@@ -101,6 +101,12 @@ function createDuplicateServiceContext(
       redeploy: vi.fn().mockResolvedValue({ success: true }),
       redeployService: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
+      verifyManagedTraefikRoute: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        attempts: 1,
+        elapsedMs: 1,
+      }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
     deployQueue: {
@@ -290,10 +296,111 @@ describe('deployable service target resolution', () => {
         provider: 'traefik_http',
         applied_without_redeploy: true,
       },
+      route_verification: {
+        status: 'skipped',
+        provider: 'traefik_http',
+        reason: 'missing_health_check_path',
+      },
       diagnostic_call: {
         tool: 'openlander_monitor',
         action: 'diagnose_service',
         params: { service_id: 'alpha__svc' },
+      },
+    });
+    expect(ctx.pipeline.verifyManagedTraefikRoute).not.toHaveBeenCalled();
+  });
+
+  it('apply_route_config verifies the managed route when health_check_path is configured', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        status: 'running',
+        container_id: 'container-alpha',
+        container_name: 'ol-alpha',
+        container_port: 3000,
+        health_check_path: 'healthz',
+      },
+    });
+    (ctx.pipeline.verifyManagedTraefikRoute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      attempts: 2,
+      elapsedMs: 503,
+    });
+
+    const result = (await getTool(ctx, 'apply_route_config').execute(
+      { service_id: 'alpha__svc', container_port: 4000 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.updateService).toHaveBeenCalledWith('alpha__svc', { containerPort: 4000 });
+    expect(ctx.pipeline.verifyManagedTraefikRoute).toHaveBeenCalledWith({
+      projectName: 'alpha',
+      path: '/healthz',
+    });
+    expect(result).toMatchObject({
+      status: 'applied',
+      route_verification: {
+        status: 'verified',
+        provider: 'traefik_http',
+        path: '/healthz',
+        http_status: 204,
+        attempts: 2,
+        elapsed_ms: 503,
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          'Route verification passed through the managed Traefik HTTP provider.',
+        ]),
+      },
+    });
+  });
+
+  it('apply_route_config rolls back the route port when managed route verification fails', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        status: 'running',
+        container_id: 'container-alpha',
+        container_name: 'ol-alpha',
+        container_port: 3000,
+        health_check_path: '/healthz',
+      },
+    });
+    (ctx.pipeline.verifyManagedTraefikRoute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      error: 'Route probe returned HTTP 502',
+      attempts: 3,
+      elapsedMs: 1_500,
+    });
+
+    const result = (await getTool(ctx, 'apply_route_config').execute(
+      { service_id: 'alpha__svc', container_port: 4000 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.updateService).toHaveBeenNthCalledWith(1, 'alpha__svc', { containerPort: 4000 });
+    expect(ctx.db.updateService).toHaveBeenNthCalledWith(2, 'alpha__svc', { containerPort: 3000 });
+    expect(ctx.pipeline.verifyManagedTraefikRoute).toHaveBeenCalledWith({
+      projectName: 'alpha',
+      path: '/healthz',
+    });
+    expect(result).toMatchObject({
+      status: 'rolled_back',
+      route_config: {
+        previous_container_port: 3000,
+        container_port: 3000,
+        attempted_container_port: 4000,
+        provider: 'traefik_http',
+        applied_without_redeploy: true,
+        rolled_back: true,
+      },
+      route_verification: {
+        status: 'failed',
+        provider: 'traefik_http',
+        path: '/healthz',
+        error: 'Route probe returned HTTP 502',
+        attempts: 3,
+        elapsed_ms: 1500,
+        rolled_back: true,
       },
     });
   });
