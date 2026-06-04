@@ -333,6 +333,7 @@ export class ServiceRepo {
       visibility: ServiceRow['visibility'];
       repoUrl: string | null;
       branch: string | null;
+      kind: ServiceRow['kind'];
       source: string;
       dockerfilePath: string | null;
       dockerTarget: string | null;
@@ -376,6 +377,9 @@ export class ServiceRepo {
     }
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;
+    }
+    if (updates.kind !== undefined) {
+      setValues.kind = updates.kind;
     }
     if (updates.source !== undefined) {
       setValues.source = updates.source;

@@ -5,6 +5,30 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.14
 
+- **`openlander_service.update_application_source` during data-model freeze:** a
+  new deployable-touching MCP action is added to save existing
+  Application/Compose source settings (`repo_url`, `branch`, `image`, `cmd`,
+  `container_port`) without starting a redeploy.
+- **Why accepted:** existing-service `deploy_app` must remain a redeploy
+  shortcut, not a source-update API. Without a dedicated save-only action,
+  agents either repeat unsupported `deploy_app(branch=...)` calls or rely on
+  Web/API settings outside the MCP workflow.
+- **Vocab review:** the action lives under `openlander_service`, uses the frozen
+  `service_id` / `service_name` / single-workload `project_name` target
+  vocabulary, and describes the user-facing target as Application/Compose.
+  `service_id` remains the compatibility wire field.
+- **Endpoint collision check:** running `rg "update_application_source"` over
+  `src`, `test`, and `docs` before the change showed no existing MCP action,
+  composite slot, REST route, or database field. No REST route or schema field
+  is added; the implementation writes existing service columns.
+- **Follow-up:** keep this action save-only. Git/image source-type switches are
+  intentionally allowed in this release, but webhook registrations and
+  branch/preview-scoped environment metadata are not cleaned up by this MCP
+  action. Audit that cleanup when source providers grow beyond this save-only
+  path. If provider-specific source settings are added later, extend this action
+  or add a narrowly scoped sibling rather than overloading `deploy_app` or
+  `redeploy_app`.
+
 - **Service-first deploy follow-up parameters during data-model freeze:**
   existing deploy/debug MCP actions (`get_deploy_status`, `get_deploy_history`,
   `get_build_log`, and `cancel_deploy`) accept `service_id` / `service_name`

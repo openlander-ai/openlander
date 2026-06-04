@@ -97,6 +97,29 @@ const updateServiceConfigSchema = z
     message: 'service_id or service_name is required',
   });
 
+const updateApplicationSourceSchema = z
+  .object({
+    ...serviceTargetFields,
+    source: z
+      .enum(['git', 'image'])
+      .optional()
+      .describe('Saved source type to use on next redeploy'),
+    repo_url: z.string().min(1).optional().describe('Git repository URL to save'),
+    branch: z.string().min(1).optional().describe('Git branch to save'),
+    image: z.string().min(1).optional().describe('Container image reference to save'),
+    cmd: z.array(z.string()).optional().describe('Image start command to save'),
+    container_port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe('Saved container port to use on next redeploy. Does not update live routes.'),
+  })
+  .refine((value) => Boolean(value.service_id || value.service_name || value.project_name), {
+    message: 'service_id, service_name, or project_name is required',
+  });
+
 const applyRouteConfigSchema = z
   .object({
     ...serviceTargetFields,
@@ -116,6 +139,7 @@ type ServiceRow = Awaited<ReturnType<AppCtx['db']['getService']>>;
 type ProjectRow = Awaited<ReturnType<AppCtx['db']['getProject']>>;
 type ResolvedServiceRow = NonNullable<ServiceRow>;
 type ResolvedProjectRow = NonNullable<ProjectRow>;
+type ServiceUpdate = Parameters<AppCtx['db']['updateService']>[1];
 
 function isManagedService(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
@@ -280,6 +304,43 @@ async function resolveDeployableService(
   return { service, project, runtimeProject };
 }
 
+async function resolveSourceUpdateService(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<{
+  service: NonNullable<ServiceRow>;
+  project: NonNullable<ProjectRow>;
+  runtimeProject: NonNullable<ProjectRow>;
+}> {
+  const serviceId = typeof args.service_id === 'string' ? args.service_id.trim() : '';
+  const serviceName = typeof args.service_name === 'string' ? args.service_name.trim() : '';
+  const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : '';
+
+  if (serviceId || serviceName) {
+    return resolveDeployableService(args, context, 'update_application_source');
+  }
+
+  const service = projectName
+    ? await resolveSingleDeployableProjectAlias(projectName, context)
+    : undefined;
+  if (!service) {
+    throw new ServiceNotFoundError(projectName || 'unknown');
+  }
+  if (isManagedService(service.kind)) {
+    throw new ServiceOperationUnsupportedError('update_application_source', service.kind);
+  }
+
+  const project = await context.appCtx.db.getProject(service.project_id);
+  if (!project) {
+    throw new ProjectNotFoundError(service.project_id);
+  }
+
+  const runtimeProjectId = deployableServiceIdToProjectId(service.id);
+  const runtimeProject = (await context.appCtx.db.getProject(runtimeProjectId)) ?? project;
+
+  return { service, project, runtimeProject };
+}
+
 function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<ProjectRow>) {
   return {
     id: service.id,
@@ -289,6 +350,174 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
     kind: service.kind,
     source: service.source,
   };
+}
+
+type SourceMode = 'git' | 'image';
+
+function trimOptional(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function parseSavedImageCommand(value: string | null | undefined): string[] | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function sourceSnapshot(service: ResolvedServiceRow) {
+  return {
+    source: service.source,
+    repo_url: service.repo_url,
+    branch: service.branch,
+    image: service.image_url,
+    cmd: parseSavedImageCommand(service.image_cmd),
+    container_port: service.container_port,
+  };
+}
+
+function buildSourceUpdate(
+  args: Record<string, unknown>,
+  service: ResolvedServiceRow,
+): {
+  updates: ServiceUpdate;
+  changedFields: string[];
+  mode: SourceMode | undefined;
+} {
+  const requestedSource = args.source as SourceMode | undefined;
+  const repoUrl = trimOptional(args.repo_url);
+  const branch = trimOptional(args.branch);
+  const image = trimOptional(args.image);
+  const cmd = args.cmd as string[] | undefined;
+  const containerPort = args.container_port as number | undefined;
+  const hasGitFields = repoUrl !== undefined || branch !== undefined;
+  const hasImageFields = image !== undefined || cmd !== undefined;
+  const hasContainerPort = containerPort !== undefined;
+
+  if (!requestedSource && !hasGitFields && !hasImageFields && !hasContainerPort) {
+    throw new OpenLanderError(
+      'No source update fields were provided.',
+      'NO_SOURCE_UPDATE_FIELDS',
+      400,
+      {
+        allowed_fields: ['source', 'repo_url', 'branch', 'image', 'cmd', 'container_port'],
+      },
+    );
+  }
+
+  if (requestedSource === 'image' && hasGitFields) {
+    throw new OpenLanderError(
+      'Git source fields cannot be mixed with source="image".',
+      'INVALID_SOURCE_FIELDS',
+      400,
+      { invalid_fields: ['repo_url', 'branch'].filter((field) => args[field] !== undefined) },
+    );
+  }
+  if (requestedSource === 'git' && hasImageFields) {
+    throw new OpenLanderError(
+      'Image source fields cannot be mixed with source="git".',
+      'INVALID_SOURCE_FIELDS',
+      400,
+      { invalid_fields: ['image', 'cmd'].filter((field) => args[field] !== undefined) },
+    );
+  }
+  if (!requestedSource && hasGitFields && hasImageFields) {
+    throw new OpenLanderError(
+      'Git and image source fields cannot be updated in the same request.',
+      'INVALID_SOURCE_FIELDS',
+      400,
+      { invalid_fields: ['repo_url', 'branch', 'image', 'cmd'] },
+    );
+  }
+
+  const mode = requestedSource ?? (hasImageFields ? 'image' : hasGitFields ? 'git' : undefined);
+  if (mode === 'git' && !repoUrl && !service.repo_url) {
+    throw new OpenLanderError(
+      'Git source updates require repo_url unless the service already has one.',
+      'INVALID_SOURCE_FIELDS',
+      400,
+      { missing: 'repo_url' },
+    );
+  }
+  if (mode === 'image' && !image && !service.image_url) {
+    throw new OpenLanderError(
+      'Image source updates require image unless the service already has one.',
+      'INVALID_SOURCE_FIELDS',
+      400,
+      { missing: 'image' },
+    );
+  }
+
+  const updates: ServiceUpdate = {};
+  const changedFields: string[] = [];
+  const mark = (field: string, changed: boolean) => {
+    if (changed && !changedFields.includes(field)) {
+      changedFields.push(field);
+    }
+  };
+
+  if (mode === 'git') {
+    if (service.kind !== 'compose') {
+      updates.kind = 'git';
+      mark('source', service.kind !== 'git' || service.source !== 'git');
+    } else {
+      mark('source', service.source !== 'git');
+    }
+    updates.source = 'git';
+    if (repoUrl !== undefined) {
+      updates.repoUrl = repoUrl;
+      mark('repo_url', service.repo_url !== repoUrl);
+    }
+    if (branch !== undefined) {
+      updates.branch = branch;
+      mark('branch', service.branch !== branch);
+    }
+    if (service.kind !== 'compose') {
+      updates.imageUrl = null;
+      mark('image', service.image_url !== null);
+      updates.imageCmd = null;
+      mark('cmd', service.image_cmd !== null);
+    }
+  } else if (mode === 'image') {
+    if (service.kind === 'compose') {
+      throw new OpenLanderError(
+        'Compose resources keep their Git/Compose source. Switching a Compose resource to an image source is not supported.',
+        'UNSUPPORTED_SOURCE_UPDATE',
+        400,
+        { service_id: service.id, service_kind: service.kind },
+      );
+    }
+    updates.kind = 'image';
+    updates.source = 'image';
+    mark('source', service.kind !== 'image' || service.source !== 'image');
+    if (image !== undefined) {
+      updates.imageUrl = image;
+      mark('image', service.image_url !== image);
+    }
+    if (cmd !== undefined) {
+      const serialized = JSON.stringify(cmd);
+      updates.imageCmd = serialized;
+      mark('cmd', service.image_cmd !== serialized);
+    }
+    updates.repoUrl = null;
+    mark('repo_url', service.repo_url !== null);
+    updates.branch = null;
+    mark('branch', service.branch !== null);
+  }
+
+  if (containerPort !== undefined) {
+    updates.containerPort = containerPort;
+    mark('container_port', service.container_port !== containerPort);
+  }
+
+  return { updates, changedFields, mode };
 }
 
 function explicitRouteVerificationPath(service: Pick<ResolvedServiceRow, 'health_check_path'>) {
@@ -848,6 +1077,66 @@ export const deployableServiceToolDefs: ToolDef[] = [
           build_context: updated?.build_context ?? service.build_context,
         },
         _agent_guidance: { next_steps: ['Call redeploy_app to apply the new configuration.'] },
+      };
+    },
+  },
+  {
+    name: 'update_application_source',
+    riskLevel: 'medium',
+    description:
+      'Save Application/Compose source settings (Git repo/branch, image/cmd, or container_port). Save-only: does not redeploy, mutate routes, or touch Docker. Call redeploy_app to apply.',
+    mcpDescription:
+      'Save Application/Compose source settings. Save-only; call redeploy_app to apply.',
+    inputSchema: updateApplicationSourceSchema,
+    execute: async (args, context) => {
+      const { service, project } = await resolveSourceUpdateService(args, context);
+      if (service.kind === 'compose-child') {
+        throw new ServiceOperationUnsupportedError('update_application_source', service.kind);
+      }
+
+      const { updates, changedFields, mode } = buildSourceUpdate(args, service);
+      if (changedFields.length === 0) {
+        return {
+          status: 'unchanged',
+          project_id: project.id,
+          service_id: service.id,
+          service: serviceSummary(service, project),
+          source: sourceSnapshot(service),
+          changed_fields: [],
+          needs_redeploy: false,
+          _agent_guidance: {
+            message:
+              'The requested source settings already match the saved Application/Compose configuration. No database write, deploy lock, Docker action, route mutation, or redeploy was started.',
+            next_steps: ['No redeploy is required for this source update request.'],
+          },
+        };
+      }
+      await context.appCtx.db.updateService(service.id, updates);
+      const updated = (await context.appCtx.db.getService(service.id)) ?? service;
+
+      return {
+        status: 'updated',
+        project_id: project.id,
+        service_id: service.id,
+        service: serviceSummary(updated, project),
+        source: sourceSnapshot(updated),
+        changed_fields: changedFields,
+        needs_redeploy: true,
+        suggested_call: {
+          tool: 'openlander_service',
+          action: 'redeploy_app',
+          params: { service_id: service.id },
+        },
+        _agent_guidance: {
+          message:
+            'Source settings were saved only. No image build, container restart, route mutation, or deploy lock was started.',
+          next_steps: [
+            `Call openlander_service.redeploy_app with service_id="${service.id}" to apply the saved source settings.`,
+            mode === undefined
+              ? 'container_port was saved for the next redeploy. Use apply_route_config only when you need a live route change without rebuilding.'
+              : 'Use update_service_config separately for dockerfile_path, docker_target, or build_context.',
+          ],
+        },
       };
     },
   },

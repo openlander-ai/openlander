@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **76 unique default operations** surfaced through those composites
+- **77 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -21,6 +21,7 @@ Agent routing rule of thumb:
 | "Deploy this new app/repo/image"              | `openlander_deploy.deploy_app`                                             |
 | "Create a new app project before DB/cache"    | `openlander_project.create_project`                                        |
 | "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
+| "Change app branch/repo/image source"         | `openlander_service.update_application_source`, then `redeploy_app`        |
 | "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
 | "Fix route port mismatch without rebuild"     | `openlander_service.apply_route_config`                                    |
 | "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
@@ -75,7 +76,7 @@ Composite catalog:
 | ---------------------------- | ------------ | ------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                         |
 | `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
-| `openlander_service`         | 23           | Application lifecycle, config, domain routes, and env vocabulary                      |
+| `openlander_service`         | 24           | Application lifecycle, config, domain routes, and env vocabulary                      |
 | `openlander_managed_service` | 21           | Database/Cache/Storage resources, credentials, backups, volumes, disk usage           |
 | `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes           |
 
@@ -488,6 +489,30 @@ Update Application build configuration.
 | `dockerfile_path` | string | No       | Dockerfile path                       |
 | `docker_target`   | string | No       | Build target                          |
 | `build_context`   | string | No       | Build context path                    |
+
+### `update_application_source`
+
+Save Application/Compose source settings without deploying. This is the MCP path
+for changing an existing app's Git repo, branch, image, image command, or saved
+container port. It does **not** start Docker, acquire a deploy lock, mutate live
+routes, or redeploy automatically; call `redeploy_app` after the update.
+
+| Parameter        | Type     | Required | Description                                                                  |
+| ---------------- | -------- | -------- | ---------------------------------------------------------------------------- |
+| `service_id`     | string   | No       | Application/Compose id                                                       |
+| `service_name`   | string   | No       | Application/Compose name                                                     |
+| `project_name`   | string   | No       | Optional group scope, or a single-workload Project shortcut                  |
+| `source`         | string   | No       | `git` or `image`                                                             |
+| `repo_url`       | string   | No       | Git repository URL. Requires `source=git` or no explicit image source        |
+| `branch`         | string   | No       | Git branch. Requires `source=git` or no explicit image source                |
+| `image`          | string   | No       | Container image reference. Requires `source=image` or no explicit Git source |
+| `cmd`            | string[] | No       | Image start command saved for the next redeploy                              |
+| `container_port` | number   | No       | Saved container port for the next redeploy; live routes are not changed      |
+
+Provide `service_id`, `service_name`, or `project_name` when the Project has
+exactly one workload. Git source fields cannot be mixed with `source="image"`,
+and image fields cannot be mixed with `source="git"`. Compose parents support
+Git repo/branch/container-port updates but cannot switch to image source.
 
 ### `apply_route_config`
 

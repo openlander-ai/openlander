@@ -140,18 +140,17 @@ describe('deploy MCP guidance', () => {
         service_id: 'app__svc',
         service_name: 'web',
       },
-      suggested_call: {
-        tool: 'openlander_service',
-        action: 'redeploy_app',
-        params: { service_id: 'app__svc' },
-      },
     });
+    expect(result['suggested_call']).toBeUndefined();
     expect(result['allowed_params']).toEqual(
       expect.not.arrayContaining(['wait', 'wait_healthy', 'timeout']),
     );
     const guidance = result['_agent_guidance'] as Record<string, unknown>;
     expect(String(guidance['message'])).toContain('did not start a redeploy');
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_service_config');
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain(
+      'update_application_source',
+    );
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('stored branch');
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
@@ -182,8 +181,12 @@ describe('deploy MCP guidance', () => {
       invalid_params: ['repo_url', 'branch'],
       suggested_call: {
         tool: 'openlander_service',
-        action: 'redeploy_app',
-        params: { service_id: 'app__svc' },
+        action: 'update_application_source',
+        params: {
+          service_id: 'app__svc',
+          repo_url: 'https://github.com/acme/app',
+          branch: 'staging',
+        },
       },
     });
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();

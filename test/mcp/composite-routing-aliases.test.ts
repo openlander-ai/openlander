@@ -163,6 +163,9 @@ describe('openlander_service direct deployable runtime actions', () => {
     expect(byName.get('redeploy_app')).toContain('Application/worker');
     expect(byName.get('rollback_service')).toContain('Application/worker');
     expect(byName.get('update_service_config')).toContain('Application/Compose build config');
+    expect(byName.get('update_application_source')).toContain(
+      'Application/Compose source settings',
+    );
   });
 
   it('help does not advertise TryCloudflare-specific public access wording', async () => {

@@ -30,6 +30,7 @@ const EXPECTED_TOOL_NAMES = [
   'archive_service',
   'unarchive_service',
   'update_service_config',
+  'update_application_source',
   'preview_deploy',
   'cleanup_preview',
   'list_previews',
