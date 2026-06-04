@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.4] - 2026-06-04
+
+> `v0.1.14-rc.3` is superseded for release QA. Live MCP QA found that
+> existing-service `deploy_app` requests could accept source/build override
+> inputs that the redeploy path does not apply, and that app self URLs could be
+> reported as high-confidence external dependency failures.
+
+### Fixed
+
+- Reject unsupported source/build override inputs when `deploy_app` resolves to
+  an existing Application/Compose service, so agents do not assume `branch`,
+  `repo_url`, or Dockerfile overrides were applied to a redeploy.
+- Keep `diagnose_service` from treating OpenLander-managed public routes and
+  self URL environment variables as external dependency failures, so route and
+  port failures are not hidden behind misleading `DEPENDENCY_UNREACHABLE`
+  diagnoses.
+
 ## [0.1.14-rc.3] - 2026-06-04
 
 > `v0.1.14-rc.2` is superseded for release QA. Exact-image GitHub release gate
