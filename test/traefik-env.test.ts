@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   buildTraefikLabels,
+  getDeployableServiceRouteName,
+  getDeployableServiceUrls,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
   getProjectHostname,
@@ -48,6 +50,24 @@ describe('Traefik environment hostnames', () => {
     expect(getPreferredProjectUrl('my-app')).toBe('http://my-app.apps.example.com');
     expect(getProjectUrls('my-app')[0]).toMatchObject({
       url: 'http://my-app.apps.example.com',
+      type: 'public',
+      host: 'apps.example.com',
+      reachable: 'external',
+    });
+  });
+
+  it('derives Application route URLs from service identity, not Project namespace', () => {
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'apps.example.com';
+
+    const service = {
+      name: 'urlnest__svc',
+      assigned_port: 10001,
+      public_url: null,
+    };
+
+    expect(getDeployableServiceRouteName(service)).toBe('urlnest');
+    expect(getDeployableServiceUrls(service)[0]).toMatchObject({
+      url: 'http://urlnest.apps.example.com',
       type: 'public',
       host: 'apps.example.com',
       reachable: 'external',
