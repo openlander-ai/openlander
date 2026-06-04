@@ -370,6 +370,7 @@ describe('blue-green route target flip', () => {
     (env.getAllForService as ReturnType<typeof vi.fn>).mockReturnValue({
       DATABASE_URL: 'postgres://new-runtime',
     });
+    const previousProbeCalls = mockHttpRequest.mock.calls.length;
 
     const result = await pipeline.recreateServiceRuntime('p1__svc', {
       lockSessionId: 'env-lock',
@@ -380,6 +381,7 @@ describe('blue-green route target flip', () => {
       success: true,
       applyMode: 'same-image-recreate',
       readiness: 'healthy',
+      route_switched: true,
       containerId: 'container-green',
       previousContainerId: 'container-blue',
     });
@@ -417,6 +419,48 @@ describe('blue-green route target flip', () => {
     expect(removeBlueCallIndex).toBeGreaterThanOrEqual(0);
     expect(updateServiceMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
       safeRemoveMock.mock.invocationCallOrder[removeBlueCallIndex],
+    );
+    expect(mockHttpRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: 'localhost',
+        port: '80',
+        path: '/',
+        headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+      expect.any(Function),
+    );
+    expect(updateServiceMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
+      mockHttpRequest.mock.invocationCallOrder[previousProbeCalls],
+    );
+  });
+
+  it('rolls runtime env recreate back when route verification does not reach the replacement', async () => {
+    (env.getAllForService as ReturnType<typeof vi.fn>).mockReturnValue({
+      DATABASE_URL: 'postgres://new-runtime',
+    });
+    mockRouteProbe(502);
+
+    const result = await pipeline.recreateServiceRuntime('p1__svc', {
+      lockSessionId: 'env-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      code: 'RUNTIME_ENV_ROUTE_VERIFY_FAILED',
+      applyMode: 'same-image-recreate',
+      readiness: 'unhealthy',
+      route_switched: false,
+      previous_version_still_serving: true,
+    });
+    expect(state.service.container_id).toBe('container-blue');
+    expect(state.service.container_name).toBe('ol-demo-app');
+    expect(state.service.assigned_port).toBe(10010);
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-green',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-blue',
     );
   });
 
