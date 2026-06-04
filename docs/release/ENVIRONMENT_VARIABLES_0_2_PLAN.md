@@ -37,7 +37,7 @@ target variables without a clear inherited/effective view.
 | ----------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Global secret           | Instance                          | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                              |
 | Project shared          | Project group                     | Values reused by every service in the project.                                                                                                |
-| Project target          | Project group + target key        | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is accepted but not a default 0.2 target). |
+| Project target          | Project group + target key        | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is reserved for later — not accepted by the current `environments.type` schema, and not a default 0.2 target). |
 | Service shared          | Deployable service                | Values specific to one app/worker, regardless of target.                                                                                      |
 | Service target          | Deployable service + target key   | Final per-service override for a specific target.                                                                                             |
 | Inline deploy override  | Deploy request or plan            | One-shot values supplied by a deploy plan or API call.                                                                                        |
@@ -66,7 +66,8 @@ deployment **target** key (omitted = production):
 
 - `production`
 - `development`
-- `staging` (schema-accepted, not a default 0.2 target)
+- `staging` (reserved/future-compatible key; not accepted by the current runtime
+  `environments.type` schema, and not a default 0.2 target)
 
 The existing `environments` table is service-runtime oriented in the current
 schema. 0.2 should avoid using a single service runtime `environment_id` as the
@@ -110,7 +111,8 @@ selection:
 - Production
 - Development
 
-`staging` is schema-compatible but is not shipped as a default 0.2 tab.
+`staging` is a reserved future key (not in the current `environments.type`
+schema) and is not shipped as a default 0.2 tab.
 
 Service pages should expose a `Variables` surface that shows:
 

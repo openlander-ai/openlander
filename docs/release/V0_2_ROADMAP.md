@@ -77,10 +77,10 @@ agent workflows, Swarm, and Kubernetes all need the same answers:
 ### 3. Deployment Targets (production / development, staging-ready)
 
 - Ship `production` and `development` as the default deployment targets.
-- Keep the target-key model forward-compatible so `staging` becomes an additive
-  target later, not a rewrite: the schema and `environment_key` already accept a
-  `staging` key, but staging is **not** shipped as a default 0.2 target or UI
-  tab.
+- Reserve `staging` in the target-key model so it can become an additive target
+  later, not a rewrite. The current runtime schema and default 0.2 UI ship only
+  `production` / `development`; adding `staging` needs an additive
+  `environments.type` enum change, not a redesign.
 - Add branch-to-target mapping that works for webhooks and manual deploys.
 - Make production-impacting changes visibly protected in UI and MCP guidance.
 - Keep custom arbitrary environment names, and staging as a default product
@@ -133,8 +133,8 @@ reshaping it:
 - an MCP agent can set and inspect env vars without relying on ambiguous target
   inference,
 - a running service reports clearly when an env change requires redeploy,
-- development does not reuse production values accidentally (schema-accepted
-  staging paths, when explicitly used, get the same isolation),
+- development does not reuse production values accidentally (a future `staging`
+  target, once added, must get the same isolation),
 - production-impacting changes are visible and intentionally applied,
 - hot-path recovery actions report whether they were verified, skipped, failed,
   or rolled back,
