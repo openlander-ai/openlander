@@ -847,6 +847,14 @@ apps depend on which databases/caches over MCP.
 If `path` is omitted, OpenLander uses a configured base path env such as
 `NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.
 
+High-confidence deterministic findings add `diagnosis: { code, summary,
+confidence, evidence }` and, when a safe next operation exists, top-level
+`suggested_call`. Current codes include `PORT_MISMATCH`,
+`ROUTE_BACKEND_MISMATCH`, `RUNTIME_ENV_MISSING`, `BUILD_TIME_ENV_MISSING`, and
+`NO_RUNTIME_IMAGE`. Ambiguous cases omit `diagnosis` and keep raw `env`,
+`buildTimeEnv`, `container`, `logs`, `httpCheck`, `route`, and `dependencies`
+fields for agent review.
+
 ### `probe_host`
 
 | Parameter      | Type    | Required | Description                                         |
