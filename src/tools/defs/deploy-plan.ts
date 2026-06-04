@@ -725,6 +725,81 @@ async function buildExistingServiceGuidance(
   };
 }
 
+const EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS = [
+  'repo_url',
+  'branch',
+  'source',
+  'image',
+  'port',
+  'prefer_dockerfile',
+  'dockerfile_path',
+  'docker_target',
+] as const;
+
+const EXISTING_SERVICE_REDEPLOY_ALLOWED_PARAMS = [
+  'service_id',
+  'service_name',
+  'project_name',
+  'name',
+  'env_vars',
+  'no_cache',
+  'strategy',
+  'health_check_path',
+  'cmd',
+] as const;
+
+function existingServiceSourceOverrideParams(args: Record<string, unknown>): string[] {
+  return EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS.filter((name) => args[name] !== undefined);
+}
+
+function buildExistingServiceSourceOverrideResponse(params: {
+  invalidParams: string[];
+  frontDoorTarget:
+    | {
+        kind: 'service_target';
+        params: Record<string, unknown>;
+      }
+    | {
+        kind: 'existing_project';
+        params: Record<string, unknown>;
+        existingService: Record<string, unknown>;
+      };
+}): Record<string, unknown> {
+  const serviceId =
+    typeof params.frontDoorTarget.params['service_id'] === 'string'
+      ? params.frontDoorTarget.params['service_id']
+      : undefined;
+
+  return {
+    error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+    code: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+    action: 'deploy_app',
+    invalid_params: params.invalidParams,
+    allowed_params: [...EXISTING_SERVICE_REDEPLOY_ALLOWED_PARAMS],
+    ...(params.frontDoorTarget.kind === 'existing_project'
+      ? { existing_service: params.frontDoorTarget.existingService }
+      : {}),
+    ...(serviceId
+      ? {
+          suggested_call: {
+            tool: 'openlander_service',
+            action: 'redeploy_app',
+            params: { service_id: serviceId },
+          },
+        }
+      : {}),
+    _agent_guidance: {
+      message:
+        'deploy_app resolved an existing Application/Compose service, but the request included source/build override params that this existing-service path does not apply. OpenLander did not start a redeploy.',
+      next_steps: [
+        'To rebuild the latest HEAD of the stored branch, retry deploy_app for the existing target without source/build override params, or call openlander_service.redeploy_app.',
+        'To change Dockerfile/build config, call openlander_service.update_service_config, then call redeploy_app.',
+        'Changing branch, repo_url, source, image, or port for an existing service is not exposed through MCP in this release; use the Web/API service settings until a dedicated MCP source-update action is added.',
+      ],
+    },
+  };
+}
+
 async function resolveExistingDeployAppTarget(
   args: Record<string, unknown>,
   context: ToolContext,
@@ -1150,6 +1225,14 @@ export const deployPlanToolDefs: ToolDef[] = [
         frontDoorTarget?.kind === 'service_target' ||
         frontDoorTarget?.kind === 'existing_project'
       ) {
+        const invalidParams = existingServiceSourceOverrideParams(args);
+        if (invalidParams.length > 0) {
+          return buildExistingServiceSourceOverrideResponse({
+            invalidParams,
+            frontDoorTarget,
+          });
+        }
+
         const redeployParams =
           Object.keys(envVars).length > 0
             ? { ...frontDoorTarget.params, env_vars: envVars }
