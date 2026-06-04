@@ -190,7 +190,7 @@ is the human surface on top.
   project that uses them and run on that project's Docker network. Cross-project
   shared Database/Cache/Storage resources and external TCP exposure are deferred.
 
-Existing Docker/PaaS workloads can be migrated with operator-assisted runbooks
+Existing Docker/PaaS workloads can be migrated with operator-assisted guidance
 today. Automatic import/adoption of existing containers, networks, and volumes
 is planned after v0.1.
 
