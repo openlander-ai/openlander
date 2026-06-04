@@ -271,6 +271,11 @@ describe('deployable service target resolution', () => {
         action: 'diagnose_service',
         params: { service_id: 'beta__svc' },
       },
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { service_id: 'beta__svc' },
+      },
     });
     expect(result).toMatchObject({
       _agent_guidance: {

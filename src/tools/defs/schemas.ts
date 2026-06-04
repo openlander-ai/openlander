@@ -395,6 +395,14 @@ export const previewIdSchema = z.object({
 
 // Status & monitoring schemas
 export const deployStatusSchema = z.object({
+  service_id: z
+    .string()
+    .optional()
+    .describe('Application/Compose service_id for service-scoped deploy status lookup'),
+  service_name: z
+    .string()
+    .optional()
+    .describe('Application/Compose name for service-scoped deploy status lookup'),
   project_id: z.string().optional().describe('Project id for current in-flight status lookup'),
   project_name: z.string().optional().describe('Project name for current in-flight status lookup'),
   deploy_id: z.string().optional().describe('Completed deploy log id to look up'),
@@ -598,6 +606,8 @@ export const getBuildLogSchema = z
       .min(1)
       .optional()
       .describe('Deploy log id. If provided, no project target is required.'),
+    service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
+    service_name: z.string().min(1).optional().describe('Application/Compose name'),
     project_id: z.string().min(1).optional().describe('Project id'),
     project_name: z.string().min(1).optional().describe('Project name'),
     deploy_index: z
@@ -612,9 +622,19 @@ export const getBuildLogSchema = z
       .optional()
       .describe('Return only the last N lines of the build/runtime logs. Useful for large logs.'),
   })
-  .refine((value) => Boolean(value.deploy_id || value.project_id || value.project_name), {
-    message: 'deploy_id, project_id, or project_name is required',
-  });
+  .refine(
+    (value) =>
+      Boolean(
+        value.deploy_id ||
+        value.service_id ||
+        value.service_name ||
+        value.project_id ||
+        value.project_name,
+      ),
+    {
+      message: 'deploy_id, service_id, service_name, project_id, or project_name is required',
+    },
+  );
 
 export const debugBuildErrorSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
@@ -907,6 +927,16 @@ export const getDeployPlanSchema = z.object({
 export const cancelDeploySchema = z
   .object({
     deploy_id: z.string().min(1).optional().describe('Deploy log ID returned by deploy APIs'),
+    service_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Application/Compose service_id whose active build should stop'),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Application/Compose name whose active build should stop'),
     project_id: z.string().min(1).optional().describe('Project ID whose active build should stop'),
     project_name: z
       .string()
@@ -921,9 +951,21 @@ export const cancelDeploySchema = z
         'Alias for deploy_id, project_id, or project_name when the caller has one id field',
       ),
   })
-  .refine((data) => Boolean(data.deploy_id ?? data.project_id ?? data.project_name ?? data.id), {
-    message: 'One of deploy_id, project_id, project_name, or id is required',
-  });
+  .refine(
+    (data) =>
+      Boolean(
+        data.deploy_id ??
+        data.service_id ??
+        data.service_name ??
+        data.project_id ??
+        data.project_name ??
+        data.id,
+      ),
+    {
+      message:
+        'One of deploy_id, service_id, service_name, project_id, project_name, or id is required',
+    },
+  );
 
 // One-call deploy schema (create plan + execute + optionally wait)
 export const deploySchema = z
@@ -1107,13 +1149,19 @@ export const updateProjectConfigSchema = z
 // Deployment history schema
 export const deployHistorySchema = z
   .object({
+    service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
+    service_name: z.string().min(1).optional().describe('Application/Compose name'),
     project_id: z.string().min(1).optional().describe('Project id'),
     project_name: z.string().min(1).optional().describe('Project name'),
     limit: z.number().optional().describe('Max entries to return (default 10)'),
   })
-  .refine((value) => Boolean(value.project_id || value.project_name), {
-    message: 'project_id or project_name is required',
-  });
+  .refine(
+    (value) =>
+      Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
+    {
+      message: 'service_id, service_name, project_id, or project_name is required',
+    },
+  );
 
 export const addVolumeSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

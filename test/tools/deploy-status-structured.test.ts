@@ -50,7 +50,7 @@ describe('get_deploy_status structured fields (O1)', () => {
       status_call: {
         tool: 'openlander_deploy',
         action: 'get_deploy_status',
-        params: { project_id: 'app' },
+        params: { service_id: 'app__svc' },
       },
     });
     expect(typeof job['elapsed_ms']).toBe('number');
@@ -229,8 +229,8 @@ describe('get_deploy_status structured fields (O1)', () => {
 
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
     // The common active-poll path: JobManager is keyed by project id, so
-    // formatJob is called without a deploy id. status_call carries project_id
-    // as the re-poll handle and deploy_id is intentionally absent.
+    // formatJob is called without a deploy id. status_call carries service_id
+    // as the preferred re-poll handle and deploy_id is intentionally absent.
     const ctx = {
       jobManager: {
         getStatus: vi.fn((id: string) =>
@@ -269,7 +269,7 @@ describe('get_deploy_status structured fields (O1)', () => {
       status_call: {
         tool: 'openlander_deploy',
         action: 'get_deploy_status',
-        params: { project_id: 'app' },
+        params: { service_id: 'app__svc' },
       },
     });
     expect(job['deploy_id']).toBeUndefined();
@@ -328,7 +328,7 @@ describe('get_deploy_status structured fields (O1)', () => {
       status_call: {
         tool: 'openlander_deploy',
         action: 'get_deploy_status',
-        params: { project_id: 'runtime-app' },
+        params: { service_id: 'runtime-app__svc' },
       },
     });
   });

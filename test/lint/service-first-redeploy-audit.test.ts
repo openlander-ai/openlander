@@ -58,9 +58,30 @@ describe('service-first redeploy audit', () => {
       expect(calls, `${expectation.file} must call redeployService(service.id)`).toContain(
         expectation.required,
       );
-      expect(calls, `${expectation.file} must not call project compatibility redeploy`).not.toContain(
-        expectation.forbidden,
-      );
+      expect(
+        calls,
+        `${expectation.file} must not call project compatibility redeploy`,
+      ).not.toContain(expectation.forbidden);
     }
+  });
+
+  it('keeps redeploy follow-up calls on service identity', () => {
+    const source = readFileSync(
+      path.join(REPO_ROOT, 'src/tools/defs/deployable-service.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('params: { service_id: service.id }');
+    expect(source).toContain(
+      'Poll openlander_deploy.get_deploy_status with service_id="${service.id}"',
+    );
+    expect(source).not.toContain('project_id="${runtimeProject.id}"');
+  });
+
+  it('keeps web service deployment history on service-scoped deploy log reads', () => {
+    const source = readFileSync(path.join(REPO_ROOT, 'src/web/api/deployment-routes.ts'), 'utf8');
+
+    expect(source).toContain('ctx.db.getDeployLogsForService(service.id');
+    expect(source).not.toContain('ctx.db.getDeployLogs(service.id');
   });
 });

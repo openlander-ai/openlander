@@ -571,11 +571,11 @@ export async function runDeployableServiceAction(
     status_call: {
       tool: 'openlander_deploy',
       action: 'get_deploy_status',
-      params: { project_id: runtimeProject.id },
+      params: { service_id: service.id },
     },
     _agent_guidance: {
       next_steps: [
-        `Poll openlander_deploy.get_deploy_status with project_id="${runtimeProject.id}" to track this deploy.`,
+        `Poll openlander_deploy.get_deploy_status with service_id="${service.id}" to track this deploy.`,
         `If deployment fails or times out, call openlander_monitor.diagnose_service with service_id="${service.id}".`,
       ],
     },

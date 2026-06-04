@@ -17,6 +17,7 @@ import {
 import type { DeployLogRow, ProjectRow } from '../../db/types.js';
 import { loadServiceView, type ServiceView } from '../../db/views/service-view.js';
 import type { ToolDef } from './types.js';
+import { resolveDeployableTarget } from './deployable-target.js';
 import {
   cleanupPreviewSchema,
   deployHistorySchema,
@@ -89,12 +90,14 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_status',
     riskLevel: 'low',
     description:
-      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Each job carries a structured status, terminal flag, and elapsed_ms; non-terminal jobs include next_poll_after_ms (suggested poll delay) and a status_call re-lookup envelope. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With watch_ms: briefly waits for a change, then returns status=still_running on timeout. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
+      'Get deployment status. Prefer service_id/service_name for Application/Compose deploys; project_id/project_name remain compatibility shortcuts for single-workload Projects. Use deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Each job carries a structured status, terminal flag, and elapsed_ms; non-terminal jobs include next_poll_after_ms (suggested poll delay) and a status_call re-lookup envelope. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With watch_ms: briefly waits for a change, then returns status=still_running on timeout. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. Jobs expose status/terminal/elapsed_ms; non-terminal jobs add next_poll_after_ms for poll pacing. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Prefer watch_ms for short waits; it returns status=still_running plus status_call on timeout. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling or watch_ms over long wait=true calls.',
+      'Get current deploy progress by service_id/service_name, compatibility project_id/project_name, or completed history by deploy_id/job_id. Jobs expose status/terminal/elapsed_ms; non-terminal jobs add next_poll_after_ms for poll pacing. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Prefer watch_ms for short waits; it returns status=still_running plus status_call on timeout. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling or watch_ms over long wait=true calls.',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const serviceIdTarget = args['service_id'] as string | undefined;
+      const serviceNameTarget = args['service_name'] as string | undefined;
       const projectId = args['project_id'] as string | undefined;
       const projectName = args['project_name'] as string | undefined;
       const deployLookupId =
@@ -192,7 +195,13 @@ export const deployToolDefs: ToolDef[] = [
 
       const addWatchTimeoutMetadata = (
         payload: Record<string, unknown>,
-        params: { project_id?: string; project_name?: string; deploy_id?: string },
+        params: {
+          service_id?: string;
+          service_name?: string;
+          project_id?: string;
+          project_name?: string;
+          deploy_id?: string;
+        },
       ): Record<string, unknown> => {
         if (watchMs === undefined || payload['timeout'] !== true || !hasInFlightJobs(payload)) {
           return payload;
@@ -239,6 +248,9 @@ export const deployToolDefs: ToolDef[] = [
         // the pre-fix bridge-IP sslip URL.
         const assignedPort = portCache.get(job.projectId);
         const serviceId = job.projectId ? projectIdToDeployableServiceId(job.projectId) : undefined;
+        const statusCallParams = serviceId
+          ? { service_id: serviceId }
+          : { project_id: job.projectId };
         const terminal = isTerminalPhase(job.phase);
         return {
           ...(deployId ? { deploy_id: deployId } : {}),
@@ -258,7 +270,7 @@ export const deployToolDefs: ToolDef[] = [
                 status_call: {
                   tool: 'openlander_deploy',
                   action: 'get_deploy_status',
-                  params: { project_id: job.projectId },
+                  params: statusCallParams,
                 },
               }),
           ...(job.phase === 'failed' && serviceId
@@ -364,13 +376,14 @@ export const deployToolDefs: ToolDef[] = [
       };
 
       const formatDeployLogJob = async (log: DeployLogRow) => {
-        const inferredProjectId = log.project_id ?? deployableServiceIdToProjectId(log.service_id);
-        const project = await appCtx.db.getProject(inferredProjectId);
-        const view = await resolveServiceView(inferredProjectId, project);
         const service =
           typeof appCtx.db.getService === 'function'
             ? await appCtx.db.getService(log.service_id)
             : undefined;
+        const inferredProjectId =
+          service?.project_id ?? log.project_id ?? deployableServiceIdToProjectId(log.service_id);
+        const project = await appCtx.db.getProject(inferredProjectId);
+        const view = await resolveServiceView(inferredProjectId, project);
         const health = view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown');
         const assignedPort = service?.assigned_port ?? view?.assignedPort ?? undefined;
         const routeService = service
@@ -558,52 +571,73 @@ export const deployToolDefs: ToolDef[] = [
           _agent_guidance: {
             next_steps: [
               'If you only have a project name, call get_deploy_history to list recent deploy ids.',
-              'If a deploy is currently running, call get_deploy_status with project_id or project_name.',
+              'If a deploy is currently running, call get_deploy_status with service_id when available.',
             ],
           },
         };
       }
 
-      if (projectId || projectName) {
-        const project = projectId
-          ? await appCtx.db.getProject(projectId)
-          : await appCtx.db.getProjectByName(projectName ?? '');
-        if (!project) {
-          if (projectId) {
-            throw new ProjectNotFoundError(projectId);
+      if (serviceIdTarget || serviceNameTarget || projectId || projectName) {
+        let project: ProjectRow;
+        let projectForStatus: ProjectRow;
+        let targetServiceId: string | undefined;
+
+        if (serviceIdTarget || serviceNameTarget) {
+          const resolved = await resolveDeployableTarget(appCtx, args, 'get_deploy_status');
+          project = resolved.project;
+          projectForStatus = resolved.runtimeProject;
+          targetServiceId = resolved.service.id;
+        } else {
+          const resolvedProject = projectId
+            ? await appCtx.db.getProject(projectId)
+            : await appCtx.db.getProjectByName(projectName ?? '');
+          if (!resolvedProject) {
+            if (projectId) {
+              throw new ProjectNotFoundError(projectId);
+            }
+            const missingProjectName = projectName ?? 'unknown';
+            const plans = await appCtx.db.listDeployPlans(missingProjectName);
+            const activePlan = plans.find((p) => {
+              // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+              return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
+            });
+            if (activePlan) {
+              return {
+                active: 1,
+                jobs: [
+                  {
+                    project: missingProjectName,
+                    phase: 'initializing',
+                    status: activePlan.status,
+                    plan_id: activePlan.id,
+                  },
+                ],
+              };
+            }
+            throw new ProjectNotFoundError(missingProjectName);
           }
-          const missingProjectName = projectName ?? 'unknown';
-          const plans = await appCtx.db.listDeployPlans(missingProjectName);
-          const activePlan = plans.find((p) => {
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
-          });
-          if (activePlan) {
-            return {
-              active: 1,
-              jobs: [
-                {
-                  project: missingProjectName,
-                  phase: 'initializing',
-                  status: activePlan.status,
-                  plan_id: activePlan.id,
-                },
-              ],
-            };
-          }
-          throw new ProjectNotFoundError(missingProjectName);
+
+          project = resolvedProject;
+          const deployables =
+            typeof appCtx.db.getDeployablesByGroup === 'function'
+              ? await appCtx.db.getDeployablesByGroup(project.id)
+              : [];
+          const singleDeployable = deployables.length === 1 ? deployables[0] : undefined;
+          targetServiceId = singleDeployable?.id;
+          const statusProject =
+            singleDeployable !== undefined
+              ? await appCtx.db.getProject(deployableServiceIdToProjectId(singleDeployable.id))
+              : undefined;
+          projectForStatus = statusProject ?? project;
         }
 
-        const deployables =
-          typeof appCtx.db.getDeployablesByGroup === 'function'
-            ? await appCtx.db.getDeployablesByGroup(project.id)
-            : [];
-        const singleDeployable = deployables.length === 1 ? deployables[0] : undefined;
-        const statusProject =
-          singleDeployable !== undefined
-            ? await appCtx.db.getProject(deployableServiceIdToProjectId(singleDeployable.id))
-            : undefined;
-        const projectForStatus = statusProject ?? project;
+        const statusParams = targetServiceId
+          ? { service_id: targetServiceId }
+          : { project_id: projectForStatus.id };
+        const getLastDeployLogForTarget = async (): Promise<DeployLogRow | undefined> =>
+          targetServiceId
+            ? await appCtx.db.getLastDeployLogForService(targetServiceId)
+            : await appCtx.db.getLastDeployLog(projectForStatus.id);
 
         await primeAssignedPort(projectForStatus.id);
 
@@ -621,7 +655,7 @@ export const deployToolDefs: ToolDef[] = [
         }) => {
           const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
           if (status && !isActive) {
-            const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
+            const lastLog = await getLastDeployLogForTarget();
             if (lastLog) {
               return {
                 active: 0,
@@ -722,7 +756,7 @@ export const deployToolDefs: ToolDef[] = [
 
             const current = appCtx.jobManager.getStatus(projectForStatus.id);
             if (current) {
-              const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
+              const lastLog = await getLastDeployLogForTarget();
               const logIsNewer =
                 lastLog &&
                 parseDBTimestamp(lastLog.created_at).getTime() > current.startedAt.getTime();
@@ -736,20 +770,20 @@ export const deployToolDefs: ToolDef[] = [
                   jobs: [await formatDeployLogJob(lastLog)],
                   ...(timedOut ? { timeout: true } : {}),
                 };
-                resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
+                resolve(addWatchTimeoutMetadata(payload, statusParams));
                 return;
               }
 
               const payload = (await buildProjectResult(current)) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
-              resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
+              resolve(addWatchTimeoutMetadata(payload, statusParams));
               return;
             }
 
             const currentLockInfo = await appCtx.db.getDeployLockInfo(projectForStatus.id);
             if (currentLockInfo) {
               const payload = buildLockedQueuedResult(currentLockInfo, timedOut);
-              resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
+              resolve(addWatchTimeoutMetadata(payload, statusParams));
               return;
             }
 
@@ -760,7 +794,7 @@ export const deployToolDefs: ToolDef[] = [
               phase: 'none',
               ...(timedOut ? { timeout: true } : {}),
             };
-            resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
+            resolve(addWatchTimeoutMetadata(payload, statusParams));
           };
 
           const unsubSuccess = eventBus.on('deploy:success', (payload) => {
@@ -781,7 +815,7 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
+            const lastLog = await getLastDeployLogForTarget();
             if (!lastLog || (lastLog.status !== 'success' && lastLog.status !== 'failed')) {
               return;
             }
@@ -899,25 +933,44 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_history',
     riskLevel: 'low',
     description:
-      'Get deployment history for a project. Returns recent deploys with status, trigger, commit, duration. Use to understand why a service is in its current state or to review past deployments.',
+      'Get deployment history for an Application/Compose service or compatibility Project target. Returns recent deploys with status, trigger, commit, duration. Use service_id when available.',
     mcpDescription: 'Get deployment history with status, duration, trigger, and commit details.',
     inputSchema: deployHistorySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const serviceId = args['service_id'] as string | undefined;
+      const serviceName = args['service_name'] as string | undefined;
       const projectId = args['project_id'] as string | undefined;
       const projectName = args['project_name'] as string | undefined;
       const limit = (args['limit'] as number | undefined) ?? 10;
 
-      const project = projectId
-        ? await appCtx.db.getProject(projectId)
-        : await appCtx.db.getProjectByName(projectName ?? '');
-      if (!project) throw new ProjectNotFoundError(projectId ?? projectName ?? '');
+      let project: ProjectRow;
+      let targetServiceId: string | undefined;
+      if (serviceId || serviceName) {
+        const resolved = await resolveDeployableTarget(appCtx, args, 'get_deploy_history');
+        project = resolved.project;
+        targetServiceId = resolved.service.id;
+      } else {
+        const resolvedProject = projectId
+          ? await appCtx.db.getProject(projectId)
+          : await appCtx.db.getProjectByName(projectName ?? '');
+        if (!resolvedProject) throw new ProjectNotFoundError(projectId ?? projectName ?? '');
+        project = resolvedProject;
+        const deployables =
+          typeof appCtx.db.getDeployablesByGroup === 'function'
+            ? await appCtx.db.getDeployablesByGroup(project.id)
+            : [];
+        targetServiceId = deployables.length === 1 ? deployables[0]?.id : undefined;
+      }
 
-      const logs = await appCtx.db.getDeployLogs(project.id, limit);
+      const logs = targetServiceId
+        ? await appCtx.db.getDeployLogsForService(targetServiceId, limit)
+        : await appCtx.db.getDeployLogs(project.id, limit);
 
       return Promise.resolve({
         project: project.name,
         project_id: project.id,
+        ...(targetServiceId ? { service_id: targetServiceId } : {}),
         count: logs.length,
         history: logs.map((log) => ({
           id: log.id,

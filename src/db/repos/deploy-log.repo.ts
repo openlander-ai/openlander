@@ -69,6 +69,14 @@ export class DeployLogRepo {
     _serverId?: string,
   ): Promise<DeployLogRow[]> {
     const serviceId = projectIdToDeployableServiceId(projectId);
+    return this.getDeployLogsForService(serviceId, limit, environmentId);
+  }
+
+  async getDeployLogsForService(
+    serviceId: string,
+    limit = 20,
+    environmentId?: string,
+  ): Promise<DeployLogRow[]> {
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);
@@ -87,6 +95,13 @@ export class DeployLogRepo {
     environmentId?: string,
   ): Promise<DeployLogRow | undefined> {
     const serviceId = projectIdToDeployableServiceId(projectId);
+    return this.getLastDeployLogForService(serviceId, environmentId);
+  }
+
+  async getLastDeployLogForService(
+    serviceId: string,
+    environmentId?: string,
+  ): Promise<DeployLogRow | undefined> {
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);
