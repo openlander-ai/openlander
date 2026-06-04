@@ -76,8 +76,20 @@ type ContainerState = {
   Running?: boolean;
   Restarting?: boolean;
   ExitCode?: number;
+  StartedAt?: string;
   Health?: { Status?: string };
 };
+
+type ContainerInspectState = {
+  RestartCount?: number;
+  State?: ContainerState;
+};
+
+function isRecentContainerStart(value: unknown, maxAgeMs: number): boolean {
+  if (typeof value !== 'string') return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && Date.now() - parsed >= 0 && Date.now() - parsed <= maxAgeMs;
+}
 
 function readinessGuidance(readiness: DeploymentReadiness): string | undefined {
   if (readiness === 'unhealthy') {
@@ -123,7 +135,7 @@ async function inspectProjectReadiness(
   }
 
   try {
-    const info = (await appCtx.docker.inspectContainer(containerId)) as { State?: ContainerState };
+    const info = (await appCtx.docker.inspectContainer(containerId)) as ContainerInspectState;
     const state = info.State ?? {};
     if (state.Restarting || state.Running === false) {
       return {
@@ -133,6 +145,19 @@ async function inspectProjectReadiness(
           state.ExitCode === undefined
             ? 'Container is not running.'
             : `Container is not running (exit code ${String(state.ExitCode)}).`,
+      };
+    }
+
+    const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : 0;
+    if (
+      state.Running === true &&
+      restartCount >= 3 &&
+      isRecentContainerStart(state.StartedAt, 5 * 60 * 1000)
+    ) {
+      return {
+        readiness: 'unhealthy',
+        ready: false,
+        message: `Container restarted ${String(restartCount)} times recently. Treat this as a restart loop until diagnose_service/logs confirm the current process is stable.`,
       };
     }
 

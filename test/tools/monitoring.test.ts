@@ -1402,6 +1402,73 @@ describe('service-targeted monitoring tools', () => {
     );
   });
 
+  it('diagnose_service treats repeated restarts as a restart loop even when Docker says running', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.docker.inspectContainer).mockResolvedValueOnce({
+      Name: '/ol-app',
+      State: {
+        Running: true,
+        Restarting: false,
+        Status: 'running',
+        ExitCode: 0,
+        Error: '',
+        StartedAt: new Date(Date.now() - 10_000).toISOString(),
+        FinishedAt: '0001-01-01T00:00:00Z',
+      },
+      Config: { Image: 'app:latest' },
+      RestartCount: 7,
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      container: {
+        running: true,
+        status: 'running',
+        restartCount: 7,
+      },
+      diagnosis: {
+        code: 'RESTART_LOOP',
+        confidence: 'high',
+        evidence: { restart_count: 7 },
+      },
+    });
+  });
+
+  it('diagnose_service does not call old restarts a restart loop after the app stabilizes', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.docker.inspectContainer).mockResolvedValueOnce({
+      Name: '/ol-app',
+      State: {
+        Running: true,
+        Restarting: false,
+        Status: 'running',
+        ExitCode: 0,
+        Error: '',
+        StartedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+        FinishedAt: '0001-01-01T00:00:00Z',
+      },
+      Config: { Image: 'app:latest' },
+      RestartCount: 7,
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result.container).toMatchObject({
+      running: true,
+      status: 'running',
+      restartCount: 7,
+    });
+    expect(result['diagnosis']).toBeUndefined();
+    expect(result['suggested_call']).toBeUndefined();
+  });
+
   it('diagnose_service synthesizes port mismatch with apply_route_config suggested_call', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Server listening on port 4000');
@@ -1434,6 +1501,99 @@ describe('service-targeted monitoring tools', () => {
         next_steps: expect.arrayContaining([expect.stringContaining('route_verification')]),
       },
     });
+  });
+
+  it('diagnose_service keeps internalHttpCheck for Docker DNS route failures', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('service logs');
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'bad gateway' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.execSimple).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      httpCheck: {
+        reachable: false,
+        probe_mode: 'internal_docker_dns',
+      },
+      internalHttpCheck: {
+        reachable: true,
+        probed_from: 'service-container',
+      },
+      route: {
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: 'external_route_failed_internal_probe_passed' }),
+        ]),
+      },
+    });
+  });
+
+  it('diagnose_service does not let host-port fallback hide a container port mismatch', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    (service as { container_name: string | null }).container_name = null;
+    service.container_port = 9999;
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('urlnest listening on 3000');
+    vi.mocked(ctx.docker.execSimple).mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'connection refused',
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      httpCheck: {
+        reachable: false,
+        probe_mode: 'service_container_loopback',
+      },
+      diagnosis: {
+        code: 'PORT_MISMATCH',
+        confidence: 'high',
+        evidence: {
+          configured_container_port: 9999,
+          detected_listening_port: 3000,
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: 'app__svc', container_port: 3000 },
+      },
+    });
+  });
+
+  it('diagnose_service suppresses duplicate internalHttpCheck after service-container loopback', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    (service as { container_name: string | null }).container_name = null;
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('service logs');
+    vi.mocked(ctx.docker.execSimple).mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'connection refused',
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.execSimple).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      httpCheck: {
+        reachable: false,
+        probe_mode: 'service_container_loopback',
+        probed_from: 'service-container',
+      },
+    });
+    expect(result['internalHttpCheck']).toBeUndefined();
   });
 
   it('diagnose_service keeps PORT_MISMATCH when APP_BASE_URL is unreachable', async () => {
@@ -1553,6 +1713,41 @@ describe('service-targeted monitoring tools', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('diagnose_service does not blame dependencies when the service container is unavailable', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    service.container_id = 'missing-container';
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://db.example.com:5432/app',
+    });
+    vi.mocked(ctx.docker.inspectContainer).mockRejectedValueOnce(new Error('No such container'));
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      dependencies: {
+        checks: [
+          expect.objectContaining({
+            key: 'DATABASE_URL',
+            reachable: false,
+          }),
+        ],
+      },
+      diagnosis: {
+        code: 'CONTAINER_NOT_RUNNING',
+        confidence: 'high',
+        evidence: {
+          present: false,
+          error: 'No such container',
+        },
+      },
+    });
+    expect(JSON.stringify(result['diagnosis'])).not.toContain('DEPENDENCY_UNREACHABLE');
   });
 
   it('diagnose_service still reports real dependency failures', async () => {
