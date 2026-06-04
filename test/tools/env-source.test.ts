@@ -72,7 +72,14 @@ function createEnvToolContext() {
   const pipeline = {
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
     redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
-    recreateServiceRuntime: vi.fn().mockResolvedValue({ success: true }),
+    recreateServiceRuntime: vi.fn().mockResolvedValue({
+      success: true,
+      readiness: 'healthy',
+      route_switched: true,
+      previous_version_still_serving: false,
+      containerId: 'container-new',
+      port: 10001,
+    }),
   };
 
   const ctx = { db, env, pipeline } as unknown as AppContext;
@@ -395,10 +402,154 @@ describe('env MCP tools', () => {
       status: 'updated_and_redeployed',
       needs_redeploy: false,
       apply_mode: 'same_image_recreate',
+      runtime_apply: {
+        mode: 'same_image_recreate',
+        status: 'verified',
+        readiness: 'healthy',
+        route_switched: true,
+        route_verification: { status: 'verified' },
+        previous_version_still_serving: false,
+        container_id: 'container-new',
+        port: 10001,
+      },
       diagnostic_call: {
         tool: 'openlander_monitor',
         action: 'diagnose_service',
         params: { service_id: 'svc1' },
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          'Same-image runtime apply completed and route verification passed.',
+        ]),
+      },
+    });
+  });
+
+  it('set_env_vars immediate apply surfaces skipped route verification for same-image recreate', async () => {
+    const { ctx, pipeline } = createEnvToolContext();
+    pipeline.recreateServiceRuntime.mockResolvedValueOnce({
+      success: true,
+      readiness: 'healthy',
+      route_switched: false,
+      previous_version_still_serving: false,
+    });
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { DATABASE_URL: 'postgres://applied' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'updated_and_redeployed',
+      needs_redeploy: false,
+      apply_mode: 'same_image_recreate',
+      runtime_apply: {
+        mode: 'same_image_recreate',
+        status: 'applied',
+        route_switched: false,
+        route_verification: {
+          status: 'skipped',
+          reason: 'missing_health_check_path',
+        },
+        previous_version_still_serving: false,
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          'Call diagnostic_call to verify runtime health before reporting success.',
+        ]),
+      },
+    });
+  });
+
+  it('set_env_vars immediate apply surfaces same-image recreate failure while previous version serves', async () => {
+    const { ctx, pipeline } = createEnvToolContext();
+    pipeline.recreateServiceRuntime.mockResolvedValueOnce({
+      success: false,
+      code: 'RUNTIME_ENV_ROUTE_VERIFY_FAILED',
+      error: 'Route probe returned HTTP 502',
+      readiness: 'unhealthy',
+      route_switched: false,
+      previous_version_still_serving: true,
+    });
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { DATABASE_URL: 'postgres://applied' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'updated_redeploy_skipped',
+      needs_redeploy: true,
+      apply_mode: 'same_image_recreate',
+      reason: 'RUNTIME_ENV_ROUTE_VERIFY_FAILED',
+      runtime_apply: {
+        mode: 'same_image_recreate',
+        status: 'failed',
+        code: 'RUNTIME_ENV_ROUTE_VERIFY_FAILED',
+        error: 'Route probe returned HTTP 502',
+        readiness: 'unhealthy',
+        route_switched: false,
+        route_verification: { status: 'failed' },
+        previous_version_still_serving: true,
+        fallback: 'redeploy_app',
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'svc1' },
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          'Runtime apply failed, but the previous version is still serving.',
+        ]),
+      },
+    });
+  });
+
+  it('set_env_vars immediate apply surfaces no runtime image as redeploy fallback', async () => {
+    const { ctx, pipeline } = createEnvToolContext();
+    pipeline.recreateServiceRuntime.mockResolvedValueOnce({
+      success: false,
+      code: 'NO_RUNTIME_IMAGE',
+      error: 'No current image is recorded for this service',
+      readiness: 'blocked',
+      route_switched: false,
+      previous_version_still_serving: false,
+    });
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { DATABASE_URL: 'postgres://applied' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'updated_redeploy_skipped',
+      needs_redeploy: true,
+      apply_mode: 'same_image_recreate',
+      reason: 'NO_RUNTIME_IMAGE',
+      runtime_apply: {
+        mode: 'same_image_recreate',
+        status: 'failed',
+        code: 'NO_RUNTIME_IMAGE',
+        readiness: 'blocked',
+        route_verification: {
+          status: 'skipped',
+          reason: 'recreate_failed_before_route_probe',
+        },
+        previous_version_still_serving: false,
+        fallback: 'redeploy_app',
       },
     });
   });
@@ -424,6 +575,12 @@ describe('env MCP tools', () => {
       status: 'updated_and_redeployed',
       needs_redeploy: false,
       apply_mode: 'full_redeploy',
+      runtime_apply: {
+        mode: 'full_redeploy',
+        status: 'started',
+        reason: 'build_time_env',
+        build_time_keys: ['NEXT_PUBLIC_API_URL'],
+      },
     });
   });
 

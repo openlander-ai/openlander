@@ -41,6 +41,41 @@ type ResolvedServiceRow = NonNullable<ServiceRow>;
 type ResolvedProjectRow = NonNullable<ProjectRow>;
 type EnvWriteScope = 'project' | 'project_environment' | 'service' | 'service_environment';
 type EnvApplyMode = 'same_image_recreate' | 'full_redeploy';
+type RuntimeRecreateOutcome = Awaited<ReturnType<AppCtx['pipeline']['recreateServiceRuntime']>>;
+type EnvRuntimeApply =
+  | {
+      mode: 'same_image_recreate';
+      status: 'verified' | 'applied';
+      readiness: RuntimeRecreateOutcome['readiness'];
+      route_switched: boolean;
+      route_verification: { status: 'verified' } | { status: 'skipped'; reason: string };
+      previous_version_still_serving: boolean;
+      container_id?: string;
+      port?: number;
+    }
+  | {
+      mode: 'same_image_recreate';
+      status: 'failed';
+      code: string;
+      error: string;
+      readiness: RuntimeRecreateOutcome['readiness'];
+      route_switched: boolean;
+      route_verification: { status: 'failed' } | { status: 'skipped'; reason: string };
+      previous_version_still_serving: boolean;
+      fallback: 'redeploy_app';
+    }
+  | {
+      mode: 'full_redeploy';
+      status: 'started';
+      reason: 'build_time_env';
+      build_time_keys: string[];
+    }
+  | {
+      mode: EnvApplyMode;
+      status: 'skipped';
+      reason: string;
+      message: string;
+    };
 
 const MAX_AUDIT_KEYS = 50;
 const ENV_WRITE_SCOPES: readonly EnvWriteScope[] = [
@@ -382,6 +417,7 @@ async function computeRedeployForTarget(
   redeployed: boolean;
   needsRedeploy: boolean;
   applyMode?: EnvApplyMode;
+  runtimeApply?: EnvRuntimeApply;
   redeploySkipped?: { reason: string; message: string };
 }> {
   if (target.service && target.runtimeProject) {
@@ -517,6 +553,83 @@ function changedEnvKeys(changes: Array<{ key: string; op: string }>): string[] {
   return changes.filter((change) => change.op !== 'noop').map((change) => change.key);
 }
 
+function sameImageRuntimeApply(result: RuntimeRecreateOutcome): EnvRuntimeApply {
+  const routeSwitched = result.route_switched === true;
+  if (result.success) {
+    return {
+      mode: 'same_image_recreate',
+      status: routeSwitched ? 'verified' : 'applied',
+      readiness: result.readiness ?? 'healthy',
+      route_switched: routeSwitched,
+      route_verification: routeSwitched
+        ? { status: 'verified' }
+        : { status: 'skipped', reason: 'missing_health_check_path' },
+      previous_version_still_serving: result.previous_version_still_serving === true,
+      ...(result.containerId ? { container_id: result.containerId } : {}),
+      ...(result.port ? { port: result.port } : {}),
+    };
+  }
+
+  const code = result.code ?? 'RUNTIME_ENV_RECREATE_FAILED';
+  return {
+    mode: 'same_image_recreate',
+    status: 'failed',
+    code,
+    error: result.error ?? 'same-image recreate failed',
+    readiness: result.readiness ?? 'unknown',
+    route_switched: routeSwitched,
+    route_verification:
+      code === 'RUNTIME_ENV_ROUTE_VERIFY_FAILED'
+        ? { status: 'failed' }
+        : { status: 'skipped', reason: 'recreate_failed_before_route_probe' },
+    previous_version_still_serving: result.previous_version_still_serving === true,
+    fallback: 'redeploy_app',
+  };
+}
+
+function runtimeApplyFields(redeploy: {
+  applyMode?: EnvApplyMode;
+  runtimeApply?: EnvRuntimeApply;
+}) {
+  return {
+    ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+    ...(redeploy.runtimeApply ? { runtime_apply: redeploy.runtimeApply } : {}),
+  };
+}
+
+function runtimeApplyGuidance(runtimeApply: EnvRuntimeApply | undefined): string[] {
+  if (!runtimeApply) return [];
+  switch (runtimeApply.status) {
+    case 'started':
+      return [
+        'A full redeploy was started because at least one changed env key is read at build time.',
+        'After the deploy reaches a terminal status, call diagnostic_call to verify runtime health.',
+      ];
+    case 'verified':
+      return [
+        'Same-image runtime apply completed and route verification passed.',
+        'diagnostic_call is optional unless the user still sees a failure.',
+      ];
+    case 'applied':
+      return [
+        'Same-image runtime apply completed, but route verification was skipped because no health_check_path is configured.',
+        'Call diagnostic_call to verify runtime health before reporting success.',
+      ];
+    case 'failed':
+      return [
+        runtimeApply.previous_version_still_serving
+          ? 'Runtime apply failed, but the previous version is still serving.'
+          : 'Runtime apply failed and OpenLander could not confirm a previous version is still serving.',
+        'Call diagnostic_call before deciding whether a full redeploy is required.',
+      ];
+    case 'skipped':
+      return [
+        `Runtime apply was skipped: ${runtimeApply.reason}.`,
+        'Call diagnostic_call if you need to inspect the current runtime before retrying.',
+      ];
+  }
+}
+
 async function projectScopeNeedsRedeploy(
   appCtx: AppCtx,
   project: ResolvedProjectRow,
@@ -538,6 +651,7 @@ async function applyRedeployIfRequested(
   redeployed: boolean;
   needsRedeploy: boolean;
   applyMode?: EnvApplyMode;
+  runtimeApply?: EnvRuntimeApply;
   redeploySkipped?: { reason: string; message: string };
 }> {
   const { project, service, runtimeProject } = target;
@@ -555,6 +669,12 @@ async function applyRedeployIfRequested(
     return {
       redeployed: false,
       needsRedeploy: true,
+      runtimeApply: {
+        mode: changedKeys.some(isBuildTimeEnvKey) ? 'full_redeploy' : 'same_image_recreate',
+        status: 'skipped',
+        reason: 'PROJECT_BUSY',
+        message: `Another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
+      },
       redeploySkipped: {
         reason: 'PROJECT_BUSY',
         message: `Env vars saved but redeploy was skipped: another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
@@ -564,19 +684,37 @@ async function applyRedeployIfRequested(
 
   try {
     if (changedKeys.some(isBuildTimeEnvKey)) {
+      const buildTimeKeys = changedKeys.filter(isBuildTimeEnvKey);
       await appCtx.pipeline.redeployService(service.id, { trigger });
-      return { redeployed: true, needsRedeploy: false, applyMode: 'full_redeploy' };
+      return {
+        redeployed: true,
+        needsRedeploy: false,
+        applyMode: 'full_redeploy',
+        runtimeApply: {
+          mode: 'full_redeploy',
+          status: 'started',
+          reason: 'build_time_env',
+          build_time_keys: buildTimeKeys,
+        },
+      };
     }
 
     const result = await appCtx.pipeline.recreateServiceRuntime(service.id, { trigger });
+    const runtimeApply = sameImageRuntimeApply(result);
     if (result.success) {
-      return { redeployed: true, needsRedeploy: false, applyMode: 'same_image_recreate' };
+      return {
+        redeployed: true,
+        needsRedeploy: false,
+        applyMode: 'same_image_recreate',
+        runtimeApply,
+      };
     }
 
     return {
       redeployed: false,
       needsRedeploy: true,
       applyMode: 'same_image_recreate',
+      runtimeApply,
       redeploySkipped: {
         reason: result.code ?? 'RUNTIME_ENV_RECREATE_FAILED',
         message: `Env vars saved but runtime apply was skipped for ${project.name}/${service.name}: ${result.error ?? 'same-image recreate failed'}`,
@@ -594,6 +732,12 @@ async function applyRedeployIfRequested(
         redeploySkipped: {
           reason: err.code,
           message: `Env vars saved but redeploy was skipped for ${project.name}/${service.name}: ${err.message}`,
+        },
+        runtimeApply: {
+          mode: changedKeys.some(isBuildTimeEnvKey) ? 'full_redeploy' : 'same_image_recreate',
+          status: 'skipped',
+          reason: err.code,
+          message: err.message,
         },
       };
     }
@@ -751,7 +895,7 @@ export const envToolDefs: ToolDef[] = [
           keys: Object.keys(vars),
           changed: changes,
           needs_redeploy: false,
-          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+          ...runtimeApplyFields(redeploy),
           ...(target.service
             ? {
                 diagnostic_call: {
@@ -761,6 +905,9 @@ export const envToolDefs: ToolDef[] = [
                 },
               }
             : {}),
+          _agent_guidance: {
+            next_steps: runtimeApplyGuidance(redeploy.runtimeApply),
+          },
         };
       }
 
@@ -776,7 +923,19 @@ export const envToolDefs: ToolDef[] = [
           needs_redeploy: true,
           reason: redeploy.redeploySkipped.reason,
           message: redeploy.redeploySkipped.message,
-          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+          ...runtimeApplyFields(redeploy),
+          ...(target.service
+            ? {
+                diagnostic_call: {
+                  tool: 'openlander_monitor',
+                  action: 'diagnose_service',
+                  params: { service_id: target.service.id },
+                },
+              }
+            : {}),
+          _agent_guidance: {
+            next_steps: runtimeApplyGuidance(redeploy.runtimeApply),
+          },
         };
       }
 
@@ -865,7 +1024,7 @@ export const envToolDefs: ToolDef[] = [
         ...targetResponseFields(target),
         key,
         needs_redeploy: redeploy.needsRedeploy,
-        ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+        ...runtimeApplyFields(redeploy),
       };
     },
   },
@@ -928,7 +1087,7 @@ export const envToolDefs: ToolDef[] = [
         not_found: result.notFound,
         count_deleted: result.deleted.length,
         needs_redeploy: redeploy.needsRedeploy,
-        ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+        ...runtimeApplyFields(redeploy),
       };
     },
   },

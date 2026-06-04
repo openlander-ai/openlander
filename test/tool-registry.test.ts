@@ -105,7 +105,14 @@ function createMockContext(opts?: {
     }),
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
     redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
-    recreateServiceRuntime: vi.fn().mockResolvedValue({ success: true }),
+    recreateServiceRuntime: vi.fn().mockResolvedValue({
+      success: true,
+      readiness: 'healthy',
+      route_switched: true,
+      previous_version_still_serving: false,
+      containerId: 'container-new',
+      port: 10001,
+    }),
   };
 
   const env = {
@@ -367,10 +374,26 @@ describe('Tool Registry', () => {
       changed: [{ key: 'API_URL', op: 'update' }],
       needs_redeploy: false,
       apply_mode: 'same_image_recreate',
+      runtime_apply: {
+        mode: 'same_image_recreate',
+        status: 'verified',
+        readiness: 'healthy',
+        route_switched: true,
+        route_verification: { status: 'verified' },
+        previous_version_still_serving: false,
+        container_id: 'container-new',
+        port: 10001,
+      },
       diagnostic_call: {
         tool: 'openlander_monitor',
         action: 'diagnose_service',
         params: { service_id: 'p1__svc' },
+      },
+      _agent_guidance: {
+        next_steps: [
+          'Same-image runtime apply completed and route verification passed.',
+          'diagnostic_call is optional unless the user still sees a failure.',
+        ],
       },
     });
   });

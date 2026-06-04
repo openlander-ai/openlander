@@ -2088,13 +2088,13 @@ function nextStepsForDiagnosis(
   if (call.action === 'apply_route_config') {
     return [
       'Use suggested_call to update the managed route without rebuilding or recreating the image.',
-      'Wait for the Traefik HTTP provider polling window, then call diagnose_service again to verify.',
+      'Read the action result route_verification field: verified means the route passed, skipped means call diagnostic_call, and failed/rolled_back means the previous route config was restored.',
     ];
   }
   if (call.action === 'set_env_vars') {
     return [
       'Replace placeholder values in suggested_call.params.variables, then execute suggested_call to save env and apply the same-image runtime recreate path.',
-      'Call diagnose_service again after the action to verify the runtime sees the env.',
+      'Read the action result runtime_apply field: verified means the same-image apply passed, applied/skipped needs diagnostic_call, and failed includes whether the previous version is still serving.',
     ];
   }
   return [

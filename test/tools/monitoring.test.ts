@@ -1429,6 +1429,9 @@ describe('service-targeted monitoring tools', () => {
         action: 'apply_route_config',
         params: { service_id: 'app__svc', container_port: 4000 },
       },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('route_verification')]),
+      },
     });
   });
 
@@ -1481,6 +1484,9 @@ describe('service-targeted monitoring tools', () => {
           variables: { DATABASE_URL: '<DATABASE_URL_value>' },
           defer_redeploy: false,
         },
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('runtime_apply')]),
       },
     });
   });
