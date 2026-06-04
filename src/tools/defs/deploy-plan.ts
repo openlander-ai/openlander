@@ -1959,9 +1959,9 @@ export const deployPlanToolDefs: ToolDef[] = [
         warnings: plan.warnings,
         _agent_guidance: {
           networking: [
-            'Application and Database/Cache/Storage containers are isolated on the Project Docker network. Do NOT create Docker networks manually.',
+            'New OpenLander-managed Applications and Database/Cache/Storage resources use Project-scoped Docker networks by default.',
             'Use Database/Cache resources created in the same Project as the default app DB/cache path.',
-            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+            'For existing Docker/PaaS migrations, inspect and back up existing volumes before changing network attachments.',
           ],
         },
       });

@@ -23,11 +23,11 @@ ambiguous monorepo deploys; expose the service after attach if needed.
 
 ## Mental Model
 
-| Term                          | Meaning                                                                            | Use it for                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Project                       | A workspace that groups related resources.                                         | Organization, settings, resource list.           |
-| Application                   | An app, API, worker, or image workload that OpenLander builds/runs.                | Env vars, redeploys, domains, logs, diagnostics. |
-| Compose                       | A compose stack represented as one Project-level resource.                         | Stack deploys and stack-level diagnostics.       |
+| Term                            | Meaning                                                                            | Use it for                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Project                         | A workspace that groups related resources.                                         | Organization, settings, resource list.           |
+| Application                     | An app, API, worker, or image workload that OpenLander builds/runs.                | Env vars, redeploys, domains, logs, diagnostics. |
+| Compose                         | A compose stack represented as one Project-level resource.                         | Stack deploys and stack-level diagnostics.       |
 | Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets.        |
 
 After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
@@ -57,6 +57,23 @@ database lands on the same isolated network as the app.
 3. `openlander_service.set_env_vars(service_id: "<app service_id>", variables: { DATABASE_URL: "<connection string>" })`
 4. `openlander_service.redeploy_app(service_id: "<app service_id>")`
 5. Verify the app's `/health` reports the database as reachable.
+
+---
+
+## Migrating Existing Docker/PaaS Workloads
+
+OpenLander v0.1 is optimized for new OpenLander-managed apps and Project-scoped
+resources. Existing Docker/PaaS workloads can still be moved over, but treat
+that as an operator-assisted migration rather than a one-click import flow.
+
+Before changing anything, back up persistent data and inspect the existing
+containers, volumes, networks, env vars, and routing labels. Do not delete or
+recreate data volumes during migration/recovery. Preserve existing Docker
+assets, import the required env vars, then redeploy or reconnect services
+deliberately with a human-approved runbook.
+
+Automatic adoption of existing containers, networks, and volumes is planned
+after v0.1.
 
 ---
 
