@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.3] - 2026-06-04
+
+> `v0.1.14-rc.2` is superseded for release QA. Exact-image GitHub release gate
+> passed, but dogfood Day-2 live QA found that route verification could accept a
+> stale 2xx from the previous Traefik HTTP-provider snapshot immediately after a
+> bad route target flip.
+
+### Fixed
+
+- Wait past the managed Traefik HTTP-provider poll window before accepting a
+  public route 2xx as verified after route target flips, preventing
+  `apply_route_config`, same-image runtime recreate, and blue-green swaps from
+  treating stale routes as successful cutovers.
+
 ## [0.1.14-rc.2] - 2026-06-04
 
 > `v0.1.14-rc.1` is superseded for release QA. Live Day-2 route recovery QA found
