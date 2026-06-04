@@ -80,6 +80,12 @@ function createDuplicateServiceContext(
         ),
       ),
       listDomainMappings: vi.fn(async () => domainMappings),
+      updateService: vi.fn(async (serviceId: string, updates: { containerPort?: number }) => {
+        const service = services.find((item) => item.id === serviceId);
+        if (service && updates.containerPort !== undefined) {
+          service.container_port = updates.containerPort;
+        }
+      }),
       isCircuitBreakerOpen: vi.fn(() => false),
       acquireDeployLock: vi.fn(() => true),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
@@ -93,6 +99,7 @@ function createDuplicateServiceContext(
         fallback_strategy: 'force',
       }),
       redeploy: vi.fn().mockResolvedValue({ success: true }),
+      redeployService: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
@@ -151,6 +158,7 @@ function createMultiDeployableProjectContext(): AppContext {
     },
     pipeline: {
       redeploy: vi.fn().mockResolvedValue({ success: true }),
+      redeployService: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
@@ -254,6 +262,42 @@ describe('deployable service target resolution', () => {
     });
   });
 
+  it('apply_route_config updates the live container port without redeploying', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        status: 'running',
+        container_id: 'container-alpha',
+        container_name: 'ol-alpha',
+        container_port: 3000,
+      },
+    });
+
+    const result = (await getTool(ctx, 'apply_route_config').execute(
+      { service_id: 'alpha__svc', container_port: 4000 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.updateService).toHaveBeenCalledWith('alpha__svc', { containerPort: 4000 });
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'applied',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      route_config: {
+        previous_container_port: 3000,
+        container_port: 4000,
+        container_name: 'ol-alpha',
+        provider: 'traefik_http',
+        applied_without_redeploy: true,
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'alpha__svc' },
+      },
+    });
+  });
+
   it('scopes service_name lookup by project_name', async () => {
     const ctx = createDuplicateServiceContext();
     const result = await getTool(ctx, 'redeploy_app').execute(
@@ -269,12 +313,24 @@ describe('deployable service target resolution', () => {
         action: 'diagnose_service',
         params: { service_id: 'beta__svc' },
       },
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { service_id: 'beta__svc' },
+      },
     });
     expect(result).toMatchObject({
       _agent_guidance: {
         next_steps: expect.arrayContaining([expect.stringContaining('diagnose_service')]),
       },
     });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'beta__svc',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
+    );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('accepts a project group name as service_name when it has one deployable', async () => {
@@ -293,6 +349,13 @@ describe('deployable service target resolution', () => {
         params: { service_id: 'alpha__svc' },
       },
     });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
+    );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('blocks unsupported blue-green redeploys before acquiring a deploy lock', async () => {
@@ -321,6 +384,7 @@ describe('deployable service target resolution', () => {
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
   it('blocks image/manual-restore redeploys without an image source before acquiring a deploy lock', async () => {
@@ -344,6 +408,7 @@ describe('deployable service target resolution', () => {
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
   it('blocks local OpenLander image tags before acquiring a deploy lock', async () => {

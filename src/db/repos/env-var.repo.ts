@@ -37,9 +37,8 @@ export class EnvVarRepo {
     return and(this.projectWhere(projectId, environmentId), eq(envVars.key, key));
   }
 
-  private serviceWhere(projectId: string, serviceId: string, environmentId?: string) {
+  private serviceWhere(_projectId: string, serviceId: string, environmentId?: string) {
     return and(
-      eq(envVars.project_id, projectId),
       eq(envVars.service_id, serviceId),
       environmentId === undefined
         ? isNull(envVars.environment_id)

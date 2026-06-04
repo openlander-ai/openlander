@@ -397,6 +397,17 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
   it('records a visible failure when missing production environment recreation fails', async () => {
     const project = makeExistingProjectRow('p-no-env', 'no-env-app');
     const db = createMockDb(project);
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'p-no-env__svc',
+      project_id: 'p-no-env',
+      name: 'app',
+      kind: 'git',
+      source: 'git',
+      repo_url: 'https://github.com/test/no-env-app',
+      image_url: null,
+      branch: 'main',
+      status: 'running',
+    });
     (db.createEnvironment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('service row missing'),
     );

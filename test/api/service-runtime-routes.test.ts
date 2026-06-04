@@ -118,6 +118,7 @@ function makeRuntimeContext(
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     redeploy: vi.fn(async () => ({ success: true, projectId: runtime.id })),
+    redeployService: vi.fn(async () => ({ success: true, projectId: runtime.id })),
     getBlueGreenEligibility: vi.fn(async () => ({
       supported: true,
       code: 'BLUE_GREEN_UNSUPPORTED',
@@ -133,10 +134,13 @@ function makeRuntimeContext(
     db,
     pipeline,
     coordinator,
-    env: { set: vi.fn(async () => undefined) },
+    env: {
+      set: vi.fn(async () => undefined),
+      setBulkForService: vi.fn(async () => true),
+    },
     ...overrides,
   } as unknown as AppContext;
-  return { app: createApp(ctx), db, pipeline, coordinator, group, runtime, service };
+  return { app: createApp(ctx), db, pipeline, coordinator, group, runtime, service, env: ctx.env };
 }
 
 function makeDeleteRuntimeContext(
@@ -257,7 +261,7 @@ describe('createServiceRuntimeRoutes', () => {
   });
 
   it('deploys the selected service runtime project', async () => {
-    const { app, db, pipeline, runtime, service } = makeRuntimeContext();
+    const { app, db, env, pipeline, runtime, service } = makeRuntimeContext();
 
     const res = await app.request('/api/projects/group-1/services/api__svc/deploy?strategy=force', {
       method: 'POST',
@@ -267,10 +271,14 @@ describe('createServiceRuntimeRoutes', () => {
 
     expect(res.status).toBe(200);
     expect(db.updateProject).toHaveBeenCalledWith(runtime.id, { status: 'building' });
-    expect(pipeline.redeploy).toHaveBeenCalledWith(
-      runtime.id,
+    expect(env.setBulkForService).toHaveBeenCalledWith(runtime.id, service.id, {
+      NODE_ENV: 'production',
+    });
+    expect(pipeline.redeployService).toHaveBeenCalledWith(
+      service.id,
       expect.objectContaining({ noCache: true, strategy: 'force' }),
     );
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       projectId: 'group-1',
       serviceId: service.id,
@@ -292,7 +300,7 @@ describe('createServiceRuntimeRoutes', () => {
     });
 
     expect(res.status).toBe(409);
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       code: 'PROJECT_ARCHIVED',
       details: { projectId: runtime.id },
@@ -314,7 +322,7 @@ describe('createServiceRuntimeRoutes', () => {
 
     expect(res.status).toBe(400);
     expect(db.updateProject).not.toHaveBeenCalledWith(runtime.id, { status: 'building' });
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       success: false,
       code: 'SERVICE_SOURCE_MISSING',
@@ -337,7 +345,7 @@ describe('createServiceRuntimeRoutes', () => {
 
     expect(res.status).toBe(400);
     expect(db.updateProject).not.toHaveBeenCalledWith(runtime.id, { status: 'building' });
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       success: false,
       code: 'SERVICE_SOURCE_MISSING',
@@ -359,8 +367,8 @@ describe('createServiceRuntimeRoutes', () => {
 
     expect(res.status).toBe(200);
     expect(db.updateProject).not.toHaveBeenCalledWith(runtime.id, { status: 'building' });
-    expect(pipeline.redeploy).toHaveBeenCalledWith(
-      runtime.id,
+    expect(pipeline.redeployService).toHaveBeenCalledWith(
+      'api__svc',
       expect.objectContaining({ strategy: 'blue-green', healthCheckPath: '/' }),
     );
   });
@@ -385,7 +393,7 @@ describe('createServiceRuntimeRoutes', () => {
 
     expect(res.status).toBe(409);
     expect(db.updateProject).not.toHaveBeenCalled();
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       status: 'blocked',
       code: 'BLUE_GREEN_UNSUPPORTED',

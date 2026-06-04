@@ -66,7 +66,47 @@ function createMockContext() {
       getDeployableForProject: vi.fn((id: string) =>
         id === project.id ? { id: 'p1__svc', status: 'healthy', assigned_port: 10001 } : undefined,
       ),
+      getDeployablesByGroup: vi.fn((id: string) =>
+        id === project.id
+          ? [
+              {
+                id: 'p1__svc',
+                name: 'critical-app__svc',
+                project_id: 'p1',
+                kind: 'git',
+                source: 'git',
+                status: 'healthy',
+                assigned_port: 10001,
+              },
+            ]
+          : [],
+      ),
+      getService: vi.fn((id: string) =>
+        id === 'p1__svc'
+          ? {
+              id: 'p1__svc',
+              name: 'critical-app__svc',
+              project_id: 'p1',
+              kind: 'git',
+              source: 'git',
+              status: 'healthy',
+              assigned_port: 10001,
+            }
+          : undefined,
+      ),
+      listServices: vi.fn(() => [
+        {
+          id: 'p1__svc',
+          name: 'critical-app__svc',
+          project_id: 'p1',
+          kind: 'git',
+          source: 'git',
+          status: 'healthy',
+          assigned_port: 10001,
+        },
+      ]),
       getLastDeployLog: vi.fn(),
+      getLastDeployLogForService: vi.fn(),
       getDeployLogs: vi.fn().mockReturnValue([
         {
           id: 'deploy-1',
@@ -77,6 +117,19 @@ function createMockContext() {
           duration_ms: 1200,
           created_at: '2026-05-13T00:00:00.000Z',
           build_log: 'build failed',
+        },
+      ]),
+      getDeployLogsForService: vi.fn().mockReturnValue([
+        {
+          id: 'deploy-service-1',
+          service_id: 'p1__svc',
+          status: 'failed',
+          trigger: 'api',
+          commit_sha: 'def456',
+          duration_ms: 2200,
+          created_at: '2026-05-14T00:00:00.000Z',
+          build_log: rawBuildLog,
+          runtime_log: rawRuntimeLog,
         },
       ]),
       getDeployLog: vi.fn((id: string) =>
@@ -172,10 +225,11 @@ describe('registry critical tool behaviors', () => {
     const history = await historyTool.execute({ project_id: 'p1', limit: 3 }, { target: 'mcp' });
     const buildLog = await buildLogTool.execute({ deploy_id: 'deploy-1' }, { target: 'mcp' });
 
-    expect(ctx.db.getDeployLogs).toHaveBeenCalledWith('p1', 3);
+    expect(ctx.db.getDeployLogsForService).toHaveBeenCalledWith('p1__svc', 3);
     expect(history).toMatchObject({
       project: 'critical-app',
       project_id: 'p1',
+      service_id: 'p1__svc',
       count: 1,
     });
     expect(ctx.db.getDeployLog).toHaveBeenCalledWith('deploy-1');
@@ -295,6 +349,38 @@ describe('registry critical tool behaviors', () => {
     });
   });
 
+  it('get_deploy_status accepts service_id and returns service-first poll links', async () => {
+    const { ctx, jobManager } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+    const now = new Date(Date.now() - 3000);
+
+    jobManager.getStatus.mockReturnValue({
+      projectId: 'p1',
+      projectName: 'critical-app',
+      phase: 'building',
+      startedAt: now,
+      errorSummary: null,
+    });
+
+    const result = await tool.execute({ service_id: 'p1__svc' }, { target: 'mcp' });
+
+    expect(ctx.db.getService).toHaveBeenCalledWith('p1__svc');
+    expect(result).toMatchObject({
+      active: 1,
+      jobs: [
+        {
+          service_id: 'p1__svc',
+          phase: 'building',
+          status_call: {
+            tool: 'openlander_deploy',
+            action: 'get_deploy_status',
+            params: { service_id: 'p1__svc' },
+          },
+        },
+      ],
+    });
+  });
+
   it('get_deploy_status prefers a newer deploy lock over stale completed job state', async () => {
     const { ctx, jobManager } = createMockContext();
     const tool = getTool(ctx, 'get_deploy_status');
@@ -377,6 +463,42 @@ describe('registry critical tool behaviors', () => {
           build_log_tail: 'line 1\nline 2\nline 3',
         },
       ],
+    });
+  });
+
+  it('get_deploy_history reads exact service deploy logs when service_id is provided', async () => {
+    const { ctx } = createMockContext();
+    const historyTool = getTool(ctx, 'get_deploy_history');
+
+    const result = await historyTool.execute(
+      { service_id: 'p1__svc', limit: 3 },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.db.getDeployLogsForService).toHaveBeenCalledWith('p1__svc', 3);
+    expect(ctx.db.getDeployLogs).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      project_id: 'p1',
+      service_id: 'p1__svc',
+      count: 1,
+      history: [{ id: 'deploy-service-1', commit_sha: 'def456' }],
+    });
+  });
+
+  it('get_build_log reads exact service deploy logs when service_id is provided', async () => {
+    const { ctx, rawBuildLog, rawRuntimeLog } = createMockContext();
+    const buildLogTool = getTool(ctx, 'get_build_log');
+
+    const result = await buildLogTool.execute(
+      { service_id: 'p1__svc', deploy_index: 0 },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.db.getDeployLogsForService).toHaveBeenCalledWith('p1__svc', 1);
+    expect(result).toMatchObject({
+      id: 'deploy-service-1',
+      build_log: rawBuildLog,
+      runtime_log: rawRuntimeLog,
     });
   });
 

@@ -149,4 +149,75 @@ describeWithDatabase('env var scope storage on Postgres', () => {
       }
     });
   });
+
+  it('reads service-scoped env vars by service_id across group/runtime project ids', async () => {
+    await withIsolatedPostgresDatabase('env_service_identity', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const env = new EnvManager(db);
+        const runtimeProject = await db.createProject({
+          id: 'runtime-env-app',
+          name: 'runtime-env-app',
+          repoUrl: 'https://github.com/example/runtime-env-app',
+        });
+        const targetProject = await db.createProjectGroup({
+          id: 'target-env-group',
+          name: 'target-env-group',
+        });
+        await db.attachServiceToProject(`${runtimeProject.id}__svc`, targetProject.id);
+        const development = await db.createEnvironment({
+          id: `${runtimeProject.id}-development`,
+          projectId: runtimeProject.id,
+          type: 'development',
+          branch: 'develop',
+        });
+        const serviceId = `${runtimeProject.id}__svc`;
+
+        await env.setBulkForService(targetProject.id, serviceId, {
+          DATABASE_URL: 'postgres://group-owner/db',
+        });
+        await expect(env.getAllForService(runtimeProject.id, serviceId)).resolves.toEqual({
+          DATABASE_URL: 'postgres://group-owner/db',
+        });
+
+        await env.setBulkForService(runtimeProject.id, serviceId, {
+          REDIS_URL: 'redis://runtime-owner:6379',
+        });
+        await expect(env.getAllForService(targetProject.id, serviceId)).resolves.toEqual({
+          DATABASE_URL: 'postgres://group-owner/db',
+          REDIS_URL: 'redis://runtime-owner:6379',
+        });
+
+        await env.setBulkForService(
+          targetProject.id,
+          serviceId,
+          {
+            ENV_DATABASE_URL: 'postgres://group-owner/dev',
+          },
+          development.id,
+        );
+        await expect(env.getAllForService(runtimeProject.id, serviceId, development.id)).resolves.toEqual(
+          {
+            ENV_DATABASE_URL: 'postgres://group-owner/dev',
+          },
+        );
+
+        const resolved = await resolveEnvVars(
+          {
+            projectId: runtimeProject.id,
+            serviceId,
+            environmentId: development.id,
+          },
+          { env },
+        );
+        expect(resolved).toMatchObject({
+          DATABASE_URL: 'postgres://group-owner/db',
+          REDIS_URL: 'redis://runtime-owner:6379',
+          ENV_DATABASE_URL: 'postgres://group-owner/dev',
+        });
+      } finally {
+        await db.close();
+      }
+    });
+  });
 });

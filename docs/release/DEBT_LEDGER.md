@@ -3,6 +3,49 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.14
+
+- **Service-first deploy follow-up parameters during data-model freeze:**
+  existing deploy/debug MCP actions (`get_deploy_status`, `get_deploy_history`,
+  `get_build_log`, and `cancel_deploy`) accept `service_id` / `service_name`
+  target parameters in addition to the existing project/deploy identifiers.
+- **Why accepted:** `redeploy_app` is now service-first, so the returned
+  `status_call` and follow-up log/history/debug calls need a stable
+  Application/Compose handle. Keeping follow-up actions project-only pushed
+  agents back through runtime Project aliases and reintroduced attached-workload
+  ambiguity.
+- **Vocab review:** `service_id` remains the frozen MCP wire field for a selected
+  Application/Compose resource. User-facing copy describes the resource as
+  Application/Compose; Project targets remain compatibility shortcuts only for
+  single-workload Projects.
+- **Endpoint collision check:** this follow-up-parameter slice adds no MCP
+  action, composite slot, REST route, or database field. It extends existing
+  action schemas and updates response guidance to prefer existing `service_id`
+  values.
+- **Follow-up:** when the deployable model is unfrozen, review whether project
+  compatibility targets should be deprecated from deploy status/history/log
+  actions or remain as single-workload convenience aliases.
+
+- **`openlander_service.apply_route_config` during data-model freeze:** a new
+  deployable-touching MCP action is added to re-point a running
+  Application/Compose route to a corrected `container_port` without rebuilding
+  or recreating the container.
+- **Why accepted:** high-confidence `PORT_MISMATCH` diagnostics need a single,
+  reversible hot-path action. Without it, agents must translate a route-only
+  failure into a full `redeploy_app`, which is slower and more failure-prone for
+  Day-2 recovery.
+- **Vocab review:** the action lives under `openlander_service`, uses the
+  existing service target vocabulary (`service_id`, `service_name`, optional
+  `project_name`), and mutates the existing `container_port` runtime field. It
+  introduces no Project-vs-service noun alias and no REST surface.
+- **Endpoint collision check:** running `rg "apply_route_config|route_config"`
+  over `src`, `test`, and `docs` showed no existing MCP action or REST endpoint
+  collision before the new `openlander_service` composite slot was added. The
+  action is intentionally not exposed as a REST route.
+- **Follow-up:** when route configuration is expanded beyond port re-pointing,
+  keep live route mutations behind the same service-target vocabulary and add
+  deterministic tests that assert which Traefik provider serves the route.
+
 ## v0.1.13
 
 - **`create_deploy_plan(target_project_id=...)` during data-model freeze:**

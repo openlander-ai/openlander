@@ -69,7 +69,7 @@ describe('DeployPipeline deploy controls', () => {
     expect(result.error).toContain('Project not found: missing-project');
   });
 
-  it('redeploy resets project state and reuses existing project id', async () => {
+  it('redeploy preserves live runtime until deploy swaps containers', async () => {
     db.createProject({
       id: 'p1',
       name: 'demo-app',
@@ -93,22 +93,20 @@ describe('DeployPipeline deploy controls', () => {
     const result = await pipeline.redeploy('p1');
 
     expect(result.success).toBe(true);
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-old-1',
-    );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('ol-demo-app');
+    expect(docker.removeContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
     expect(deploySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         _projectId: 'p1',
         name: 'demo-app',
+        _preserveLiveContainerUntilRun: true,
       }),
     );
 
     const project = db.getProject('p1');
-    expect(project?.status).toBe('building');
-    expect(project?.container_id).toBeNull();
-    expect(project?.image_tag).toBeNull();
-    expect(project?.assigned_port).toBeNull();
+    expect(project?.status).toBe('running');
+    expect(project?.container_id).toBe('container-old-1');
+    expect(project?.image_tag).toBe('openlander/demo-app:v2');
+    expect(project?.assigned_port).toBe(10010);
     expect(project?.previous_image_tag).toBe('openlander/demo-app:v2');
   });
 

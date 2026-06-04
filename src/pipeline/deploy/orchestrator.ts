@@ -567,6 +567,7 @@ export async function runAndVerify(
     imageCmd: config.imageCmd,
     secretFiles: secretFilesMounts,
     restartPolicy: { Name: 'unless-stopped' },
+    removeExistingContainer: config._preserveLiveContainerUntilRun !== true,
   });
   const { containerId, port, url: internalUrl } = runResult;
 

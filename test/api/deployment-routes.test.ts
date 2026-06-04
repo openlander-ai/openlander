@@ -218,14 +218,14 @@ describe('createDeploymentRoutes', () => {
   it('lists service deployment history after resolving service aliases', async () => {
     const project = makeProjectRow();
     const service = makeServiceRow();
-    const getDeployLogs = vi.fn(async () => [makeDeployLog({ id: 'deploy-service' })]);
+    const getDeployLogsForService = vi.fn(async () => [makeDeployLog({ id: 'deploy-service' })]);
     const getService = vi.fn(async (id: string) => (id === service.id ? service : undefined));
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
         getService,
-        getDeployLogs,
+        getDeployLogsForService,
       },
     });
 
@@ -234,7 +234,7 @@ describe('createDeploymentRoutes', () => {
     expect(res.status).toBe(200);
     expect(getService).toHaveBeenNthCalledWith(1, 'group-1');
     expect(getService).toHaveBeenNthCalledWith(2, 'group-1__svc');
-    expect(getDeployLogs).toHaveBeenCalledWith('group-1__svc', 7, undefined);
+    expect(getDeployLogsForService).toHaveBeenCalledWith('group-1__svc', 7, undefined);
     await expect(res.json()).resolves.toMatchObject({
       count: 1,
       deployments: [{ id: 'deploy-service', commitMessage: 'Ship it' }],
@@ -247,20 +247,20 @@ describe('createDeploymentRoutes', () => {
       status: 'building' as ServiceRow['status'],
       updated_at: '2026-01-03T04:05:06.000Z',
     });
-    const getDeployLogs = vi.fn(async () => []);
+    const getDeployLogsForService = vi.fn(async () => []);
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
         getService: vi.fn(async () => service),
-        getDeployLogs,
+        getDeployLogsForService,
       },
     });
 
     const res = await app.request('/api/projects/group-1/services/group-1__svc/deployments');
 
     expect(res.status).toBe(200);
-    expect(getDeployLogs).toHaveBeenCalledWith('group-1__svc', 50, undefined);
+    expect(getDeployLogsForService).toHaveBeenCalledWith('group-1__svc', 50, undefined);
     await expect(res.json()).resolves.toMatchObject({
       count: 1,
       deployments: [

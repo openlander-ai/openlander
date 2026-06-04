@@ -130,7 +130,7 @@ export function createDeploymentRoutes(ctx: AppContext): Hono {
 
     const limit = parseLimit(c.req.query('limit'), 50);
     const environmentId = c.req.query('environmentId');
-    const deployLogs = await ctx.db.getDeployLogs(service.id, limit, environmentId);
+    const deployLogs = await ctx.db.getDeployLogsForService(service.id, limit, environmentId);
     const runtimeProject = await ctx.db.getProject(deployableServiceIdToProjectId(service.id));
     const deployments = prependInFlightDeploy(
       deployLogs.map(mapDeployLogSummary),

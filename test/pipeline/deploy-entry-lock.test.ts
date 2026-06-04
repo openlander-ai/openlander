@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
@@ -12,6 +12,18 @@ import { clearPortScanCache } from '../../src/pipeline/port.js';
 
 vi.mock('../../src/pipeline/preflight.js', () => ({
   preflightCheckOrThrow: vi.fn().mockResolvedValue({ warnings: [] }),
+}));
+
+const gitMockState = vi.hoisted(() => ({
+  clonePath: '',
+}));
+
+vi.mock('../../src/pipeline/git.js', () => ({
+  cloneRepo: vi.fn(async () => ({
+    path: gitMockState.clonePath,
+    commitSha: 'abc123def456',
+  })),
+  getCommitSubject: vi.fn().mockResolvedValue('test commit'),
 }));
 
 /**
@@ -33,6 +45,12 @@ type EnvLike = {
   ) => Array<{ filename: string; content: string; mountPath: string }>;
   getGlobalSecrets: () => Record<string, string>;
   getAll: () => Record<string, string>;
+  getAllWithInheritance: (projectId: string, environmentId: string) => Record<string, string>;
+  getAllForService: (
+    projectId: string,
+    serviceId: string,
+    environmentId?: string,
+  ) => Record<string, string>;
 };
 
 function createMockDocker(): Docker {
@@ -75,9 +93,11 @@ interface ProjectUpdateInput {
   imageCmd?: string | null;
   containerPort?: number | null;
   containerId?: string | null;
+  containerName?: string | null;
   imageTag?: string | null;
   previousImageTag?: string | null;
   assignedPort?: number | null;
+  buildMethod?: 'dockerfile' | 'compose' | null;
 }
 
 interface EnsureDeployableServiceInput {
@@ -206,6 +226,9 @@ function applyProjectUpdate(
     project.container_id = updates.containerId;
     if (service) service.container_id = updates.containerId;
   }
+  if (updates.containerName !== undefined && service) {
+    service.container_name = updates.containerName;
+  }
   if (updates.assignedPort !== undefined) {
     project.assigned_port = updates.assignedPort;
     if (service) service.assigned_port = updates.assignedPort;
@@ -241,6 +264,59 @@ function applyProjectUpdate(
     project.container_port = updates.containerPort;
     if (service) service.container_port = updates.containerPort;
   }
+  if (updates.buildMethod !== undefined) {
+    project.build_method = updates.buildMethod;
+    if (service) service.build_method = updates.buildMethod;
+  }
+}
+
+function applyEnvironmentUpdate(
+  environment: EnvironmentRow,
+  updates: Record<string, unknown>,
+): void {
+  if (updates.status !== undefined) {
+    environment.status = updates.status as EnvironmentRow['status'];
+  }
+  if (updates.branch !== undefined) {
+    environment.branch = updates.branch as string | null;
+  }
+  if (updates.containerId !== undefined) {
+    environment.container_id = updates.containerId as string | null;
+  }
+  if (updates.container_id !== undefined) {
+    environment.container_id = updates.container_id as string | null;
+  }
+  if (updates.assignedPort !== undefined) {
+    environment.assigned_port = updates.assignedPort as number | null;
+  }
+  if (updates.assigned_port !== undefined) {
+    environment.assigned_port = updates.assigned_port as number | null;
+  }
+  if (updates.imageTag !== undefined) {
+    environment.image_tag = updates.imageTag as string | null;
+  }
+  if (updates.image_tag !== undefined) {
+    environment.image_tag = updates.image_tag as string | null;
+  }
+  if (updates.previousImageTag !== undefined) {
+    environment.previous_image_tag = updates.previousImageTag as string | null;
+  }
+  if (updates.previous_image_tag !== undefined) {
+    environment.previous_image_tag = updates.previous_image_tag as string | null;
+  }
+  if (updates.publicUrl !== undefined) {
+    environment.public_url = updates.publicUrl as string | null;
+  }
+  if (updates.public_url !== undefined) {
+    environment.public_url = updates.public_url as string | null;
+  }
+  if (updates.containerPort !== undefined) {
+    environment.container_port = updates.containerPort as number | null;
+  }
+  if (updates.container_port !== undefined) {
+    environment.container_port = updates.container_port as number | null;
+  }
+  environment.updated_at = nowIso();
 }
 
 function createInMemoryDb(): Database {
@@ -296,6 +372,7 @@ function createInMemoryDb(): Database {
       return project;
     }),
     getDeployableForProject: vi.fn((projectId: string) => services.get(`${projectId}__svc`)),
+    getService: vi.fn((serviceId: string) => services.get(serviceId)),
     getServices: vi.fn(({ ids }: { ids?: string[] } = {}) => {
       const rows = Array.from(services.values());
       return ids ? rows.filter((service) => ids.includes(service.id)) : rows;
@@ -303,9 +380,17 @@ function createInMemoryDb(): Database {
     getUsedPorts: vi.fn(() => []),
     getChildProjects: vi.fn(() => []),
     getComposeChildProjects: vi.fn(() => []),
+    getEnvironment: vi.fn((environmentId: string) => {
+      for (const rows of environments.values()) {
+        const row = rows.find((environment) => environment.id === environmentId);
+        if (row) return row;
+      }
+      return undefined;
+    }),
     getEnvironmentsByProject: vi.fn((projectId: string) => environments.get(projectId) ?? []),
     getLastDeployLog: vi.fn(() => undefined),
     createDeployLog: vi.fn(() => undefined),
+    consumePendingFix: vi.fn(async () => null),
     createEnvironment: vi.fn((environment: EnvironmentRow) => {
       const projectId = environment.project_id ?? environment.service_id.replace(/__svc$/, '');
       const rows = environments.get(projectId) ?? [];
@@ -318,7 +403,7 @@ function createInMemoryDb(): Database {
       for (const rows of environments.values()) {
         const row = rows.find((environment) => environment.id === id);
         if (row) {
-          Object.assign(row, updates, { updated_at: nowIso() });
+          applyEnvironmentUpdate(row, updates as Record<string, unknown>);
           return row;
         }
       }
@@ -368,11 +453,14 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-deploy-entry-lock-'));
+    gitMockState.clonePath = tmpDir;
     db = createInMemoryDb();
     docker = createMockDocker();
     env = {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
+      getAllWithInheritance: vi.fn().mockReturnValue({}),
+      getAllForService: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
@@ -381,6 +469,7 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
 
   afterEach(() => {
     clearPortScanCache();
+    gitMockState.clonePath = '';
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -596,6 +685,71 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
   });
 
   describe('blueGreenRedeploy() via redeploy(strategy=blue-green)', () => {
+    it('keeps the live runtime when a force redeploy build fails before swap', async () => {
+      writeFileSync(
+        join(tmpDir, 'Dockerfile'),
+        'FROM node:22-alpine\nEXPOSE 3000\nCMD ["node", "server.js"]\n',
+        'utf8',
+      );
+      db.createProject({
+        id: 'p-safe',
+        name: 'safe-redeploy-app',
+        repoUrl: 'https://github.com/test/safe-redeploy-app',
+        branch: 'main',
+      });
+      db.updateProject('p-safe', {
+        status: 'running',
+        containerId: 'container-live-123',
+        containerName: 'ol-safe-redeploy-app',
+        assignedPort: 10042,
+        imageTag: 'openlander/safe-redeploy-app:live',
+      });
+      const productionEnvironment = db
+        .getEnvironmentsByProject('p-safe')
+        .find((environment) => environment.type === 'production');
+      expect(productionEnvironment).toBeDefined();
+      db.updateEnvironment(productionEnvironment!.id, {
+        status: 'running',
+        containerId: 'container-live-123',
+        assignedPort: 10042,
+        imageTag: 'openlander/safe-redeploy-app:live',
+      });
+      (docker.buildImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('build failed before swap'),
+      );
+
+      const result = await pipeline.redeploy('p-safe', { strategy: 'force' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('build failed before swap');
+      expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+      expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+        'container-live-123',
+      );
+      expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+        'ol-safe-redeploy-app',
+      );
+
+      const project = db.getProject('p-safe');
+      const environment = db.getEnvironment(productionEnvironment!.id);
+      expect(project?.status).toBe('running');
+      expect(project?.container_id).toBe('container-live-123');
+      expect(project?.assigned_port).toBe(10042);
+      expect(project?.image_tag).toBe('openlander/safe-redeploy-app:live');
+      expect(environment?.status).toBe('running');
+      expect(environment?.container_id).toBe('container-live-123');
+      expect(environment?.assigned_port).toBe(10042);
+      expect(environment?.image_tag).toBe('openlander/safe-redeploy-app:live');
+      expect(db.createDeployLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'p-safe',
+          environmentId: productionEnvironment!.id,
+          status: 'failed',
+          buildLog: expect.stringContaining('build failed before swap'),
+        }),
+      );
+    });
+
     it('lock is held during redeploy and released afterwards', async () => {
       db.createProject({
         id: 'p-bg',

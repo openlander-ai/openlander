@@ -69,7 +69,10 @@ function createEnvToolContext() {
       changed: true,
     }),
   };
-  const pipeline = { redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }) };
+  const pipeline = {
+    redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+    redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+  };
 
   const ctx = { db, env, pipeline } as unknown as AppContext;
   return { ctx, db, env, pipeline };
@@ -384,7 +387,8 @@ describe('env MCP tools', () => {
       { appCtx: ctx, target: 'mcp' },
     );
 
-    expect(pipeline.redeploy).toHaveBeenCalledWith('p1', { trigger: 'chat' });
+    expect(pipeline.redeployService).toHaveBeenCalledWith('svc1', { trigger: 'chat' });
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'updated_and_redeployed',
       needs_redeploy: false,

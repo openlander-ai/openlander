@@ -7,6 +7,8 @@ import {
   runAndVerify,
   type DeployOrchestrationDeps,
 } from '../../src/pipeline/deploy/orchestrator.js';
+import { ContainerOps } from '../../src/pipeline/docker/container.js';
+import type { DockerContext } from '../../src/pipeline/docker/context.js';
 
 describe('Monorepo readiness gate (executeOrdered)', () => {
   const buildTopology = (services: { name: string; dependsOn: string[] }[]): ServiceTopology => {
@@ -72,7 +74,7 @@ describe('Monorepo readiness gate (executeOrdered)', () => {
       waitForHealthy: vi.fn().mockImplementation(async (service) => {
         warn(
           { serviceName: service.name, error: 'timeout' },
-          'Monorepo health check: not healthy within 60s — proceeding anyway',
+          'Monorepo health check: not healthy within readiness window — proceeding anyway',
         );
         return { healthy: true };
       }),
@@ -86,8 +88,64 @@ describe('Monorepo readiness gate (executeOrdered)', () => {
     expect(deployedServices).toContain('worker');
     expect(warn).toHaveBeenCalledWith(
       { serviceName: 'api', error: 'timeout' },
-      'Monorepo health check: not healthy within 60s — proceeding anyway',
+      'Monorepo health check: not healthy within readiness window — proceeding anyway',
     );
+  });
+});
+
+describe('Docker readiness wait', () => {
+  it('extends the wait deadline to honor Docker HEALTHCHECK start_period', async () => {
+    vi.useFakeTimers();
+    const startedAt = new Date('2026-01-01T00:00:00.000Z');
+    vi.setSystemTime(startedAt);
+    const startingResponse = {
+      Config: { Healthcheck: { StartPeriod: 3_000_000_000 } },
+      State: {
+        Running: true,
+        Restarting: false,
+        ExitCode: 0,
+        StartedAt: startedAt.toISOString(),
+        Health: { Status: 'starting' },
+      },
+    };
+    const healthyResponse = {
+      Config: { Healthcheck: { StartPeriod: 3_000_000_000 } },
+      State: {
+        Running: true,
+        Restarting: false,
+        ExitCode: 0,
+        StartedAt: startedAt.toISOString(),
+        Health: { Status: 'healthy' },
+      },
+    };
+    const inspectResponses = [
+      startingResponse,
+      startingResponse,
+      startingResponse,
+      startingResponse,
+      startingResponse,
+      startingResponse,
+      startingResponse,
+      healthyResponse,
+    ];
+    const inspect = vi.fn(async () => inspectResponses.shift() ?? healthyResponse);
+    const ops = new ContainerOps(
+      {
+        client: {
+          getContainer: vi.fn(() => ({ inspect })),
+        },
+      } as unknown as DockerContext,
+      {
+        ensureSharedNetworkAttachment: vi.fn(),
+        connectToNetworkStrict: vi.fn(),
+      },
+    );
+
+    const result = ops.waitForHealthy('container-with-start-period', 1000);
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await expect(result).resolves.toEqual({ healthy: true });
+    expect(inspect).toHaveBeenCalledTimes(8);
   });
 });
 
@@ -152,6 +210,7 @@ describe('Deploy runtime log capture', () => {
     }
 
     expect(runtime.getLogs).toHaveBeenCalledWith('container-runtime-crash', 'all');
+    expect(runtime.waitForHealthy).toHaveBeenCalledWith('container-runtime-crash', 20000);
     expect(extractRuntimeLogFromDeployError(thrown)).toBe(runtimeLog);
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toContain('Container logs (last 80 lines)');

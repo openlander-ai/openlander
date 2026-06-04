@@ -22,6 +22,25 @@ import { ContainerNotFoundError, isDockerNotFoundError } from '../../errors.js';
 import { sleep } from '../../lib/sleep.js';
 
 const log = createModuleLogger('docker:container');
+const DEFAULT_HEALTH_POLL_INTERVAL_MS = 500;
+const HEALTHCHECK_START_PERIOD_GRACE_MS = 500;
+
+function getHealthcheckStartPeriodMs(info: Dockerode.ContainerInspectInfo): number {
+  const startPeriodNs = info.Config.Healthcheck?.StartPeriod;
+  if (typeof startPeriodNs !== 'number' || startPeriodNs <= 0) {
+    return 0;
+  }
+  return Math.ceil(startPeriodNs / 1_000_000);
+}
+
+function getContainerStartedAtMs(info: Dockerode.ContainerInspectInfo, fallbackMs: number): number {
+  const startedAt = info.State.StartedAt;
+  if (typeof startedAt !== 'string' || startedAt.length === 0) {
+    return fallbackMs;
+  }
+  const parsed = Date.parse(startedAt);
+  return Number.isFinite(parsed) ? parsed : fallbackMs;
+}
 
 export class ContainerOps {
   constructor(
@@ -433,7 +452,8 @@ export class ContainerOps {
 
   async waitForHealthy(containerId: string, timeoutMs = 15000): Promise<WaitForHealthyResult> {
     const startTime = Date.now();
-    const checkInterval = 2000;
+    let deadlineMs = startTime + timeoutMs;
+    const checkInterval = DEFAULT_HEALTH_POLL_INTERVAL_MS;
     const inspectTimeoutMs = 10_000;
     // HEALTHCHECK-less containers can report Running just before the process exits.
     // Keep this shorter than Docker's common 30s start_period while still catching
@@ -442,12 +462,20 @@ export class ContainerOps {
     let noHealthcheckStableSince: number | null = null;
     let noHealthcheckRestartCount: number | null = null;
 
-    while (Date.now() - startTime < timeoutMs) {
+    while (Date.now() < deadlineMs) {
       try {
         const container = this.ctx.client.getContainer(containerId);
         const info = await container.inspect({
           abortSignal: AbortSignal.timeout(inspectTimeoutMs),
         });
+        const healthcheckStartPeriodMs = getHealthcheckStartPeriodMs(info);
+        if (healthcheckStartPeriodMs > 0) {
+          const startedAtMs = getContainerStartedAtMs(info, startTime);
+          deadlineMs = Math.max(
+            deadlineMs,
+            startedAtMs + healthcheckStartPeriodMs + HEALTHCHECK_START_PERIOD_GRACE_MS,
+          );
+        }
 
         if (info.State.Restarting) {
           return {
@@ -489,7 +517,7 @@ export class ContainerOps {
         }
       }
 
-      const remainingMs = timeoutMs - (Date.now() - startTime);
+      const remainingMs = deadlineMs - Date.now();
       if (remainingMs <= 0) break;
       await sleep(Math.min(checkInterval, remainingMs));
     }
@@ -505,6 +533,9 @@ export class ContainerOps {
           exitCode: info.State.ExitCode,
           error: `Container entered restart loop (exit code: ${String(info.State.ExitCode)})`,
         };
+      }
+      if (info.State.Health?.Status === 'healthy') {
+        return { healthy: true };
       }
       if (info.State.Health && info.State.Health.Status !== 'healthy') {
         return {

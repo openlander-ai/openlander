@@ -207,23 +207,23 @@ Once connected, AI agents see **5 composite MCP tools** covering **74 unique def
 | Composite                    | Actions | Purpose                                                         |
 | ---------------------------- | ------- | --------------------------------------------------------------- |
 | `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build             |
-| `openlander_project`         | 16      | Projects: metadata, secrets, exposure                     |
-| `openlander_service`         | 22      | Application lifecycle, config, domains                |
+| `openlander_project`         | 16      | Projects: metadata, secrets, exposure                           |
+| `openlander_service`         | 23      | Application lifecycle, config, domains                          |
 | `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes                |
 | `openlander_monitor`         | 11      | Monitoring & ops: logs, topology, alerts, stats, host diagnosis |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task     | Composite → action                              | Description                          |
-| -------- | ----------------------------------------------- | ------------------------------------ |
-| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door                |
-| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status              |
-| List     | `openlander_project` → `list_projects`          | Show all projects                    |
-| Logs     | `openlander_monitor` → `get_logs`               | Container logs                       |
+| Task     | Composite → action                              | Description                            |
+| -------- | ----------------------------------------------- | -------------------------------------- |
+| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door                  |
+| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status                |
+| List     | `openlander_project` → `list_projects`          | Show all projects                      |
+| Logs     | `openlander_monitor` → `get_logs`               | Container logs                         |
 | Env Vars | `openlander_service` → `set_env_vars`           | Save Application environment variables |
-| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only |
-| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL         |
-| Service  | `openlander_managed_service` → `create_service` | Create database/cache                |
+| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only   |
+| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL           |
+| Service  | `openlander_managed_service` → `create_service` | Create database/cache                  |
 
 MCP env changes target Applications. Use `service_id` or `service_name`;
 `project_name` works only for groups with exactly one Application.
@@ -254,7 +254,8 @@ Agent will: `create_deploy_plan` → `execute_deploy_plan` → `get_deploy_statu
 
 > "What's the status of my-app?"
 
-Agent will: `get_deploy_status(project_name: "my-app")`
+Agent will: `get_deploy_status(service_id: "<Application service_id>")` when available,
+or the returned `status_call` from the deploy response.
 
 ### Fix a failure
 

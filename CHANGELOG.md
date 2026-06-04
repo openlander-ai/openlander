@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.1] - 2026-06-04
+
+> `v0.1.13-rc.3` is superseded for release QA. It fixed DB-first deploy and
+> URL projection issues, but Mac mini QA found that service env vars saved on an
+> existing Application could be skipped by the legacy Project-centered
+> `redeploy(projectId)` path.
+
+### Changed
+
+- Added `pipeline.redeployService(service_id)` as the service-first redeploy
+  contract for existing Applications and Compose workloads.
+- Kept `pipeline.redeploy(project_id)` as a compatibility wrapper that resolves
+  exactly one Application/Compose service before dispatching to the service-first
+  path.
+
+### Fixed
+
+- Fixed MCP and web service redeploy actions so they redeploy the selected
+  Application/Compose service id rather than the runtime Project id.
+- Fixed immediate redeploy after `set_env_vars` so saved service-scoped env vars
+  are applied to the next container runtime.
+- Fixed service env reads so `service_id` is the canonical identity even when
+  the env row's `project_id` is an ownership/group metadata value.
+- Added release-gated coverage and an audit guard for service-first redeploy
+  routing, attached workload config reconstruction, and cross-project
+  service-env reads.
+
 ## [0.1.13-rc.3] - 2026-06-04
 
 > `v0.1.13-rc.2` is superseded for release QA. It fixed the DB-first

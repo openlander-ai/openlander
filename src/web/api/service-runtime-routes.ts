@@ -385,8 +385,13 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       }
     }
     if (body.env_vars && typeof body.env_vars === 'object') {
+      const envVars: Record<string, string> = {};
       for (const [key, value] of Object.entries(body.env_vars)) {
-        if (value.trim()) await ctx.env.set(runtimeProject.id, key, value.trim());
+        const trimmed = value.trim();
+        if (trimmed) envVars[key] = trimmed;
+      }
+      if (Object.keys(envVars).length > 0) {
+        await ctx.env.setBulkForService(runtimeProject.id, service.id, envVars);
       }
     }
     const lockSessionId = `redeploy-${runtimeProject.id}-${Date.now().toString(36)}`;
@@ -402,7 +407,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       if (strategy !== 'blue-green') {
         await ctx.db.updateProject(runtimeProject.id, { status: 'building' });
       }
-      return ctx.pipeline.redeploy(runtimeProject.id, {
+      return ctx.pipeline.redeployService(service.id, {
         noCache: body.no_cache,
         strategy,
         healthCheckPath: body.health_check_path,

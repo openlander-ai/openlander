@@ -1502,6 +1502,11 @@ export class PlanEngine {
     mergedEnv: Record<string, string>;
   }): Promise<void> {
     const { plan, targetProject, approvedSafeResources, mergedEnv } = params;
+    const workItems: Array<{
+      envVarName: string;
+      resolveConnectionString: () => Promise<string>;
+    }> = [];
+
     for (const planService of plan.services) {
       const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
       if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
@@ -1542,12 +1547,11 @@ export class PlanEngine {
             { serviceType: planService.type, envVarName },
           );
         }
-        const connectionString = await this.provisionApprovedService(
-          planService,
-          targetProject,
+        workItems.push({
           envVarName,
-        );
-        mergedEnv[envVarName] = connectionString;
+          resolveConnectionString: () =>
+            this.provisionApprovedService(planService, targetProject, envVarName),
+        });
       } else {
         if (!targetProject) {
           throw new ServiceConfigError(
@@ -1559,16 +1563,31 @@ export class PlanEngine {
             },
           );
         }
-        const reusable = await this.resolveReusableService(planService, targetProject.id);
-        const connectionString = this.getServiceConnectionString(reusable, envVarName);
-        mergedEnv[envVarName] = connectionString;
-        await new ManagedServiceLinker(this.db, this.env).connect({
-          projectId: targetProject.id,
-          service: reusable,
-          source: 'deploy_plan',
-          credentials: { connectionString },
+        workItems.push({
+          envVarName,
+          resolveConnectionString: async () => {
+            const reusable = await this.resolveReusableService(planService, targetProject.id);
+            const connectionString = this.getServiceConnectionString(reusable, envVarName);
+            await new ManagedServiceLinker(this.db, this.env).connect({
+              projectId: targetProject.id,
+              service: reusable,
+              source: 'deploy_plan',
+              credentials: { connectionString },
+            });
+            return connectionString;
+          },
         });
       }
+    }
+
+    const resolved = await Promise.all(
+      workItems.map(async (item) => ({
+        envVarName: item.envVarName,
+        connectionString: await item.resolveConnectionString(),
+      })),
+    );
+    for (const { envVarName, connectionString } of resolved) {
+      mergedEnv[envVarName] = connectionString;
     }
   }
 

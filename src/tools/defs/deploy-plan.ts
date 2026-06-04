@@ -38,6 +38,7 @@ import {
   deploySchema,
   validateDeployPlanSchema,
 } from './schemas.js';
+import { resolveDeployableTarget } from './deployable-target.js';
 
 type AppCtx = ToolContext['appCtx'];
 type ProjectRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getProject']>>>;
@@ -572,7 +573,7 @@ async function resolveCancelProject(
   args: Record<string, unknown>,
   appCtx: AppCtx,
 ): Promise<
-  | { ok: true; project: ProjectRow; deployId?: string; resolvedFrom: string }
+  | { ok: true; project: ProjectRow; deployId?: string; serviceId?: string; resolvedFrom: string }
   | { ok: false; code: string; message: string; attempted_id?: string }
 > {
   const projectFromDeployId = async (
@@ -597,6 +598,21 @@ async function resolveCancelProject(
       code: 'DEPLOY_NOT_FOUND',
       message: `No deploy log was found for deploy_id "${deployId}".`,
       attempted_id: deployId,
+    };
+  }
+
+  const serviceId = args['service_id'];
+  const serviceName = args['service_name'];
+  if (
+    (typeof serviceId === 'string' && serviceId.length > 0) ||
+    (typeof serviceName === 'string' && serviceName.length > 0)
+  ) {
+    const resolved = await resolveDeployableTarget(appCtx, args, 'cancel_deploy');
+    return {
+      ok: true,
+      project: resolved.runtimeProject,
+      serviceId: resolved.service.id,
+      resolvedFrom: serviceId ? 'service_id' : 'service_name',
     };
   }
 
@@ -630,6 +646,16 @@ async function resolveCancelProject(
     if (byDeploy.project) {
       return { ok: true, project: byDeploy.project, deployId: id, resolvedFrom: 'id:deploy_id' };
     }
+    const service = await appCtx.db.getService(id);
+    if (service && !isManagedService(service.kind)) {
+      const byService = await resolveDeployableTarget(appCtx, { service_id: id }, 'cancel_deploy');
+      return {
+        ok: true,
+        project: byService.runtimeProject,
+        serviceId: byService.service.id,
+        resolvedFrom: 'id:service_id',
+      };
+    }
     const byProjectId = await appCtx.db.getProject(id);
     if (byProjectId) return { ok: true, project: byProjectId, resolvedFrom: 'id:project_id' };
     const byProjectName = await appCtx.db.getProjectByName(id);
@@ -645,7 +671,8 @@ async function resolveCancelProject(
   return {
     ok: false,
     code: 'INVALID_ARGS',
-    message: 'One of deploy_id, project_id, project_name, or id is required.',
+    message:
+      'One of deploy_id, service_id, service_name, project_id, project_name, or id is required.',
   };
 }
 
@@ -1010,9 +1037,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'cancel_deploy',
     riskLevel: 'medium',
     description:
-      'Cancel an active deployment build by deploy_id, project_id, project_name, or id. Stops the active Docker build stream for the resolved parent project if one is running and returns a status_call for follow-up.',
+      'Cancel an active deployment build by deploy_id, service_id, service_name, project_id, project_name, or id. Stops the active Docker build stream for the resolved runtime project if one is running and returns a status_call for follow-up.',
     mcpDescription:
-      'Cancel an active deployment. Accepts deploy_id, project_id, project_name, or id. Targets the resolved parent project build stream; returns cancelled=true only when an active stream was stopped.',
+      'Cancel an active deployment. Prefer service_id/service_name when available; deploy_id and legacy Project targets remain supported. Returns cancelled=true only when an active stream was stopped.',
     inputSchema: cancelDeploySchema,
     execute: async (args, context) => {
       const resolved = await resolveCancelProject(args, context.appCtx);
@@ -1045,12 +1072,22 @@ export const deployPlanToolDefs: ToolDef[] = [
         project_id: resolved.project.id,
         project_name: resolved.project.name,
         ...(resolved.deployId ? { deploy_id: resolved.deployId } : {}),
+        ...(resolved.serviceId ? { service_id: resolved.serviceId } : {}),
         resolved_from: resolved.resolvedFrom,
-        status_call: deployStatusCall({
-          projectId: resolved.project.id,
-          projectName: resolved.project.name,
-          deployId: resolved.deployId,
-        }),
+        status_call: resolved.serviceId
+          ? {
+              tool: 'openlander_deploy',
+              action: 'get_deploy_status',
+              params: {
+                service_id: resolved.serviceId,
+                ...(resolved.deployId ? { deploy_id: resolved.deployId } : {}),
+              },
+            }
+          : deployStatusCall({
+              projectId: resolved.project.id,
+              projectName: resolved.project.name,
+              deployId: resolved.deployId,
+            }),
         _agent_guidance: {
           message: cancelled
             ? 'Active deployment cancellation was requested.'

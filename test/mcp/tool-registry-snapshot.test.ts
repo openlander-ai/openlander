@@ -17,6 +17,7 @@ const EXPECTED_TOOLS = [
   'add_domain_route',
   'add_volume',
   'analyze_infrastructure',
+  'apply_route_config',
   'archive_project',
   'archive_service',
   'backup_service',
@@ -133,8 +134,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 75 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(75);
+  it('maintains exactly 76 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(76);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

@@ -45,6 +45,7 @@ describe('deploy MCP guidance', () => {
       },
       pipeline: {
         redeploy: vi.fn(async () => undefined),
+        redeployService: vi.fn(async () => undefined),
       },
       env: {
         setBulkForServiceDetailed: vi.fn(async () => [{ key: 'DATABASE_URL', op: 'set' }]),
@@ -76,7 +77,7 @@ describe('deploy MCP guidance', () => {
       status_call: {
         tool: 'openlander_deploy',
         action: 'get_deploy_status',
-        params: { project_id: 'app' },
+        params: { service_id: 'app__svc' },
       },
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
@@ -84,11 +85,12 @@ describe('deploy MCP guidance', () => {
       DATABASE_URL: 'postgresql://example',
     });
     await vi.waitFor(() =>
-      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith(
-        'app',
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
         expect.objectContaining({ trigger: 'chat' }),
       ),
     );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('routes deploy_app to redeploy_app when project_name matches one existing deployable service', async () => {
@@ -118,6 +120,7 @@ describe('deploy MCP guidance', () => {
       },
       pipeline: {
         redeploy: vi.fn(async () => undefined),
+        redeployService: vi.fn(async () => undefined),
       },
       planEngine: {
         createPlan: vi.fn(),
@@ -140,11 +143,12 @@ describe('deploy MCP guidance', () => {
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith(
-        'app',
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
         expect.objectContaining({ trigger: 'chat' }),
       ),
     );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('asks for service selection when deploy_app name matches multiple deployables', async () => {

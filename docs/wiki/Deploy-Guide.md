@@ -176,7 +176,7 @@ validate_deploy_plan(plan_id: "plan_xxx")
 After executing, poll:
 
 ```
-get_deploy_status(project_name: "my-app")
+get_deploy_status(service_id: "<service_id from status_call>")
 ```
 
 Poll until status is `completed` or `failed`.

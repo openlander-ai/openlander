@@ -32,6 +32,7 @@ export interface RunConfig {
   preferredPort?: number;
   secretFiles?: Array<{ filename: string; content: string; mountPath: string }>;
   restartPolicy?: { Name: string; MaximumRetryCount?: number };
+  removeExistingContainer?: boolean;
 }
 
 export class ContainerRunner {
@@ -71,7 +72,9 @@ export class ContainerRunner {
     }
 
     const containerName = projectContainerName(config.containerName ?? config.projectName);
-    await this.runtime.safeRemoveContainer(containerName);
+    if (config.removeExistingContainer !== false) {
+      await this.runtime.safeRemoveContainer(containerName);
+    }
     const networkProjectName = config.networkProjectName ?? config.projectName;
     const projectNetwork = await this.runtime.ensureProjectNetwork(networkProjectName);
     await ensureManagedTraefikNetwork(this.runtime, projectNetwork);
