@@ -73,9 +73,24 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
     loadDeployConfig: vi.fn().mockResolvedValue(null),
     loadDeployConfigForService: vi.fn().mockResolvedValue(null),
     getEnvironmentsByProject: vi.fn().mockResolvedValue([]),
+    createEnvironment: vi.fn().mockImplementation(
+      async (environment: {
+        id: string;
+        projectId: string;
+        type: string;
+        branch?: string | null;
+      }) => ({
+        id: environment.id,
+        project_id: environment.projectId,
+        type: environment.type,
+        branch: environment.branch ?? null,
+        status: 'idle',
+      }),
+    ),
     updateEnvironment: vi.fn().mockResolvedValue(undefined),
     getChildProjects: vi.fn().mockResolvedValue([]),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
+    createDeployLog: vi.fn().mockResolvedValue(undefined),
     cleanExpiredDeployLocks: vi.fn().mockResolvedValue(0),
   } as unknown as Database;
 }
@@ -323,6 +338,100 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
     expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
     expect(docker.removeContainer).not.toHaveBeenCalled();
     expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('recreates a missing production environment before redeploying', async () => {
+    const project = makeExistingProjectRow('p-no-env', 'no-env-app');
+    const db = createMockDb(project);
+    const docker = createMockDocker();
+    const deployable = {
+      id: 'p-no-env__svc',
+      project_id: 'p-no-env',
+      name: 'app',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      repo_url: 'https://github.com/test/no-env-app',
+      branch: 'main',
+      image_url: null,
+      image_tag: null,
+      assigned_port: 10001,
+    };
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue(deployable);
+    const pipeline = buildPipeline(db, docker);
+    const deploySpy = vi.spyOn(pipeline, 'deploy').mockResolvedValue({
+      success: true,
+      projectId: 'p-no-env',
+      projectName: 'no-env-app',
+    });
+
+    const result = await pipeline.redeploy('p-no-env', {
+      lockSessionId: 'mcp-redeploy-session',
+      trigger: 'api',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      projectId: 'p-no-env',
+      projectName: 'no-env-app',
+    });
+    expect(db.createEnvironment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'p-no-env-production',
+        projectId: 'p-no-env',
+        type: 'production',
+        branch: 'main',
+      }),
+    );
+    expect(deploySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _projectId: 'p-no-env',
+        _lockSessionId: 'mcp-redeploy-session',
+        environment: 'production',
+        trigger: 'api',
+      }),
+    );
+    expect(db.createDeployLog).not.toHaveBeenCalled();
+  });
+
+  it('records a visible failure when missing production environment recreation fails', async () => {
+    const project = makeExistingProjectRow('p-no-env', 'no-env-app');
+    const db = createMockDb(project);
+    (db.createEnvironment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('service row missing'),
+    );
+    const docker = createMockDocker();
+    const pipeline = buildPipeline(db, docker);
+    const deploySpy = vi.spyOn(pipeline, 'deploy');
+
+    const result = await pipeline.redeploy('p-no-env', {
+      lockSessionId: 'mcp-redeploy-session',
+      trigger: 'api',
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      projectId: 'p-no-env',
+      projectName: 'no-env-app',
+      error: 'Production environment not found and could not be recreated: service row missing',
+    });
+    expect(deploySpy).not.toHaveBeenCalled();
+    expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(docker.removeContainer).not.toHaveBeenCalled();
+    expect(db.createDeployLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'p-no-env',
+        status: 'failed',
+        trigger: 'api',
+        buildLog: expect.stringContaining('service row missing'),
+        durationMs: 0,
+      }),
+    );
+    expect(db.updateProject).toHaveBeenCalledWith(
+      'p-no-env',
+      expect.objectContaining({ status: 'error' }),
+    );
+    expect(db.releaseDeployLock).toHaveBeenCalledWith('p-no-env', 'mcp-redeploy-session');
   });
 
   it('uses canonical service source when deciding whether to preserve previous image tags', async () => {

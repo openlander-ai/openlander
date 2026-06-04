@@ -1901,16 +1901,38 @@ export class DeployPipeline {
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
-      const targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
+      const redeployView = (await loadServiceViewRecord(this.db, project)).view;
+      let targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
         (environment) => environment.type === 'production',
       );
       if (!targetEnvironment) {
-        return {
-          success: false,
-          projectId,
-          projectName: project.name,
-          error: 'Production environment not found',
-        };
+        try {
+          targetEnvironment = await this.db.createEnvironment({
+            id: `${projectId}-production`,
+            projectId,
+            type: 'production',
+            branch: redeployView.source === 'image' ? null : redeployView.branch,
+          });
+          log.warn(
+            { projectId, environmentId: targetEnvironment.id },
+            'Production environment was missing during redeploy and has been recreated',
+          );
+        } catch (err) {
+          const error =
+            err instanceof Error
+              ? `Production environment not found and could not be recreated: ${err.message}`
+              : 'Production environment not found and could not be recreated';
+          this.jobManager?.trackJob(projectId, project.name);
+          await this.recordBackgroundFailure(projectId, error, options?.trigger, {
+            emitTerminalEvent: true,
+          });
+          return {
+            success: false,
+            projectId,
+            projectName: project.name,
+            error,
+          };
+        }
       }
 
       const strategy = options?.strategy ?? 'force';
@@ -1923,7 +1945,6 @@ export class DeployPipeline {
 
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-      const redeployView = (await loadServiceViewRecord(this.db, project)).view;
       const redeployImageTag = redeployView.imageTag;
       const redeploySource = redeployView.source;
       const redeployAssignedPort = redeployView.assignedPort;

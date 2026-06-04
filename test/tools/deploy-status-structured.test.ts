@@ -218,6 +218,57 @@ describe('get_deploy_status structured fields (O1)', () => {
     }
   });
 
+  it('project_id polling follows a single deployable group to the runtime project', async () => {
+    const ctx = {
+      jobManager: {
+        getStatus: vi.fn((id: string) =>
+          id === 'runtime-app'
+            ? {
+                projectId: 'runtime-app',
+                projectName: 'hotdeal-api',
+                phase: 'building',
+                startedAt: new Date(Date.now() - 3000),
+              }
+            : null,
+        ),
+      },
+      db: {
+        getProject: vi.fn(async (id: string) => {
+          if (id === 'group-hotdeal') return { id, name: 'hotdeal' };
+          if (id === 'runtime-app') return { id, name: 'hotdeal-api' };
+          return undefined;
+        }),
+        getDeployablesByGroup: vi.fn(async (id: string) =>
+          id === 'group-hotdeal'
+            ? [{ id: 'runtime-app__svc', name: 'hotdeal-api', project_id: 'group-hotdeal' }]
+            : [],
+        ),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === 'runtime-app' ? { assigned_port: 10001, status: 'running' } : null,
+        ),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { project_id: 'group-hotdeal', wait: false },
+      { target: 'mcp' },
+    )) as { active: number; jobs: Array<Record<string, unknown>> };
+
+    expect(result.active).toBe(1);
+    expect(result.jobs[0]).toMatchObject({
+      project_id: 'runtime-app',
+      service_id: 'runtime-app__svc',
+      name: 'hotdeal-api',
+      phase: 'building',
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { project_id: 'runtime-app' },
+      },
+    });
+  });
+
   it('watch_ms short-polls an active project and returns a re-poll envelope on timeout', async () => {
     const ctx = {
       jobManager: {
