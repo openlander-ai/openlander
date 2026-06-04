@@ -94,6 +94,29 @@ describe('ContainerRunner', () => {
     expect(result.url).toContain('mono-api.');
   });
 
+  it('can skip pre-run removal when the caller preserves a live container until swap', async () => {
+    const docker = createMockDocker();
+    const db = createMockDatabase();
+    const runner = new ContainerRunner(docker, db);
+    vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(13500);
+
+    await runner.run({
+      imageTag: 'openlander/safe-swap:latest',
+      projectName: 'safe-swap',
+      projectId: 'p-safe-swap',
+      envVars: {},
+      removeExistingContainer: false,
+    });
+
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ol-safe-swap',
+        port: 13500,
+      }),
+    );
+  });
+
   it('passes project network for production environment', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();

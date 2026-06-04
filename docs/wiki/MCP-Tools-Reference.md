@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **75 unique default operations** surfaced through those composites
+- **76 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -22,6 +22,7 @@ Agent routing rule of thumb:
 | "Create a new app project before DB/cache"    | `openlander_project.create_project`                                        |
 | "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
 | "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
+| "Fix route port mismatch without rebuild"     | `openlander_service.apply_route_config`                                    |
 | "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
 | "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
 | "Was this killed by host memory/Docker?"      | `openlander_monitor.diagnose_host_resources`                               |
@@ -74,7 +75,7 @@ Composite catalog:
 | ---------------------------- | ------------ | ------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                         |
 | `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
-| `openlander_service`         | 22           | Application lifecycle, config, domain routes, and env vocabulary                      |
+| `openlander_service`         | 23           | Application lifecycle, config, domain routes, and env vocabulary                      |
 | `openlander_managed_service` | 21           | Database/Cache/Storage resources, credentials, backups, volumes, disk usage           |
 | `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes           |
 
@@ -486,6 +487,23 @@ Update Application build configuration.
 | `dockerfile_path` | string | No       | Dockerfile path                       |
 | `docker_target`   | string | No       | Build target                          |
 | `build_context`   | string | No       | Build context path                    |
+
+### `apply_route_config`
+
+Apply a live route configuration change without rebuilding the image or
+recreating the container. In v0.1.x this supports `container_port` re-pointing
+for running Applications behind the managed Traefik HTTP provider.
+
+| Parameter        | Type   | Required | Description                                     |
+| ---------------- | ------ | -------- | ----------------------------------------------- |
+| `service_id`     | string | No       | Application id                                  |
+| `service_name`   | string | No       | Application name                                |
+| `project_name`   | string | No       | Optional group scope for name lookups           |
+| `container_port` | number | Yes      | Port the container listens on inside Docker DNS |
+
+Provide either `service_id` or `service_name`. This is intended for high-confidence
+diagnosis such as "the app logs say it listens on 4000, but the route points to
+3000." It does not start a build or redeploy.
 
 ---
 

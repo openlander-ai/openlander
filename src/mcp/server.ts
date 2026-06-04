@@ -86,7 +86,7 @@ All actions: action="help"
 
 ## openlander_service
 Applications/Compose workloads: lifecycle, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id from list_projects.
-Key actions: redeploy_app, restart_service, list_archived_services, set_env_vars, list_env_vars, update_service_config, expose_public
+Key actions: redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service

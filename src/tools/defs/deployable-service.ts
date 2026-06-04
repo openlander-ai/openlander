@@ -97,6 +97,20 @@ const updateServiceConfigSchema = z
     message: 'service_id or service_name is required',
   });
 
+const applyRouteConfigSchema = z
+  .object({
+    ...serviceTargetFields,
+    container_port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .describe('Port the running container listens on inside the Docker network'),
+  })
+  .refine((value) => Boolean(value.service_id || value.service_name), {
+    message: 'service_id or service_name is required',
+  });
+
 type AppCtx = ToolContext['appCtx'];
 type ServiceRow = Awaited<ReturnType<AppCtx['db']['getService']>>;
 type ProjectRow = Awaited<ReturnType<AppCtx['db']['getProject']>>;
@@ -829,6 +843,106 @@ export const deployableServiceToolDefs: ToolDef[] = [
         },
         _agent_guidance: { next_steps: ['Call redeploy_app to apply the new configuration.'] },
       };
+    },
+  },
+  {
+    name: 'apply_route_config',
+    riskLevel: 'medium',
+    description:
+      'Apply a live Application route config change without rebuilding the image. Currently supports container_port re-pointing for running services behind the managed Traefik HTTP provider.',
+    mcpDescription:
+      'Apply live route config without redeploy. Supports container_port re-pointing for running services.',
+    inputSchema: applyRouteConfigSchema,
+    execute: async (args, context) => {
+      const { service, project, runtimeProject } = await resolveDeployableService(
+        args,
+        context,
+        'apply_route_config',
+      );
+      const groupPolicyRejection =
+        runtimeProject.id === project.id
+          ? undefined
+          : await tryRejectIfNotMutable(project, context);
+      if (groupPolicyRejection) {
+        return groupPolicyRejection;
+      }
+      if (service.archived_at) {
+        return buildArchivedServiceRejection(runtimeProject, project);
+      }
+      const policyRejection = await tryRejectIfNotMutable(runtimeProject, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
+      const serviceStatus = service.status as string | null;
+      if (!service.container_id || (serviceStatus !== 'running' && serviceStatus !== 'building')) {
+        return {
+          status: 'error',
+          error: 'SERVICE_NOT_RUNNING',
+          code: 'SERVICE_NOT_RUNNING',
+          service: serviceSummary(service, project),
+          _agent_guidance: {
+            message:
+              'Route config can only be applied in-place while the Application has a running container.',
+            next_steps: [
+              `Call redeploy_app with service_id="${service.id}" if the service should be started.`,
+              `Call openlander_monitor.diagnose_service with service_id="${service.id}" to inspect the current runtime state.`,
+            ],
+          },
+        };
+      }
+
+      const sessionId = `mcp-apply-route-config-${nanoid(12)}`;
+      const lockResult = await tryAcquireDeployLockOrResponse(
+        runtimeProject.id,
+        sessionId,
+        context,
+      );
+      if (lockResult) {
+        return lockResult;
+      }
+
+      const containerPort = args.container_port as number;
+      const previousContainerPort = service.container_port;
+      try {
+        await context.appCtx.db.updateService(service.id, { containerPort });
+        const updated = await context.appCtx.db.getService(service.id);
+        const effectiveService = updated ?? service;
+        return {
+          status: 'applied',
+          project_id: project.id,
+          service_id: service.id,
+          service: serviceSummary(effectiveService, project),
+          route_config: {
+            previous_container_port: previousContainerPort,
+            container_port: updated?.container_port ?? containerPort,
+            container_name: effectiveService.container_name,
+            provider: 'traefik_http',
+            applied_without_redeploy: true,
+          },
+          diagnostic_call: {
+            tool: 'openlander_monitor',
+            action: 'diagnose_service',
+            params: { service_id: service.id },
+          },
+          _agent_guidance: {
+            message:
+              'Route config was updated in-place. Managed Traefik reads this from the OpenLander HTTP provider; no image build or container recreate was started.',
+            next_steps: [
+              'Wait for the Traefik HTTP provider polling window, then call diagnostic_call to verify the route.',
+              'If the service still fails, inspect logs.tail from diagnose_service before redeploying.',
+            ],
+          },
+        };
+      } finally {
+        await context.appCtx.db
+          .releaseDeployLock(runtimeProject.id, sessionId)
+          .catch((err: unknown) => {
+            log.warn(
+              { err, projectId: runtimeProject.id, serviceId: service.id },
+              'Failed to release apply_route_config deploy lock',
+            );
+          });
+      }
     },
   },
 ];

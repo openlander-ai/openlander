@@ -1400,6 +1400,37 @@ describe('service-targeted monitoring tools', () => {
     );
   });
 
+  it('diagnose_service synthesizes port mismatch with apply_route_config suggested_call', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Server listening on port 4000');
+    vi.mocked(ctx.docker.execSimple).mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'connection refused',
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      diagnosis: {
+        code: 'PORT_MISMATCH',
+        confidence: 'high',
+        evidence: {
+          configured_container_port: 3000,
+          detected_listening_port: 4000,
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: 'app__svc', container_port: 4000 },
+      },
+    });
+  });
+
   it('diagnose_service accepts health_check_path as a path alias', async () => {
     const { ctx } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(

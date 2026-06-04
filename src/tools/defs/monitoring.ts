@@ -575,6 +575,15 @@ export const monitoringToolDefs: ToolDef[] = [
         httpCheck,
         dependencies,
       });
+      const diagnosis = buildSynthesizedServiceDiagnosis({
+        service,
+        buildDiagnostics,
+        container,
+        httpCheck,
+        dependencies,
+        logs: runtimeLogs,
+        recentDeployment,
+      });
 
       return {
         project: {
@@ -603,7 +612,10 @@ export const monitoringToolDefs: ToolDef[] = [
         logs: runtimeLogs,
         httpCheck,
         dependencies,
+        ...(diagnosis ? { diagnosis } : {}),
+        ...(diagnosis?.suggested_call ? { suggested_call: diagnosis.suggested_call } : {}),
         _agent_guidance: {
+          ...(diagnosis ? { message: diagnosis.summary } : {}),
           next_steps: nextSteps,
         },
       };
@@ -1855,6 +1867,145 @@ function buildDiagnoseNextSteps(input: {
     'For existing services, call openlander_deploy.deploy_app with service_id/service_name/name, or call openlander_service.redeploy_app directly with service_id.',
   );
   return nextSteps;
+}
+
+interface SynthesizedServiceDiagnosis {
+  code:
+    | 'PORT_MISMATCH'
+    | 'BUILD_TIME_ENV_MISSING'
+    | 'RESTART_LOOP'
+    | 'CONTAINER_NOT_RUNNING'
+    | 'DEPENDENCY_UNREACHABLE';
+  confidence: 'high';
+  summary: string;
+  evidence: Record<string, unknown>;
+  suggested_call?: {
+    tool: 'openlander_service';
+    action: 'apply_route_config';
+    params: { service_id: string; container_port: number };
+  };
+}
+
+function extractListeningPort(text: string): number | null {
+  const patterns = [
+    /\b(?:listening|listen|started|server|ready|running)\b[^\n]{0,100}\b(?:on\s+)?(?:port\s+)?(\d{2,5})\b/i,
+    /\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d{2,5})\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    const rawPort = match?.[1];
+    if (!rawPort) continue;
+    const port = Number(rawPort);
+    if (Number.isInteger(port) && port >= 1 && port <= 65535) {
+      return port;
+    }
+  }
+  return null;
+}
+
+function buildSynthesizedServiceDiagnosis(input: {
+  service: ServiceRow;
+  buildDiagnostics: Record<string, unknown>;
+  container: Record<string, unknown>;
+  httpCheck: Record<string, unknown>;
+  dependencies: Record<string, unknown>;
+  logs: Record<string, unknown>;
+  recentDeployment: Record<string, unknown>;
+}): SynthesizedServiceDiagnosis | null {
+  const suspectedBuildEnv = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
+  if (Array.isArray(suspectedBuildEnv) && suspectedBuildEnv.length > 0) {
+    return {
+      code: 'BUILD_TIME_ENV_MISSING',
+      confidence: 'high',
+      summary: `${suspectedBuildEnv.join(', ')} is present at runtime but the recent build log shows it was missing during build.`,
+      evidence: {
+        suspected_missing_build_time_keys: suspectedBuildEnv,
+        allowed_build_time_prefixes: input.buildDiagnostics['allowedPrefixes'],
+      },
+    };
+  }
+
+  if (input.container['status'] === 'restarting') {
+    return {
+      code: 'RESTART_LOOP',
+      confidence: 'high',
+      summary: 'The container is running but Docker reports a restart loop.',
+      evidence: {
+        status: input.container['status'],
+        exit_code: input.container['exitCode'],
+        restart_count: input.container['restartCount'],
+      },
+    };
+  }
+
+  if (input.container['present'] === true && input.container['running'] !== true) {
+    return {
+      code: 'CONTAINER_NOT_RUNNING',
+      confidence: 'high',
+      summary: 'The service has a container, but Docker reports it is not running.',
+      evidence: {
+        status: input.container['status'],
+        exit_code: input.container['exitCode'],
+        error: input.container['error'],
+      },
+    };
+  }
+
+  const configuredPort = input.service.container_port;
+  const logText = [
+    typeof input.logs['tail'] === 'string' ? input.logs['tail'] : '',
+    typeof asRecord(input.recentDeployment['latest'])?.['buildLogTail'] === 'string'
+      ? (asRecord(input.recentDeployment['latest'])?.['buildLogTail'] as string)
+      : '',
+  ].join('\n');
+  const detectedPort = extractListeningPort(logText);
+  if (
+    input.container['running'] === true &&
+    input.httpCheck['reachable'] === false &&
+    typeof configuredPort === 'number' &&
+    detectedPort !== null &&
+    detectedPort !== configuredPort
+  ) {
+    return {
+      code: 'PORT_MISMATCH',
+      confidence: 'high',
+      summary: `The app appears to listen on ${String(detectedPort)}, but OpenLander routes to container_port ${String(configuredPort)}.`,
+      evidence: {
+        configured_container_port: configuredPort,
+        detected_listening_port: detectedPort,
+        http_probe_target: input.httpCheck['target_resolved'],
+        http_probe_error: input.httpCheck['error'],
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: input.service.id, container_port: detectedPort },
+      },
+    };
+  }
+
+  const depChecks = asRecord(input.dependencies)?.['checks'];
+  const failedDependency = Array.isArray(depChecks)
+    ? depChecks
+        .map((item) => asRecord(item))
+        .find((item): item is Record<string, unknown> => item?.['reachable'] === false)
+    : undefined;
+  if (failedDependency) {
+    const failed = failedDependency;
+    const key = typeof failed['key'] === 'string' ? failed['key'] : 'endpoint';
+    return {
+      code: 'DEPENDENCY_UNREACHABLE',
+      confidence: 'high',
+      summary: `Dependency ${key} is unreachable from the service network.`,
+      evidence: {
+        key: failed['key'],
+        target: failed['target'],
+        error: failed['error'],
+      },
+    };
+  }
+
+  return null;
 }
 
 function resolveTarget(

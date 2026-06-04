@@ -208,6 +208,68 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(env.getSecretFilesForDeploy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p2');
   });
 
+  it('preserves live runtime state when a redeploy build fails before swap', async () => {
+    db.createProject({
+      id: 'p-safe',
+      name: 'safe-app',
+      repoUrl: 'https://github.com/openlander/safe-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p-safe')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+    db.updateProject('p-safe', {
+      status: 'running',
+      containerId: 'container-live-123',
+      containerName: 'ol-safe-app',
+      assignedPort: 10042,
+      imageTag: 'openlander/safe-app:live',
+    });
+    db.updateEnvironment(productionEnvironment!.id, {
+      status: 'running',
+      containerId: 'container-live-123',
+      assignedPort: 10042,
+      imageTag: 'openlander/safe-app:live',
+    });
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('build failed before swap'),
+    );
+
+    const result = await pipeline.deployEnvironment('p-safe', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/safe-app',
+      _projectId: 'p-safe',
+      _serviceId: 'p-safe__svc',
+      _preferredPort: 10042,
+      _preserveLiveContainerUntilRun: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('build failed before swap');
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-live-123',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'ol-safe-app',
+    );
+
+    const project = db.getProject('p-safe');
+    const environment = db.getEnvironment(productionEnvironment!.id);
+    expect(project?.status).toBe('running');
+    expect(project?.container_id).toBe('container-live-123');
+    expect(project?.assigned_port).toBe(10042);
+    expect(project?.image_tag).toBe('openlander/safe-app:live');
+    expect(environment?.status).toBe('running');
+    expect(environment?.container_id).toBe('container-live-123');
+    expect(environment?.assigned_port).toBe(10042);
+    expect(environment?.image_tag).toBe('openlander/safe-app:live');
+
+    const deployLog = db.getLastDeployLog('p-safe', productionEnvironment!.id);
+    expect(deployLog?.status).toBe('failed');
+    expect(deployLog?.build_log).toContain('build failed before swap');
+  });
+
   it('deployEnvironment uses project naming without dev suffix', async () => {
     db.createProject({
       id: 'p3',

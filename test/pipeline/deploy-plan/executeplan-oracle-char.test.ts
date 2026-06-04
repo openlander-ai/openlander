@@ -40,6 +40,25 @@ const SAFE_PG_PROPOSAL = {
   reason: 'pg',
 };
 
+const SAFE_REDIS_PROPOSAL = {
+  type: 'redis' as const,
+  action: 'create' as const,
+  connect_via: 'REDIS_URL',
+  resolution: 'proposed_project_service' as const,
+  approval: 'safe_resource' as const,
+  reason: 'redis',
+};
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function buildEngine() {
   const mockDb = {
     createDeployPlan: vi.fn(),
@@ -395,6 +414,79 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
     expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         envVars: expect.objectContaining({ DATABASE_URL: 'postgres://provisioned/db' }),
+      }),
+    );
+  });
+
+  it('P1b: approved safe resources provision concurrently and merge env after all complete', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_approval',
+      project_id: 'p1',
+      services: [SAFE_PG_PROPOSAL, SAFE_REDIS_PROPOSAL],
+    });
+    h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    const pgCreate = createDeferred<{
+      id: string;
+      name: string;
+      kind: string;
+      container_name: string;
+    }>();
+    const redisCreate = createDeferred<{
+      id: string;
+      name: string;
+      kind: string;
+      container_name: string;
+    }>();
+    h.mockServiceManager.create.mockImplementation(
+      (options: { template: 'postgresql' | 'redis' }) => {
+        if (options.template === 'postgresql') {
+          return pgCreate.promise;
+        }
+        return redisCreate.promise;
+      },
+    );
+    h.mockServiceManager.getSuggestedEnv.mockImplementation(
+      (service: { id: string }): Array<{ key: string; value: string }> => {
+        if (service.id === 'svc-pg-1') {
+          return [{ key: 'DATABASE_URL', value: 'postgres://parallel/db' }];
+        }
+        return [{ key: 'REDIS_URL', value: 'redis://parallel/cache' }];
+      },
+    );
+
+    const resultPromise = h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    await vi.waitFor(() => {
+      expect(h.mockServiceManager.create).toHaveBeenCalledTimes(2);
+    });
+    expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
+
+    pgCreate.resolve({
+      id: 'svc-pg-1',
+      name: 'test-app-postgresql',
+      kind: 'postgres',
+      container_name: 'ol-svc-test-app-postgresql',
+    });
+    await Promise.resolve();
+    expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
+
+    redisCreate.resolve({
+      id: 'svc-redis-1',
+      name: 'test-app-redis',
+      kind: 'redis',
+      container_name: 'ol-svc-test-app-redis',
+    });
+    const result = await resultPromise;
+
+    expect(result.status).toBe('building');
+    expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          DATABASE_URL: 'postgres://parallel/db',
+          REDIS_URL: 'redis://parallel/cache',
+        }),
       }),
     );
   });

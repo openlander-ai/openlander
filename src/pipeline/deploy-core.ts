@@ -175,6 +175,8 @@ export interface ProjectConfig {
   _networkProjectName?: string;
   _noCacheBuild?: boolean;
   _preferredPort?: number;
+  /** @internal Preserve the live container until the new image is ready to run. */
+  _preserveLiveContainerUntilRun?: boolean;
   /** @internal Deploy lock session for event-based session-scoped release. */
   _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
@@ -1271,6 +1273,9 @@ export class DeployPipeline {
         await this.db.mergeEnvVars(projectId, deployConfig.envVars);
       }
     }
+    const preserveLiveContainerUntilRun = deployConfig._preserveLiveContainerUntilRun === true;
+    const liveContainerId = environment.container_id;
+    const liveContainerName = serviceViewFromRows(project, deployService).containerName;
     if (environment.container_id) {
       try {
         const runtimeLog = await this.runtime.getLogs(environment.container_id, 500);
@@ -1284,25 +1289,35 @@ export class DeployPipeline {
         // Container may already be gone — best-effort capture
       }
 
-      try {
-        await this.runtime.safeRemoveContainer(environment.container_id);
-      } catch {
-        // container may already be removed
+      if (!preserveLiveContainerUntilRun) {
+        try {
+          await this.runtime.safeRemoveContainer(environment.container_id);
+        } catch {
+          // container may already be removed
+        }
       }
     }
     await eventBus.emit('deploy:start', { projectId, repoUrl });
-    await this.db.updateEnvironment(environmentId, {
-      status: 'building',
-      containerId: null,
-      imageTag: null,
-      assignedPort: null,
-      branch: source === 'image' ? null : (branch ?? null),
-    });
-    await this.transitionProjectState(projectId, 'building', 'deploy-started', {
-      containerId: null,
-      imageTag: null,
-      assignedPort: null,
-    });
+    if (preserveLiveContainerUntilRun) {
+      await this.db.updateEnvironment(environmentId, {
+        status: 'building',
+        branch: source === 'image' ? null : (branch ?? null),
+      });
+      await this.transitionProjectState(projectId, 'building', 'deploy-started');
+    } else {
+      await this.db.updateEnvironment(environmentId, {
+        status: 'building',
+        containerId: null,
+        imageTag: null,
+        assignedPort: null,
+        branch: source === 'image' ? null : (branch ?? null),
+      });
+      await this.transitionProjectState(projectId, 'building', 'deploy-started', {
+        containerId: null,
+        imageTag: null,
+        assignedPort: null,
+      });
+    }
     let buildLog = '';
     let clonePath = '';
     let diffContext: string | undefined;
@@ -1334,6 +1349,7 @@ export class DeployPipeline {
       }
     }
     let dockerfilePath: string | undefined;
+    let liveContainerRemovedForSwap = false;
     try {
       if (source === 'image') {
         const imageUrl = deployConfig.imageUrl;
@@ -1405,6 +1421,24 @@ export class DeployPipeline {
         dockerfilePath = buildResult.dockerfilePath;
       }
 
+      if (preserveLiveContainerUntilRun) {
+        const containersToRemove = Array.from(
+          new Set(
+            [liveContainerId, liveContainerName, projectContainerName(routeName)].filter(
+              (value): value is string => typeof value === 'string' && value.trim().length > 0,
+            ),
+          ),
+        );
+        for (const containerRef of containersToRemove) {
+          try {
+            await this.runtime.safeRemoveContainer(containerRef);
+          } catch {
+            // container may already be removed
+          }
+        }
+        liveContainerRemovedForSwap = true;
+      }
+
       const runResult = await runAndVerify(orchestrationDeps, {
         projectId,
         environmentId,
@@ -1456,8 +1490,13 @@ export class DeployPipeline {
         const cancelMessage = 'Build cancelled by user';
         const buildLogWithCancel = buildLog + `[cancelled] ${cancelMessage}\n`;
         this.jobManager?.updatePhase(projectId, 'failed', cancelMessage);
-        await this.db.updateEnvironment(environmentId, { status: 'stopped' });
-        await this.transitionProjectState(projectId, 'stopped', 'deploy-cancelled');
+        if (preserveLiveContainerUntilRun && !liveContainerRemovedForSwap) {
+          await this.db.updateEnvironment(environmentId, { status: 'running' });
+          await this.transitionProjectState(projectId, 'running', 'deploy-cancelled');
+        } else {
+          await this.db.updateEnvironment(environmentId, { status: 'stopped' });
+          await this.transitionProjectState(projectId, 'stopped', 'deploy-cancelled');
+        }
         await this.db.createDeployLog({
           id: nanoid(12),
           projectId,
@@ -1501,12 +1540,14 @@ export class DeployPipeline {
       const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
-      try {
-        const containerName = projectContainerName(routeName);
-        await this.runtime.safeRemoveContainer(containerName);
-        log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
-      } catch {
-        // container may not exist — that's fine
+      if (!preserveLiveContainerUntilRun || liveContainerRemovedForSwap) {
+        try {
+          const containerName = projectContainerName(routeName);
+          await this.runtime.safeRemoveContainer(containerName);
+          log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
+        } catch {
+          // container may not exist — that's fine
+        }
       }
 
       // Classify for build-log context only; OpenLander 0.1 does not auto-remediate.
@@ -1530,8 +1571,13 @@ export class DeployPipeline {
       } catch (classifyError) {
         log.warn({ err: classifyError, projectId }, 'Build failure classification failed');
       }
-      await this.db.updateEnvironment(environmentId, { status: 'error' });
-      await this.transitionProjectState(projectId, 'error', 'deploy-failed');
+      if (preserveLiveContainerUntilRun && !liveContainerRemovedForSwap) {
+        await this.db.updateEnvironment(environmentId, { status: 'running' });
+        await this.transitionProjectState(projectId, 'running', 'deploy-failed');
+      } else {
+        await this.db.updateEnvironment(environmentId, { status: 'error' });
+        await this.transitionProjectState(projectId, 'error', 'deploy-failed');
+      }
       await this.db.createDeployLog({
         id: nanoid(12),
         projectId,
@@ -1823,25 +1869,25 @@ export class DeployPipeline {
 
         log.info(
           { serviceName: service.name, containerId },
-          'Monorepo health check: waiting for readiness (60s)',
+          'Monorepo health check: waiting for readiness',
         );
 
         try {
-          const healthResult = await this.runtime.waitForHealthy(containerId, 60000);
+          const healthResult = await this.runtime.waitForHealthy(containerId, 20000);
           if (healthResult.healthy) {
             return { healthy: true };
           }
 
           log.warn(
             { serviceName: service.name, error: healthResult.error },
-            'Monorepo health check: not healthy within 60s — proceeding anyway',
+            'Monorepo health check: not healthy within readiness window — proceeding anyway',
           );
           return { healthy: true };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           log.warn(
             { serviceName: service.name, error: message },
-            'Monorepo health check: not healthy within 60s — proceeding anyway',
+            'Monorepo health check: not healthy within readiness window — proceeding anyway',
           );
           return { healthy: true };
         }
@@ -2097,6 +2143,7 @@ export class DeployPipeline {
           _preferredPort: previousPort,
           _lockSessionId: lockSession,
           _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
+          _preserveLiveContainerUntilRun: true,
           environment: 'production',
           trigger: options?.trigger,
           ...(options?.cmd && { imageCmd: options.cmd }),
@@ -2138,24 +2185,7 @@ export class DeployPipeline {
         }
       }
 
-      await this.cleanupProjectContainers(projectId, 'remove');
-
       await this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
-
-      await this.transitionProjectState(projectId, 'building', 'deploy-started', {
-        containerId: null,
-        imageTag: null,
-        assignedPort: null,
-      });
-      for (const env of await this.db.getEnvironmentsByProject(projectId)) {
-        await this.db.updateEnvironment(env.id, {
-          assignedPort: null,
-          containerId: null,
-          imageTag: null,
-          previousImageTag: redeployPreviousTag,
-          status: 'idle',
-        });
-      }
       this.jobManager?.trackJob(projectId, project.name);
 
       return await this.deploy(config);
@@ -2833,18 +2863,6 @@ export class DeployPipeline {
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, () =>
       this.rollbackExecutor.rollbackToImage(projectId, environmentId, trigger),
     );
-  }
-
-  private async cleanupProjectContainers(
-    projectId: string,
-    mode: 'stop' | 'remove',
-  ): Promise<void> {
-    if (mode === 'stop') {
-      await this.lifecycle.stop(projectId);
-      return;
-    }
-
-    await this.lifecycle.cleanupProjectContainers(projectId);
   }
 
   private async forceCleanConflicts(

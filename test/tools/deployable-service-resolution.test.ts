@@ -80,6 +80,12 @@ function createDuplicateServiceContext(
         ),
       ),
       listDomainMappings: vi.fn(async () => domainMappings),
+      updateService: vi.fn(async (serviceId: string, updates: { containerPort?: number }) => {
+        const service = services.find((item) => item.id === serviceId);
+        if (service && updates.containerPort !== undefined) {
+          service.container_port = updates.containerPort;
+        }
+      }),
       isCircuitBreakerOpen: vi.fn(() => false),
       acquireDeployLock: vi.fn(() => true),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
@@ -252,6 +258,42 @@ describe('deployable service target resolution', () => {
       _agent_guidance: {
         message: expect.stringContaining('No container was started automatically'),
         next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
+      },
+    });
+  });
+
+  it('apply_route_config updates the live container port without redeploying', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        status: 'running',
+        container_id: 'container-alpha',
+        container_name: 'ol-alpha',
+        container_port: 3000,
+      },
+    });
+
+    const result = (await getTool(ctx, 'apply_route_config').execute(
+      { service_id: 'alpha__svc', container_port: 4000 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.updateService).toHaveBeenCalledWith('alpha__svc', { containerPort: 4000 });
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'applied',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      route_config: {
+        previous_container_port: 3000,
+        container_port: 4000,
+        container_name: 'ol-alpha',
+        provider: 'traefik_http',
+        applied_without_redeploy: true,
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'alpha__svc' },
       },
     });
   });
