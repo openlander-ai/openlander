@@ -174,7 +174,13 @@ Starts the reverse proxy for routing. Automatic in managed mode.
 
 ### Step 4: GitHub (Optional)
 
-Connect GitHub with a Personal Access Token for private repo access.
+Connect GitHub with a Personal Access Token for private or internal GitHub
+repository access. Repository listing and search return safe HTTPS clone URLs;
+the token is used internally at clone time and is never returned in MCP tool
+responses, logs, or deployment status payloads.
+
+Container registry credentials are separate from GitHub repository credentials.
+Private container registries are still on the roadmap.
 
 ### Step 5: MCP (Optional)
 
