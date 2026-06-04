@@ -538,7 +538,10 @@ are not masked. Empty strings render as `""`; missing single-key lookups throw `
 `set_env_vars` is an upsert keyed by `(service_id, key)`. It saves only by default and returns
 `changed: [{ key, op }]`, where `op` is `insert`, `update`, or `noop`. `null` values are rejected
 with `BAD_REQUEST`; `""` stores an explicit empty value. To apply saved changes to a running
-container, call `redeploy_app`, or pass `defer_redeploy=false`.
+container, call `redeploy_app`, or pass `defer_redeploy=false`. Runtime-only env changes are applied
+with a verified same-image recreate (`apply_mode: same_image_recreate`); build-time keys such as
+`NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`, `NUXT_PUBLIC_*`, `PUBLIC_*`, and `GATSBY_*` still require a
+full redeploy (`apply_mode: full_redeploy`).
 
 ### `export_env_vars`
 
@@ -563,6 +566,8 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 | `defer_redeploy` | boolean  | No                  | Default `true`; pass `false` to apply immediately  |
 
 `bulk_delete_env_vars` without `confirm=true` returns `{ would_delete, not_found, count_to_delete, confirm_required: true }` and makes no changes.
+Confirmed deletes with `defer_redeploy=false` use the same runtime-only same-image recreate path
+when no build-time env key is involved.
 
 ### `set_global_secret` / `list_global_secrets`
 

@@ -166,6 +166,7 @@ function createMockDb(state: {
 
   return {
     getProject: vi.fn(async (id: string) => (id === state.project.id ? state.project : undefined)),
+    getService: vi.fn(async (id: string) => (id === state.service.id ? state.service : undefined)),
     getDeployableForProject: vi.fn(async (id: string) =>
       id === state.project.id ? state.service : undefined,
     ),
@@ -177,6 +178,9 @@ function createMockDb(state: {
       id === state.environment.id ? state.environment : undefined,
     ),
     updateProject: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
+      applyRuntimeUpdates(updates);
+    }),
+    updateService: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
       applyRuntimeUpdates(updates);
     }),
     updateEnvironment: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
@@ -192,6 +196,7 @@ function createMockDb(state: {
       if ('previousImageTag' in updates)
         state.environment.previous_image_tag = updates.previousImageTag as string | null;
     }),
+    createEnvironment: vi.fn(async () => state.environment),
     createDeployLog: vi.fn(async () => undefined),
     loadDeployConfigForService: vi.fn(async () => null),
     loadDeployConfig: vi.fn(async () => null),
@@ -220,8 +225,11 @@ function createMockDocker(options?: {
   const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
     pullImage: vi.fn().mockResolvedValue(undefined),
+    inspectImage: vi.fn().mockResolvedValue({ Config: { ExposedPorts: { '3000/tcp': {} } } }),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     runContainer: vi.fn().mockResolvedValue('container-green'),
+    waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
+    getLogs: vi.fn().mockResolvedValue(''),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn(async (containerId: string) => {
       if (containerId === 'container-blue' && options?.cleanupBlueFails) {
@@ -355,6 +363,60 @@ describe('blue-green route target flip', () => {
         headers: { Host: expect.stringMatching(/^demo-app\./) },
       }),
       expect.any(Function),
+    );
+  });
+
+  it('recreates runtime env from the same image before removing the previous container', async () => {
+    (env.getAllForService as ReturnType<typeof vi.fn>).mockReturnValue({
+      DATABASE_URL: 'postgres://new-runtime',
+    });
+
+    const result = await pipeline.recreateServiceRuntime('p1__svc', {
+      lockSessionId: 'env-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      applyMode: 'same-image-recreate',
+      readiness: 'healthy',
+      containerId: 'container-green',
+      previousContainerId: 'container-blue',
+    });
+    expect(state.service.container_id).toBe('container-green');
+    expect(state.service.container_name).toMatch(/^ol-demo-app-env-/);
+    expect(state.service.assigned_port).toBe(12001);
+
+    const runContainerMock = docker.runContainer as ReturnType<typeof vi.fn>;
+    expect(runContainerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'openlander/demo-app:old',
+        name: expect.stringMatching(/^ol-demo-app-env-/),
+        port: 12001,
+        containerPort: 3000,
+        envVars: { DATABASE_URL: 'postgres://new-runtime' },
+        labels: expect.objectContaining({
+          'openlander.managed': 'true',
+          'openlander.project': 'demo-app',
+          'openlander.service': 'p1__svc',
+          'traefik.enable': 'false',
+        }),
+        volumeProjectName: 'demo-app',
+      }),
+    );
+
+    const updateServiceMock = db.updateService as ReturnType<typeof vi.fn>;
+    const safeRemoveMock = docker.safeRemoveContainer as ReturnType<typeof vi.fn>;
+    const greenUpdateCallIndex = updateServiceMock.mock.calls.findIndex(
+      ([, updates]) => (updates as Record<string, unknown>).containerId === 'container-green',
+    );
+    const removeBlueCallIndex = safeRemoveMock.mock.calls.findIndex(
+      ([containerId]) => containerId === 'container-blue',
+    );
+    expect(greenUpdateCallIndex).toBeGreaterThanOrEqual(0);
+    expect(removeBlueCallIndex).toBeGreaterThanOrEqual(0);
+    expect(updateServiceMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
+      safeRemoveMock.mock.invocationCallOrder[removeBlueCallIndex],
     );
   });
 

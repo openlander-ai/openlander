@@ -105,6 +105,7 @@ function createMockContext(opts?: {
     }),
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
     redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+    recreateServiceRuntime: vi.fn().mockResolvedValue({ success: true }),
   };
 
   const env = {
@@ -355,7 +356,8 @@ describe('Tool Registry', () => {
       },
       { target: 'agent' },
     );
-    expect(pipeline.redeployService).toHaveBeenCalledWith('p1__svc', { trigger: 'chat' });
+    expect(pipeline.recreateServiceRuntime).toHaveBeenCalledWith('p1__svc', { trigger: 'chat' });
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     expect(pipeline.redeploy).not.toHaveBeenCalled();
     expect(applied).toEqual({
       status: 'updated_and_redeployed',
@@ -364,6 +366,12 @@ describe('Tool Registry', () => {
       keys: ['API_URL'],
       changed: [{ key: 'API_URL', op: 'update' }],
       needs_redeploy: false,
+      apply_mode: 'same_image_recreate',
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'p1__svc' },
+      },
     });
   });
 

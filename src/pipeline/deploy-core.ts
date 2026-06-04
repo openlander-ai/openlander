@@ -11,10 +11,11 @@ import { rm } from 'node:fs/promises';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import type { RuntimeBackend } from './runtime/index.js';
 import { cloneRepo } from './git.js';
-import { allocatePort, scanUsedPorts } from './port.js';
+import { allocatePort, clearPortScanCache, releasePortReservation, scanUsedPorts } from './port.js';
 import {
   ensureManagedTraefikNetwork,
   getEnvironmentProjectHostname,
+  getPreferredProjectUrl,
   getProjectUrl,
 } from './traefik.js';
 import { resolveContainerUrl } from './url-resolver.js';
@@ -140,6 +141,22 @@ function explicitHealthCheckPath(
   return found ? (found.startsWith('/') ? found : `/${found}`) : undefined;
 }
 
+function parseRuntimeImageCmd(rawImageCmd: string | null): string[] | undefined {
+  if (!rawImageCmd) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(rawImageCmd);
+    if (!Array.isArray(parsed)) return undefined;
+    const cmd = parsed.filter((entry): entry is string => typeof entry === 'string');
+    return cmd.length > 0 ? cmd : undefined;
+  } catch {
+    return [rawImageCmd];
+  }
+}
+
+function tailLogLines(logText: string, lineCount: number): string {
+  return logText.split(/\r?\n/).slice(-lineCount).join('\n');
+}
+
 /**
  * Project configuration for a deployment.
  */
@@ -222,6 +239,23 @@ export interface DeployResult {
 }
 
 export type RedeployStrategy = 'blue-green' | 'force';
+
+export interface RuntimeRecreateOptions {
+  trigger?: 'chat' | 'webhook' | 'api';
+  lockSessionId?: string;
+  healthCheckPath?: string;
+  healthCheckTimeoutMs?: number;
+  routeSwitchDelayMs?: number;
+  routeProbeIntervalMs?: number;
+  routeProbeTimeoutMs?: number;
+}
+
+export interface RuntimeRecreateResult extends DeployResult {
+  applyMode: 'same-image-recreate';
+  containerName?: string;
+  previousContainerId?: string | null;
+  previousContainerName?: string | null;
+}
 
 export interface RedeployOptions {
   noCache?: boolean;
@@ -2191,6 +2225,335 @@ export class DeployPipeline {
     }
 
     return await this.redeployResolvedService(service, options);
+  }
+
+  /**
+   * Recreate a running service from its already-built image and the latest
+   * runtime env snapshot. This is for Day-2 env/config hot paths only: no git
+   * clone, no Docker build, and the existing container stays up until the
+   * replacement passes readiness checks.
+   */
+  async recreateServiceRuntime(
+    serviceId: string,
+    options?: RuntimeRecreateOptions,
+  ): Promise<RuntimeRecreateResult> {
+    const startTime = Date.now();
+    const service = await this.db.getService(serviceId);
+    if (!service) {
+      return {
+        success: false,
+        projectId: deployableServiceIdToProjectId(serviceId),
+        projectName: 'unknown',
+        code: 'SERVICE_NOT_FOUND',
+        applyMode: 'same-image-recreate',
+        error: `Service not found: ${serviceId}`,
+      };
+    }
+
+    if (!this.isDeployableService(service)) {
+      return {
+        success: false,
+        projectId: service.project_id,
+        projectName: 'unknown',
+        code: 'SERVICE_OPERATION_UNSUPPORTED',
+        applyMode: 'same-image-recreate',
+        error: `Service ${service.id} is not an Application/Compose workload.`,
+      };
+    }
+
+    const { ownerProject, runtimeProject } = await this.resolveRuntimeProjectForService(service);
+    const project = runtimeProject;
+    const projectId = project.id;
+    this.validateProjectName(project.name);
+
+    if (ownerProject.id !== project.id) {
+      await this.assertProjectMutable(ownerProject);
+    }
+    await this.assertProjectMutable(project);
+
+    const lockSession = options?.lockSessionId ?? `runtime-env-${nanoid(12)}`;
+    return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
+      const view = serviceViewFromRows(project, service);
+      const imageTag = view.imageTag ?? (view.source === 'image' ? view.imageUrl : null);
+      if (!imageTag) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          code: 'NO_RUNTIME_IMAGE',
+          applyMode: 'same-image-recreate',
+          previous_version_still_serving: Boolean(view.containerId),
+          error:
+            'Runtime env apply requires a previously built image. Call redeploy_app to build the service first.',
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
+
+      let targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
+        (environment) => environment.type === 'production',
+      );
+      if (!targetEnvironment) {
+        targetEnvironment = await this.db.createEnvironment({
+          id: `${projectId}-production`,
+          projectId,
+          type: 'production',
+          branch: view.source === 'image' ? null : view.branch,
+        });
+      }
+
+      if (view.source === 'image') {
+        try {
+          await this.runtime.pullImage(imageTag);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          throw new ImagePullError(mapPullError(err));
+        }
+      }
+
+      const envVars = await resolveEnvVars(
+        {
+          projectId,
+          serviceId: service.id,
+          environmentId: targetEnvironment.id,
+        },
+        { env: this.env },
+      );
+      const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
+      const imageCmd = parseRuntimeImageCmd(view.imageCmdRaw);
+      const exposedPort = await getImageExposedPort(this.runtime, imageTag).catch(() => null);
+      let tempPort = 0;
+      let tempContainerId = '';
+      const tempRouteName = `${getRouteName(project.name)}-env-${nanoid(6)}`;
+      const tempContainerName = projectContainerName(tempRouteName);
+      const projectNetwork = await this.runtime.ensureProjectNetwork(project.name);
+      await ensureManagedTraefikNetwork(this.runtime, projectNetwork);
+      const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
+        projectId,
+        serviceId: service.id,
+      });
+
+      try {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          tempPort = await allocatePort(this.db, this.runtime, {}, 'production');
+          const containerPort = view.containerPort ?? exposedPort ?? view.assignedPort ?? tempPort;
+          try {
+            tempContainerId = await this.runtime.runContainer({
+              imageTag,
+              name: tempContainerName,
+              port: tempPort,
+              containerPort,
+              envVars,
+              cmd: imageCmd,
+              traefikLabels: {},
+              network: projectNetwork,
+              aliases: [tempRouteName],
+              secretFiles,
+              restartPolicy: { Name: 'unless-stopped' },
+              labels: {
+                [DOCKER_LABELS.MANAGED]: 'true',
+                [DOCKER_LABELS.PROJECT]: project.name,
+                [DOCKER_LABELS.SERVICE]: service.id,
+                'traefik.enable': 'false',
+              },
+              volumeProjectName: project.name,
+              resourceLimits: resourceLimits ?? undefined,
+            });
+            releasePortReservation(tempPort);
+            break;
+          } catch (error) {
+            releasePortReservation(tempPort);
+            const message = error instanceof Error ? error.message : String(error);
+            const isPortConflict =
+              message.includes('port is already allocated') ||
+              message.includes('address already in use');
+            if (attempt === 0 && isPortConflict) {
+              clearPortScanCache();
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        if (!tempContainerId) {
+          throw new Error('Runtime env container recreate did not return a container id');
+        }
+
+        const healthResult = await this.runtime.waitForHealthy(
+          tempContainerId,
+          options?.healthCheckTimeoutMs ?? 20_000,
+        );
+        await eventBus.emit('monitor:healthcheck', {
+          projectId,
+          healthy: healthResult.healthy,
+          responseTimeMs: 0,
+        });
+        if (!healthResult.healthy) {
+          const containerLogs = await this.runtime
+            .getLogs(tempContainerId, 'all')
+            .catch(() => '(no logs available)');
+          await this.runtime.safeRemoveContainer(tempContainerId).catch((err: unknown) => {
+            log.warn(
+              { err, projectId, serviceId: service.id, containerId: tempContainerId },
+              'Failed to remove unhealthy replacement container after runtime env recreate',
+            );
+          });
+          return {
+            success: false,
+            projectId,
+            projectName: project.name,
+            code: 'RUNTIME_ENV_RECREATE_FAILED',
+            applyMode: 'same-image-recreate',
+            readiness: 'unhealthy',
+            previous_version_still_serving: Boolean(view.containerId),
+            error: healthResult.error ?? 'Replacement container did not become healthy',
+            buildLogTail: tailLogLines(containerLogs, 80),
+            buildDurationMs: Date.now() - startTime,
+          };
+        }
+
+        const previousContainerId = view.containerId;
+        const previousContainerName = view.containerName;
+        const containerPort = view.containerPort ?? exposedPort ?? view.assignedPort ?? tempPort;
+        await this.db.updateService(service.id, {
+          status: 'running',
+          containerId: tempContainerId,
+          containerName: tempContainerName,
+          assignedPort: tempPort,
+          containerPort,
+          imageTag,
+          previousImageTag: view.imageTag ?? null,
+        });
+        await this.db.updateEnvironment(targetEnvironment.id, {
+          status: 'running',
+          assignedPort: tempPort,
+          containerId: tempContainerId,
+          containerPort,
+          imageTag,
+          previousImageTag: view.imageTag ?? null,
+        });
+        await this.transitionProjectState(projectId, 'running', 'runtime-env-recreate-success', {
+          containerId: tempContainerId,
+          containerName: tempContainerName,
+          assignedPort: tempPort,
+          containerPort,
+          imageTag,
+          previousImageTag: view.imageTag ?? null,
+        });
+
+        const routeProbePath = explicitHealthCheckPath(view, options?.healthCheckPath);
+        if (routeProbePath) {
+          const routeProbe = await this.waitForManagedTraefikRoute({
+            projectName: project.name,
+            path: routeProbePath,
+            probeTimeoutMs: options?.routeProbeTimeoutMs ?? 5_000,
+            maxWaitMs: options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS,
+            intervalMs: options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS,
+          });
+          if (!routeProbe.ok) {
+            const restoredStatus: ServiceRow['status'] =
+              view.status === 'stopped' || view.status === 'error' || view.status === 'recovering'
+                ? view.status
+                : 'running';
+            await this.db.updateService(service.id, {
+              status: restoredStatus,
+              containerId: previousContainerId,
+              containerName: previousContainerName,
+              assignedPort: view.assignedPort,
+              containerPort: view.containerPort,
+              imageTag: view.imageTag,
+              previousImageTag: view.previousImageTag,
+            });
+            await this.db.updateEnvironment(targetEnvironment.id, {
+              status: targetEnvironment.status,
+              assignedPort: targetEnvironment.assigned_port,
+              containerId: targetEnvironment.container_id,
+              containerPort: targetEnvironment.container_port,
+              imageTag: targetEnvironment.image_tag,
+              previousImageTag: targetEnvironment.previous_image_tag,
+            });
+            await this.transitionProjectState(
+              projectId,
+              'running',
+              'runtime-env-recreate-rollback',
+              {
+                containerId: previousContainerId,
+                containerName: previousContainerName,
+                assignedPort: view.assignedPort,
+                containerPort: view.containerPort,
+                imageTag: view.imageTag,
+                previousImageTag: view.previousImageTag,
+              },
+            );
+            await this.runtime.safeRemoveContainer(tempContainerId).catch((err: unknown) => {
+              log.warn(
+                { err, projectId, serviceId: service.id, containerId: tempContainerId },
+                'Failed to remove replacement container after route verification failed',
+              );
+            });
+            return {
+              success: false,
+              projectId,
+              projectName: project.name,
+              code: 'RUNTIME_ENV_ROUTE_VERIFY_FAILED',
+              applyMode: 'same-image-recreate',
+              readiness: 'unhealthy',
+              previous_version_still_serving: Boolean(previousContainerId),
+              error: routeProbe.error,
+              buildDurationMs: Date.now() - startTime,
+            };
+          }
+        }
+
+        if (previousContainerId) {
+          await this.runtime.safeRemoveContainer(previousContainerId).catch((err: unknown) => {
+            log.warn(
+              { err, projectId, serviceId: service.id, containerId: previousContainerId },
+              'Failed to remove previous container after runtime env recreate',
+            );
+          });
+        } else if (previousContainerName) {
+          await this.runtime.safeRemoveContainer(previousContainerName).catch((err: unknown) => {
+            log.warn(
+              { err, projectId, serviceId: service.id, containerName: previousContainerName },
+              'Failed to remove previous container after runtime env recreate',
+            );
+          });
+        }
+
+        return {
+          success: true,
+          projectId,
+          projectName: project.name,
+          applyMode: 'same-image-recreate',
+          readiness: 'healthy',
+          previous_version_still_serving: false,
+          previousContainerId,
+          previousContainerName,
+          containerId: tempContainerId,
+          containerName: tempContainerName,
+          port: tempPort,
+          url: getPreferredProjectUrl(project.name, tempPort),
+          buildDurationMs: Date.now() - startTime,
+        };
+      } catch (error) {
+        if (tempContainerId) {
+          await this.runtime.safeRemoveContainer(tempContainerId).catch((err: unknown) => {
+            log.warn(
+              { err, projectId, serviceId: service.id, containerId: tempContainerId },
+              'Failed to remove replacement container after runtime env recreate failure',
+            );
+          });
+        } else {
+          await this.runtime.safeRemoveContainer(tempContainerName).catch((err: unknown) => {
+            log.debug(
+              { err, projectId, serviceId: service.id, containerName: tempContainerName },
+              'Replacement container cleanup skipped or failed',
+            );
+          });
+        }
+        throw error;
+      }
+    });
   }
 
   private async redeployResolvedService(
