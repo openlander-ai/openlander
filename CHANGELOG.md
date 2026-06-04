@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.2] - 2026-06-04
+
+> `v0.1.14-rc.1` is superseded for release QA. Live Day-2 route recovery QA found
+> that new apps could drop their configured health path before route
+> verification.
+
+### Fixed
+
+- Preserve `health_check_path` from `deploy_app` and
+  `create_deploy_plan -> execute_deploy_plan` through the deploy plan and first
+  service-row creation paths so Day-2 route verify/rollback does not skip with
+  `missing_health_check_path`.
+
 ## [0.1.14-rc.1] - 2026-06-04
 
 > `v0.1.13-rc.3` is superseded for release QA. It fixed DB-first deploy and
