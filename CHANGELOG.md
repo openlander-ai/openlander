@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.13-rc.3] - 2026-06-04
+
+> `v0.1.13-rc.2` is superseded for release QA. It fixed the DB-first
+> service-row/FK path, but AWS QA found that attached Applications could still
+> advertise the Project namespace URL instead of the actual Application route.
+
+### Fixed
+
+- Hardened DB-first failure handling so pre-service deploy crashes preserve the
+  original failure and do not write secondary deploy-log records against a
+  missing Application service row.
+- Replaced the synthetic `__svc` write-path audit with AST-backed checks so the
+  release gate enforces real call sites without false positives from comments.
+- Fixed agent-facing URL projection for attached Applications and Compose
+  stacks so Project-level responses advertise the actual service route rather
+  than the Project namespace route.
+- Added release-gated coverage for the reported Project `p2probe` plus
+  Application `urlnest` route mismatch.
+
 ## [0.1.13-rc.2] - 2026-06-04
 
 ### Fixed
