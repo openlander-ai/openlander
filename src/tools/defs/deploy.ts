@@ -594,7 +594,18 @@ export const deployToolDefs: ToolDef[] = [
           throw new ProjectNotFoundError(missingProjectName);
         }
 
-        await primeAssignedPort(project.id);
+        const deployables =
+          typeof appCtx.db.getDeployablesByGroup === 'function'
+            ? await appCtx.db.getDeployablesByGroup(project.id)
+            : [];
+        const singleDeployable = deployables.length === 1 ? deployables[0] : undefined;
+        const statusProject =
+          singleDeployable !== undefined
+            ? await appCtx.db.getProject(deployableServiceIdToProjectId(singleDeployable.id))
+            : undefined;
+        const projectForStatus = statusProject ?? project;
+
+        await primeAssignedPort(projectForStatus.id);
 
         const buildProjectResult = async (status?: {
           projectId: string;
@@ -610,7 +621,7 @@ export const deployToolDefs: ToolDef[] = [
         }) => {
           const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
           if (status && !isActive) {
-            const lastLog = await appCtx.db.getLastDeployLog(project.id);
+            const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
             if (lastLog) {
               return {
                 active: 0,
@@ -633,8 +644,8 @@ export const deployToolDefs: ToolDef[] = [
           lock_session: currentLockInfo.session,
           jobs: [
             formatJob({
-              projectId: project.id,
-              projectName: project.name,
+              projectId: projectForStatus.id,
+              projectName: projectForStatus.name,
               phase: 'queued',
               startedAt: parseDBTimestamp(currentLockInfo.lockedAt),
             }),
@@ -642,8 +653,8 @@ export const deployToolDefs: ToolDef[] = [
           ...(timedOut ? { timeout: true } : {}),
         });
 
-        let status = appCtx.jobManager.getStatus(project.id);
-        const lockInfo = await appCtx.db.getDeployLockInfo(project.id);
+        let status = appCtx.jobManager.getStatus(projectForStatus.id);
+        const lockInfo = await appCtx.db.getDeployLockInfo(projectForStatus.id);
 
         if (!shouldWait) {
           const statusIsStaleForLock = terminalStatusPrecedesLock(status, lockInfo);
@@ -699,16 +710,19 @@ export const deployToolDefs: ToolDef[] = [
           const matchesProject = (payload: {
             projectId: string;
             parentProjectId?: string;
-          }): boolean => payload.projectId === project.id || payload.parentProjectId === project.id;
+          }): boolean =>
+            payload.projectId === projectForStatus.id ||
+            payload.parentProjectId === projectForStatus.id ||
+            payload.parentProjectId === project.id;
 
           const resolveWithCurrent = async (timedOut: boolean): Promise<void> => {
             if (settled) return;
             settled = true;
             cleanup();
 
-            const current = appCtx.jobManager.getStatus(project.id);
+            const current = appCtx.jobManager.getStatus(projectForStatus.id);
             if (current) {
-              const lastLog = await appCtx.db.getLastDeployLog(project.id);
+              const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
               const logIsNewer =
                 lastLog &&
                 parseDBTimestamp(lastLog.created_at).getTime() > current.startedAt.getTime();
@@ -722,31 +736,31 @@ export const deployToolDefs: ToolDef[] = [
                   jobs: [await formatDeployLogJob(lastLog)],
                   ...(timedOut ? { timeout: true } : {}),
                 };
-                resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
+                resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
                 return;
               }
 
               const payload = (await buildProjectResult(current)) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
-              resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
+              resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
               return;
             }
 
-            const currentLockInfo = await appCtx.db.getDeployLockInfo(project.id);
+            const currentLockInfo = await appCtx.db.getDeployLockInfo(projectForStatus.id);
             if (currentLockInfo) {
               const payload = buildLockedQueuedResult(currentLockInfo, timedOut);
-              resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
+              resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
               return;
             }
 
-            const dbProject = await appCtx.db.getProjectByName(project.name);
+            const dbProject = await appCtx.db.getProjectByName(projectForStatus.name);
             const payload = {
-              project: project.name,
+              project: projectForStatus.name,
               status: dbProject?.status ?? 'unknown',
               phase: 'none',
               ...(timedOut ? { timeout: true } : {}),
             };
-            resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
+            resolve(addWatchTimeoutMetadata(payload, { project_id: projectForStatus.id }));
           };
 
           const unsubSuccess = eventBus.on('deploy:success', (payload) => {
@@ -767,7 +781,7 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            const lastLog = await appCtx.db.getLastDeployLog(project.id);
+            const lastLog = await appCtx.db.getLastDeployLog(projectForStatus.id);
             if (!lastLog || (lastLog.status !== 'success' && lastLog.status !== 'failed')) {
               return;
             }
@@ -778,7 +792,7 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            const currentJob = appCtx.jobManager.getStatus(project.id);
+            const currentJob = appCtx.jobManager.getStatus(projectForStatus.id);
             const logIsNewer = !currentJob || logTime > currentJob.startedAt.getTime();
 
             if (logIsNewer) {
@@ -799,7 +813,7 @@ export const deployToolDefs: ToolDef[] = [
             void pollDeployLog();
           }, 5000);
 
-          status = appCtx.jobManager.getStatus(project.id);
+          status = appCtx.jobManager.getStatus(projectForStatus.id);
           if (status && (status.phase === 'done' || status.phase === 'failed')) {
             void resolveWithCurrent(false);
           }
