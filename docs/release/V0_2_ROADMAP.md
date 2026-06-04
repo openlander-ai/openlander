@@ -3,7 +3,7 @@
 ## Goal
 
 0.2 should turn the stabilized 0.1 release into a clearer multi-service,
-multi-environment deployment platform without opening broad new automation
+multi-target deployment platform without opening broad new automation
 surfaces too early.
 
 The main product direction is:
@@ -11,9 +11,9 @@ The main product direction is:
 - treat the v0.1.14 Day-2 recovery loop as the automation foundation: agents get
   one high-confidence diagnosis, one safe next action, and an explicit
   verification result,
-- keep project groups, deployable services, managed services, and environments
-  easy to distinguish,
-- make environment-specific configuration predictable,
+- keep project groups, deployable services, managed services, and deployment
+  targets easy to distinguish,
+- make deployment-target-specific configuration predictable,
 - make every important mutation usable from both the web UI and MCP,
 - keep built-in AI/Ops automation dormant until its product surface and tests
   are restored together.
@@ -38,7 +38,7 @@ This is intentionally not built-in autonomous remediation. The supported model
 is still MCP-first: external agents inspect, decide, call actions explicitly,
 and read verification results.
 
-## First Milestone: Variables And Environment Scope
+## First Milestone: Variables And Deployment-Target Scope
 
 The first 0.2 milestone is the environment-variable scope refactor described in
 `docs/release/ENVIRONMENT_VARIABLES_0_2_PLAN.md`.
@@ -46,7 +46,7 @@ The first 0.2 milestone is the environment-variable scope refactor described in
 This comes first because staging, preview deployments, managed-service binding,
 agent workflows, Swarm, and Kubernetes all need the same answers:
 
-- which logical environment is targeted,
+- which deployment target is being deployed,
 - which deployable service receives the change,
 - which value is effective at runtime,
 - whether saving a change requires redeploying a running service.
@@ -55,34 +55,40 @@ agent workflows, Swarm, and Kubernetes all need the same answers:
 
 ### 1. Environment Variables Contract
 
-- Define canonical variable scopes across project, environment, service, and
+- Define canonical variable scopes across project, target, service, and
   deploy-time overrides.
-- Stop collapsing environment-scoped writes into project-scoped rows.
+- Stop collapsing target-scoped writes into project-scoped rows.
 - Add effective-variable resolution with source metadata.
 - Add interpolation validation for project/environment/service references.
 - Expose the same model through REST, MCP, and the web UI.
 
-### 2. Project, Service, And Environment Identity Cleanup
+### 2. Project, Service, And Target Identity Cleanup
 
 - Keep "project" as the user-facing group/workspace.
 - Keep "service" as the deployable app/worker or managed infrastructure unit.
-- Use public `environment_key` values for logical environments instead of
+- Use public `environment_key` values for logical deployment targets instead of
   leaking service-runtime row ids into user-facing workflows.
+- Treat `environment_key` as the deployment **target** key (omitted =
+  production). `Environment` stays reserved as a future project-level product
+  noun, not a 0.2 grouping object; the 0.2 model is flat `Project -> Resource`.
 - Preserve compatibility for existing v0.1 project/service routes while adding
   clearer 0.2 paths where needed.
 
-### 3. Staging Workflow
+### 3. Deployment Targets (production / development, staging-ready)
 
-- Support `production`, `staging`, and `development` as first-class logical
-  environment keys.
-- Add branch-to-environment mapping that works for webhooks and manual deploys.
+- Ship `production` and `development` as the default deployment targets.
+- Reserve `staging` in the target-key model so it can become an additive target
+  later, not a rewrite. The current runtime schema and default 0.2 UI ship only
+  `production` / `development`; adding `staging` needs an additive
+  `environments.type` enum change, not a redesign.
+- Add branch-to-target mapping that works for webhooks and manual deploys.
 - Make production-impacting changes visibly protected in UI and MCP guidance.
-- Keep custom arbitrary environment names out of 0.2 unless the fixed-key model
-  is already stable.
+- Keep custom arbitrary environment names, and staging as a default product
+  surface, out of 0.2 until the fixed-key model is stable.
 
-### 4. Managed Service Binding Across Environments
+### 4. Managed Service Binding Across Deployment Targets
 
-- Make generated connection variables environment-aware.
+- Make generated connection variables deployment-target-aware.
 - Show generated/managed values as a separate source in effective env views.
 - Prevent managed runtime values from being silently overridden by user writes.
 - Keep standalone managed-service creation and deploy-plan auto-wiring aligned.
@@ -122,12 +128,13 @@ reshaping it:
 
 0.2 is not ready until the following are true:
 
-- a user can tell whether a value belongs to the project, environment, service,
+- a user can tell whether a value belongs to the project, target, service,
   or generated runtime layer,
 - an MCP agent can set and inspect env vars without relying on ambiguous target
   inference,
 - a running service reports clearly when an env change requires redeploy,
-- staging/development do not reuse production values accidentally,
+- development does not reuse production values accidentally (a future `staging`
+  target, once added, must get the same isolation),
 - production-impacting changes are visible and intentionally applied,
 - hot-path recovery actions report whether they were verified, skipped, failed,
   or rolled back,
