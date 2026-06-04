@@ -422,6 +422,7 @@ describe('POST /api/projects group creation', () => {
     };
     const pipeline = {
       redeploy: vi.fn(async () => ({ success: true, projectId: runtime.id })),
+      redeployService: vi.fn(async () => ({ success: true, projectId: runtime.id })),
     };
     const app = new Hono();
     app.route(
@@ -429,7 +430,7 @@ describe('POST /api/projects group creation', () => {
       createServiceRuntimeRoutes({
         db,
         pipeline,
-        env: { set: vi.fn() },
+        env: { set: vi.fn(), setBulkForService: vi.fn(async () => true) },
         coordinator: { suppressProject: vi.fn() },
       } as unknown as AppContext),
     );
@@ -442,10 +443,11 @@ describe('POST /api/projects group creation', () => {
 
     expect(res.status).toBe(200);
     expect(db.updateProject).toHaveBeenCalledWith(runtime.id, { status: 'building' });
-    expect(pipeline.redeploy).toHaveBeenCalledWith(
-      runtime.id,
+    expect(pipeline.redeployService).toHaveBeenCalledWith(
+      service.id,
       expect.objectContaining({ noCache: undefined, strategy: 'force' }),
     );
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       success: true,
       projectId: group.id,

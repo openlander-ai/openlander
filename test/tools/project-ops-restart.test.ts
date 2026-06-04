@@ -30,6 +30,7 @@ function createContext() {
 
   const stop = vi.fn(async () => undefined);
   const redeploy = vi.fn(async () => ({ deployId: 'deploy-1' }));
+  const redeployService = vi.fn(async () => ({ deployId: 'deploy-1' }));
 
   const ctx = {
     db: {
@@ -48,19 +49,20 @@ function createContext() {
     pipeline: {
       stop,
       redeploy,
+      redeployService,
     },
     deployQueue: {
       acquire: vi.fn().mockResolvedValue(() => {}),
     },
   } as unknown as AppContext;
 
-  return { ctx, stop, redeploy };
+  return { ctx, stop, redeploy, redeployService };
 }
 
 describe('deployable restart_service non-blocking', () => {
   it('returns immediately without awaiting redeploy', async () => {
-    const { ctx, stop, redeploy } = createContext();
-    redeploy.mockImplementationOnce(() => new Promise(() => undefined));
+    const { ctx, stop, redeploy, redeployService } = createContext();
+    redeployService.mockImplementationOnce(() => new Promise(() => undefined));
 
     const result = await Promise.race([
       getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' }),
@@ -69,7 +71,7 @@ describe('deployable restart_service non-blocking', () => {
 
     expect(result).not.toBe('timeout');
     expect(stop).not.toHaveBeenCalled();
-    expect(redeploy).toHaveBeenCalledWith('project-1', {
+    expect(redeployService).toHaveBeenCalledWith('service-1', {
       noCache: false,
       strategy: undefined,
       healthCheckPath: undefined,
@@ -77,25 +79,27 @@ describe('deployable restart_service non-blocking', () => {
       lockSessionId: expect.any(String),
       trigger: 'chat',
     });
+    expect(redeploy).not.toHaveBeenCalled();
   });
 
   it('does not stop the live container before redeploy source validation', async () => {
-    const { ctx, stop, redeploy } = createContext();
+    const { ctx, stop, redeploy, redeployService } = createContext();
 
     await getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' });
 
     expect(stop).not.toHaveBeenCalled();
-    expect(redeploy).toHaveBeenCalledWith(
-      'project-1',
+    expect(redeployService).toHaveBeenCalledWith(
+      'service-1',
       expect.objectContaining({
         lockSessionId: expect.any(String),
         trigger: 'chat',
       }),
     );
+    expect(redeploy).not.toHaveBeenCalled();
   });
 
   it('returns status restarting with polling message', async () => {
-    const { ctx, redeploy } = createContext();
+    const { ctx, redeploy, redeployService } = createContext();
 
     const result = await getRestartServiceTool(ctx).execute(
       {
@@ -105,7 +109,7 @@ describe('deployable restart_service non-blocking', () => {
       { target: 'mcp' },
     );
 
-    expect(redeploy).toHaveBeenCalledWith('project-1', {
+    expect(redeployService).toHaveBeenCalledWith('service-1', {
       noCache: true,
       strategy: undefined,
       healthCheckPath: undefined,
@@ -113,6 +117,7 @@ describe('deployable restart_service non-blocking', () => {
       lockSessionId: expect.any(String),
       trigger: 'chat',
     });
+    expect(redeploy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'restarting',
       service: { name: 'demo-app', projectId: 'project-1', projectName: 'demo-group' },

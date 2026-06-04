@@ -21,7 +21,7 @@ import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database, EnvironmentRow, ProjectRow } from '../db/index.js';
+import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -32,6 +32,7 @@ import {
   MissingImageUrlError,
   PreflightCheckError,
   ProjectNotFoundError,
+  ServiceSelectionRequiredError,
   ServiceSourceMissingError,
   isDockerNotFoundError,
   isDockerBuildCancelledError,
@@ -69,7 +70,13 @@ import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
 import { createDependencyCacheKey } from './build-cache.js';
-import { loadServiceViewRecord, type ServiceView } from '../db/views/service-view.js';
+import {
+  loadServiceViewRecord,
+  serviceViewFromRows,
+  type ServiceView,
+} from '../db/views/service-view.js';
+import { deployableServiceIdToProjectId } from '../db/service-ids.js';
+import { NON_DEPLOYABLE_SERVICE_KINDS } from '../db/repos/service.repo.js';
 
 import {
   buildProject,
@@ -1074,7 +1081,7 @@ export class DeployPipeline {
   ): Promise<DeployResult> {
     const source = config.source ?? 'git';
 
-    if (config._projectId) {
+    if (config._projectId && !config._serviceId) {
       await this.ensureFirstApplicationService(projectId, {
         ...config,
         name: projectName,
@@ -1221,8 +1228,12 @@ export class DeployPipeline {
     const projectName = deployConfig.name ?? project.name;
     const trigger = deployConfig.trigger ?? 'api';
     const deployRecord = await loadServiceViewRecord(this.db, project);
-    const deployService = deployRecord.service;
-    const deployView = deployRecord.view;
+    const deployService = deployConfig._serviceId
+      ? ((await this.db.getService(deployConfig._serviceId)) ?? deployRecord.service)
+      : deployRecord.service;
+    const deployView = deployConfig._serviceId
+      ? serviceViewFromRows(project, deployService)
+      : deployRecord.view;
     const source = deployConfig.source ?? deployView.source ?? 'git';
     const repoUrl = deployConfig.repoUrl ?? deployView.repoUrl ?? '';
     const branch = deployConfig.branch ?? deployView.branch ?? environment.branch ?? undefined;
@@ -1888,7 +1899,70 @@ export class DeployPipeline {
     };
   }
 
-  /** Redeploy an existing project (pull latest, rebuild, swap containers). */
+  private isDeployableService(service: ServiceRow): boolean {
+    return !(NON_DEPLOYABLE_SERVICE_KINDS as readonly string[]).includes(service.kind);
+  }
+
+  private async resolveRedeployServiceForProject(
+    project: ProjectRow,
+  ): Promise<ServiceRow | DeployResult> {
+    const candidates = new Map<string, ServiceRow>();
+    const dbWithGroupLookup = this.db as Pick<Database, 'getDeployableForProject'> &
+      Partial<Pick<Database, 'getDeployablesByGroup'>>;
+    const groupDeployables = dbWithGroupLookup.getDeployablesByGroup
+      ? await dbWithGroupLookup.getDeployablesByGroup(project.id)
+      : [];
+    for (const service of groupDeployables) {
+      if (this.isDeployableService(service)) {
+        candidates.set(service.id, service);
+      }
+    }
+
+    const canonical = await this.db.getDeployableForProject(project.id);
+    if (canonical && this.isDeployableService(canonical)) {
+      candidates.set(canonical.id, canonical);
+    }
+
+    const deployables = [...candidates.values()];
+    if (deployables.length === 0) {
+      return {
+        success: false,
+        projectId: project.id,
+        projectName: project.name,
+        code: 'NO_DEPLOYABLE_SERVICE',
+        error: `Project '${project.name}' has no Application/Compose workload to redeploy.`,
+      };
+    }
+    if (deployables.length > 1) {
+      throw new ServiceSelectionRequiredError(
+        project.id,
+        project.name,
+        deployables.map((service) => ({
+          serviceId: service.id,
+          serviceName: service.name,
+          kind: service.kind,
+          source: service.source,
+        })),
+      );
+    }
+
+    return deployables[0] as ServiceRow;
+  }
+
+  private async resolveRuntimeProjectForService(
+    service: ServiceRow,
+  ): Promise<{ ownerProject: ProjectRow; runtimeProject: ProjectRow }> {
+    const ownerProject = await this.db.getProject(service.project_id);
+    if (!ownerProject) {
+      throw new ProjectNotFoundError(service.project_id);
+    }
+
+    const runtimeProjectId = deployableServiceIdToProjectId(service.id);
+    const runtimeProject = (await this.db.getProject(runtimeProjectId)) ?? ownerProject;
+    return { ownerProject, runtimeProject };
+  }
+
+  /** Compatibility wrapper. New service paths should call redeployService(serviceId). */
   async redeploy(projectId: string, options?: RedeployOptions): Promise<DeployResult> {
     const project = await this.db.getProject(projectId);
     if (!project) {
@@ -1900,15 +1974,59 @@ export class DeployPipeline {
       };
     }
 
+    const service = await this.resolveRedeployServiceForProject(project);
+    if ('success' in service) {
+      return service;
+    }
+
+    return await this.redeployResolvedService(service, options);
+  }
+
+  /** Redeploy an existing Application/Compose service by service identity. */
+  async redeployService(serviceId: string, options?: RedeployOptions): Promise<DeployResult> {
+    const service = await this.db.getService(serviceId);
+    if (!service) {
+      return {
+        success: false,
+        projectId: deployableServiceIdToProjectId(serviceId),
+        projectName: 'unknown',
+        code: 'SERVICE_NOT_FOUND',
+        error: `Service not found: ${serviceId}`,
+      };
+    }
+
+    return await this.redeployResolvedService(service, options);
+  }
+
+  private async redeployResolvedService(
+    service: ServiceRow,
+    options?: RedeployOptions,
+  ): Promise<DeployResult> {
+    if (!this.isDeployableService(service)) {
+      return {
+        success: false,
+        projectId: service.project_id,
+        projectName: 'unknown',
+        code: 'SERVICE_OPERATION_UNSUPPORTED',
+        error: `Service ${service.id} is not an Application/Compose workload.`,
+      };
+    }
+
+    const { ownerProject, runtimeProject } = await this.resolveRuntimeProjectForService(service);
+    const projectId = runtimeProject.id;
+    const project = runtimeProject;
     this.validateProjectName(project.name);
 
     // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
     // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
+    if (ownerProject.id !== project.id) {
+      await this.assertProjectMutable(ownerProject);
+    }
     await this.assertProjectMutable(project);
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
-      const redeployView = (await loadServiceViewRecord(this.db, project)).view;
+      const redeployView = serviceViewFromRows(project, service);
       let targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
         (environment) => environment.type === 'production',
       );
@@ -1959,8 +2077,11 @@ export class DeployPipeline {
       const previousPort = redeployAssignedPort ?? undefined;
       const config = await buildDeployConfig({
         projectId,
+        serviceId: service.id,
+        service,
         runtimeOverrides: {
           _projectId: projectId,
+          _serviceId: service.id,
           _preferredPort: previousPort,
           _lockSessionId: lockSession,
           _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,

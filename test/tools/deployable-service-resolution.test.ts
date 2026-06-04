@@ -93,6 +93,7 @@ function createDuplicateServiceContext(
         fallback_strategy: 'force',
       }),
       redeploy: vi.fn().mockResolvedValue({ success: true }),
+      redeployService: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
@@ -151,6 +152,7 @@ function createMultiDeployableProjectContext(): AppContext {
     },
     pipeline: {
       redeploy: vi.fn().mockResolvedValue({ success: true }),
+      redeployService: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
@@ -275,6 +277,13 @@ describe('deployable service target resolution', () => {
         next_steps: expect.arrayContaining([expect.stringContaining('diagnose_service')]),
       },
     });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'beta__svc',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
+    );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('accepts a project group name as service_name when it has one deployable', async () => {
@@ -293,6 +302,13 @@ describe('deployable service target resolution', () => {
         params: { service_id: 'alpha__svc' },
       },
     });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
+    );
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('blocks unsupported blue-green redeploys before acquiring a deploy lock', async () => {
@@ -321,6 +337,7 @@ describe('deployable service target resolution', () => {
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
   it('blocks image/manual-restore redeploys without an image source before acquiring a deploy lock', async () => {
@@ -344,6 +361,7 @@ describe('deployable service target resolution', () => {
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
   it('blocks local OpenLander image tags before acquiring a deploy lock', async () => {

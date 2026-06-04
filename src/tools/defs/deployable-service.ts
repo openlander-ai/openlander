@@ -514,7 +514,7 @@ export async function runDeployableServiceAction(
   }
 
   const execute = async () => {
-    await context.appCtx.pipeline.redeploy(runtimeProject.id, {
+    await context.appCtx.pipeline.redeployService(service.id, {
       noCache,
       strategy,
       healthCheckPath: healthCheckPath?.trim() || undefined,
@@ -627,8 +627,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     riskLevel: 'medium',
     description:
       'Deploy or redeploy an Application/worker. Provide service_id or service_name. Runs in background; poll get_deploy_status for progress.',
-    mcpDescription:
-      'Deploy/redeploy an Application/worker. Provide service_id or service_name.',
+    mcpDescription: 'Deploy/redeploy an Application/worker. Provide service_id or service_name.',
     inputSchema: deployServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'redeploy_app'),
   },
@@ -760,8 +759,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     riskLevel: 'medium',
     description:
       'Restore an archived Application/worker. Provide service_id or service_name. Does not deploy automatically.',
-    mcpDescription:
-      'Restore an archived Application/worker. Call redeploy_app to run it.',
+    mcpDescription: 'Restore an archived Application/worker. Call redeploy_app to run it.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(

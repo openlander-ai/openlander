@@ -90,6 +90,7 @@ export default defineConfig({
       'test/pipeline/db-first-identity-contract-postgres.test.ts',
       'test/pipeline/deploy/run-step.test.ts',
       'test/pipeline/deploy-plan/executeplan-oracle-char.test.ts',
+      'test/pipeline/redeploy-config-char.test.ts',
       'test/pipeline/mutation-policy.test.ts',
       'test/pipeline/managed-service-create-regression.test.ts',
       'test/pipeline/managed-service-linker.test.ts',
@@ -118,6 +119,7 @@ export default defineConfig({
       'test/tools/registry-critical-tools.test.ts',
       'test/tools/server-tools.test.ts',
       'test/lint/public-vocabulary-audit.test.ts',
+      'test/lint/service-first-redeploy-audit.test.ts',
       'test/lint/synthetic-service-id-write-audit.test.ts',
       // v0.1 frontend IA regression tests. Source-string assertions
       // pinning the IA contracts merged across PRs #196-#208. Adding

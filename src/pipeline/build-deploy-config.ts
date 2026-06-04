@@ -1,11 +1,14 @@
-import type { Database } from '../db/index.js';
-import { loadServiceViewRecord } from '../db/views/service-view.js';
+import type { Database, ServiceRow } from '../db/index.js';
+import { loadServiceViewRecord, serviceViewFromRows } from '../db/views/service-view.js';
+import { ServiceNotFoundError } from '../errors.js';
 import { validateStoredConfig } from './config-snapshot.js';
 import type { ProjectConfig } from './deploy-core.js';
 import { getRedeploySourceMissingError } from './redeploy-source.js';
 
 export interface BuildDeployConfigParams {
   projectId: string;
+  serviceId?: string;
+  service?: ServiceRow;
   runtimeOverrides?: Partial<ProjectConfig>;
   db: Database;
 }
@@ -38,14 +41,20 @@ function isValidDockerfilePath(path: string): boolean {
 }
 
 export async function buildDeployConfig(params: BuildDeployConfigParams): Promise<ProjectConfig> {
-  const { projectId, runtimeOverrides, db } = params;
+  const { projectId, serviceId, service, runtimeOverrides, db } = params;
 
   const project = await db.getProject(projectId);
   if (!project) {
     throw new Error(`Project not found: ${projectId}`);
   }
 
-  const { service: deployable, view } = await loadServiceViewRecord(db, project);
+  const record = await loadServiceViewRecord(db, project);
+  const deployable =
+    service ?? (serviceId ? ((await db.getService(serviceId)) ?? null) : record.service);
+  if (serviceId && !deployable) {
+    throw new ServiceNotFoundError(serviceId);
+  }
+  const view = serviceId ? serviceViewFromRows(project, deployable) : record.view;
   const buildMethod = view.buildMethod;
   const source = view.source;
   const repoUrl = deployable?.repo_url ?? '';

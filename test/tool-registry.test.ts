@@ -104,6 +104,7 @@ function createMockContext(opts?: {
       status: 'building',
     }),
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+    redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
   };
 
   const env = {
@@ -354,7 +355,8 @@ describe('Tool Registry', () => {
       },
       { target: 'agent' },
     );
-    expect(pipeline.redeploy).toHaveBeenCalledWith('p1', { trigger: 'chat' });
+    expect(pipeline.redeployService).toHaveBeenCalledWith('p1__svc', { trigger: 'chat' });
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
     expect(applied).toEqual({
       status: 'updated_and_redeployed',
       project: 'my-app',

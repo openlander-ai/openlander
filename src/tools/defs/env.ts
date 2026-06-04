@@ -548,7 +548,7 @@ async function applyRedeployIfRequested(
   }
 
   try {
-    await appCtx.pipeline.redeploy(runtimeProject.id, { trigger });
+    await appCtx.pipeline.redeployService(service.id, { trigger });
     return { redeployed: true, needsRedeploy: false };
   } catch (err) {
     if (
