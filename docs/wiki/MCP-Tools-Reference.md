@@ -505,6 +505,14 @@ Provide either `service_id` or `service_name`. This is intended for high-confide
 diagnosis such as "the app logs say it listens on 4000, but the route points to
 3000." It does not start a build or redeploy.
 
+The response includes `route_verification`. If the service has a
+`health_check_path`, OpenLander probes the managed Traefik HTTP-provider route
+after the update and returns `status: "verified"` on success. If that probe
+fails, OpenLander restores the previous `container_port` and returns
+`status: "rolled_back"` with `route_verification.status: "failed"`. Services
+without a configured health path return `route_verification.status: "skipped"`
+and keep the usual `diagnostic_call` for follow-up inspection.
+
 ---
 
 ## Environment Variables & Secrets

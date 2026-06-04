@@ -291,6 +291,12 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
+function explicitRouteVerificationPath(service: Pick<ResolvedServiceRow, 'health_check_path'>) {
+  const path = service.health_check_path?.trim();
+  if (!path) return undefined;
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
 function archivedServiceSummary(
   service: NonNullable<ServiceRow>,
   project: NonNullable<ProjectRow>,
@@ -907,6 +913,94 @@ export const deployableServiceToolDefs: ToolDef[] = [
         await context.appCtx.db.updateService(service.id, { containerPort });
         const updated = await context.appCtx.db.getService(service.id);
         const effectiveService = updated ?? service;
+        const verificationPath = explicitRouteVerificationPath(effectiveService);
+        let routeVerification:
+          | {
+              status: 'verified';
+              provider: 'traefik_http';
+              path: string;
+              http_status: number;
+              attempts: number;
+              elapsed_ms: number;
+            }
+          | {
+              status: 'failed';
+              provider: 'traefik_http';
+              path: string;
+              error: string;
+              attempts: number;
+              elapsed_ms: number;
+              rolled_back: true;
+            }
+          | {
+              status: 'skipped';
+              provider: 'traefik_http';
+              reason: 'missing_health_check_path';
+            };
+        if (verificationPath) {
+          const verification = await context.appCtx.pipeline.verifyManagedTraefikRoute({
+            projectName: runtimeProject.name,
+            path: verificationPath,
+          });
+          if (!verification.ok) {
+            await context.appCtx.db.updateService(service.id, {
+              containerPort: previousContainerPort ?? null,
+            });
+            const restored = (await context.appCtx.db.getService(service.id)) ?? service;
+            routeVerification = {
+              status: 'failed',
+              provider: 'traefik_http',
+              path: verificationPath,
+              error: verification.error,
+              attempts: verification.attempts,
+              elapsed_ms: verification.elapsedMs,
+              rolled_back: true,
+            };
+            return {
+              status: 'rolled_back',
+              project_id: project.id,
+              service_id: service.id,
+              service: serviceSummary(restored, project),
+              route_config: {
+                previous_container_port: previousContainerPort,
+                container_port: restored.container_port,
+                attempted_container_port: containerPort,
+                container_name: restored.container_name,
+                provider: 'traefik_http',
+                applied_without_redeploy: true,
+                rolled_back: true,
+              },
+              route_verification: routeVerification,
+              diagnostic_call: {
+                tool: 'openlander_monitor',
+                action: 'diagnose_service',
+                params: { service_id: service.id },
+              },
+              _agent_guidance: {
+                message:
+                  'Route config was re-pointed, but the managed Traefik route did not pass verification, so OpenLander restored the previous container_port.',
+                next_steps: [
+                  'Call diagnostic_call to inspect the current route and container state before trying another port.',
+                  'If logs show the app is healthy on the attempted port, verify the health_check_path before applying route config again.',
+                ],
+              },
+            };
+          }
+          routeVerification = {
+            status: 'verified',
+            provider: 'traefik_http',
+            path: verificationPath,
+            http_status: verification.status,
+            attempts: verification.attempts,
+            elapsed_ms: verification.elapsedMs,
+          };
+        } else {
+          routeVerification = {
+            status: 'skipped',
+            provider: 'traefik_http',
+            reason: 'missing_health_check_path',
+          };
+        }
         return {
           status: 'applied',
           project_id: project.id,
@@ -919,6 +1013,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
             provider: 'traefik_http',
             applied_without_redeploy: true,
           },
+          route_verification: routeVerification,
           diagnostic_call: {
             tool: 'openlander_monitor',
             action: 'diagnose_service',
@@ -928,7 +1023,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
             message:
               'Route config was updated in-place. Managed Traefik reads this from the OpenLander HTTP provider; no image build or container recreate was started.',
             next_steps: [
-              'Wait for the Traefik HTTP provider polling window, then call diagnostic_call to verify the route.',
+              routeVerification.status === 'verified'
+                ? 'Route verification passed through the managed Traefik HTTP provider.'
+                : 'No health_check_path is configured, so call diagnostic_call to verify route health.',
               'If the service still fails, inspect logs.tail from diagnose_service before redeploying.',
             ],
           },

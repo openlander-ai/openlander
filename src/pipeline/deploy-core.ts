@@ -262,6 +262,10 @@ export interface RuntimeRecreateResult extends DeployResult {
   previousContainerName?: string | null;
 }
 
+export type ManagedRouteVerificationResult =
+  | { ok: true; status: number; attempts: number; elapsedMs: number }
+  | { ok: false; error: string; attempts: number; elapsedMs: number };
+
 export interface RedeployOptions {
   noCache?: boolean;
   strategy?: RedeployStrategy;
@@ -1105,10 +1109,7 @@ export class DeployPipeline {
     probeTimeoutMs: number;
     maxWaitMs: number;
     intervalMs: number;
-  }): Promise<
-    | { ok: true; status: number; attempts: number; elapsedMs: number }
-    | { ok: false; error: string; attempts: number; elapsedMs: number }
-  > {
+  }): Promise<ManagedRouteVerificationResult> {
     const startedAt = Date.now();
     const deadline = startedAt + Math.max(0, params.maxWaitMs);
     let attempts = 0;
@@ -1134,6 +1135,22 @@ export class DeployPipeline {
 
       await sleep(Math.min(params.intervalMs, remainingMs));
     }
+  }
+
+  async verifyManagedTraefikRoute(params: {
+    projectName: string;
+    path: string;
+    probeTimeoutMs?: number;
+    maxWaitMs?: number;
+    intervalMs?: number;
+  }): Promise<ManagedRouteVerificationResult> {
+    return await this.waitForManagedTraefikRoute({
+      projectName: params.projectName,
+      path: params.path,
+      probeTimeoutMs: params.probeTimeoutMs ?? 5_000,
+      maxWaitMs: params.maxWaitMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS,
+      intervalMs: params.intervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS,
+    });
   }
 
   private async deployInner(
