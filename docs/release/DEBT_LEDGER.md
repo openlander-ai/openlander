@@ -3,6 +3,28 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.14
+
+- **Service-first deploy follow-up parameters during data-model freeze:**
+  existing deploy/debug MCP actions (`get_deploy_status`, `get_deploy_history`,
+  `get_build_log`, and `cancel_deploy`) accept `service_id` / `service_name`
+  target parameters in addition to the existing project/deploy identifiers.
+- **Why accepted:** `redeploy_app` is now service-first, so the returned
+  `status_call` and follow-up log/history/debug calls need a stable
+  Application/Compose handle. Keeping follow-up actions project-only pushed
+  agents back through runtime Project aliases and reintroduced attached-workload
+  ambiguity.
+- **Vocab review:** `service_id` remains the frozen MCP wire field for a selected
+  Application/Compose resource. User-facing copy describes the resource as
+  Application/Compose; Project targets remain compatibility shortcuts only for
+  single-workload Projects.
+- **Endpoint collision check:** no MCP action, composite slot, REST route, or
+  database field is added. The change extends existing action schemas and
+  updates response guidance to prefer existing `service_id` values.
+- **Follow-up:** when the deployable model is unfrozen, review whether project
+  compatibility targets should be deprecated from deploy status/history/log
+  actions or remain as single-workload convenience aliases.
+
 ## v0.1.13
 
 - **`create_deploy_plan(target_project_id=...)` during data-model freeze:**
