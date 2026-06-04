@@ -6,7 +6,13 @@ import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import {
+  getDeployableServiceRouteName,
+  getDeployableServiceUrls,
+  getPreferredDeployableServiceUrl,
+  getPreferredProjectUrl,
+  getProjectUrls,
+} from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
@@ -1435,10 +1441,33 @@ export const deployPlanToolDefs: ToolDef[] = [
               const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
                 () => undefined,
               );
+              const attachedServiceId =
+                typeof targetAttach.fields['service_id'] === 'string'
+                  ? targetAttach.fields['service_id']
+                  : undefined;
+              const attachedService =
+                attachedServiceId && typeof appCtx.db.getService === 'function'
+                  ? await appCtx.db.getService(attachedServiceId).catch(() => undefined)
+                  : undefined;
 
-              const assignedPort = serviceRecord?.view.assignedPort ?? undefined;
-              const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
-              const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
+              const assignedPort =
+                attachedService?.assigned_port ?? serviceRecord?.view.assignedPort ?? undefined;
+              const routeService = attachedService
+                ? {
+                    name: attachedService.name,
+                    assigned_port: assignedPort ?? null,
+                    public_url: attachedService.public_url ?? serviceRecord?.view.publicUrl ?? null,
+                  }
+                : null;
+              const routeName = routeService
+                ? getDeployableServiceRouteName(routeService)
+                : result.project_name;
+              const portAwareUrls = routeService
+                ? getDeployableServiceUrls(routeService)
+                : getProjectUrls(routeName, assignedPort);
+              const portAwarePreferred =
+                (routeService ? getPreferredDeployableServiceUrl(routeService) : null) ??
+                getPreferredProjectUrl(routeName, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
               resolve({
                 plan_id: plan.plan_id,
@@ -1453,7 +1482,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 ...(targetAttach.status ? { target_attach_status: targetAttach.status } : {}),
                 preferred_url: externalUrl ?? portAwarePreferred,
                 urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
-                internal_host: projectContainerName(result.project_name),
+                internal_host: projectContainerName(routeName),
                 docker_host: getDockerHostType(),
                 readiness: readiness.readiness,
                 ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
@@ -1506,10 +1535,33 @@ export const deployPlanToolDefs: ToolDef[] = [
               const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
                 () => undefined,
               );
+              const attachedServiceId =
+                typeof targetAttachFields['service_id'] === 'string'
+                  ? targetAttachFields['service_id']
+                  : undefined;
+              const attachedService =
+                attachedServiceId && typeof appCtx.db.getService === 'function'
+                  ? await appCtx.db.getService(attachedServiceId).catch(() => undefined)
+                  : undefined;
 
-              const assignedPort = serviceRecord?.view.assignedPort ?? undefined;
-              const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
-              const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
+              const assignedPort =
+                attachedService?.assigned_port ?? serviceRecord?.view.assignedPort ?? undefined;
+              const routeService = attachedService
+                ? {
+                    name: attachedService.name,
+                    assigned_port: assignedPort ?? null,
+                    public_url: attachedService.public_url ?? serviceRecord?.view.publicUrl ?? null,
+                  }
+                : null;
+              const routeName = routeService
+                ? getDeployableServiceRouteName(routeService)
+                : result.project_name;
+              const portAwareUrls = routeService
+                ? getDeployableServiceUrls(routeService)
+                : getProjectUrls(routeName, assignedPort);
+              const portAwarePreferred =
+                (routeService ? getPreferredDeployableServiceUrl(routeService) : null) ??
+                getPreferredProjectUrl(routeName, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
               resolve({
                 plan_id: plan.plan_id,
@@ -1524,7 +1576,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
                 preferred_url: externalUrl ?? portAwarePreferred,
                 urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
-                internal_host: projectContainerName(result.project_name),
+                internal_host: projectContainerName(routeName),
                 docker_host: getDockerHostType(),
                 readiness: 'starting',
                 readiness_message: err instanceof Error ? err.message : String(err),

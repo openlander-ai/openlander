@@ -66,6 +66,57 @@ async function runWire(ctx: AppContext, target: 'mcp' | 'agent' = 'mcp') {
 }
 
 describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
+  it('advertises primary Application route URL instead of Project namespace URL', async () => {
+    const originalPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'apps.example.com';
+    try {
+      const ctx = createContext({
+        projects: [
+          {
+            id: 'p2probe',
+            name: 'p2probe',
+            status: null,
+            visibility: null,
+            created_at: NOW,
+            updated_at: NOW,
+          },
+        ],
+        deployables: {
+          p2probe: undefined,
+        },
+        groups: {
+          p2probe: [
+            makeService({
+              id: 'urlnest__svc',
+              name: 'urlnest__svc',
+              project_id: 'p2probe',
+              status: 'running',
+              assigned_port: 10001,
+              container_id: 'c-urlnest',
+              container_name: 'ol-urlnest',
+            }),
+          ],
+        },
+      });
+
+      const wire = await runWire(ctx);
+      const project = wire.projects[0]!;
+      expect(project['name']).toBe('p2probe');
+      expect(project['url']).toBe('http://urlnest.apps.example.com');
+      expect(project['preferred_url']).toBe('http://urlnest.apps.example.com');
+      expect(project['urls']).toEqual([
+        expect.objectContaining({ url: 'http://urlnest.apps.example.com' }),
+      ]);
+      expect(project['url']).not.toBe('http://p2probe.apps.example.com');
+    } finally {
+      if (originalPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = originalPublicHost;
+      }
+    }
+  });
+
   it('emits canonical services-row values and omits status/port/publicUrl when both rows are empty', async () => {
     const ctx = createContext({
       projects: [

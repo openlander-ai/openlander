@@ -8,6 +8,8 @@ import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../co
 import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
 import { isDockerNotFoundError } from '../errors.js';
+import { deployableServiceIdToProjectId } from '../db/service-ids.js';
+import type { ServiceRow } from '../db/types.js';
 
 const TRAEFIK_IMAGE = 'traefik:v3.6';
 
@@ -480,6 +482,55 @@ export function getProjectUrls(projectName: string, assignedPort?: number | null
 
 export function getPreferredProjectUrl(projectName: string, assignedPort?: number | null): string {
   return getProjectUrls(projectName, assignedPort)[0]?.url ?? getProjectUrl(projectName);
+}
+
+type RoutableService = Pick<ServiceRow, 'name' | 'assigned_port' | 'public_url'>;
+
+function routeSlug(displayName: string): string {
+  const slug = displayName
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+  return slug.length > 0 ? slug : 'project';
+}
+
+function projectUrlFromExternalUrl(url: string): ProjectUrl {
+  try {
+    const parsed = new URL(url);
+    return {
+      url,
+      type: 'public',
+      host: parsed.hostname,
+      reachable: 'external',
+    };
+  } catch {
+    return { url, type: 'public', reachable: 'external' };
+  }
+}
+
+export function getDeployableServiceDisplayName(service: Pick<ServiceRow, 'name'>): string {
+  return deployableServiceIdToProjectId(service.name);
+}
+
+export function getDeployableServiceRouteName(service: Pick<ServiceRow, 'name'>): string {
+  return routeSlug(getDeployableServiceDisplayName(service));
+}
+
+export function getDeployableServiceUrls(service: RoutableService): ProjectUrl[] {
+  const port = service.assigned_port ?? null;
+  if (!port) return [];
+
+  if (service.public_url) {
+    return [projectUrlFromExternalUrl(service.public_url)];
+  }
+
+  return getProjectUrls(getDeployableServiceRouteName(service), port);
+}
+
+export function getPreferredDeployableServiceUrl(service: RoutableService): string | null {
+  return getDeployableServiceUrls(service)[0]?.url ?? null;
 }
 
 export function buildTraefikLabels(

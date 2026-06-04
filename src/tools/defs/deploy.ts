@@ -7,7 +7,13 @@ import {
 } from '../../db/service-ids.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import {
+  getDeployableServiceRouteName,
+  getDeployableServiceUrls,
+  getPreferredDeployableServiceUrl,
+  getPreferredProjectUrl,
+  getProjectUrls,
+} from '../../pipeline/traefik.js';
 import type { DeployLogRow, ProjectRow } from '../../db/types.js';
 import { loadServiceView, type ServiceView } from '../../db/views/service-view.js';
 import type { ToolDef } from './types.js';
@@ -361,8 +367,24 @@ export const deployToolDefs: ToolDef[] = [
         const inferredProjectId = log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
         const view = await resolveServiceView(inferredProjectId, project);
+        const service =
+          typeof appCtx.db.getService === 'function'
+            ? await appCtx.db.getService(log.service_id)
+            : undefined;
         const health = view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown');
-        const assignedPort = view?.assignedPort ?? undefined;
+        const assignedPort = service?.assigned_port ?? view?.assignedPort ?? undefined;
+        const routeService = service
+          ? {
+              name: service.name,
+              assigned_port: assignedPort ?? null,
+              public_url: service.public_url ?? view?.publicUrl ?? null,
+            }
+          : undefined;
+        const routeName = routeService ? getDeployableServiceRouteName(routeService) : undefined;
+        const serviceUrls = routeService ? getDeployableServiceUrls(routeService) : undefined;
+        const preferredUrl = routeService
+          ? getPreferredDeployableServiceUrl(routeService)
+          : undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
         const completedAt = parseDBTimestamp(log.created_at);
@@ -396,12 +418,14 @@ export const deployToolDefs: ToolDef[] = [
           completed_at: completedAt.toISOString(),
           ...(phase === 'done'
             ? {
-                preferred_url: getPreferredProjectUrl(
-                  project?.name ?? inferredProjectId,
-                  assignedPort,
+                preferred_url:
+                  preferredUrl ??
+                  getPreferredProjectUrl(project?.name ?? inferredProjectId, assignedPort),
+                urls:
+                  serviceUrls ?? getProjectUrls(project?.name ?? inferredProjectId, assignedPort),
+                internal_host: projectContainerName(
+                  routeName ?? project?.name ?? inferredProjectId,
                 ),
-                urls: getProjectUrls(project?.name ?? inferredProjectId, assignedPort),
-                internal_host: projectContainerName(project?.name ?? inferredProjectId),
                 docker_host: getDockerHostType(),
               }
             : {}),

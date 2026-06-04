@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import {
+  getDeployableServiceUrls,
+  getPreferredDeployableServiceUrl,
+} from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
 import {
   loadServiceViewRecords,
@@ -43,7 +46,9 @@ const createProjectSchema = z.object({
       PROJECT_NAME_REGEX,
       'Project names must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens.',
     )
-    .describe('Project slug. Use this before creating Database/Cache resources for a brand-new app.'),
+    .describe(
+      'Project slug. Use this before creating Database/Cache resources for a brand-new app.',
+    ),
   display_name: z
     .string()
     .trim()
@@ -326,6 +331,14 @@ export const projectOpsToolDefs: ToolDef[] = [
             const port = deployable ? view.assignedPort : undefined;
             const containerId = view.containerId;
             const publicUrl = deployable ? view.publicUrl : undefined;
+            const routeService = deployable
+              ? {
+                  name: deployable.name,
+                  assigned_port: view.assignedPort,
+                  public_url: view.publicUrl,
+                }
+              : null;
+            const serviceUrls = routeService ? getDeployableServiceUrls(routeService) : [];
             const deployableContainerName =
               deployable?.container_name ??
               (containerId ? projectContainerName(project.name) : null);
@@ -360,9 +373,9 @@ export const projectOpsToolDefs: ToolDef[] = [
               port,
               containerName: containerId ? projectContainerName(project.name) : null,
               network: projectContainerName(project.name),
-              url: port ? getPreferredProjectUrl(project.name, port) : null,
-              preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
-              urls: port ? getProjectUrls(project.name, port) : [],
+              url: routeService ? getPreferredDeployableServiceUrl(routeService) : null,
+              preferred_url: routeService ? getPreferredDeployableServiceUrl(routeService) : null,
+              urls: serviceUrls,
               publicUrl,
               deployable_service_count: deployableServiceCount,
               deployable_service: deployableService,
@@ -397,6 +410,14 @@ export const projectOpsToolDefs: ToolDef[] = [
           const port = deployable ? view.assignedPort : undefined;
           const containerId = view.containerId;
           const publicUrl = deployable ? view.publicUrl : undefined;
+          const routeService = deployable
+            ? {
+                name: deployable.name,
+                assigned_port: view.assignedPort,
+                public_url: view.publicUrl,
+              }
+            : null;
+          const preferredUrl = routeService ? getPreferredDeployableServiceUrl(routeService) : null;
           const deployableServiceCount = (deployableGroups.get(project.id) ?? []).length;
           return {
             name: project.name,
@@ -404,8 +425,8 @@ export const projectOpsToolDefs: ToolDef[] = [
             visibility,
             port,
             containerName: containerId ? projectContainerName(project.name) : null,
-            url: port ? getPreferredProjectUrl(project.name, port) : null,
-            preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
+            url: preferredUrl,
+            preferred_url: preferredUrl,
             publicUrl,
             deployable_service_count: deployableServiceCount,
           };

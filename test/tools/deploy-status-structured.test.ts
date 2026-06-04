@@ -163,6 +163,70 @@ describe('get_deploy_status structured fields (O1)', () => {
     expect(JSON.stringify(job['urls'])).toContain('10077');
   });
 
+  it('completed deploy log URLs use service route identity after target Project attach', async () => {
+    const originalPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'apps.example.com';
+    try {
+      const ctx = {
+        jobManager: { getStatus: vi.fn(() => null) },
+        db: {
+          getDeployLog: vi.fn(async (id: string) =>
+            id === 'd4'
+              ? {
+                  id: 'd4',
+                  service_id: 'urlnest__svc',
+                  project_id: 'p2probe',
+                  status: 'success',
+                  commit_sha: 'abc123',
+                  commit_message: 'ship',
+                  trigger: 'api',
+                  duration_ms: 2000,
+                  build_log: null,
+                  created_at: '2026-05-22T00:00:00Z',
+                }
+              : undefined,
+          ),
+          getProject: vi.fn(async (id: string) =>
+            id === 'p2probe'
+              ? { id: 'p2probe', name: 'p2probe', assigned_port: null, status: 'running' }
+              : undefined,
+          ),
+          getDeployableForProject: vi.fn(async () => null),
+          getService: vi.fn(async (id: string) =>
+            id === 'urlnest__svc'
+              ? {
+                  id: 'urlnest__svc',
+                  name: 'urlnest__svc',
+                  project_id: 'p2probe',
+                  assigned_port: 10001,
+                  public_url: null,
+                  status: 'running',
+                }
+              : undefined,
+          ),
+        },
+      } as unknown as AppContext;
+
+      const result = (await getTool(ctx, 'get_deploy_status').execute(
+        { deploy_id: 'd4' },
+        { target: 'mcp' },
+      )) as { jobs: Array<Record<string, unknown>> };
+
+      const job = result.jobs[0]!;
+      expect(job['project_id']).toBe('p2probe');
+      expect(job['service_id']).toBe('urlnest__svc');
+      expect(job['preferred_url']).toBe('http://urlnest.apps.example.com');
+      expect(job['internal_host']).toBe('ol-urlnest');
+      expect(job['preferred_url']).not.toBe('http://p2probe.apps.example.com');
+    } finally {
+      if (originalPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = originalPublicHost;
+      }
+    }
+  });
+
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
     // The common active-poll path: JobManager is keyed by project id, so
     // formatJob is called without a deploy id. status_call carries project_id
