@@ -7,10 +7,10 @@ the web UI, REST API, MCP tools, and deploy pipeline.
 
 The target model follows the same practical shape used by platforms such as
 Dokploy: variables can be defined once at a shared project level, overridden for
-a deployment environment, and finally overridden by a specific deployable
+a deployment target, and finally overridden by a specific deployable
 service. OpenLander also needs an explicit agent-facing contract so MCP clients
 can set, inspect, and apply variables without guessing which service or
-environment receives the change.
+target receives the change.
 
 ## Why This Comes First
 
@@ -18,7 +18,7 @@ This work should land before larger 0.2 product features such as staging
 workflows, preview environments, built-in AI Ops, Docker Swarm, or Kubernetes.
 Those features all depend on a clear answer to the same questions:
 
-- Which logical environment is being deployed?
+- Which deployment target is being deployed?
 - Which service receives a variable?
 - Which variable value is effective at runtime?
 - Does a saved variable change require a redeploy?
@@ -26,31 +26,31 @@ Those features all depend on a clear answer to the same questions:
 The current code has useful pieces, but the contract is not yet consistent
 enough to build on safely. In particular, `environment_id` exists in the
 database schema, while several env-var repository and pipeline paths still treat
-environment-scoped writes as project-scoped writes. The UI also exposes service
-environment variables without a clear inherited/effective view.
+target-scoped writes as project-scoped writes. The UI also exposes service
+target variables without a clear inherited/effective view.
 
 ## Target Variable Scopes
 
 0.2 should support these scopes as the canonical model:
 
-| Scope                   | Owner                                | Purpose                                                                                                                                        |
-| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Global secret           | Instance                             | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                               |
-| Project shared          | Project group                        | Values reused by every service in the project.                                                                                                 |
-| Project environment     | Project group + environment key      | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is accepted but not a default 0.2 target). |
-| Service shared          | Deployable service                   | Values specific to one app/worker, regardless of environment.                                                                                  |
-| Service environment     | Deployable service + environment key | Final per-service override for a specific environment.                                                                                         |
-| Inline deploy override  | Deploy request or plan               | One-shot values supplied by a deploy plan or API call.                                                                                         |
-| System/runtime reserved | OpenLander                           | Protected runtime values such as platform-managed connection/runtime metadata.                                                                 |
+| Scope                   | Owner                             | Purpose                                                                                                                                       |
+| ----------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global secret           | Instance                          | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                              |
+| Project shared          | Project group                     | Values reused by every service in the project.                                                                                                |
+| Project target          | Project group + target key        | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is accepted but not a default 0.2 target). |
+| Service shared          | Deployable service                | Values specific to one app/worker, regardless of target.                                                                                      |
+| Service target          | Deployable service + target key   | Final per-service override for a specific target.                                                                                             |
+| Inline deploy override  | Deploy request or plan            | One-shot values supplied by a deploy plan or API call.                                                                                        |
+| System/runtime reserved | OpenLander                        | Protected runtime values such as platform-managed connection/runtime metadata.                                                               |
 
 Effective runtime precedence should be:
 
 ```text
 global secret
   < project shared
-  < project environment
+  < project target
   < service shared
-  < service environment
+  < service target
   < inline deploy override
   < protected system/runtime values
 ```
@@ -59,7 +59,7 @@ Protected system/runtime variables should either be rejected on write or clearly
 reported as reserved, so users and agents do not believe they changed a value
 that OpenLander must control.
 
-## Environment Identity
+## Deployment-Target Identity
 
 Use `environment_key` as the public contract for variable scope. It is the
 deployment **target** key (omitted = production):
@@ -70,10 +70,10 @@ deployment **target** key (omitted = production):
 
 The existing `environments` table is service-runtime oriented in the current
 schema. 0.2 should avoid using a single service runtime `environment_id` as the
-public identifier for project-level shared environment variables. The
+public identifier for project-level shared target variables. The
 implementation can map `environment_key` to existing runtime rows, or add a
-dedicated logical project-environment table later, but UI/API/MCP callers should
-not need to know service-runtime row ids just to edit shared environment
+dedicated logical project-target table later, but UI/API/MCP callers should
+not need to know service-runtime row ids just to edit shared target
 variables.
 
 This keeps the model compatible with multi-service project groups and leaves a
@@ -92,8 +92,9 @@ APP_URL=https://${{service.PUBLIC_HOST}}
 Rules:
 
 - `${{project.KEY}}` reads project shared variables.
-- `${{environment.KEY}}` reads the selected project environment variables.
-- `${{service.KEY}}` reads service shared or service environment variables.
+- `${{environment.KEY}}` reads the selected project target variables (the
+  `environment` namespace is the compatibility name for the target scope).
+- `${{service.KEY}}` reads service shared or service target variables.
 - `${{KEY}}` is allowed as a service-local shorthand only.
 - Missing references fail validation before deploy.
 - Cycles fail validation before deploy.
@@ -114,10 +115,10 @@ selection:
 Service pages should expose a `Variables` surface that shows:
 
 - inherited project values,
-- inherited environment values,
+- inherited target values,
 - service overrides,
 - generated/managed values,
-- the final effective runtime value for the selected environment.
+- the final effective runtime value for the selected target.
 
 Expected controls:
 
@@ -125,11 +126,11 @@ Expected controls:
 - key/value table mode,
 - import/export `.env`,
 - mask/unmask per row,
-- source badges such as `Project`, `Environment`, `Service`, `Generated`,
+- source badges such as `Project`, `Target`, `Service`, `Generated`,
 - changed-state detection,
 - a redeploy-needed banner when a saved change affects a running service.
 
-The UI should not make users choose internal service-runtime environment ids.
+The UI should not make users choose internal service-runtime row ids.
 
 ## REST And MCP Contract
 
@@ -150,6 +151,11 @@ Recommended shape:
 }
 ```
 
+The `project_environment` and `service_environment` `scope` values are the
+**compatibility API names** for the project-target and service-target scopes
+above. The product/UI label is "target"; the wire values keep the `_environment`
+suffix for v0.1 compatibility, and `environment_key` stays the target-key field.
+
 MCP responses should continue using the existing response envelope. Do not add
 new one-off helper fields. Use `suggested_call`, `status_call`,
 `diagnostic_call`, and `_agent_guidance` for follow-up actions.
@@ -162,13 +168,13 @@ redeploy action unless immediate apply was explicitly requested.
 
 1. Add env-domain tests that capture the target scope and precedence model.
 2. Refactor the env-var repository around explicit scope methods.
-3. Add or migrate storage so environment-scoped project/service variables do not
+3. Add or migrate storage so target-scoped project/service variables do not
    collapse into project-scoped rows.
 4. Add a deploy resolver with deterministic precedence across saved, inline, and
    protected runtime-generated values.
 5. Add a resolver that returns both raw layers and the effective masked view.
 6. Add interpolation validation and resolved preview behavior.
-7. Update REST routes to accept explicit scope and environment keys.
+7. Update REST routes to accept explicit scope and `environment_key` target values.
 8. Update MCP env tools to expose the same scope model.
 9. Replace the service-only web env editor with project/service variable views.
 10. Update docs and release-gate tests after the behavior is implemented.
@@ -194,9 +200,9 @@ it.
 The release gate for this work should prove:
 
 - project shared variables are visible to every service in the project,
-- project environment variables override project shared variables,
-- service variables override project/environment variables,
-- service environment variables override service shared variables,
+- project target variables override project shared variables,
+- service variables override project/target variables,
+- service target variables override service shared variables,
 - inline deploy values override saved user values,
 - protected system/runtime variables cannot be silently overridden,
 - interpolation resolves correctly and fails on missing references or cycles,
