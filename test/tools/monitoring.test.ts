@@ -951,13 +951,14 @@ describe('service-targeted monitoring tools', () => {
       source: 'git',
       status: 'running',
       assigned_port: 10001,
-      container_id: 'service-container',
-      container_name: 'ol-app',
+      container_id: 'service-container' as string | null,
+      container_name: 'ol-app' as string | null,
       container_port: 3000,
       health_check_path: '/health',
       repo_url: 'https://github.com/acme/app.git',
       branch: 'main',
-      image_url: null,
+      image_tag: 'app:latest' as string | null,
+      image_url: null as string | null,
     };
     const ctx = {
       db: {
@@ -1427,6 +1428,193 @@ describe('service-targeted monitoring tools', () => {
         tool: 'openlander_service',
         action: 'apply_route_config',
         params: { service_id: 'app__svc', container_port: 4000 },
+      },
+    });
+  });
+
+  it('diagnose_service omits diagnosis for healthy ambiguous output and keeps raw fields', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Server listening on port 3000');
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result['diagnosis']).toBeUndefined();
+    expect(result['suggested_call']).toBeUndefined();
+    expect(result).toMatchObject({
+      env: expect.objectContaining({ masked: true }),
+      logs: expect.objectContaining({ available: true }),
+      httpCheck: expect.objectContaining({ reachable: true }),
+      route: expect.objectContaining({
+        provider: 'traefik_http',
+        consistent: true,
+      }),
+    });
+  });
+
+  it('diagnose_service distinguishes runtime env missing and suggests same-image env apply', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Error: DATABASE_URL is not set');
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      diagnosis: {
+        code: 'RUNTIME_ENV_MISSING',
+        confidence: 'high',
+        evidence: {
+          missing_env_keys: ['DATABASE_URL'],
+          missing_from_saved_env: ['DATABASE_URL'],
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'set_env_vars',
+        params: {
+          service_id: 'app__svc',
+          scope: 'service',
+          variables: { DATABASE_URL: '<DATABASE_URL_value>' },
+          defer_redeploy: false,
+        },
+      },
+    });
+  });
+
+  it('diagnose_service does not treat generic uppercase tokens as high-confidence env keys', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('TLS is required for outbound calls');
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result['diagnosis']).toBeUndefined();
+    expect(result['suggested_call']).toBeUndefined();
+  });
+
+  it('diagnose_service distinguishes build-time env missing and suggests full redeploy', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      DATABASE_URL: 'postgres://app/db',
+    });
+    vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
+      {
+        id: 'deploy-1',
+        service_id: 'app__svc',
+        environment_id: null,
+        status: 'failed',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: 'abc123',
+        commit_message: 'test',
+        build_log: 'Build failed: DATABASE_URL is not set',
+        runtime_log: null,
+        duration_ms: 12000,
+        created_at: '2026-05-12T00:01:00.000Z',
+      },
+    ]);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      diagnosis: {
+        code: 'BUILD_TIME_ENV_MISSING',
+        confidence: 'high',
+        evidence: {
+          suspected_missing_build_time_keys: ['DATABASE_URL'],
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'app__svc' },
+      },
+    });
+  });
+
+  it('diagnose_service suggests full redeploy when runtime env apply has no image', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    service.container_id = null;
+    service.container_name = null;
+    service.image_tag = null;
+    service.image_url = null;
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Missing env DATABASE_URL');
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      diagnosis: {
+        code: 'NO_RUNTIME_IMAGE',
+        confidence: 'high',
+        evidence: {
+          missing_env_keys: ['DATABASE_URL'],
+          image_tag: null,
+          image_url: null,
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'app__svc' },
+      },
+    });
+  });
+
+  it('diagnose_service detects route backend mismatch and suggests route refresh', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    service.container_name = 'ol-stale-app';
+    vi.mocked(ctx.docker.inspectContainer).mockResolvedValueOnce({
+      Name: '/ol-current-app',
+      State: {
+        Running: true,
+        Status: 'running',
+        ExitCode: 0,
+        Error: '',
+        StartedAt: new Date(Date.now() - 10_000).toISOString(),
+        FinishedAt: '0001-01-01T00:00:00Z',
+      },
+      Config: { Image: 'app:latest' },
+      RestartCount: 0,
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'bad gateway' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      route: {
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: 'backend_container_name_mismatch' }),
+          expect.objectContaining({ code: 'external_route_failed_internal_probe_passed' }),
+        ]),
+      },
+      diagnosis: {
+        code: 'ROUTE_BACKEND_MISMATCH',
+        confidence: 'high',
+        evidence: {
+          repair_mode: 'refresh_http_provider_backend',
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: 'app__svc', container_port: 3000 },
       },
     });
   });

@@ -560,6 +560,10 @@ export const monitoringToolDefs: ToolDef[] = [
       const httpCheck = await probeServiceHttp(appCtx, service, probePath, timeoutMs, {
         internal,
       });
+      const internalHttpCheck =
+        !internal && service.container_id && httpCheck['reachable'] === false
+          ? await probeServiceHttp(appCtx, service, probePath, timeoutMs, { internal: true })
+          : null;
       const dependencies = await probeEnvDependencies(
         appCtx,
         effectiveEnv,
@@ -575,11 +579,22 @@ export const monitoringToolDefs: ToolDef[] = [
         httpCheck,
         dependencies,
       });
-      const diagnosis = buildSynthesizedServiceDiagnosis({
+      const route = summarizeRouteState({
         service,
-        buildDiagnostics,
+        project,
         container,
         httpCheck,
+        internalHttpCheck,
+      });
+      const diagnosis = buildSynthesizedServiceDiagnosis({
+        service,
+        project,
+        effectiveEnv,
+        buildDiagnostics,
+        container,
+        route,
+        httpCheck,
+        internalHttpCheck,
         dependencies,
         logs: runtimeLogs,
         recentDeployment,
@@ -611,12 +626,14 @@ export const monitoringToolDefs: ToolDef[] = [
         container,
         logs: runtimeLogs,
         httpCheck,
+        ...(internalHttpCheck ? { internalHttpCheck } : {}),
+        route,
         dependencies,
         ...(diagnosis ? { diagnosis } : {}),
         ...(diagnosis?.suggested_call ? { suggested_call: diagnosis.suggested_call } : {}),
         _agent_guidance: {
           ...(diagnosis ? { message: diagnosis.summary } : {}),
-          next_steps: nextSteps,
+          next_steps: diagnosis ? nextStepsForDiagnosis(diagnosis, nextSteps) : nextSteps,
         },
       };
     },
@@ -1522,6 +1539,7 @@ async function summarizeContainer(
       startedAt: getString(state, 'StartedAt'),
       finishedAt: getString(state, 'FinishedAt'),
       restartCount: getNumber(rawInspect, 'RestartCount'),
+      inspectName: getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
       image: sanitizeDiagnosticText(
         getString(config, 'Image') ?? service.image_tag ?? service.image_url,
       ),
@@ -1872,17 +1890,115 @@ function buildDiagnoseNextSteps(input: {
 interface SynthesizedServiceDiagnosis {
   code:
     | 'PORT_MISMATCH'
+    | 'ROUTE_BACKEND_MISMATCH'
+    | 'RUNTIME_ENV_MISSING'
     | 'BUILD_TIME_ENV_MISSING'
+    | 'NO_RUNTIME_IMAGE'
     | 'RESTART_LOOP'
     | 'CONTAINER_NOT_RUNNING'
     | 'DEPENDENCY_UNREACHABLE';
   confidence: 'high';
   summary: string;
   evidence: Record<string, unknown>;
-  suggested_call?: {
-    tool: 'openlander_service';
-    action: 'apply_route_config';
-    params: { service_id: string; container_port: number };
+  suggested_call?: SuggestedServiceDiagnosisCall;
+}
+
+type SuggestedServiceDiagnosisCall =
+  | {
+      tool: 'openlander_service';
+      action: 'apply_route_config';
+      params: { service_id: string; container_port: number };
+    }
+  | {
+      tool: 'openlander_service';
+      action: 'set_env_vars';
+      params: {
+        service_id: string;
+        scope: 'service';
+        variables: Record<string, string>;
+        defer_redeploy: false;
+      };
+    }
+  | {
+      tool: 'openlander_service';
+      action: 'redeploy_app';
+      params: { service_id: string };
+    };
+
+function resolveHttpProviderContainerName(service: ServiceRow, project: ProjectRow): string | null {
+  if (service.container_name) {
+    return service.container_name;
+  }
+  if (service.id === projectIdToDeployableServiceId(project.id)) {
+    return project.name;
+  }
+  return null;
+}
+
+function summarizeRouteState(input: {
+  service: ServiceRow;
+  project: ProjectRow;
+  container: Record<string, unknown>;
+  httpCheck: Record<string, unknown>;
+  internalHttpCheck: Record<string, unknown> | null;
+}): Record<string, unknown> {
+  const backendContainerName = resolveHttpProviderContainerName(input.service, input.project);
+  const backendPort = input.service.container_port ?? input.service.assigned_port ?? null;
+  const inspectedContainerName =
+    typeof input.container['inspectName'] === 'string'
+      ? input.container['inspectName']
+      : typeof input.container['name'] === 'string'
+        ? input.container['name']
+        : null;
+  const issues: Array<{ code: string; message: string }> = [];
+
+  if (!backendContainerName) {
+    issues.push({
+      code: 'missing_backend_container_name',
+      message: 'The managed HTTP provider cannot resolve a container name for this service.',
+    });
+  }
+  if (!backendPort) {
+    issues.push({
+      code: 'missing_backend_port',
+      message: 'The managed HTTP provider cannot resolve a backend port for this service.',
+    });
+  }
+  if (
+    input.container['running'] === true &&
+    backendContainerName &&
+    inspectedContainerName &&
+    backendContainerName !== inspectedContainerName
+  ) {
+    issues.push({
+      code: 'backend_container_name_mismatch',
+      message: `The HTTP provider backend is ${backendContainerName}, but Docker inspect reports ${inspectedContainerName}.`,
+    });
+  }
+  if (input.httpCheck['reachable'] === false && input.internalHttpCheck?.['reachable'] === true) {
+    issues.push({
+      code: 'external_route_failed_internal_probe_passed',
+      message:
+        'The service responds inside its container, but the normal OpenLander route probe fails.',
+    });
+  }
+
+  return {
+    provider: 'traefik_http',
+    backend: {
+      container_name: backendContainerName,
+      container_port: input.service.container_port ?? null,
+      assigned_port: input.service.assigned_port ?? null,
+      resolved_port: backendPort,
+    },
+    inspected_container: {
+      id: input.container['id'] ?? null,
+      name: inspectedContainerName,
+      running: input.container['running'] === true,
+    },
+    internal_probe_reachable: input.internalHttpCheck?.['reachable'] ?? null,
+    issues,
+    consistent: issues.length === 0,
   };
 }
 
@@ -1903,11 +2019,99 @@ function extractListeningPort(text: string): number | null {
   return null;
 }
 
+function extractMissingEnvKeys(text: string): string[] {
+  const keys = new Set<string>();
+  const patterns = [
+    /\b([A-Z][A-Z0-9_]{1,})\b[^\n]{0,80}\b(?:is\s+)?(?:not\s+set|missing|required|undefined)\b/g,
+    /\b(?:[Mm]issing|[Rr]equired|[Uu]ndefined)\b[^\n]{0,80}\b(?:env(?:ironment)?(?: variable)?\s+)?([A-Z][A-Z0-9_]{1,})\b/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const key = match[1];
+      if (key && key.length <= 80) {
+        keys.add(key);
+      }
+    }
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b));
+}
+
+function isKnownRuntimeEnvKey(key: string): boolean {
+  return (
+    /^(DATABASE_URL|REDIS_URL|POSTGRES_URL|POSTGRESQL_URL|MYSQL_URL|MONGO_URL|MONGODB_URI|RABBITMQ_URL|AMQP_URL|S3_ENDPOINT|S3_ACCESS_KEY|S3_SECRET_KEY)$/.test(
+      key,
+    ) || /_(URL|URI|DSN|HOST|PORT|TOKEN|SECRET|PASSWORD|PASS|PWD|KEY|ENDPOINT)$/.test(key)
+  );
+}
+
+function hasRuntimeImage(service: ServiceRow, container: Record<string, unknown>): boolean {
+  return Boolean(
+    service.image_tag ||
+    service.image_url ||
+    (typeof container['image'] === 'string' && container['image'].length > 0),
+  );
+}
+
+function setEnvVarsSuggestedCall(serviceId: string, keys: string[]): SuggestedServiceDiagnosisCall {
+  const variables: Record<string, string> = {};
+  for (const key of keys) {
+    variables[key] = `<${key}_value>`;
+  }
+  return {
+    tool: 'openlander_service',
+    action: 'set_env_vars',
+    params: {
+      service_id: serviceId,
+      scope: 'service',
+      variables,
+      defer_redeploy: false,
+    },
+  };
+}
+
+function redeploySuggestedCall(serviceId: string): SuggestedServiceDiagnosisCall {
+  return {
+    tool: 'openlander_service',
+    action: 'redeploy_app',
+    params: { service_id: serviceId },
+  };
+}
+
+function nextStepsForDiagnosis(
+  diagnosis: SynthesizedServiceDiagnosis,
+  fallback: string[],
+): string[] {
+  if (!diagnosis.suggested_call) {
+    return fallback;
+  }
+  const call = diagnosis.suggested_call;
+  if (call.action === 'apply_route_config') {
+    return [
+      'Use suggested_call to update the managed route without rebuilding or recreating the image.',
+      'Wait for the Traefik HTTP provider polling window, then call diagnose_service again to verify.',
+    ];
+  }
+  if (call.action === 'set_env_vars') {
+    return [
+      'Replace placeholder values in suggested_call.params.variables, then execute suggested_call to save env and apply the same-image runtime recreate path.',
+      'Call diagnose_service again after the action to verify the runtime sees the env.',
+    ];
+  }
+  return [
+    'Use suggested_call to run a full redeploy/rebuild because the current image cannot be fixed with a route or same-image runtime update.',
+    'After the deploy reaches a terminal status, call diagnose_service again to verify.',
+  ];
+}
+
 function buildSynthesizedServiceDiagnosis(input: {
   service: ServiceRow;
+  project: ProjectRow;
+  effectiveEnv: Record<string, string>;
   buildDiagnostics: Record<string, unknown>;
   container: Record<string, unknown>;
+  route: Record<string, unknown>;
   httpCheck: Record<string, unknown>;
+  internalHttpCheck: Record<string, unknown> | null;
   dependencies: Record<string, unknown>;
   logs: Record<string, unknown>;
   recentDeployment: Record<string, unknown>;
@@ -1922,6 +2126,28 @@ function buildSynthesizedServiceDiagnosis(input: {
         suspected_missing_build_time_keys: suspectedBuildEnv,
         allowed_build_time_prefixes: input.buildDiagnostics['allowedPrefixes'],
       },
+      suggested_call: redeploySuggestedCall(input.service.id),
+    };
+  }
+
+  const runtimeLogText = typeof input.logs['tail'] === 'string' ? input.logs['tail'] : '';
+  const currentKeys = new Set(Object.keys(input.effectiveEnv));
+  const missingRuntimeEnvKeys = extractMissingEnvKeys(runtimeLogText).filter(
+    (key) => currentKeys.has(key) || isKnownRuntimeEnvKey(key),
+  );
+  if (missingRuntimeEnvKeys.length > 0 && !hasRuntimeImage(input.service, input.container)) {
+    return {
+      code: 'NO_RUNTIME_IMAGE',
+      confidence: 'high',
+      summary:
+        'The service has runtime env errors, but OpenLander has no current runtime image for a same-image recreate.',
+      evidence: {
+        missing_env_keys: missingRuntimeEnvKeys,
+        image_tag: input.service.image_tag ?? null,
+        image_url: input.service.image_url ?? null,
+        container_image: input.container['image'] ?? null,
+      },
+      suggested_call: redeploySuggestedCall(input.service.id),
     };
   }
 
@@ -1981,6 +2207,63 @@ function buildSynthesizedServiceDiagnosis(input: {
         action: 'apply_route_config',
         params: { service_id: input.service.id, container_port: detectedPort },
       },
+    };
+  }
+
+  const routeIssues = asRecord(input.route)?.['issues'];
+  const hasRouteBackendMismatch =
+    Array.isArray(routeIssues) &&
+    routeIssues.some((issue) => {
+      const record = asRecord(issue);
+      return (
+        record?.['code'] === 'backend_container_name_mismatch' ||
+        record?.['code'] === 'external_route_failed_internal_probe_passed'
+      );
+    });
+  const refreshPort = input.service.container_port ?? input.service.assigned_port;
+  if (
+    input.container['running'] === true &&
+    input.httpCheck['reachable'] === false &&
+    input.internalHttpCheck?.['reachable'] === true &&
+    hasRouteBackendMismatch &&
+    typeof refreshPort === 'number'
+  ) {
+    return {
+      code: 'ROUTE_BACKEND_MISMATCH',
+      confidence: 'high',
+      summary:
+        'The app responds inside the container, but the OpenLander route probe fails, which points to a stale route/backend target. Re-applying route config refreshes the HTTP-provider backend name and port from the service row.',
+      evidence: {
+        route: input.route,
+        http_probe_target: input.httpCheck['target_resolved'],
+        internal_probe_target: input.internalHttpCheck['target_resolved'],
+        repair_mode: 'refresh_http_provider_backend',
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: input.service.id, container_port: refreshPort },
+      },
+    };
+  }
+
+  if (missingRuntimeEnvKeys.length > 0) {
+    const presentKeys = missingRuntimeEnvKeys.filter((key) => currentKeys.has(key));
+    const missingKeys = missingRuntimeEnvKeys.filter((key) => !currentKeys.has(key));
+    return {
+      code: 'RUNTIME_ENV_MISSING',
+      confidence: 'high',
+      summary:
+        missingKeys.length > 0
+          ? `${missingKeys.join(', ')} is missing from the service runtime env.`
+          : `${presentKeys.join(', ')} exists in saved env, but the running container logs still report it missing.`,
+      evidence: {
+        missing_env_keys: missingRuntimeEnvKeys,
+        present_in_saved_env: presentKeys,
+        missing_from_saved_env: missingKeys,
+        build_time_suspected_keys: suspectedBuildEnv,
+      },
+      suggested_call: setEnvVarsSuggestedCall(input.service.id, missingRuntimeEnvKeys),
     };
   }
 
