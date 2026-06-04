@@ -6,10 +6,140 @@ import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
 import { getLanIp } from '../pipeline/traefik.js';
 import type { ToolSet } from 'ai';
+import type { AuthService, OrgMcpPatTokenResult } from '../auth/auth-service.js';
 
 const log = createModuleLogger('cli');
 
 const program = new Command();
+const DEFAULT_MCP_TOKEN_EXPIRY_DAYS = 90;
+
+interface McpTokenCommandOptions {
+  name?: string;
+  expiresInDays?: string;
+  json?: boolean;
+  yes?: boolean;
+}
+
+function parseExpiryDays(value: string | undefined): number | null {
+  const raw = value ?? String(DEFAULT_MCP_TOKEN_EXPIRY_DAYS);
+  const days = Number(raw);
+  if (!Number.isInteger(days) || days <= 0) return null;
+  return days;
+}
+
+function expiresAtFromDays(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function printCommandError(message: string, json?: boolean): void {
+  if (json) {
+    console.log(JSON.stringify({ status: 'error', error: message }, null, 2));
+  } else {
+    console.error(pc.red(message));
+  }
+  process.exitCode = 1;
+}
+
+async function withAuthService<T>(
+  fn: (authService: AuthService) => Promise<T>,
+  json?: boolean,
+): Promise<T | null> {
+  const { getDatabaseUrl } = await import('../config/index.js');
+  const databaseUrl = getDatabaseUrl();
+
+  if (!databaseUrl) {
+    printCommandError('No database URL configured. Set OPENLANDER_DATABASE_URL first.', json);
+    return null;
+  }
+
+  const { Database } = await import('../db/index.js');
+  const { AuthService } = await import('../auth/auth-service.js');
+
+  const db = await Database.connect(databaseUrl);
+  try {
+    const authService = new AuthService(db);
+    return await fn(authService);
+  } finally {
+    await db.close();
+  }
+}
+
+function printMcpTokenResult(
+  action: 'ensure' | 'rotate',
+  result: OrgMcpPatTokenResult,
+  json?: boolean,
+): void {
+  const status = action === 'rotate' ? 'rotated' : result.created ? 'created' : 'existing';
+  const payload = {
+    status,
+    token_id: result.row.id,
+    token_suffix: result.row.token_suffix,
+    expires_at: result.row.expires_at,
+    plaintext: result.token,
+    revoked_token_ids: result.revokedTokenIds,
+    legacy_token_rotated: result.legacyTokenRotated,
+  };
+
+  if (json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  if (result.token) {
+    console.log(pc.green(`MCP org token ${status}. Store this plaintext securely:`));
+    console.log(result.token);
+    return;
+  }
+
+  console.log(pc.yellow('An active MCP org token already exists.'));
+  console.log(`Token: mcp_...${result.row.token_suffix}`);
+  if (result.row.expires_at) console.log(`Expires: ${result.row.expires_at}`);
+  console.log(
+    pc.dim(
+      'Plaintext cannot be shown again. Use `openlander mcp token rotate --yes --json` to issue a new token.',
+    ),
+  );
+}
+
+async function runMcpTokenEnsure(options: McpTokenCommandOptions): Promise<void> {
+  const days = parseExpiryDays(options.expiresInDays);
+  if (days === null) {
+    printCommandError('--expires-in-days must be a positive integer.', options.json);
+    return;
+  }
+
+  const name = options.name?.trim() || 'OpenLander local CLI';
+  const result = await withAuthService(
+    (authService) => authService.ensureOrgMcpPatToken({ name, expiresAt: expiresAtFromDays(days) }),
+    options.json,
+  );
+  if (!result) return;
+  printMcpTokenResult('ensure', result, options.json);
+}
+
+async function runMcpTokenRotate(options: McpTokenCommandOptions): Promise<void> {
+  if (!options.yes) {
+    printCommandError(
+      'Rotating the MCP org token revokes existing agent tokens. Re-run with --yes to continue.',
+      options.json,
+    );
+    return;
+  }
+
+  const days = parseExpiryDays(options.expiresInDays);
+  if (days === null) {
+    printCommandError('--expires-in-days must be a positive integer.', options.json);
+    return;
+  }
+
+  const name = options.name?.trim() || 'OpenLander local CLI';
+  const result = await withAuthService(
+    (authService) => authService.rotateOrgMcpPatToken({ name, expiresAt: expiresAtFromDays(days) }),
+    options.json,
+  );
+  if (!result) return;
+  printMcpTokenResult('rotate', result, options.json);
+}
 
 /**
  * 1.0 GA: shared unhandledRejection handler used by both `openlander` and
@@ -594,7 +724,7 @@ program
 
 // ── openlander mcp ───────────────────────────────────────────────────────────
 
-program
+const mcpCommand = program
   .command('mcp')
   .description('Start the MCP server (for Claude Code, Cursor, etc.)')
   .action(async () => {
@@ -628,5 +758,24 @@ program
     const { startMcpServer } = await import('../mcp/server.js');
     await startMcpServer(ctx);
   });
+
+const mcpTokenCommand = mcpCommand.command('token').description('Manage local MCP org tokens');
+
+mcpTokenCommand
+  .command('ensure')
+  .description('Create an MCP org token if one is missing')
+  .option('--name <name>', 'Token name', 'OpenLander local CLI')
+  .option('--expires-in-days <days>', 'Token expiry in days', String(DEFAULT_MCP_TOKEN_EXPIRY_DAYS))
+  .option('--json', 'Print machine-readable JSON')
+  .action(runMcpTokenEnsure);
+
+mcpTokenCommand
+  .command('rotate')
+  .description('Rotate the MCP org token, revoking existing org tokens')
+  .option('--name <name>', 'Token name', 'OpenLander local CLI')
+  .option('--expires-in-days <days>', 'Token expiry in days', String(DEFAULT_MCP_TOKEN_EXPIRY_DAYS))
+  .option('--json', 'Print machine-readable JSON')
+  .option('--yes', 'Confirm revoking existing org MCP tokens')
+  .action(runMcpTokenRotate);
 
 program.parse();

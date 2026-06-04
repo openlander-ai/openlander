@@ -135,4 +135,32 @@ describe('CLI lifecycle commands (1.0 GA: foreground-only)', () => {
       CLI_TEST_TIMEOUT_MS,
     );
   });
+
+  describe('openlander mcp token', () => {
+    it(
+      'documents the local token ensure command',
+      () => {
+        const result = runCli(['mcp', 'token', 'ensure', '--help'], tmpHome);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('--expires-in-days');
+        expect(result.stdout).toContain('--json');
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'requires explicit confirmation before rotating org MCP tokens',
+      () => {
+        const result = runCli(['mcp', 'token', 'rotate', '--json'], tmpHome);
+
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          status: 'error',
+          error: expect.stringMatching(/revokes existing agent tokens/i),
+        });
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
+  });
 });
