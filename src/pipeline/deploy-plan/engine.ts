@@ -48,6 +48,7 @@ export interface CreatePlanOptions {
   imageUrl?: string;
   imageCmd?: string[];
   containerPort?: number;
+  healthCheckPath?: string;
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'shared';
   environment?: string;
@@ -67,6 +68,7 @@ interface PlanExecutionContext {
   trigger?: string;
   imageCmd?: string[];
   containerPort?: number;
+  healthCheckPath?: string;
   targetProjectId?: string;
 }
 
@@ -482,6 +484,7 @@ export class PlanEngine {
       trigger: opts.trigger,
       imageCmd: opts.imageCmd,
       containerPort: opts.containerPort,
+      healthCheckPath: opts.healthCheckPath,
       targetProjectId: opts.targetProjectId,
     };
 
@@ -492,6 +495,7 @@ export class PlanEngine {
       !execution.trigger &&
       !execution.imageCmd &&
       execution.containerPort === undefined &&
+      !execution.healthCheckPath &&
       !execution.targetProjectId
     ) {
       return undefined;
@@ -1732,6 +1736,7 @@ export class PlanEngine {
       ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
       ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
       ...(execution.containerPort !== undefined ? { containerPort: execution.containerPort } : {}),
+      ...(execution.healthCheckPath ? { healthCheckPath: execution.healthCheckPath } : {}),
       preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
       dockerfilePath:
         !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,

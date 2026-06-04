@@ -211,6 +211,8 @@ export interface ProjectConfig {
   imageCmd?: string[];
   /** Port the application listens on inside the container */
   containerPort?: number;
+  /** HTTP path used for service health checks and route verification */
+  healthCheckPath?: string;
   /** Resource profile for memory/CPU limits */
   resourceProfile?: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
   /** Memory limit in bytes */
@@ -557,6 +559,7 @@ export class DeployPipeline {
       imageUrl: config.imageUrl ?? null,
       imageCmd: config.imageCmd ?? null,
       containerPort: config.containerPort ?? null,
+      healthCheckPath: config.healthCheckPath ?? null,
     });
   }
 
@@ -678,6 +681,7 @@ export class DeployPipeline {
         ...(config.buildContext ? { buildContext: config.buildContext } : {}),
         ...(config.dockerfilePath ? { dockerfilePath: config.dockerfilePath } : {}),
         ...(config.dockerTarget ? { dockerTarget: config.dockerTarget } : {}),
+        ...(config.healthCheckPath ? { healthCheckPath: config.healthCheckPath } : {}),
         ...(source === 'image'
           ? {
               source,
@@ -712,6 +716,7 @@ export class DeployPipeline {
       dockerfilePath: config.dockerfilePath,
       dockerTarget: config.dockerTarget,
       buildContext: config.buildContext,
+      healthCheckPath: config.healthCheckPath,
       ...(source === 'image'
         ? {
             source,

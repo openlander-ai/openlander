@@ -745,6 +745,26 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     expect(h.mockPipeline.startDeploy).toHaveBeenCalledTimes(1);
   });
 
+  it('New app with health_check_path: execution context reaches startDeploy for route verification', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      services: [],
+      execution: { containerPort: 4000, healthCheckPath: '/healthz' },
+    });
+    h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const result = await h.engine.executePlan(plan.plan_id);
+
+    expect(result.status).toBe('building');
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerPort: 4000,
+        healthCheckPath: '/healthz',
+      }),
+    );
+  });
+
   it('New app + DB, plan-then-approve: unapproved is gated (I1), approved-with-no-project is blocked (B3)', async () => {
     // Unapproved → needs_approval, zero side effects.
     const unapprovedPlan = createMockDeployPlan({
