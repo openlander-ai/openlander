@@ -18,12 +18,33 @@ a release should be recorded here so follow-up work is explicit.
   Application/Compose resource. User-facing copy describes the resource as
   Application/Compose; Project targets remain compatibility shortcuts only for
   single-workload Projects.
-- **Endpoint collision check:** no MCP action, composite slot, REST route, or
-  database field is added. The change extends existing action schemas and
-  updates response guidance to prefer existing `service_id` values.
+- **Endpoint collision check:** this follow-up-parameter slice adds no MCP
+  action, composite slot, REST route, or database field. It extends existing
+  action schemas and updates response guidance to prefer existing `service_id`
+  values.
 - **Follow-up:** when the deployable model is unfrozen, review whether project
   compatibility targets should be deprecated from deploy status/history/log
   actions or remain as single-workload convenience aliases.
+
+- **`openlander_service.apply_route_config` during data-model freeze:** a new
+  deployable-touching MCP action is added to re-point a running
+  Application/Compose route to a corrected `container_port` without rebuilding
+  or recreating the container.
+- **Why accepted:** high-confidence `PORT_MISMATCH` diagnostics need a single,
+  reversible hot-path action. Without it, agents must translate a route-only
+  failure into a full `redeploy_app`, which is slower and more failure-prone for
+  Day-2 recovery.
+- **Vocab review:** the action lives under `openlander_service`, uses the
+  existing service target vocabulary (`service_id`, `service_name`, optional
+  `project_name`), and mutates the existing `container_port` runtime field. It
+  introduces no Project-vs-service noun alias and no REST surface.
+- **Endpoint collision check:** running `rg "apply_route_config|route_config"`
+  over `src`, `test`, and `docs` showed no existing MCP action or REST endpoint
+  collision before the new `openlander_service` composite slot was added. The
+  action is intentionally not exposed as a REST route.
+- **Follow-up:** when route configuration is expanded beyond port re-pointing,
+  keep live route mutations behind the same service-target vocabulary and add
+  deterministic tests that assert which Traefik provider serves the route.
 
 ## v0.1.13
 

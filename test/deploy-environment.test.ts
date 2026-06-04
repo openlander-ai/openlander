@@ -8,6 +8,7 @@ import { Database } from '../src/db/index.js';
 import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
+import * as portPipeline from '../src/pipeline/port.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
 import { eventBus } from '../src/events/index.js';
@@ -15,6 +16,12 @@ import { eventBus } from '../src/events/index.js';
 type EnvLike = {
   getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
+  getAllWithInheritance: (projectId: string, environmentId: string) => Record<string, string>;
+  getAllForService: (
+    projectId: string,
+    serviceId: string,
+    environmentId?: string,
+  ) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
   getSecretFilesForDeploy: (
     projectId: string,
@@ -62,6 +69,10 @@ describe('DeployPipeline deployEnvironment', () => {
     env = {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
+      getAllWithInheritance: vi.fn((projectId: string, environmentId: string) =>
+        env.getAll(projectId, environmentId),
+      ),
+      getAllForService: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
@@ -268,6 +279,76 @@ describe('DeployPipeline deployEnvironment', () => {
     const deployLog = db.getLastDeployLog('p-safe', productionEnvironment!.id);
     expect(deployLog?.status).toBe('failed');
     expect(deployLog?.build_log).toContain('build failed before swap');
+  });
+
+  it('restores the previous image when a preserved redeploy fails during swap run', async () => {
+    vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(10042);
+    db.createProject({
+      id: 'p-safe-swap',
+      name: 'safe-swap-app',
+      repoUrl: 'https://github.com/openlander/safe-swap-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p-safe-swap')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+    db.updateProject('p-safe-swap', {
+      status: 'running',
+      containerId: 'container-live-123',
+      containerName: 'ol-safe-swap-app',
+      assignedPort: 10042,
+      containerPort: 3000,
+      imageTag: 'openlander/safe-swap-app:live',
+    });
+    db.updateEnvironment(productionEnvironment!.id, {
+      status: 'running',
+      containerId: 'container-live-123',
+      assignedPort: 10042,
+      containerPort: 3000,
+      imageTag: 'openlander/safe-swap-app:live',
+    });
+    (docker.runContainer as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('docker create failed after swap'))
+      .mockResolvedValueOnce('container-restored-456');
+
+    const result = await pipeline.deployEnvironment('p-safe-swap', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/safe-swap-app',
+      _projectId: 'p-safe-swap',
+      _serviceId: 'p-safe-swap__svc',
+      _preferredPort: 10042,
+      _preserveLiveContainerUntilRun: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('docker create failed after swap');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-live-123',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        imageTag: 'openlander/safe-swap-app:live',
+        name: 'ol-safe-swap-app',
+        port: 10042,
+        containerPort: 3000,
+      }),
+    );
+
+    const project = db.getProject('p-safe-swap');
+    const environment = db.getEnvironment(productionEnvironment!.id);
+    expect(project?.status).toBe('running');
+    expect(project?.container_id).toBe('container-restored-456');
+    expect(project?.assigned_port).toBe(10042);
+    expect(project?.image_tag).toBe('openlander/safe-swap-app:live');
+    expect(environment?.status).toBe('running');
+    expect(environment?.container_id).toBe('container-restored-456');
+    expect(environment?.assigned_port).toBe(10042);
+    expect(environment?.image_tag).toBe('openlander/safe-swap-app:live');
+
+    const deployLog = db.getLastDeployLog('p-safe-swap', productionEnvironment!.id);
+    expect(deployLog?.status).toBe('failed');
+    expect(deployLog?.build_log).toContain('[rollback] restored previous container');
   });
 
   it('deployEnvironment uses project naming without dev suffix', async () => {

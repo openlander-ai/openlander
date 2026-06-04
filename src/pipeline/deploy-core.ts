@@ -325,6 +325,26 @@ interface PreviewDeployResult {
   error?: string;
 }
 
+interface PreservedLiveContainerSnapshot {
+  containerId: string | null;
+  containerName: string | null;
+  assignedPort: number | null;
+  containerPort: number | null;
+  imageTag: string | null;
+  previousImageTag: string | null;
+}
+
+type RestoreLiveContainerResult =
+  | {
+      restored: true;
+      containerId: string;
+      port: number;
+    }
+  | {
+      restored: false;
+      error: string;
+    };
+
 /**
  * Deterministic deployment pipeline.
  *
@@ -1177,6 +1197,79 @@ export class DeployPipeline {
     return result;
   }
 
+  private async restoreLiveContainerAfterSwapFailure(params: {
+    projectId: string;
+    environmentId: string;
+    projectName: string;
+    routeName: string;
+    serviceId?: string;
+    networkProjectName?: string;
+    config: Partial<ProjectConfig>;
+    snapshot: PreservedLiveContainerSnapshot;
+  }): Promise<RestoreLiveContainerResult> {
+    const {
+      projectId,
+      environmentId,
+      projectName,
+      routeName,
+      serviceId,
+      networkProjectName,
+      config,
+      snapshot,
+    } = params;
+    if (!snapshot.imageTag) {
+      return { restored: false, error: 'previous image tag is missing' };
+    }
+
+    try {
+      const envVars = await resolveEnvVars(
+        {
+          projectId,
+          serviceId,
+          environmentId,
+          inlineEnvVars: config.envVars,
+        },
+        { env: this.env },
+      );
+      const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
+      const restored = await this.containerRunner.run({
+        imageTag: snapshot.imageTag,
+        projectName,
+        containerName: routeName,
+        ...(networkProjectName ? { networkProjectName } : {}),
+        projectId,
+        serviceId,
+        preferredPort: snapshot.assignedPort ?? undefined,
+        containerPort: snapshot.containerPort ?? snapshot.assignedPort ?? undefined,
+        envVars,
+        imageCmd: config.imageCmd,
+        secretFiles,
+        restartPolicy: { Name: 'unless-stopped' },
+      });
+      const healthResult = await this.runtime.waitForHealthy(restored.containerId, 20000);
+      await eventBus.emit('monitor:healthcheck', {
+        projectId,
+        healthy: healthResult.healthy,
+        responseTimeMs: 0,
+      });
+      if (!healthResult.healthy) {
+        await this.runtime.safeRemoveContainer(restored.containerId).catch((err: unknown) => {
+          log.warn(
+            { err, projectId, containerId: restored.containerId },
+            'Failed to remove unhealthy restored live container',
+          );
+        });
+        return {
+          restored: false,
+          error: healthResult.error ?? 'restored previous image did not become healthy',
+        };
+      }
+      return { restored: true, containerId: restored.containerId, port: restored.port };
+    } catch (error) {
+      return { restored: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   async deployEnvironment(
     projectId: string,
     environmentId: string,
@@ -1275,7 +1368,16 @@ export class DeployPipeline {
     }
     const preserveLiveContainerUntilRun = deployConfig._preserveLiveContainerUntilRun === true;
     const liveContainerId = environment.container_id;
-    const liveContainerName = serviceViewFromRows(project, deployService).containerName;
+    const liveContainerView = serviceViewFromRows(project, deployService);
+    const liveContainerName = liveContainerView.containerName;
+    const preservedLiveContainer: PreservedLiveContainerSnapshot = {
+      containerId: liveContainerId,
+      containerName: liveContainerName,
+      assignedPort: liveContainerView.assignedPort ?? environment.assigned_port,
+      containerPort: liveContainerView.containerPort ?? environment.container_port,
+      imageTag: liveContainerView.imageTag ?? environment.image_tag,
+      previousImageTag: liveContainerView.previousImageTag ?? environment.previous_image_tag,
+    };
     if (environment.container_id) {
       try {
         const runtimeLog = await this.runtime.getLogs(environment.container_id, 500);
@@ -1549,6 +1651,24 @@ export class DeployPipeline {
           // container may not exist — that's fine
         }
       }
+      let restoredLiveContainer: RestoreLiveContainerResult | undefined;
+      if (preserveLiveContainerUntilRun && liveContainerRemovedForSwap) {
+        restoredLiveContainer = await this.restoreLiveContainerAfterSwapFailure({
+          projectId,
+          environmentId,
+          projectName,
+          routeName,
+          serviceId: deployService?.id,
+          networkProjectName: deployConfig._networkProjectName,
+          config: deployConfig,
+          snapshot: preservedLiveContainer,
+        });
+        if (restoredLiveContainer.restored) {
+          buildLog += `[rollback] restored previous container ${restoredLiveContainer.containerId.slice(0, 12)} after swap failure\n`;
+        } else {
+          buildLog += `[rollback] failed to restore previous container after swap failure: ${restoredLiveContainer.error}\n`;
+        }
+      }
 
       // Classify for build-log context only; OpenLander 0.1 does not auto-remediate.
       try {
@@ -1574,6 +1694,23 @@ export class DeployPipeline {
       if (preserveLiveContainerUntilRun && !liveContainerRemovedForSwap) {
         await this.db.updateEnvironment(environmentId, { status: 'running' });
         await this.transitionProjectState(projectId, 'running', 'deploy-failed');
+      } else if (restoredLiveContainer?.restored) {
+        await this.db.updateEnvironment(environmentId, {
+          status: 'running',
+          containerId: restoredLiveContainer.containerId,
+          assignedPort: restoredLiveContainer.port,
+          containerPort: preservedLiveContainer.containerPort,
+          imageTag: preservedLiveContainer.imageTag,
+          previousImageTag: preservedLiveContainer.previousImageTag,
+        });
+        await this.transitionProjectState(projectId, 'running', 'deploy-swap-rollback', {
+          containerId: restoredLiveContainer.containerId,
+          containerName: preservedLiveContainer.containerName ?? projectContainerName(routeName),
+          assignedPort: restoredLiveContainer.port,
+          containerPort: preservedLiveContainer.containerPort,
+          imageTag: preservedLiveContainer.imageTag,
+          previousImageTag: preservedLiveContainer.previousImageTag,
+        });
       } else {
         await this.db.updateEnvironment(environmentId, { status: 'error' });
         await this.transitionProjectState(projectId, 'error', 'deploy-failed');
