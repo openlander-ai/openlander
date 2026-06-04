@@ -561,7 +561,10 @@ export const monitoringToolDefs: ToolDef[] = [
         internal,
       });
       const internalHttpCheck =
-        !internal && service.container_id && httpCheck['reachable'] === false
+        !internal &&
+        service.container_id &&
+        httpCheck['reachable'] === false &&
+        httpCheck['probed_from'] !== 'service-container'
           ? await probeServiceHttp(appCtx, service, probePath, timeoutMs, { internal: true })
           : null;
       const dependencies = await probeEnvDependencies(
@@ -1710,6 +1713,16 @@ async function probeServiceHttp(
     }
   }
 
+  if (service.container_id && service.container_port) {
+    const loopbackResult = await probeServiceHttp(appCtx, service, path, timeoutMs, {
+      internal: true,
+    });
+    return {
+      ...loopbackResult,
+      probe_mode: 'service_container_loopback',
+    };
+  }
+
   if (!service.assigned_port) {
     return {
       skipped: true,
@@ -1937,6 +1950,7 @@ function buildDiagnoseNextSteps(input: {
   const depChecks = asRecord(input.dependencies)?.['checks'];
   if (
     Array.isArray(depChecks) &&
+    input.container['running'] === true &&
     depChecks.some((item) => asRecord(item)?.['reachable'] === false)
   ) {
     nextSteps.push(
@@ -2120,6 +2134,12 @@ function hasRuntimeImage(service: ServiceRow, container: Record<string, unknown>
   );
 }
 
+function isRecentTimestamp(value: unknown, maxAgeMs: number): boolean {
+  if (typeof value !== 'string') return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && Date.now() - parsed >= 0 && Date.now() - parsed <= maxAgeMs;
+}
+
 function setEnvVarsSuggestedCall(serviceId: string, keys: string[]): SuggestedServiceDiagnosisCall {
   const variables: Record<string, string> = {};
   for (const key of keys) {
@@ -2232,12 +2252,34 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
-  if (input.container['present'] === true && input.container['running'] !== true) {
+  const restartCount =
+    typeof input.container['restartCount'] === 'number' ? input.container['restartCount'] : 0;
+  const recentlyStarted = isRecentTimestamp(input.container['startedAt'], 5 * 60 * 1000);
+  if (input.container['running'] === true && restartCount >= 3 && recentlyStarted) {
+    return {
+      code: 'RESTART_LOOP',
+      confidence: 'high',
+      summary:
+        'Docker reports repeated container restarts. Treat this as a restart loop until logs prove the current process is stable.',
+      evidence: {
+        status: input.container['status'],
+        exit_code: input.container['exitCode'],
+        restart_count: restartCount,
+        started_at: input.container['startedAt'],
+      },
+    };
+  }
+
+  if (input.container['running'] !== true) {
     return {
       code: 'CONTAINER_NOT_RUNNING',
       confidence: 'high',
-      summary: 'The service has a container, but Docker reports it is not running.',
+      summary:
+        input.container['present'] === true
+          ? 'The service has a container, but Docker reports it is not running.'
+          : 'OpenLander cannot inspect a running container for this service.',
       evidence: {
+        present: input.container['present'] ?? null,
         status: input.container['status'],
         exit_code: input.container['exitCode'],
         error: input.container['error'],
@@ -2254,7 +2296,6 @@ function buildSynthesizedServiceDiagnosis(input: {
   ].join('\n');
   const detectedPort = extractListeningPort(logText);
   if (
-    input.container['running'] === true &&
     input.httpCheck['reachable'] === false &&
     typeof configuredPort === 'number' &&
     detectedPort !== null &&
@@ -2290,7 +2331,6 @@ function buildSynthesizedServiceDiagnosis(input: {
     });
   const refreshPort = input.service.container_port ?? input.service.assigned_port;
   if (
-    input.container['running'] === true &&
     input.httpCheck['reachable'] === false &&
     input.internalHttpCheck?.['reachable'] === true &&
     hasRouteBackendMismatch &&
@@ -2342,7 +2382,7 @@ function buildSynthesizedServiceDiagnosis(input: {
         .find((item): item is Record<string, unknown> => item?.['reachable'] === false)
     : undefined;
   if (failedDependency) {
-    if (input.container['running'] === true && input.httpCheck['reachable'] === false) {
+    if (input.httpCheck['reachable'] === false) {
       return null;
     }
     const failed = failedDependency;
