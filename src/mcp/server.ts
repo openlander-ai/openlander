@@ -120,9 +120,11 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 5. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
 
 ## Networking
-- All containers share the "openlander" Docker network
-- Container-to-container: http://ol-{project-name}:{port}
-- Never create Docker networks manually
+- New OpenLander-managed deployments use Project-scoped Docker networks by default.
+- Same-project Database/Cache/Storage resources are reachable by their service DNS names on that Project network.
+- Do not delete or recreate existing data volumes during migration or recovery.
+- For existing Docker/PaaS workloads, treat network and volume adoption as an operator-assisted migration flow. Inspect first, back up data, then use platform recovery/diagnostic tools or an explicit human-approved runbook.
+- Do not issue ad-hoc Docker network changes unless the user is explicitly performing migration or incident recovery.
 
 ## Human UI-only operations
 Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;

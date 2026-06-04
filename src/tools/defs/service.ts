@@ -674,7 +674,7 @@ export const serviceToolDefs: ToolDef[] = [
             networking: [
               'Database/Cache/Storage resources created through MCP are Project-scoped and attached only to their Project Docker network.',
               'Create app databases/caches in the same Project as the app that uses them. Cross-project shared resources are not exposed in OpenLander 0.1.',
-              'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+              'For existing Docker/PaaS migrations, inspect and back up existing volumes before changing network attachments.',
             ],
           },
         };
@@ -921,7 +921,7 @@ export const serviceToolDefs: ToolDef[] = [
           networking: [
             'Database/Cache/Storage resources are attached to their Project Docker network.',
             'Use Project resources as the app database/cache path. Cross-project shared resources are not exposed in OpenLander 0.1.',
-            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+            'For existing Docker/PaaS migrations, inspect and back up existing volumes before changing network attachments.',
           ],
         },
       };

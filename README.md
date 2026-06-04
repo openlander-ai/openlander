@@ -90,6 +90,7 @@ It is not yet:
 - a production-grade multi-tenant sandbox
 - a Nomad or Kubernetes replacement
 - a fully self-healing PaaS
+- a one-click importer for existing Docker/PaaS workloads
 - safe for running arbitrary untrusted code without additional isolation
 
 OpenLander controls Docker on the host and is intended for trusted self-hosted
@@ -188,6 +189,10 @@ is the human surface on top.
   MongoDB, or MinIO. In v0.1 these are project-scoped: they attach to the
   project that uses them and run on that project's Docker network. Cross-project
   shared Database/Cache/Storage resources and external TCP exposure are deferred.
+
+Existing Docker/PaaS workloads can be migrated with operator-assisted guidance
+today. Automatic import/adoption of existing containers, networks, and volumes
+is planned after v0.1.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
 common single-Application case.
