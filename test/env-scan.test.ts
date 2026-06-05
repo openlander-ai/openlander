@@ -232,7 +232,6 @@ for (const item of schema) {
     expect(exchangeKey?.requirement).toMatchObject({
       kind: 'prefix',
       prefix: 'key_',
-      example: 'key_openlander_placeholder',
       source: 'schema',
     });
     expect(optional).toBeDefined();

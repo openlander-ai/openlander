@@ -508,7 +508,6 @@ function buildPlanInputRequirements(plan: { env?: DeployPlan['env']; missing?: s
       const requirement = {
         ...inferred,
         ...entry.requirement,
-        example: entry.requirement.example ?? inferred?.example,
         guidance: entry.requirement.guidance ?? inferred?.guidance,
       };
       return [

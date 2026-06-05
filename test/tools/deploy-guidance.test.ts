@@ -526,7 +526,7 @@ describe('deploy MCP guidance', () => {
           requirement: expect.objectContaining({
             kind: 'prefix',
             prefix: 'sk_',
-            example: 'sk_test_openlander_placeholder',
+            guidance: expect.stringContaining('real Stripe secret key'),
           }),
         }),
       ],

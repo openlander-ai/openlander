@@ -7,7 +7,6 @@ export interface EnvValueRequirement {
   prefix?: string;
   values?: string[];
   allowLocalhost?: boolean;
-  example?: string;
   guidance?: string;
   message?: string;
 }
@@ -85,7 +84,9 @@ export function requirementFromNodeSchemaObject(
       kind: 'prefix',
       source: 'schema',
       prefix,
-      example: prefix ? `${prefix}openlander_placeholder` : undefined,
+      guidance: prefix
+        ? `Ask the user for the real value; it must start with "${prefix}".`
+        : undefined,
     };
   }
   if (kind === 'minlen') {
@@ -94,7 +95,9 @@ export function requirementFromNodeSchemaObject(
       kind: 'minlen',
       source: 'schema',
       min,
-      example: 'openlander-development-secret-32chars',
+      guidance: min
+        ? `Ask the user for a real secret at least ${String(min)} characters long.`
+        : undefined,
     };
   }
 
@@ -107,8 +110,8 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       kind: 'url',
       source: 'key_name',
       allowLocalhost: false,
-      example: 'https://api.github.com',
-      guidance: 'Use a real reachable HTTP(S) endpoint; this app may preflight it during startup.',
+      guidance:
+        'Ask the user for the real reachable HTTP(S) endpoint; this app may preflight it during startup.',
     };
   }
   if (/^EXCHANGE_API_KEY$/i.test(key)) {
@@ -116,7 +119,7 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       kind: 'prefix',
       source: 'key_name',
       prefix: 'key_',
-      example: 'key_openlander_placeholder',
+      guidance: 'Ask the user for the real key; it must start with "key_".',
     };
   }
   if (/^STRIPE_(?:API|SECRET)_KEY$/i.test(key)) {
@@ -124,7 +127,7 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       kind: 'prefix',
       source: 'key_name',
       prefix: 'sk_',
-      example: 'sk_test_openlander_placeholder',
+      guidance: 'Ask the user for the real Stripe secret key; it must start with "sk_".',
     };
   }
   if (/^STRIPE_WEBHOOK_SECRET$/i.test(key)) {
@@ -132,7 +135,7 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       kind: 'prefix',
       source: 'key_name',
       prefix: 'whsec_',
-      example: 'whsec_openlander_placeholder',
+      guidance: 'Ask the user for the real Stripe webhook secret; it must start with "whsec_".',
     };
   }
   if (/^(JWT_SECRET|SESSION_SECRET|SECRET_KEY|APP_SECRET)$/i.test(key)) {
@@ -140,7 +143,7 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       kind: 'minlen',
       source: 'key_name',
       min: 16,
-      example: 'openlander-development-secret-32chars',
+      guidance: 'Ask the user for a real secret at least 16 characters long.',
     };
   }
   if (URL_KEY_PATTERN.test(key)) {
@@ -152,13 +155,13 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
     };
   }
   if (INTEGER_KEY_PATTERN.test(key)) {
-    return { kind: 'int', source: 'key_name', example: '3000' };
+    return { kind: 'int', source: 'key_name' };
   }
   if (SECRET_KEY_PATTERN.test(key)) {
     return {
       kind: 'secret',
       source: 'key_name',
-      example: 'openlander-development-secret-32chars',
+      guidance: 'Ask the user for the real secret value; do not invent one.',
     };
   }
 

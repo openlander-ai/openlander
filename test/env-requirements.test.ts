@@ -3,21 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { inferEnvValueRequirement, validateEnvValue } from '../src/pipeline/env-requirements.js';
 
 describe('env value requirements', () => {
-  it('infers executable examples for common app secrets', () => {
+  it('infers constraints for common app secrets without copyable fake values', () => {
     expect(inferEnvValueRequirement('STRIPE_API_KEY')).toMatchObject({
       kind: 'prefix',
       prefix: 'sk_',
-      example: 'sk_test_openlander_placeholder',
+      guidance: expect.stringContaining('real Stripe secret key'),
     });
     expect(inferEnvValueRequirement('EXCHANGE_API_KEY')).toMatchObject({
       kind: 'prefix',
       prefix: 'key_',
-      example: 'key_openlander_placeholder',
+      guidance: expect.stringContaining('real key'),
     });
     expect(inferEnvValueRequirement('JWT_SECRET')).toMatchObject({
       kind: 'minlen',
       min: 16,
-      example: 'openlander-development-secret-32chars',
+      guidance: expect.stringContaining('real secret'),
     });
   });
 
@@ -55,7 +55,6 @@ describe('env value requirements', () => {
   it('infers integer requirements for numeric knobs', () => {
     expect(inferEnvValueRequirement('SMTP_PORT')).toMatchObject({
       kind: 'int',
-      example: '3000',
     });
     expect(
       validateEnvValue('SMTP_PORT', 'abc', inferEnvValueRequirement('SMTP_PORT')),
