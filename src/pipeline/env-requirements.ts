@@ -1,4 +1,4 @@
-export type EnvRequirementKind = 'url' | 'int' | 'enum' | 'prefix' | 'minlen' | 'secret';
+export type EnvRequirementKind = 'url' | 'host' | 'int' | 'enum' | 'prefix' | 'minlen' | 'secret';
 
 export interface EnvValueRequirement {
   kind: EnvRequirementKind;
@@ -18,8 +18,10 @@ export interface EnvValueIssue {
     | 'ENV_VALUE_TOO_SHORT'
     | 'ENV_VALUE_PREFIX_MISMATCH'
     | 'ENV_VALUE_INVALID_URL'
+    | 'ENV_VALUE_INVALID_HOST'
     | 'ENV_VALUE_LOCALHOST_URL'
     | 'ENV_VALUE_RESERVED_URL_HOST'
+    | 'ENV_VALUE_RESERVED_HOST'
     | 'ENV_VALUE_ENUM_MISMATCH'
     | 'ENV_VALUE_NOT_INTEGER';
   severity: 'fail' | 'warning';
@@ -31,8 +33,12 @@ const PLACEHOLDER_PATTERN =
   /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|dummy|fake|sample|test[-_](?:value|secret|key|token)|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/i;
 
 const URL_KEY_PATTERN = /(?:^|_)(URL|URI|DSN|ENDPOINT|CONNECTION)$/i;
+const HOST_KEY_PATTERN = /(?:^|_)(HOST|HOSTNAME)$/i;
 const INTEGER_KEY_PATTERN = /(?:^|_)(PORT|MAX|MIN|LIMIT|TTL|TIMEOUT|RETRIES|INTERVAL)$/i;
-const SECRET_KEY_PATTERN = /(?:SECRET|TOKEN|API[_-]?KEY|PRIVATE[_-]?KEY|JWT|PASSWORD)/i;
+const SECRET_KEY_PATTERN =
+  /(?:SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|JWT|PASSWORD)/i;
+const SECRET_EXAMPLE_PATTERN =
+  /(?:abcdef|123456|super[-_]?secret|very[-_]?long[-_]?secret|example(?:key)?|AKIA[0-9A-Z]*EXAMPLE|wJalrXUtnFEMI)/i;
 
 function parseNumberField(raw: string, field: string): number | undefined {
   const match = new RegExp(`\\b${field}\\s*:\\s*(\\d+)`).exec(raw);
@@ -154,6 +160,14 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
       guidance: 'Use a real reachable URL. Avoid example.com, .local, .test, and localhost.',
     };
   }
+  if (HOST_KEY_PATTERN.test(key)) {
+    return {
+      kind: 'host',
+      source: 'key_name',
+      allowLocalhost: false,
+      guidance: 'Use a real reachable host. Avoid example.com, .local, .test, and localhost.',
+    };
+  }
   if (INTEGER_KEY_PATTERN.test(key)) {
     return { kind: 'int', source: 'key_name' };
   }
@@ -187,42 +201,73 @@ function isProbablyUrl(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
 }
 
+function isReservedHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  if (
+    normalized === 'example.com' ||
+    normalized === 'example.org' ||
+    normalized === 'example.net' ||
+    normalized
+      .split('.')
+      .some(
+        (label) =>
+          label === 'example' ||
+          label === 'demo' ||
+          label === 'sample' ||
+          label === 'test' ||
+          label.endsWith('-example') ||
+          label.startsWith('example-') ||
+          label.endsWith('-demo') ||
+          label.startsWith('demo-') ||
+          label.endsWith('-sample') ||
+          label.startsWith('sample-') ||
+          label.endsWith('-test') ||
+          label.startsWith('test-'),
+      ) ||
+    normalized.endsWith('.example.com') ||
+    normalized.endsWith('.example.org') ||
+    normalized.endsWith('.example.net') ||
+    normalized.endsWith('.invalid') ||
+    normalized.endsWith('.test') ||
+    normalized.endsWith('.local')
+  ) {
+    return true;
+  }
+
+  const parts = normalized.split('.').map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+  const [a, b] = parts;
+  return (
+    (a === 192 && b === 0 && parts[2] === 2) ||
+    (a === 198 && b === 51 && parts[2] === 100) ||
+    (a === 203 && b === 0 && parts[2] === 113)
+  );
+}
+
 function isReservedUrlHost(value: string): boolean {
   try {
     const url = new URL(value);
-    const hostname = url.hostname.toLowerCase();
-    if (
-      hostname === 'example.com' ||
-      hostname === 'example.org' ||
-      hostname === 'example.net' ||
-      hostname
-        .split('.')
-        .some(
-          (label) =>
-            label === 'example' || label.endsWith('-example') || label.startsWith('example-'),
-        ) ||
-      hostname.endsWith('.example.com') ||
-      hostname.endsWith('.example.org') ||
-      hostname.endsWith('.example.net') ||
-      hostname.endsWith('.invalid') ||
-      hostname.endsWith('.test') ||
-      hostname.endsWith('.local')
-    ) {
-      return true;
-    }
-
-    const parts = hostname.split('.').map((part) => Number.parseInt(part, 10));
-    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
-      return false;
-    }
-    const [a, b] = parts;
-    return (
-      (a === 192 && b === 0 && parts[2] === 2) ||
-      (a === 198 && b === 51 && parts[2] === 100) ||
-      (a === 203 && b === 0 && parts[2] === 113)
-    );
+    return isReservedHostname(url.hostname);
   } catch {
     return false;
+  }
+}
+
+function parseHostValue(value: string): { hostname?: string; invalid: boolean } {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return { invalid: true };
+  }
+
+  try {
+    if (isProbablyUrl(trimmed)) {
+      return { hostname: new URL(trimmed).hostname, invalid: false };
+    }
+    return { hostname: new URL(`tcp://${trimmed}`).hostname, invalid: false };
+  } catch {
+    return { invalid: true };
   }
 }
 
@@ -256,6 +301,22 @@ export function validateEnvValue(
       code: 'ENV_VALUE_PLACEHOLDER',
       severity: required ? 'fail' : 'warning',
       message: `${key} looks empty or placeholder-like; provide the real value before deployment.`,
+      requirement,
+    });
+  }
+
+  if (
+    requirement &&
+    (requirement.kind === 'secret' ||
+      requirement.kind === 'prefix' ||
+      requirement.kind === 'minlen') &&
+    SECRET_EXAMPLE_PATTERN.test(trimmed)
+  ) {
+    issues.push({
+      key,
+      code: 'ENV_VALUE_PLACEHOLDER',
+      severity: required ? 'fail' : 'warning',
+      message: `${key} looks like a copied example secret; ask the user for the real value before deployment.`,
       requirement,
     });
   }
@@ -335,6 +396,35 @@ export function validateEnvValue(
         code: 'ENV_VALUE_RESERVED_URL_HOST',
         severity: shouldFailReservedHost(key, trimmed, required) ? 'fail' : 'warning',
         message: `${key} points to a reserved/example host; use a real reachable URL before deployment.`,
+        requirement,
+      });
+    }
+  }
+
+  if (requirement.kind === 'host') {
+    const parsed = parseHostValue(trimmed);
+    if (parsed.invalid || !parsed.hostname) {
+      issues.push({
+        key,
+        code: 'ENV_VALUE_INVALID_HOST',
+        severity: 'fail',
+        message: `${key} must be a hostname or host:port value, not a placeholder or path.`,
+        requirement,
+      });
+    } else if (requirement.allowLocalhost !== true && isLocalhostUrl(`tcp://${parsed.hostname}`)) {
+      issues.push({
+        key,
+        code: 'ENV_VALUE_LOCALHOST_URL',
+        severity: 'warning',
+        message: `${key} points to localhost; inside a container this usually needs a service hostname or external host.`,
+        requirement,
+      });
+    } else if (isReservedHostname(parsed.hostname)) {
+      issues.push({
+        key,
+        code: 'ENV_VALUE_RESERVED_HOST',
+        severity: required ? 'fail' : 'warning',
+        message: `${key} points to a reserved/example host; use a real reachable host before deployment.`,
         requirement,
       });
     }

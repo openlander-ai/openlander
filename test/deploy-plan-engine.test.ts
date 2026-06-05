@@ -162,6 +162,83 @@ describe('PlanEngine.updatePlan', () => {
     ]);
   });
 
+  it('keeps plan in needs_input for shape-correct fake external env values', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      env: {
+        auto: {},
+        required: [
+          'APP_BASE_URL',
+          'EXCHANGE_API_KEY',
+          'S3_ACCESS_KEY',
+          'SMTP_HOST',
+          'STRIPE_API_KEY',
+        ],
+        provided: {},
+        detected: [
+          { key: 'APP_BASE_URL', source: 'required', required: true },
+          { key: 'EXCHANGE_API_KEY', source: 'required', required: true },
+          { key: 'S3_ACCESS_KEY', source: 'required', required: true },
+          { key: 'SMTP_HOST', source: 'required', required: true },
+          { key: 'STRIPE_API_KEY', source: 'required', required: true },
+        ],
+      },
+      missing: [
+        'APP_BASE_URL',
+        'EXCHANGE_API_KEY',
+        'S3_ACCESS_KEY',
+        'SMTP_HOST',
+        'STRIPE_API_KEY',
+      ],
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: {
+        APP_BASE_URL: 'https://ledgerly-demo.openlander.app',
+        EXCHANGE_API_KEY: ['key', 'supersecret'].join('_'),
+        S3_ACCESS_KEY: 'AKIAIOSFODNN7EXAMPLE',
+        SMTP_HOST: 'smtp.example.com',
+        STRIPE_API_KEY: ['sk', 'live', 'supersecret'].join('_'),
+      },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    expect(updated.status).toBe('needs_input');
+    expect(updated.env.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'APP_BASE_URL',
+          code: 'ENV_VALUE_RESERVED_URL_HOST',
+          severity: 'fail',
+        }),
+        expect.objectContaining({
+          key: 'EXCHANGE_API_KEY',
+          code: 'ENV_VALUE_PLACEHOLDER',
+          severity: 'fail',
+        }),
+        expect.objectContaining({
+          key: 'S3_ACCESS_KEY',
+          code: 'ENV_VALUE_PLACEHOLDER',
+          severity: 'fail',
+        }),
+        expect.objectContaining({
+          key: 'SMTP_HOST',
+          code: 'ENV_VALUE_RESERVED_HOST',
+          severity: 'fail',
+        }),
+        expect.objectContaining({
+          key: 'STRIPE_API_KEY',
+          code: 'ENV_VALUE_PLACEHOLDER',
+          severity: 'fail',
+        }),
+      ]),
+    );
+  });
+
   // P1-1 status-priority gate on updatePlan: a plan that starts needs_input
   // (missing user secret) AND carries a safe proposed managed resource must
   // become needs_approval (NOT ready) once the secret is filled — otherwise the
