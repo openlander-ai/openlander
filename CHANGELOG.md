@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.12] - 2026-06-05
+
+### Fixed
+
+- Detect schema-driven Node.js environment validators that read required
+  variables through dynamic `process.env[key]` access, so deploy plans surface
+  those app secrets before runtime boot loops.
+- Grant managed PostgreSQL app users privileges on the target database `public`
+  schema and its default tables/sequences when creating service-scoped users.
+
 ## [0.1.14-rc.11] - 2026-06-05
 
 ### Fixed
