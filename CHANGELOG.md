@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Surface recent post-deploy restart loops in completed `get_deploy_status`
+  responses, so a successful deploy log does not hide a current unhealthy
+  container.
+
 ## [0.1.14-rc.7] - 2026-06-05
 
 > `v0.1.14-rc.6` is superseded for release QA. This candidate adds the
