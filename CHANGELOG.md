@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.10] - 2026-06-05
+
+### Fixed
+
+- Keep Day-1 composite deploy plans from leaking into manual Project, database,
+  and cache assembly by creating and binding the target Project before approved
+  managed resource provisioning.
+- Ensure app runtime and auto-provisioned Postgres/Redis resources share the
+  same Project/network, including monorepo plans that reuse a pre-created parent
+  Project during execution.
+- Update MCP deploy-plan guidance so agents stay on the composite approval path
+  instead of hand-assembling Project and managed-service primitives.
+
 ## [0.1.14-rc.9] - 2026-06-05
 
 ### Fixed
