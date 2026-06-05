@@ -227,6 +227,93 @@ describe('get_deploy_status structured fields (O1)', () => {
     }
   });
 
+  it('completed successful deploy log surfaces current recent restart loop as unhealthy', async () => {
+    const project = {
+      id: 'app',
+      name: 'app',
+      status: 'running',
+      container_id: 'container-1',
+    };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      assigned_port: 10001,
+      public_url: null,
+    };
+    const ctx = {
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd5'
+            ? {
+                id: 'd5',
+                service_id: 'app__svc',
+                project_id: 'app',
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === 'app' ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 7,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd5' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd5',
+      phase: 'done',
+      status: 'unhealthy',
+      health: 'unhealthy',
+      readiness: 'unhealthy',
+      readiness_message: expect.stringContaining('restarted 7 times recently'),
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'app__svc' },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('restarted 7 times recently'),
+        next_steps: expect.arrayContaining([
+          'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
+        ]),
+      },
+    });
+    expect(job['warnings']).toEqual(
+      expect.arrayContaining([expect.stringContaining('restarted 7 times recently')]),
+    );
+    const serialized = JSON.stringify(result);
+    for (const field of FORBIDDEN_FIELDS) {
+      expect(serialized).not.toContain(field);
+    }
+  });
+
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
     // The common active-poll path: JobManager is keyed by project id, so
     // formatJob is called without a deploy id. status_call carries service_id
