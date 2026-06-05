@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Add a short post-deploy stability observation window to `deploy_app(wait=true)`
+  so containers that start crashing immediately after an initial healthy signal
+  are returned as unhealthy with `post_deploy_stability`, warnings, and
+  `diagnostic_call`.
+- Warn in `diagnose_service` when the configured healthcheck path succeeds but
+  representative traffic returns HTTP 5xx, while keeping ambiguous 401/403/404
+  and redirect responses as raw probe evidence instead of high-confidence
+  failures.
+
 ## [0.1.14-rc.8] - 2026-06-05
 
 ### Fixed
