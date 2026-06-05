@@ -111,6 +111,7 @@ describe('env value requirements', () => {
   it('blocks reserved/example hosts for required host env vars', () => {
     expect(inferEnvValueRequirement('SMTP_HOST')).toMatchObject({
       kind: 'host',
+      trustedSourceRequired: true,
     });
 
     expect(
@@ -119,6 +120,49 @@ describe('env value requirements', () => {
 
     expect(
       validateEnvValue('SMTP_HOST', 'smtp.sendgrid.net', inferEnvValueRequirement('SMTP_HOST')),
+    ).toEqual([]);
+  });
+
+  it('requires trusted provenance for user-owned external env in deploy-plan inline input', () => {
+    expect(inferEnvValueRequirement('APP_BASE_URL')).toMatchObject({
+      kind: 'url',
+      trustedSourceRequired: true,
+    });
+    expect(inferEnvValueRequirement('S3_BUCKET')).toMatchObject({
+      kind: 'secret',
+      trustedSourceRequired: true,
+    });
+
+    expect(
+      validateEnvValue(
+        'EXCHANGE_API_URL',
+        'https://api.blockchain.com',
+        inferEnvValueRequirement('EXCHANGE_API_URL'),
+        true,
+        { trustedSource: false },
+      ),
+    ).toEqual([
+      expect.objectContaining({ code: 'ENV_VALUE_UNTRUSTED_EXTERNAL', severity: 'fail' }),
+    ]);
+
+    expect(
+      validateEnvValue(
+        'EXCHANGE_API_URL',
+        'https://api.blockchain.com',
+        inferEnvValueRequirement('EXCHANGE_API_URL'),
+        true,
+        { trustedSource: true },
+      ),
+    ).toEqual([]);
+
+    expect(
+      validateEnvValue(
+        'DATABASE_URL',
+        'postgres://postgres:postgres@postgres:5432/app',
+        inferEnvValueRequirement('DATABASE_URL'),
+        true,
+        { trustedSource: false },
+      ),
     ).toEqual([]);
   });
 

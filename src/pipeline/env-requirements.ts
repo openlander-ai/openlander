@@ -7,6 +7,7 @@ export interface EnvValueRequirement {
   prefix?: string;
   values?: string[];
   allowLocalhost?: boolean;
+  trustedSourceRequired?: boolean;
   guidance?: string;
   message?: string;
 }
@@ -22,11 +23,16 @@ export interface EnvValueIssue {
     | 'ENV_VALUE_LOCALHOST_URL'
     | 'ENV_VALUE_RESERVED_URL_HOST'
     | 'ENV_VALUE_RESERVED_HOST'
+    | 'ENV_VALUE_UNTRUSTED_EXTERNAL'
     | 'ENV_VALUE_ENUM_MISMATCH'
     | 'ENV_VALUE_NOT_INTEGER';
   severity: 'fail' | 'warning';
   message: string;
   requirement?: EnvValueRequirement;
+}
+
+export interface EnvValueValidationOptions {
+  trustedSource?: boolean;
 }
 
 const PLACEHOLDER_PATTERN =
@@ -39,6 +45,55 @@ const SECRET_KEY_PATTERN =
   /(?:SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|JWT|PASSWORD)/i;
 const SECRET_EXAMPLE_PATTERN =
   /(?:abcdef|123456|super[-_]?secret|very[-_]?long[-_]?secret|example(?:key)?|AKIA[0-9A-Z]*EXAMPLE|wJalrXUtnFEMI)/i;
+
+const PLATFORM_MANAGED_ENV_KEYS = new Set([
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'POSTGRESQL_URL',
+  'MYSQL_URL',
+  'REDIS_URL',
+  'MONGO_URL',
+  'MONGODB_URI',
+  'RABBITMQ_URL',
+  'AMQP_URL',
+]);
+
+const TRUSTED_EXTERNAL_PREFIXES = [
+  'EXCHANGE_',
+  'STRIPE_',
+  'SMTP_',
+  'S3_',
+  'AWS_',
+  'SENDGRID_',
+  'MAILGUN_',
+  'TWILIO_',
+  'SLACK_',
+  'DISCORD_',
+];
+
+function requiresTrustedExternalSource(key: string): boolean {
+  const normalized = key.toUpperCase();
+  if (PLATFORM_MANAGED_ENV_KEYS.has(normalized)) {
+    return false;
+  }
+  if (/^(APP_BASE_URL|BASE_URL|PUBLIC_URL)$/.test(normalized)) {
+    return true;
+  }
+  return TRUSTED_EXTERNAL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function withExternalTrustRequirement(
+  key: string,
+  requirement: EnvValueRequirement,
+): EnvValueRequirement {
+  if (!requiresTrustedExternalSource(key)) {
+    return requirement;
+  }
+  return {
+    ...requirement,
+    trustedSourceRequired: true,
+  };
+}
 
 function parseNumberField(raw: string, field: string): number | undefined {
   const match = new RegExp(`\\b${field}\\s*:\\s*(\\d+)`).exec(raw);
@@ -111,38 +166,61 @@ export function requirementFromNodeSchemaObject(
 }
 
 export function inferEnvValueRequirement(key: string): EnvValueRequirement | undefined {
+  if (/^(APP_BASE_URL|BASE_URL|PUBLIC_URL)$/i.test(key)) {
+    return withExternalTrustRequirement(key, {
+      kind: 'url',
+      source: 'key_name',
+      allowLocalhost: false,
+      guidance:
+        'Use the real public URL supplied or confirmed by the user; do not invent a public base URL during deploy planning.',
+    });
+  }
   if (/^EXCHANGE_API_URL$/i.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'url',
       source: 'key_name',
       allowLocalhost: false,
       guidance:
         'Ask the user for the real reachable HTTP(S) endpoint; this app may preflight it during startup.',
-    };
+    });
   }
   if (/^EXCHANGE_API_KEY$/i.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'prefix',
       source: 'key_name',
       prefix: 'key_',
       guidance: 'Ask the user for the real key; it must start with "key_".',
-    };
+    });
   }
   if (/^STRIPE_(?:API|SECRET)_KEY$/i.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'prefix',
       source: 'key_name',
       prefix: 'sk_',
       guidance: 'Ask the user for the real Stripe secret key; it must start with "sk_".',
-    };
+    });
   }
   if (/^STRIPE_WEBHOOK_SECRET$/i.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'prefix',
       source: 'key_name',
       prefix: 'whsec_',
       guidance: 'Ask the user for the real Stripe webhook secret; it must start with "whsec_".',
-    };
+    });
+  }
+  if (/^(S3_BUCKET|AWS_S3_BUCKET|AWS_BUCKET)$/i.test(key)) {
+    return withExternalTrustRequirement(key, {
+      kind: 'secret',
+      source: 'key_name',
+      guidance: 'Ask the user for the real object-storage bucket name; do not invent one.',
+    });
+  }
+  if (/^SMTP_(?:USER|USERNAME|PASS|PASSWORD)$/i.test(key)) {
+    return withExternalTrustRequirement(key, {
+      kind: 'secret',
+      source: 'key_name',
+      guidance: 'Ask the user for the real SMTP credential; do not invent one.',
+    });
   }
   if (/^(JWT_SECRET|SESSION_SECRET|SECRET_KEY|APP_SECRET)$/i.test(key)) {
     return {
@@ -153,33 +231,50 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
     };
   }
   if (URL_KEY_PATTERN.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'url',
       source: 'key_name',
       allowLocalhost: false,
       guidance: 'Use a real reachable URL. Avoid example.com, .local, .test, and localhost.',
-    };
+    });
   }
   if (HOST_KEY_PATTERN.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'host',
       source: 'key_name',
       allowLocalhost: false,
       guidance: 'Use a real reachable host. Avoid example.com, .local, .test, and localhost.',
-    };
+    });
   }
   if (INTEGER_KEY_PATTERN.test(key)) {
     return { kind: 'int', source: 'key_name' };
   }
   if (SECRET_KEY_PATTERN.test(key)) {
-    return {
+    return withExternalTrustRequirement(key, {
       kind: 'secret',
       source: 'key_name',
       guidance: 'Ask the user for the real secret value; do not invent one.',
-    };
+    });
   }
 
   return undefined;
+}
+
+export function mergeEnvValueRequirement(
+  key: string,
+  detectedRequirement?: EnvValueRequirement,
+): EnvValueRequirement | undefined {
+  const inferred = inferEnvValueRequirement(key);
+  if (!detectedRequirement) {
+    return inferred;
+  }
+  return {
+    ...(inferred ?? {}),
+    ...detectedRequirement,
+    guidance: detectedRequirement.guidance ?? inferred?.guidance,
+    trustedSourceRequired:
+      detectedRequirement.trustedSourceRequired ?? inferred?.trustedSourceRequired,
+  };
 }
 
 function isLocalhostUrl(value: string): boolean {
@@ -291,6 +386,7 @@ export function validateEnvValue(
   value: string,
   requirement?: EnvValueRequirement,
   required = true,
+  options: EnvValueValidationOptions = {},
 ): EnvValueIssue[] {
   const issues: EnvValueIssue[] = [];
   const trimmed = value.trim();
@@ -323,6 +419,16 @@ export function validateEnvValue(
 
   if (!requirement) {
     return issues;
+  }
+
+  if (requirement.trustedSourceRequired && options.trustedSource === false) {
+    issues.push({
+      key,
+      code: 'ENV_VALUE_UNTRUSTED_EXTERNAL',
+      severity: required ? 'fail' : 'warning',
+      message: `${key} is user-owned external configuration. Provide it from a saved/trusted user source; do not invent it during deploy planning.`,
+      requirement,
+    });
   }
 
   if (

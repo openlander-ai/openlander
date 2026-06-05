@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep deploy plans in `needs_input` when user-owned external app env values
+  are supplied inline without a trusted/saved source, so agents cannot turn
+  missing SaaS credentials or public URLs into plausible invented values during
+  Day-1 deploy planning.
+
 ## [0.1.14-rc.15] - 2026-06-06
 
 ### Fixed

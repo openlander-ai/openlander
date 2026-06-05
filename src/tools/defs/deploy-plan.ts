@@ -30,6 +30,7 @@ import {
 import { runDeployableServiceAction } from './deployable-service.js';
 import {
   inferEnvValueRequirement,
+  mergeEnvValueRequirement,
   validateEnvValue,
   type EnvValueRequirement,
 } from '../../pipeline/env-requirements.js';
@@ -2159,8 +2160,10 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envEntryByKey = new Map(detectedEnvEntries.map((entry) => [entry.key, entry]));
       for (const [key, value] of envEntries) {
         const entry = envEntryByKey.get(key);
-        const requirement = entry?.requirement ?? inferEnvValueRequirement(key);
-        const issues = validateEnvValue(key, value, requirement, entry?.required ?? false);
+        const requirement = mergeEnvValueRequirement(key, entry?.requirement);
+        const issues = validateEnvValue(key, value, requirement, entry?.required ?? false, {
+          trustedSource: false,
+        });
         for (const issue of issues) {
           checks.push({
             name: 'env_vars',
