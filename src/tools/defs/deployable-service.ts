@@ -643,10 +643,12 @@ export async function runDeployableServiceAction(
     action,
   );
   const noCache = (args.no_cache as boolean | undefined) === true;
-  const strategy = args.strategy as 'blue-green' | 'force' | undefined;
+  let strategy = args.strategy as 'blue-green' | 'force' | undefined;
   const healthCheckPath = args.health_check_path as string | undefined;
   const cmd = args.cmd as string[] | undefined;
   const envVars = parseInternalRedeployEnvVars(args);
+  let autoSelectedBlueGreen = false;
+  let blueGreenFallbackReasons: string[] = [];
 
   if (service.archived_at) {
     return buildArchivedServiceRejection(runtimeProject, project);
@@ -705,6 +707,21 @@ export async function runDeployableServiceAction(
           ],
         },
       };
+    }
+  } else if (action === 'redeploy_app' && strategy === undefined) {
+    if (typeof context.appCtx.pipeline.getBlueGreenEligibility === 'function') {
+      const eligibility = await context.appCtx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+        healthCheckPath: healthCheckPath?.trim() || undefined,
+      });
+      if (eligibility.supported) {
+        strategy = 'blue-green';
+        autoSelectedBlueGreen = true;
+      } else {
+        strategy = 'force';
+        blueGreenFallbackReasons = eligibility.reasons;
+      }
+    } else {
+      strategy = 'force';
     }
   }
 
@@ -808,10 +825,14 @@ export async function runDeployableServiceAction(
 
   return {
     status: action === 'restart_service' ? 'restarting' : 'deploying',
+    ...(action === 'redeploy_app' ? { strategy: strategy ?? 'force' } : {}),
+    ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     service: serviceSummary(service, project),
     message: noCache
       ? 'Deployment started (no_cache). Poll get_deploy_status to track progress.'
-      : 'Deployment started. Poll get_deploy_status to track progress.',
+      : autoSelectedBlueGreen
+        ? 'Blue-green deployment started. The previous version stays live until route verification passes.'
+        : 'Deployment started. Poll get_deploy_status to track progress.',
     diagnostic_call: {
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -826,6 +847,13 @@ export async function runDeployableServiceAction(
       next_steps: [
         `Poll openlander_deploy.get_deploy_status with service_id="${service.id}" to track this deploy.`,
         `If deployment fails or times out, call openlander_monitor.diagnose_service with service_id="${service.id}".`,
+        ...(autoSelectedBlueGreen
+          ? ['Blue-green was selected automatically because this Application is eligible.']
+          : blueGreenFallbackReasons.length > 0
+            ? [
+                `Force redeploy was used because blue-green is not currently eligible: ${blueGreenFallbackReasons.join(' ')}`,
+              ]
+            : []),
       ],
     },
   };

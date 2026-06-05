@@ -494,6 +494,53 @@ describe('deployable service target resolution', () => {
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
+  it('auto-selects blue-green for eligible redeploy_app calls without an explicit strategy', async () => {
+    const ctx = createDuplicateServiceContext();
+
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_name: 'api', project_name: 'alpha' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      strategy: 'blue-green',
+      zero_downtime: true,
+    });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+  });
+
+  it('falls back to force when implicit blue-green is not eligible', async () => {
+    const ctx = createDuplicateServiceContext();
+    (ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      supported: false,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      reasons: ['An explicit health_check_path is required.'],
+      fallback_strategy: 'force',
+    });
+
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_name: 'api', project_name: 'alpha' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      strategy: 'force',
+    });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ strategy: 'force' }),
+      ),
+    );
+  });
+
   it('blocks image/manual-restore redeploys without an image source before acquiring a deploy lock', async () => {
     const ctx = createDuplicateServiceContext({
       alphaService: { kind: 'image', source: 'image', repo_url: null, image_url: null },
