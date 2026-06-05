@@ -529,6 +529,16 @@ export const deployToolDefs: ToolDef[] = [
           health,
           ...(readiness ? { readiness: readiness.readiness } : {}),
           ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
+          ...(phase === 'done' && readiness?.readiness === 'unhealthy'
+            ? {
+                post_deploy_stability: {
+                  status: 'unstable',
+                  source: 'current_container_inspect',
+                  readiness: readiness.readiness,
+                  ...(readinessMessage ? { message: readinessMessage } : {}),
+                },
+              }
+            : {}),
           created_at: startedAt,
           completed_at: completedAt.toISOString(),
           ...(phase === 'done'

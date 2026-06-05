@@ -16,6 +16,7 @@ describe('deploy MCP guidance', () => {
   afterEach(() => {
     eventBus.clear('deploy:success');
     eventBus.clear('deploy:failed');
+    vi.useRealTimers();
   });
 
   it('routes deploy_app to redeploy_app when name matches one existing deployable service', async () => {
@@ -829,6 +830,119 @@ describe('deploy MCP guidance', () => {
       readiness: 'healthy',
     });
     expect(result['readiness_message']).toBeUndefined();
+  });
+
+  it('observes post-deploy stability and warns when a healthy app starts crashing', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
+    const project = {
+      id: 'app',
+      name: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      archived_at: null,
+    };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      container_id: 'container-1',
+    };
+    const inspectContainer = vi
+      .fn()
+      .mockResolvedValueOnce({
+        RestartCount: 0,
+        State: {
+          Running: true,
+          Restarting: false,
+          ExitCode: 0,
+          StartedAt: new Date(Date.now()).toISOString(),
+          Health: { Status: 'healthy' },
+        },
+      })
+      .mockResolvedValueOnce({
+        RestartCount: 4,
+        State: {
+          Running: true,
+          Restarting: false,
+          ExitCode: 0,
+          StartedAt: new Date(Date.now() + 1_000).toISOString(),
+          Health: { Status: 'healthy' },
+        },
+      });
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+      docker: {
+        inspectContainer,
+      },
+      jobManager: {
+        getStatus: vi.fn(() => null),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'ready',
+          app: { name: 'app' },
+          project_id: 'app',
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'building',
+          project_name: 'app',
+          project_id: 'app',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    const pending = getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/app',
+        name: 'app',
+        wait: true,
+      },
+      { target: 'mcp' },
+    );
+    await vi.waitFor(() => expect(eventBus.listenerCount('deploy:success')).toBeGreaterThan(0));
+    await eventBus.emit('deploy:success', {
+      projectId: 'app',
+      url: 'http://app.example.com',
+      totalDurationMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    const result = (await pending) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'unhealthy',
+      readiness: 'unhealthy',
+      readiness_message: expect.stringContaining('restarted 4 times recently'),
+      post_deploy_stability: {
+        status: 'unstable',
+        readiness: 'unhealthy',
+        observed_ms: 2000,
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'app__svc' },
+      },
+    });
+    expect(result['warnings']).toEqual(
+      expect.arrayContaining([expect.stringContaining('restarted 4 times recently')]),
+    );
   });
 
   it('reports unhealthy readiness instead of claiming deploy success', async () => {

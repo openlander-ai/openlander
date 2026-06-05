@@ -55,6 +55,14 @@ interface ResolvedDeployableService {
   runtimeProject: ProjectRow;
 }
 
+interface DiagnosticWarning {
+  code: 'TRAFFIC_HEALTH_MISMATCH';
+  severity: 'warning';
+  confidence: 'medium';
+  summary: string;
+  evidence: Record<string, unknown>;
+}
+
 async function resolveTopologyProject(
   appCtx: AppCtx,
   args: Record<string, unknown>,
@@ -560,6 +568,20 @@ export const monitoringToolDefs: ToolDef[] = [
       const httpCheck = await probeServiceHttp(appCtx, service, probePath, timeoutMs, {
         internal,
       });
+      const trafficProbePath = selectServiceTrafficProbePath({
+        primaryPath: probePath,
+        env: effectiveEnv,
+      });
+      const trafficCheck =
+        !internal && httpCheck['reachable'] === true && trafficProbePath
+          ? await probeServiceHttp(appCtx, service, trafficProbePath, timeoutMs, { internal })
+          : null;
+      const warnings = buildDiagnoseWarnings({
+        healthPath: probePath,
+        httpCheck,
+        trafficPath: trafficProbePath,
+        trafficCheck,
+      });
       const internalHttpCheck =
         !internal &&
         service.container_id &&
@@ -583,6 +605,7 @@ export const monitoringToolDefs: ToolDef[] = [
         httpCheck,
         dependencies,
       });
+      const warningNextSteps = nextStepsForDiagnosticWarnings(warnings);
       const route = summarizeRouteState({
         service,
         project,
@@ -630,14 +653,22 @@ export const monitoringToolDefs: ToolDef[] = [
         container,
         logs: runtimeLogs,
         httpCheck,
+        ...(trafficCheck ? { trafficCheck } : {}),
         ...(internalHttpCheck ? { internalHttpCheck } : {}),
         route,
         dependencies,
+        ...(warnings.length > 0 ? { warnings } : {}),
         ...(diagnosis ? { diagnosis } : {}),
         ...(diagnosis?.suggested_call ? { suggested_call: diagnosis.suggested_call } : {}),
         _agent_guidance: {
-          ...(diagnosis ? { message: diagnosis.summary } : {}),
-          next_steps: diagnosis ? nextStepsForDiagnosis(diagnosis, nextSteps) : nextSteps,
+          ...(diagnosis
+            ? { message: diagnosis.summary }
+            : warnings[0]
+              ? { message: warnings[0].summary }
+              : {}),
+          next_steps: diagnosis
+            ? nextStepsForDiagnosis(diagnosis, [...warningNextSteps, ...nextSteps])
+            : [...warningNextSteps, ...nextSteps],
         },
       };
     },
@@ -1624,6 +1655,78 @@ function selectServiceProbePath(input: {
   );
 }
 
+function inferTrafficProbePathFromEnv(env: Record<string, string>): string | null {
+  const candidateKeys = [
+    'OPENLANDER_SMOKE_PATH',
+    'SMOKE_PATH',
+    'APP_SMOKE_PATH',
+    'TRAFFIC_SMOKE_PATH',
+    'PUBLIC_SMOKE_PATH',
+  ];
+  for (const key of candidateKeys) {
+    const path = normalizeProbePath(env[key]);
+    if (path) return path;
+  }
+  return null;
+}
+
+function selectServiceTrafficProbePath(input: {
+  primaryPath: string;
+  env: Record<string, string>;
+}): string | null {
+  const primary = normalizeProbePath(input.primaryPath) ?? '/';
+  const explicit = inferTrafficProbePathFromEnv(input.env);
+  const candidate = explicit ?? '/';
+  return candidate === primary ? null : candidate;
+}
+
+function probeStatusCode(check: Record<string, unknown> | null): number | null {
+  const value = check?.['status_code'];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildDiagnoseWarnings(input: {
+  healthPath: string;
+  httpCheck: Record<string, unknown>;
+  trafficPath: string | null;
+  trafficCheck: Record<string, unknown> | null;
+}): DiagnosticWarning[] {
+  if (!input.trafficPath || !input.trafficCheck || input.httpCheck['reachable'] !== true) {
+    return [];
+  }
+
+  const trafficStatusCode = probeStatusCode(input.trafficCheck);
+  if (trafficStatusCode === null || trafficStatusCode < 500 || trafficStatusCode > 599) {
+    return [];
+  }
+
+  return [
+    {
+      code: 'TRAFFIC_HEALTH_MISMATCH',
+      severity: 'warning',
+      confidence: 'medium',
+      summary: `Health path ${input.healthPath} is reachable, but representative traffic path ${input.trafficPath} returned HTTP ${String(trafficStatusCode)}.`,
+      evidence: {
+        health_path: input.healthPath,
+        health_status_code: probeStatusCode(input.httpCheck),
+        health_target: input.httpCheck['target_resolved'] ?? null,
+        traffic_path: input.trafficPath,
+        traffic_status_code: trafficStatusCode,
+        traffic_target: input.trafficCheck['target_resolved'] ?? null,
+      },
+    },
+  ];
+}
+
+function nextStepsForDiagnosticWarnings(warnings: DiagnosticWarning[]): string[] {
+  if (warnings.length === 0) {
+    return [];
+  }
+  return [
+    'Healthcheck passed, but representative traffic returned 5xx. Do not report end-user success until logs or an explicit app probe confirms the route is healthy.',
+  ];
+}
+
 async function probeServiceHttp(
   appCtx: AppCtx,
   service: ServiceRow,
@@ -2604,6 +2707,14 @@ function buildInternalTcpProbeCommand(host: string, port: number, timeoutSec: nu
   ];
 }
 
+function parseHttpStatusCode(value: string): number | null {
+  const match = value.match(/\b([1-5][0-9]{2})\b/);
+  const rawStatus = match?.[1];
+  if (!rawStatus) return null;
+  const parsed = Number.parseInt(rawStatus, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function probeInternal(
   appCtx: {
     docker: {
@@ -2667,18 +2778,33 @@ async function probeInternal(
     cmd = buildInternalTcpProbeCommand(host, port, timeoutSec);
   } else {
     const url = `${protocol}://${host}:${String(port)}${path}`;
-    cmd = ['curl', '-sf', '--max-time', String(timeoutSec), url];
+    cmd = [
+      'curl',
+      '-sS',
+      '-o',
+      '/dev/null',
+      '-w',
+      '%{http_code}',
+      '--max-time',
+      String(timeoutSec),
+      url,
+    ];
   }
 
   try {
     const result = await appCtx.docker.execSimple(runningContainer.id, cmd);
     const latencyMs = Date.now() - startedAt;
-    const reachable = result.exitCode === 0;
     const output = result.stderr.trim() || result.stdout.trim();
+    const statusCode = protocol === 'tcp' ? null : parseHttpStatusCode(result.stdout.trim());
+    const reachable =
+      protocol === 'tcp'
+        ? result.exitCode === 0
+        : result.exitCode === 0 && (statusCode === null || statusCode < 400);
     const probeToolUnavailable = result.exitCode === 127;
 
     return {
       reachable,
+      ...(statusCode !== null ? { status_code: statusCode } : {}),
       latency_ms: latencyMs,
       error: reachable
         ? undefined

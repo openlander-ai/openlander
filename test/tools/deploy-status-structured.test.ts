@@ -293,6 +293,12 @@ describe('get_deploy_status structured fields (O1)', () => {
       health: 'unhealthy',
       readiness: 'unhealthy',
       readiness_message: expect.stringContaining('restarted 7 times recently'),
+      post_deploy_stability: {
+        status: 'unstable',
+        source: 'current_container_inspect',
+        readiness: 'unhealthy',
+        message: expect.stringContaining('restarted 7 times recently'),
+      },
       diagnostic_call: {
         tool: 'openlander_monitor',
         action: 'diagnose_service',
