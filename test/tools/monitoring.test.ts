@@ -295,13 +295,16 @@ describe('probe_host tool', () => {
       )) as Record<string, unknown>;
 
       expect(result.reachable).toBe(true);
-      expect(ctx.docker.execSimple).toHaveBeenCalledWith('container-2', [
-        'curl',
-        '-sf',
-        '--max-time',
-        '5',
-        'http://my-app:3000/health',
-      ]);
+      expect(ctx.docker.execSimple).toHaveBeenCalledWith(
+        'container-2',
+        expect.arrayContaining([
+          'curl',
+          '-w',
+          '%{http_code}',
+          '5',
+          'http://my-app:3000/health',
+        ]),
+      );
     });
 
     it('returns not reachable on exec failure', async () => {
@@ -1758,6 +1761,7 @@ describe('service-targeted monitoring tools', () => {
     });
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
 
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
@@ -1807,6 +1811,82 @@ describe('service-targeted monitoring tools', () => {
       }),
     });
   });
+
+  it('diagnose_service warns when healthcheck passes but representative traffic returns 5xx', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      httpCheck: {
+        reachable: true,
+        status_code: 200,
+        target_resolved: 'http://ol-app:3000/health',
+      },
+      trafficCheck: {
+        reachable: false,
+        status_code: 500,
+        target_resolved: 'http://ol-app:3000/',
+      },
+      warnings: [
+        {
+          code: 'TRAFFIC_HEALTH_MISMATCH',
+          severity: 'warning',
+          confidence: 'medium',
+          evidence: {
+            health_path: '/health',
+            health_status_code: 200,
+            traffic_path: '/',
+            traffic_status_code: 500,
+          },
+        },
+      ],
+      _agent_guidance: {
+        message: expect.stringContaining('Health path /health is reachable'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('representative traffic returned 5xx'),
+        ]),
+      },
+    });
+    expect(result['diagnosis']).toBeUndefined();
+    expect(result['suggested_call']).toBeUndefined();
+  });
+
+  it.each([
+    { statusCode: 401, exitCode: 0 },
+    { statusCode: 403, exitCode: 0 },
+    { statusCode: 404, exitCode: 0 },
+    { statusCode: 302, exitCode: 0 },
+  ])(
+    'diagnose_service does not warn on ambiguous representative traffic HTTP $statusCode',
+    async ({ statusCode, exitCode }) => {
+      const { ctx } = createServiceTargetContext();
+      vi.mocked(ctx.docker.execSimple)
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+        .mockResolvedValueOnce({
+          exitCode,
+          stdout: String(statusCode),
+          stderr: '',
+        });
+
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        httpCheck: { reachable: true, status_code: 200 },
+        trafficCheck: { status_code: statusCode },
+      });
+      expect(result['warnings']).toBeUndefined();
+    },
+  );
 
   it('diagnose_service distinguishes runtime env missing and suggests same-image env apply', async () => {
     const { ctx } = createServiceTargetContext();

@@ -47,6 +47,9 @@ type DeployLogRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getDeployLog']>
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
 type DeploymentReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
 
+const POST_DEPLOY_STABILITY_OBSERVE_MS = 12_000;
+const POST_DEPLOY_STABILITY_POLL_MS = 2_000;
+
 // Pipeline success events emit `url` for both internal and tunnel deploys —
 // most regular deploys pass an internal getProjectUrl-derived value
 // (`{name}.localhost` or `*.sslip.io`) which is exactly what we want to
@@ -70,6 +73,14 @@ interface ReadinessResult {
   readiness: DeploymentReadiness;
   ready: boolean;
   message?: string;
+}
+
+interface StabilityObservation {
+  status: 'stable' | 'unstable' | 'skipped';
+  observed_ms: number;
+  readiness: DeploymentReadiness;
+  message?: string;
+  result: ReadinessResult;
 }
 
 type ContainerState = {
@@ -203,6 +214,51 @@ async function waitForProjectReadiness(
     last = await inspectProjectReadiness(appCtx, projectId);
   }
   return last;
+}
+
+async function observeProjectStability(
+  appCtx: AppCtx,
+  projectId: string,
+  initial: ReadinessResult,
+  observeMs = POST_DEPLOY_STABILITY_OBSERVE_MS,
+): Promise<StabilityObservation> {
+  const started = Date.now();
+  if (!initial.ready) {
+    return {
+      status: 'skipped',
+      observed_ms: 0,
+      readiness: initial.readiness,
+      message: initial.message ?? readinessGuidance(initial.readiness),
+      result: initial,
+    };
+  }
+
+  let last = initial;
+  while (Date.now() - started < observeMs) {
+    const elapsed = Date.now() - started;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(POST_DEPLOY_STABILITY_POLL_MS, observeMs - elapsed)),
+    );
+    last = await inspectProjectReadiness(appCtx, projectId);
+    if (last.readiness === 'unhealthy') {
+      return {
+        status: 'unstable',
+        observed_ms: Date.now() - started,
+        readiness: last.readiness,
+        message:
+          last.message ??
+          'Container restarted, exited, or became unhealthy during the post-deploy stability window.',
+        result: last,
+      };
+    }
+  }
+
+  return {
+    status: 'stable',
+    observed_ms: Date.now() - started,
+    readiness: last.readiness,
+    result: last,
+  };
 }
 
 interface TargetAttachObservation {
@@ -1603,14 +1659,26 @@ export const deployPlanToolDefs: ToolDef[] = [
               const readiness = waitHealthy
                 ? await waitForProjectReadiness(appCtx, projectIdOverride ?? projectId, 30_000)
                 : await inspectProjectReadiness(appCtx, projectIdOverride ?? projectId);
-              const readinessMessage = readiness.message ?? readinessGuidance(readiness.readiness);
+              const stability =
+                waitHealthy && readiness.ready
+                  ? await observeProjectStability(appCtx, projectIdOverride ?? projectId, readiness)
+                  : undefined;
+              const finalReadiness =
+                stability?.status === 'unstable' ? stability.result : readiness;
+              const readinessMessage =
+                finalReadiness.message ?? readinessGuidance(finalReadiness.readiness);
+              const stabilityWarning =
+                stability?.status === 'unstable'
+                  ? (stability.message ??
+                    'Container restarted, exited, or became unhealthy after deploy success.')
+                  : undefined;
               const readinessWarnings =
-                readiness.readiness === 'healthy'
+                finalReadiness.readiness === 'healthy'
                   ? []
-                  : [readinessMessage ?? `readiness=${readiness.readiness}`];
-              const completionStatus = readiness.ready
+                  : [readinessMessage ?? `readiness=${finalReadiness.readiness}`];
+              const completionStatus = finalReadiness.ready
                 ? 'done'
-                : readiness.readiness === 'unhealthy'
+                : finalReadiness.readiness === 'unhealthy'
                   ? 'unhealthy'
                   : 'timeout';
               const finalProjectId = projectIdOverride ?? projectId;
@@ -1654,24 +1722,54 @@ export const deployPlanToolDefs: ToolDef[] = [
                   projectId: finalProjectId,
                   projectName: result.project_name,
                 }),
+                ...(completionStatus === 'unhealthy'
+                  ? {
+                      diagnostic_call: {
+                        tool: 'openlander_monitor',
+                        action: 'diagnose_service',
+                        params: {
+                          service_id:
+                            attachedServiceId ??
+                            targetIdentityResolver.deployableServiceIdForRuntimeProject(
+                              finalProjectId,
+                            ),
+                        },
+                      },
+                    }
+                  : {}),
                 ...targetAttach.fields,
                 ...(targetAttach.status ? { target_attach_status: targetAttach.status } : {}),
                 preferred_url: externalUrl ?? portAwarePreferred,
                 urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
                 internal_host: projectContainerName(routeName),
                 docker_host: getDockerHostType(),
-                readiness: readiness.readiness,
+                readiness: finalReadiness.readiness,
                 ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
+                ...(stability
+                  ? {
+                      post_deploy_stability: {
+                        status: stability.status,
+                        observed_ms: stability.observed_ms,
+                        readiness: stability.readiness,
+                        ...(stability.message ? { message: stability.message } : {}),
+                      },
+                    }
+                  : {}),
                 ...(payload.totalDurationMs
                   ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
                   : {}),
                 ...(timedOut || completionStatus === 'timeout' ? { timeout: true } : {}),
                 ...postDeploy,
-                ...([...readinessWarnings, ...(postDeployWarnings ?? []), ...targetAttach.warnings]
-                  .length > 0
+                ...([
+                  ...readinessWarnings,
+                  ...(stabilityWarning ? [stabilityWarning] : []),
+                  ...(postDeployWarnings ?? []),
+                  ...targetAttach.warnings,
+                ].length > 0
                   ? {
                       warnings: [
                         ...readinessWarnings,
+                        ...(stabilityWarning ? [stabilityWarning] : []),
                         ...(postDeployWarnings ?? []),
                         ...targetAttach.warnings,
                       ],
@@ -1688,7 +1786,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                         ],
                       },
                     }
-                  : readiness.ready && readiness.readiness === 'healthy'
+                  : finalReadiness.ready && finalReadiness.readiness === 'healthy'
                     ? {}
                     : {
                         _agent_guidance: {
@@ -1697,7 +1795,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                             'Deployment container is running, but readiness is not confirmed.',
                           next_steps: [
                             'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
-                            ...(readiness.readiness === 'no_healthcheck'
+                            ...(finalReadiness.readiness === 'no_healthcheck'
                               ? ['Probe the service URL before reporting end-user success']
                               : ['Wait and poll again, or inspect logs before reporting success']),
                           ],
