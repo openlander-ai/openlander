@@ -682,8 +682,32 @@ export async function runDeployableServiceAction(
     };
   }
 
+  const getBlueGreenEligibility =
+    typeof context.appCtx.pipeline.getBlueGreenEligibility === 'function'
+      ? context.appCtx.pipeline.getBlueGreenEligibility.bind(context.appCtx.pipeline)
+      : undefined;
+
   if (action === 'redeploy_app' && strategy === 'blue-green') {
-    const eligibility = await context.appCtx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+    if (!getBlueGreenEligibility) {
+      return {
+        status: 'blocked',
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        strategy: 'blue-green',
+        service: serviceSummary(service, project),
+        reasons: ['Blue-green eligibility checks are unavailable in this runtime.'],
+        fallback_call: {
+          tool: 'openlander_service',
+          action: 'redeploy_app',
+          params: { service_id: service.id, strategy: 'force' },
+        },
+        _agent_guidance: {
+          message: 'Blue-green redeploy could not verify eligibility, so no deploy was started.',
+          next_steps: ['If downtime is acceptable, call redeploy_app again with strategy="force".'],
+        },
+      };
+    }
+
+    const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
       healthCheckPath: healthCheckPath?.trim() || undefined,
     });
     if (!eligibility.supported) {
@@ -709,8 +733,8 @@ export async function runDeployableServiceAction(
       };
     }
   } else if (action === 'redeploy_app' && strategy === undefined) {
-    if (typeof context.appCtx.pipeline.getBlueGreenEligibility === 'function') {
-      const eligibility = await context.appCtx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+    if (getBlueGreenEligibility) {
+      const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
         healthCheckPath: healthCheckPath?.trim() || undefined,
       });
       if (eligibility.supported) {
@@ -825,7 +849,7 @@ export async function runDeployableServiceAction(
 
   return {
     status: action === 'restart_service' ? 'restarting' : 'deploying',
-    ...(action === 'redeploy_app' ? { strategy: strategy ?? 'force' } : {}),
+    ...(action === 'redeploy_app' ? { strategy } : {}),
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     service: serviceSummary(service, project),
     message: noCache
