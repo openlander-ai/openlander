@@ -16,7 +16,7 @@ import {
 } from '../../pipeline/traefik.js';
 import type { DeployLogRow, ProjectRow } from '../../db/types.js';
 import { loadServiceView, type ServiceView } from '../../db/views/service-view.js';
-import type { ToolDef } from './types.js';
+import type { ToolContext, ToolDef } from './types.js';
 import { resolveDeployableTarget } from './deployable-target.js';
 import {
   cleanupPreviewSchema,
@@ -25,6 +25,96 @@ import {
   listPreviewsSchema,
   previewDeploySchema,
 } from './schemas.js';
+
+type AppCtx = ToolContext['appCtx'];
+type DeployStatusReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
+
+interface DeployStatusReadinessResult {
+  readiness: DeployStatusReadiness;
+  message?: string;
+}
+
+type ContainerState = {
+  Running?: boolean;
+  Restarting?: boolean;
+  ExitCode?: number;
+  StartedAt?: string;
+  Health?: { Status?: string };
+};
+
+type ContainerInspectState = {
+  RestartCount?: number;
+  State?: ContainerState;
+};
+
+function isRecentContainerStart(value: unknown, maxAgeMs: number): boolean {
+  if (typeof value !== 'string') return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && Date.now() - parsed >= 0 && Date.now() - parsed <= maxAgeMs;
+}
+
+function readinessGuidance(readiness: DeployStatusReadiness): string | undefined {
+  if (readiness === 'unhealthy') {
+    return 'Container is running but healthcheck is failing. Call openlander_monitor.diagnose_service for logs, env, dependency checks, and probe output before reporting success.';
+  }
+  if (readiness === 'starting') {
+    return 'Container is running but still warming up. Poll openlander_monitor.diagnose_service or get_deploy_status before reporting success.';
+  }
+  if (readiness === 'no_healthcheck') {
+    return 'Container has no Docker HEALTHCHECK. Treat the deploy as running, but verify the app with openlander_monitor.diagnose_service or an HTTP probe if correctness matters.';
+  }
+  return undefined;
+}
+
+async function inspectContainerReadiness(
+  appCtx: AppCtx,
+  containerId: string,
+): Promise<DeployStatusReadinessResult> {
+  try {
+    const info = (await appCtx.docker.inspectContainer(containerId)) as ContainerInspectState;
+    const state = info.State ?? {};
+    if (state.Restarting || state.Running === false) {
+      return {
+        readiness: 'unhealthy',
+        message:
+          state.ExitCode === undefined
+            ? 'Container is not running.'
+            : `Container is not running (exit code ${String(state.ExitCode)}).`,
+      };
+    }
+
+    const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : 0;
+    if (
+      state.Running === true &&
+      restartCount >= 3 &&
+      isRecentContainerStart(state.StartedAt, 5 * 60 * 1000)
+    ) {
+      return {
+        readiness: 'unhealthy',
+        message: `Container restarted ${String(restartCount)} times recently. Treat this as a restart loop until diagnose_service/logs confirm the current process is stable.`,
+      };
+    }
+
+    if (!state.Health) {
+      return { readiness: 'no_healthcheck' };
+    }
+    if (state.Health.Status === 'healthy') {
+      return { readiness: 'healthy' };
+    }
+    if (state.Health.Status === 'unhealthy') {
+      return { readiness: 'unhealthy', message: 'Container healthcheck is unhealthy.' };
+    }
+    return {
+      readiness: 'starting',
+      message: `Container healthcheck is ${state.Health.Status ?? 'starting'}.`,
+    };
+  } catch (error) {
+    return {
+      readiness: 'starting',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 export const deployToolDefs: ToolDef[] = [
   {
@@ -384,7 +474,6 @@ export const deployToolDefs: ToolDef[] = [
           service?.project_id ?? log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
         const view = await resolveServiceView(inferredProjectId, project);
-        const health = view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown');
         const assignedPort = service?.assigned_port ?? view?.assignedPort ?? undefined;
         const routeService = service
           ? {
@@ -400,6 +489,17 @@ export const deployToolDefs: ToolDef[] = [
           : undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
+        const readiness =
+          phase === 'done' && view?.containerId
+            ? await inspectContainerReadiness(appCtx, view.containerId)
+            : undefined;
+        const readinessMessage =
+          readiness?.message ?? (readiness ? readinessGuidance(readiness.readiness) : undefined);
+        const status =
+          phase === 'done' && readiness?.readiness === 'unhealthy' ? 'unhealthy' : log.status;
+        const health =
+          readiness?.readiness ??
+          (view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown'));
         const completedAt = parseDBTimestamp(log.created_at);
         const durationMs =
           typeof log.duration_ms === 'number' && Number.isFinite(log.duration_ms)
@@ -416,7 +516,7 @@ export const deployToolDefs: ToolDef[] = [
           service_id: log.service_id,
           name: project?.name ?? inferredProjectId,
           phase,
-          status: log.status,
+          status,
           terminal: true,
           trigger: log.trigger,
           commit_sha: log.commit_sha,
@@ -427,6 +527,8 @@ export const deployToolDefs: ToolDef[] = [
               ? `${String(Math.round(log.duration_ms / 1000))}s`
               : null,
           health,
+          ...(readiness ? { readiness: readiness.readiness } : {}),
+          ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
           created_at: startedAt,
           completed_at: completedAt.toISOString(),
           ...(phase === 'done'
@@ -460,14 +562,39 @@ export const deployToolDefs: ToolDef[] = [
                 },
               }
             : {}),
+          ...(phase === 'done' && readiness?.readiness === 'unhealthy'
+            ? {
+                diagnostic_call: {
+                  tool: 'openlander_monitor',
+                  action: 'diagnose_service',
+                  params: { service_id: log.service_id },
+                },
+                warnings: [
+                  readinessMessage ??
+                    'Deployment log is successful, but current container readiness is unhealthy.',
+                ],
+              }
+            : {}),
           _agent_guidance: {
+            ...(phase === 'done' && readiness?.readiness === 'unhealthy'
+              ? {
+                  message:
+                    readinessMessage ??
+                    'The deploy log is successful, but the current container is unhealthy.',
+                }
+              : {}),
             next_steps:
               log.status === 'failed'
                 ? [
                     'Call get_build_log with this deploy_id for full raw build output.',
                     'Fix the issue, then redeploy the service.',
                   ]
-                : ['Use get_deploy_history for nearby deploys if you need broader context.'],
+                : phase === 'done' && readiness?.readiness === 'unhealthy'
+                  ? [
+                      'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
+                      'Inspect logs before reporting the deployment as healthy.',
+                    ]
+                  : ['Use get_deploy_history for nearby deploys if you need broader context.'],
           },
         };
       };
