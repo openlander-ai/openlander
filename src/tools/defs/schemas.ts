@@ -888,7 +888,7 @@ export const updateDeployPlanSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions)',
+      'JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions). For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
     ),
 });
 

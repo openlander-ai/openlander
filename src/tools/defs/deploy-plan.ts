@@ -535,6 +535,11 @@ function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['
       `Fix invalid env values: ${blockingIssues.map((issue) => `${issue.key} (${issue.code})`).join(', ')}`,
     );
   }
+  if (blockingIssues.some((issue) => issue.code === 'ENV_VALUE_UNTRUSTED_EXTERNAL')) {
+    steps.push(
+      'For user-owned external services, ask the user for the real value. If the user has supplied or confirmed it, call update_deploy_plan with updates.env.provided plus updates.env.trusted containing those keys.',
+    );
+  }
   const hasRequirements = (plan.env?.detected ?? []).some((entry) => entry.requirement);
   if (hasRequirements) {
     steps.push(
@@ -1169,7 +1174,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input". Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     mcpDescription:
-      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
+      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). For user-owned external env that the user supplied or confirmed, use env:{provided:{KEY:"..."},trusted:["KEY"]}. Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     inputSchema: updateDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1510,6 +1515,16 @@ export const deployPlanToolDefs: ToolDef[] = [
       });
 
       if (plan.status === 'needs_input') {
+        const nextSteps = buildNeedsInputNextSteps(plan);
+        if (
+          !((plan as Partial<DeployPlan>).env?.issues ?? []).some(
+            (issue) => issue.code === 'ENV_VALUE_UNTRUSTED_EXTERNAL',
+          )
+        ) {
+          nextSteps.push(
+            'Or call deploy_app again with env_vars including the missing/corrected keys',
+          );
+        }
         return buildPlanNeedsInputResponse({
           planId: plan.plan_id,
           missing: plan.missing,
@@ -1517,10 +1532,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           envIssues: (plan as Partial<DeployPlan>).env?.issues,
           warnings: plan.warnings,
           message: 'The generated deploy plan needs more input before execution.',
-          nextSteps: [
-            ...buildNeedsInputNextSteps(plan),
-            'Or call deploy_app again with env_vars including the missing/corrected keys',
-          ],
+          nextSteps,
         });
       }
 
@@ -2158,11 +2170,14 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envEntries = Object.entries(plan.env.provided);
       const detectedEnvEntries = Array.isArray(plan.env.detected) ? plan.env.detected : [];
       const envEntryByKey = new Map(detectedEnvEntries.map((entry) => [entry.key, entry]));
+      const trustedEnvKeys = new Set(
+        (plan.env.trusted ?? []).filter((key) => key in plan.env.provided),
+      );
       for (const [key, value] of envEntries) {
         const entry = envEntryByKey.get(key);
         const requirement = mergeEnvValueRequirement(key, entry?.requirement);
         const issues = validateEnvValue(key, value, requirement, entry?.required ?? false, {
-          trustedSource: false,
+          trustedSource: trustedEnvKeys.has(key),
         });
         for (const issue of issues) {
           checks.push({

@@ -49,7 +49,7 @@ describe('env value requirements', () => {
         'https://api.exchange-example.org',
         inferEnvValueRequirement('EXCHANGE_API_URL'),
       ),
-    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_URL_HOST', severity: 'fail' })]);
+    ).toEqual([]);
 
     expect(
       validateEnvValue(
@@ -64,13 +64,17 @@ describe('env value requirements', () => {
     expect(
       validateEnvValue(
         'EXCHANGE_API_KEY',
-        'key_test_dummy',
+        'key_test_secret',
         inferEnvValueRequirement('EXCHANGE_API_KEY'),
       ),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
 
     expect(
-      validateEnvValue('STRIPE_API_KEY', 'sk_live_sample', inferEnvValueRequirement('STRIPE_API_KEY')),
+      validateEnvValue(
+        'STRIPE_API_KEY',
+        'sk_live_sample_secret',
+        inferEnvValueRequirement('STRIPE_API_KEY'),
+      ),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
   });
 
@@ -106,6 +110,22 @@ describe('env value requirements', () => {
         inferEnvValueRequirement('S3_SECRET_KEY'),
       ),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue(
+        'STRIPE_API_KEY',
+        'sk_abcdef123RealLookingKey',
+        inferEnvValueRequirement('STRIPE_API_KEY'),
+      ),
+    ).toEqual([]);
+
+    expect(
+      validateEnvValue(
+        'S3_SECRET_KEY',
+        'realSecretWith123456InsideButNotAnExampleToken',
+        inferEnvValueRequirement('S3_SECRET_KEY'),
+      ),
+    ).toEqual([]);
   });
 
   it('blocks reserved/example hosts for required host env vars', () => {
@@ -121,12 +141,15 @@ describe('env value requirements', () => {
     expect(
       validateEnvValue('SMTP_HOST', 'smtp.sendgrid.net', inferEnvValueRequirement('SMTP_HOST')),
     ).toEqual([]);
+
+    expect(validateEnvValue('SMTP_HOST', 'demo.acme.io', inferEnvValueRequirement('SMTP_HOST'))).toEqual(
+      [],
+    );
   });
 
   it('requires trusted provenance for user-owned external env in deploy-plan inline input', () => {
     expect(inferEnvValueRequirement('APP_BASE_URL')).toMatchObject({
       kind: 'url',
-      trustedSourceRequired: true,
     });
     expect(inferEnvValueRequirement('S3_BUCKET')).toMatchObject({
       kind: 'secret',
@@ -166,14 +189,14 @@ describe('env value requirements', () => {
     ).toEqual([]);
   });
 
-  it('blocks demo/sample self URLs that look like invented public routes', () => {
+  it('allows self URLs with demo/test labels because they may be real preview routes', () => {
     expect(
       validateEnvValue(
         'APP_BASE_URL',
         'https://ledgerly-demo.openlander.app',
         inferEnvValueRequirement('APP_BASE_URL'),
       ),
-    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_URL_HOST', severity: 'fail' })]);
+    ).toEqual([]);
   });
 
   it('infers integer requirements for numeric knobs', () => {

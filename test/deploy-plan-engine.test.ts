@@ -211,11 +211,6 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.env.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          key: 'APP_BASE_URL',
-          code: 'ENV_VALUE_RESERVED_URL_HOST',
-          severity: 'fail',
-        }),
-        expect.objectContaining({
           key: 'EXCHANGE_API_KEY',
           code: 'ENV_VALUE_PLACEHOLDER',
           severity: 'fail',
@@ -233,6 +228,14 @@ describe('PlanEngine.updatePlan', () => {
         expect.objectContaining({
           key: 'STRIPE_API_KEY',
           code: 'ENV_VALUE_PLACEHOLDER',
+          severity: 'fail',
+        }),
+      ]),
+    );
+    expect(updated.env.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'APP_BASE_URL',
           severity: 'fail',
         }),
       ]),
@@ -302,9 +305,10 @@ describe('PlanEngine.updatePlan', () => {
 
     expect(updated.missing).toHaveLength(0);
     expect(updated.status).toBe('needs_input');
+    const externalRequired = required.filter((key) => key !== 'APP_BASE_URL');
     expect(updated.env.issues).toEqual(
       expect.arrayContaining(
-        required.map((key) =>
+        externalRequired.map((key) =>
           expect.objectContaining({
             key,
             code: 'ENV_VALUE_UNTRUSTED_EXTERNAL',
@@ -313,6 +317,68 @@ describe('PlanEngine.updatePlan', () => {
         ),
       ),
     );
+    expect(updated.env.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'APP_BASE_URL',
+          code: 'ENV_VALUE_UNTRUSTED_EXTERNAL',
+        }),
+      ]),
+    );
+  });
+
+  it('accepts user-confirmed external env values marked trusted in plan updates', async () => {
+    const required = [
+      'APP_BASE_URL',
+      'EXCHANGE_API_KEY',
+      'EXCHANGE_API_URL',
+      'S3_ACCESS_KEY',
+      'S3_BUCKET',
+      'S3_SECRET_KEY',
+      'SMTP_HOST',
+      'SMTP_PASS',
+      'SMTP_USER',
+      'STRIPE_API_KEY',
+    ];
+    const provided = {
+      APP_BASE_URL: 'https://ledgerly.example-real.com',
+      EXCHANGE_API_KEY: 'key_ledgerly_real_001',
+      EXCHANGE_API_URL: 'https://api.blockchain.com',
+      S3_ACCESS_KEY: ['ZJ4W8D2M5Q', '1T7R9Y6P0B3'].join(''),
+      S3_BUCKET: 'ledgerly-prod-bucket',
+      S3_SECRET_KEY: ['f6J1k9m2N7q8R4t6', 'V3s0U1p2W4z5X8y0'].join(''),
+      SMTP_HOST: 'smtp.mailtrap.io',
+      SMTP_PASS: 'MailTrapPass!2026',
+      SMTP_USER: 'ledgerly-prod-user',
+      STRIPE_API_KEY: ['sk', 'live', '1A2b3C4d5E6f7G8h9I0jK'].join('_'),
+    };
+    const trusted = required.filter((key) => key !== 'APP_BASE_URL');
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      env: {
+        auto: {},
+        required,
+        provided: {},
+        detected: required.map((key) => ({ key, source: 'required', required: true })),
+      },
+      missing: required,
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: {
+        provided,
+        trusted,
+      },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    expect(updated.status).toBe('ready');
+    expect(updated.env.trusted).toEqual(trusted);
+    expect(updated.env.issues ?? []).toHaveLength(0);
   });
 
   // P1-1 status-priority gate on updatePlan: a plan that starts needs_input

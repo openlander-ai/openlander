@@ -100,6 +100,7 @@ export interface PlanEnv {
   auto: Record<string, string>;
   required: string[];
   provided: Record<string, string>;
+  trusted?: string[];
   detected: PlanEnvEntry[];
   issues?: EnvValueIssue[];
 }
