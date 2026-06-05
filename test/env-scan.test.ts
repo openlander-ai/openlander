@@ -199,6 +199,34 @@ describe('scanForEnvUsage', () => {
     expect(v).toBeDefined();
     expect(v?.optional).toBe(false);
   });
+
+  it('detects env config schema keys used through dynamic process.env lookup', () => {
+    writeFileSync(
+      join(tmp, 'server.js'),
+      `
+const schema = [
+  { key: 'JWT_SECRET', kind: 'minlen', min: 16 },
+  { key: 'APP_BASE_URL', kind: 'url' },
+  { key: 'OPTIONAL_FLAG', kind: 'optional' },
+];
+for (const item of schema) {
+  const value = process.env[item.key];
+}
+`,
+    );
+
+    const r = scanForEnvUsage(tmp);
+    const jwt = r.vars.find((v) => v.key === 'JWT_SECRET');
+    const appBase = r.vars.find((v) => v.key === 'APP_BASE_URL');
+    const optional = r.vars.find((v) => v.key === 'OPTIONAL_FLAG');
+
+    expect(jwt).toBeDefined();
+    expect(jwt?.optional).toBe(false);
+    expect(appBase).toBeDefined();
+    expect(appBase?.optional).toBe(false);
+    expect(optional).toBeDefined();
+    expect(optional?.optional).toBe(true);
+  });
 });
 
 describe('scanRepoEnvVars', () => {

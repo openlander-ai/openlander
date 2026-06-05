@@ -316,6 +316,7 @@ describe('ServiceManager extended DB/user operations', () => {
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
 
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
     const result = await manager.createUser('svc-pg', 'app_user', 'pw123', { database: 'appdb' });
@@ -328,10 +329,14 @@ describe('ServiceManager extended DB/user operations', () => {
     });
 
     const commands = dockerHarness.getExecCommands('svc-pg-container');
-    expect(commands).toHaveLength(3);
+    expect(commands).toHaveLength(4);
     expect(commands[1]?.join(' ')).toContain('CREATE ROLE "app_user" LOGIN PASSWORD');
     expect(commands[2]?.join(' ')).toContain(
       'GRANT ALL PRIVILEGES ON DATABASE "appdb" TO "app_user";',
+    );
+    expect(commands[3]?.join(' ')).toContain('GRANT USAGE, CREATE ON SCHEMA public TO "app_user";');
+    expect(commands[3]?.join(' ')).toContain(
+      'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "app_user";',
     );
   });
 
