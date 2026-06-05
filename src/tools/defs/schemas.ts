@@ -848,7 +848,7 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe(
-        'Create the plan for deploying the first single Application/worker into an existing Project. Use after create_project when the Project already contains Database/Cache resources needed before first boot.',
+        'Create the plan for deploying one new Application/worker into an existing Project. For new apps with proposed safe Database/Cache resources, prefer the deploy-plan approval path so OpenLander owns same-project provisioning.',
       ),
   })
   .superRefine((data, ctx) => {

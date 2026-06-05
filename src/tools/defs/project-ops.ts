@@ -182,9 +182,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'create_project',
     riskLevel: 'low',
     description:
-      'Create an empty Project before provisioning Database/Cache resources or attaching Applications/workers. This does not deploy code, create a repository source, or start a container. Use it for the smooth first-deploy order: create_project -> create_service(project_id) when needed -> deploy_app(target_project_id).',
+      'Create an empty Project for an existing group, manual Database/Cache resource setup, or later Application/worker attach. This does not deploy code, create a repository source, or start a container. For new apps with safe PostgreSQL/Redis proposals, prefer create_deploy_plan -> execute_deploy_plan approval so OpenLander owns same-project provisioning.',
     mcpDescription:
-      'Create an empty Project. Use this before create_service(project_id) and deploy_app(target_project_id) for a brand-new app that needs Project-scoped Database/Cache resources.',
+      'Create an empty Project for existing groups or manual resource setup. For a brand-new app with proposed safe Database/Cache resources, prefer the deploy-plan approval flow.',
     inputSchema: createProjectSchema,
     execute: async (args, context) => {
       const name = typeof args['name'] === 'string' ? args['name'].trim() : '';

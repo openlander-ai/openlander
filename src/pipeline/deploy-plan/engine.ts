@@ -35,7 +35,11 @@ import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
-import { ProjectNotFoundError, ServiceConfigError } from '../../errors.js';
+import {
+  ProjectAlreadyExistsError,
+  ProjectNotFoundError,
+  ServiceConfigError,
+} from '../../errors.js';
 import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 
 const log = createModuleLogger('plan-engine');
@@ -1360,7 +1364,7 @@ export class PlanEngine {
       }
     }
 
-    const targetProject =
+    let targetProject: ExecutePlanProjectTarget | null =
       attachTargetProject ??
       (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
       (await this.db.getProjectByName(plan.app.name)) ??
@@ -1374,33 +1378,63 @@ export class PlanEngine {
     );
 
     if (hasApprovedCreate && !targetProject) {
-      return {
-        attachTargetProject,
-        targetProject,
-        response: {
-          plan_id: planId,
-          status: 'needs_target_project',
-          project_name: plan.app.name,
-          message:
-            'Database/Cache auto-provisioning needs an existing Project. This is a new app, so create the Project first or execute the plan with target_project_id.',
-          approval_required: {
-            create_resources: this.safeProposedResources(plan.services)
-              .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
-              .map((svc) => this.proposedResourceIdentifier(svc)),
-          },
-          _agent_guidance: {
-            next_steps: [
-              'Call openlander_project.create_project with the intended Project name.',
-              'Create the Database/Cache resource in that Project with openlander_managed_service.create_service(project_id=...).',
-              'Retry deploy_app or execute_deploy_plan with target_project_id so the first Application attaches to the existing Project.',
-              'If the user already has a real external connection URL, pass it in env_vars and execute without approving Database/Cache creation.',
-            ],
-          },
-        },
-      };
+      targetProject = await this.createPlanOwnedTargetProject(plan);
     }
 
     return { attachTargetProject, targetProject };
+  }
+
+  private async createPlanOwnedTargetProject(plan: DeployPlan): Promise<ExecutePlanProjectTarget> {
+    const existing = await this.db.getProjectByName(plan.app.name);
+    if (existing) {
+      return { id: existing.id, name: existing.name };
+    }
+
+    const { nanoid } = await import('nanoid');
+    const source = plan.build.method === 'image' ? 'image' : 'git';
+    try {
+      const created = await this.db.createProject({
+        id: nanoid(12),
+        name: plan.app.name,
+        repoUrl: source === 'image' ? '' : plan.app.source.repo_url,
+        branch: source === 'image' ? undefined : plan.app.source.branch,
+        dockerfilePath: plan.build.dockerfile,
+        dockerTarget: plan.build.target,
+        buildContext: plan.build.context,
+        buildMethod: plan.build.method === 'compose' ? 'compose' : null,
+        source,
+        ...(source === 'image'
+          ? {
+              imageUrl: plan.app.source.image_url,
+            }
+          : {}),
+      });
+      return { id: created.id, name: created.name };
+    } catch (error) {
+      if (error instanceof ProjectAlreadyExistsError) {
+        const createdByRace = await this.db.getProjectByName(plan.app.name);
+        if (createdByRace) {
+          return { id: createdByRace.id, name: createdByRace.name };
+        }
+      }
+      throw error;
+    }
+  }
+
+  private bindPlanToExecutionTarget(params: {
+    plan: DeployPlan;
+    attachTargetProject: ExecutePlanProjectTarget | null;
+    targetProject: ExecutePlanProjectTarget | null;
+  }): DeployPlan {
+    const { plan, attachTargetProject, targetProject } = params;
+    if (attachTargetProject || !targetProject || plan.project_id === targetProject.id) {
+      return plan;
+    }
+    return {
+      ...plan,
+      project_id: targetProject.id,
+      target_project_id: undefined,
+    };
   }
 
   private async acquirePlanDeployLock(params: {
@@ -1499,11 +1533,12 @@ export class PlanEngine {
   private async resolvePlanBaseEnv(params: {
     plan: DeployPlan;
     attachTargetProject: ExecutePlanProjectTarget | null;
+    targetProject: ExecutePlanProjectTarget | null;
   }): Promise<Record<string, string>> {
-    const { plan, attachTargetProject } = params;
+    const { plan, attachTargetProject, targetProject } = params;
     return await resolveEnvVars(
       {
-        projectId: attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
+        projectId: targetProject?.id ?? attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
         autoEnvVars: plan.env.auto,
         inlineEnvVars: plan.env.provided,
       },
@@ -1925,11 +1960,11 @@ export class PlanEngine {
     this.assertPlanIsExecutable(freshPlan);
     this.assertValidProjectName(freshPlan.app.name);
 
-    const plan = this.transitionApprovedPlanForExecution(freshPlan);
-    const planExecution = this.getExecutionContext(plan);
+    const approvedPlan = this.transitionApprovedPlanForExecution(freshPlan);
+    const planExecution = this.getExecutionContext(approvedPlan);
     const targetResolution = await this.resolveExecuteTarget({
       planId,
-      plan,
+      plan: approvedPlan,
       planExecution,
       approvedSafeResources: approvalGate.approvedSafeResources,
     });
@@ -1938,6 +1973,11 @@ export class PlanEngine {
     }
 
     const { attachTargetProject, targetProject } = targetResolution;
+    const plan = this.bindPlanToExecutionTarget({
+      plan: approvedPlan,
+      attachTargetProject,
+      targetProject,
+    });
     const deployLock = await this.acquirePlanDeployLock({
       planId,
       lockSessionId,
@@ -1960,7 +2000,7 @@ export class PlanEngine {
         approvedSafeResources: approvalGate.approvedSafeResources,
       });
       const mergedEnv = shouldOverlapBuildAndProvision
-        ? await this.resolvePlanBaseEnv({ plan, attachTargetProject })
+        ? await this.resolvePlanBaseEnv({ plan, attachTargetProject, targetProject })
         : await this.resolvePlanEnv({
             plan,
             attachTargetProject,

@@ -149,9 +149,7 @@ describe('deploy MCP guidance', () => {
     const guidance = result['_agent_guidance'] as Record<string, unknown>;
     expect(String(guidance['message'])).toContain('did not start a redeploy');
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_service_config');
-    expect((guidance['next_steps'] as string[]).join('\n')).toContain(
-      'update_application_source',
-    );
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_application_source');
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('stored branch');
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
@@ -1081,6 +1079,8 @@ describe('deploy MCP guidance', () => {
     expect(result.services).toBeDefined();
     expect((result.services as unknown[]).length).toBeGreaterThan(0);
     expect(result._agent_guidance).toBeDefined();
+    expect(JSON.stringify(result._agent_guidance)).toContain('execute_deploy_plan will create/own');
+    expect(JSON.stringify(result._agent_guidance)).not.toContain('create_project');
     // Must NOT proceed to execute — approval has not been given.
     expect(ctx.planEngine.executePlan).not.toHaveBeenCalled();
   });

@@ -166,11 +166,11 @@ only. Standalone `create_service` creates the Database/Cache/Storage resource an
 that Application to apply saved env. If the project is empty, deploy the first app
 with `deploy_app(target_project_id=...)`.
 
-Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
-brand-new app (no project row yet) returns `needs_target_project` and creates nothing. Create the
-project first with `create_project`, create any required Database/Cache/Storage resource with that `project_id`,
-then deploy the app with `target_project_id`. If the user already has a real external connection
-URL such as RDS or Upstash, pass it in `env_vars` and skip Database/Cache/Storage resource creation.
+For brand-new apps, approved safe resources are provisioned into the same Project/network that the
+app deploy uses. The plan engine creates/owns that target Project before provisioning, so agents do
+not need to hand-assemble `create_project` -> `create_service` -> `deploy_app(target_project_id)`
+for the common PostgreSQL/Redis case. If the user already has a real external connection URL such
+as RDS or Upstash, pass it in `env_vars` and skip Database/Cache/Storage resource creation.
 Shared OpenLander-provisioned Database/Cache resources and external TCP database/cache endpoints are not part of the
 v0.1 MCP surface.
 
@@ -319,8 +319,8 @@ List active preview deployments. No parameters.
 
 ### `create_project`
 
-Create an empty Project before provisioning Database/Cache/Storage resources or attaching
-the first Application. This creates no runtime container and
+Create an empty Project before attaching an Application/worker to an existing group or manually
+provisioning Database/Cache/Storage resources. This creates no runtime container and
 does not set a repository source.
 
 | Parameter      | Type     | Required | Description                  |
@@ -330,11 +330,11 @@ does not set a repository source.
 | `description`  | string   | No       | Optional project description |
 | `tags`         | string[] | No       | Optional project tags        |
 
-For a new app that needs PostgreSQL/Redis/etc. before first boot, use:
-`create_project` -> `create_service(project_id=...)` -> `deploy_app(target_project_id=...)`.
-Do not deploy with a placeholder connection string just to create the project. If the user has a
-real external connection URL, pass it through `env_vars` instead of creating an OpenLander-managed
-service.
+For a typical new app that needs PostgreSQL/Redis/etc. before first boot, prefer the deploy-plan
+approval flow so OpenLander keeps the app and resources on one Project/network. Use this manual
+Project-first path only for existing groups, shared/external dependencies, or resource types the
+plan cannot auto-provision. Do not deploy with a placeholder connection string just to create the
+project.
 
 ### `list_projects`
 

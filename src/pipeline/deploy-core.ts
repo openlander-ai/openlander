@@ -833,15 +833,22 @@ export class DeployPipeline {
 
   async startMonorepoDeploy(config: MonorepoConfig): Promise<StartMonorepoResult> {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
-    const parentId = nanoid(12);
+    const existingParent = await this.db.getProjectByName(parentName);
+    const parentId = existingParent?.id ?? nanoid(12);
 
-    // Create parent record NOW for immediate status queries
-    await this.db.createProject({
-      id: parentId,
-      name: parentName,
-      repoUrl: config.repoUrl,
-      branch: config.branch,
-    });
+    // Create or reuse the parent record NOW for immediate status queries.
+    // Plan execution may pre-create this row so managed resources and monorepo
+    // children share one target Project/network.
+    if (existingParent) {
+      await this.assertProjectMutable(existingParent);
+    } else {
+      await this.db.createProject({
+        id: parentId,
+        name: parentName,
+        repoUrl: config.repoUrl,
+        branch: config.branch,
+      });
+    }
     await this.stateManager.transition(parentId, 'building', 'deploy-started');
     this.jobManager?.trackJob(parentId, parentName);
 

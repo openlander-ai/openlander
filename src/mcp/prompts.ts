@@ -45,26 +45,22 @@ const PROMPTS: PromptDef[] = [
 ## Recommended Deployment Flow
 
 1. **Preflight** — Call \`get_system_stats\` to check disk/memory.
-2. **Choose Project order** — For a simple Application with no pre-created Database/Cache resources, \`deploy_app\` is the one-call front door: pass \`repo_url\` (or \`image\`) + \`name\`. If the Application needs an OpenLander-created Database/Cache before first boot, call \`create_project\` first, then compatibility action \`create_service(project_id=...)\`, then \`deploy_app(target_project_id=...)\`. If the user already has a real external URL such as RDS or Upstash, pass it in \`env_vars\` and skip \`create_service\`. Do not use placeholder connection strings just to force Project creation.
-3. **Approve proposed Database/Cache creation** — When a plan would auto-provision a Project-scoped Database/Cache resource (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). Auto-provisioning works only when the target Project already exists; for a brand-new Application that needs a Database/Cache before first boot, use \`create_project\` before creating/executing the plan. If the dependency is external and the user provides a real connection URL, pass it in \`env_vars\` instead of creating an OpenLander Database/Cache.
-4. **Link a resource manually (alternative)** — For Compose stacks, not-auto-creatable resources, or an external/shared dependency: compatibility action \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. If the Project already has an Application/Compose workload, redeploy it to apply saved env. If the Project is empty, deploy the first Application with \`deploy_app(target_project_id=...)\`.
+2. **Choose Project order** — For a new Application, prefer the composite front door: \`deploy_app\` with \`repo_url\` (or \`image\`) + \`name\`, or \`create_deploy_plan\` followed by \`execute_deploy_plan\`. If the plan proposes safe Database/Cache resources, approve them through \`execute_deploy_plan\`; OpenLander owns the target Project, same-project provisioning, and env wiring. If the user already has a real URL such as RDS or Upstash, pass it in \`env_vars\` and skip OpenLander-managed resource creation. Do not use placeholder connection strings just to force Project creation.
+3. **Approve proposed Database/Cache creation** — When a plan would auto-provision a Project-scoped Database/Cache resource (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). For a brand-new Application, approved resources are provisioned into the same target Project/network that the app deploy uses. If the dependency is external and the user provides a real connection URL, pass it in \`env_vars\` instead of creating an OpenLander Database/Cache.
+4. **Link a resource manually (alternative)** — For Compose stacks, not-auto-creatable resources, or an external/shared dependency: compatibility action \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. Use this only when the composite plan cannot own the resource lifecycle.
 5. **Monitor** — Behavior depends on the path. A **new Application** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** Application/Compose workload (\`service_id\`/\`service_name\`, or a single-workload \`name\`) it delegates to \`redeploy_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
 6. **On failure** — use the \`recover-failed-deploy\` prompt: gather evidence (\`get_build_log\`, \`get_logs\`, \`diagnose_service\`, \`diagnose_host_resources\`), apply the fix, and \`redeploy_app\`.
 
 ## Manual Service-Link Pattern (alternative to step 3 auto-provisioning)
 
 \`\`\`
-// 1. Create the Project before the first Application if it needs DB/cache on boot
-create_project({ name: "myapp" })
+// 1. Create/inspect the plan; it can propose safe Database/Cache resources.
+create_deploy_plan({ name: "myapp", repo_url: "https://github.com/user/repo" })
 
-// 2. Create the Database/Cache resource in that Project
-create_service({ name: "mydb", template: "postgresql", project_id: "proj_..." })
-// Returns: { suggested_env: [{ key: "DATABASE_URL", value: "postgresql://..." }] }
+// 2. Approve safe proposed resources; OpenLander keeps app + DB/cache on one Project/network.
+execute_deploy_plan({ plan_id: "plan_...", approve_all_safe_resources: true })
 
-// 3. Deploy the first Application into the existing Project
-deploy_app({ target_project_id: "proj_...", name: "myapp-web", repo_url: "https://github.com/user/repo" })
-
-// Later updates: set_env_vars({ service_name: "myapp-web", variables: '{"DATABASE_URL": "..."}' }) then redeploy_app(...)
+// Manual fallback only: create_service(...) + set_env_vars(...) when the composite plan cannot own the dependency.
 \`\`\`
 
 ## Env Var Conventions
