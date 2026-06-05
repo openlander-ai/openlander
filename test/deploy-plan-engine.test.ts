@@ -239,6 +239,82 @@ describe('PlanEngine.updatePlan', () => {
     );
   });
 
+  it('keeps plan in needs_input for plausible but untrusted external env values', async () => {
+    const required = [
+      'APP_BASE_URL',
+      'EXCHANGE_API_KEY',
+      'EXCHANGE_API_URL',
+      'S3_ACCESS_KEY',
+      'S3_BUCKET',
+      'S3_SECRET_KEY',
+      'SMTP_HOST',
+      'SMTP_PASS',
+      'SMTP_USER',
+      'STRIPE_API_KEY',
+    ];
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      env: {
+        auto: {},
+        required,
+        provided: {},
+        detected: required.map((key) => {
+          if (key === 'APP_BASE_URL') {
+            return {
+              key,
+              source: 'config schema',
+              required: true,
+              requirement: { kind: 'url' as const, source: 'schema' as const },
+            };
+          }
+          if (key === 'EXCHANGE_API_KEY') {
+            return {
+              key,
+              source: 'config schema',
+              required: true,
+              requirement: { kind: 'prefix' as const, source: 'schema' as const, prefix: 'key_' },
+            };
+          }
+          return { key, source: 'required', required: true };
+        }),
+      },
+      missing: required,
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: {
+        APP_BASE_URL: 'https://www.google.com',
+        EXCHANGE_API_KEY: 'key_ledgerly_demo_001',
+        EXCHANGE_API_URL: 'https://api.blockchain.com',
+        S3_ACCESS_KEY: ['ZJ4W8D2M5Q', '1T7R9Y6P0B3'].join(''),
+        S3_BUCKET: 'ledgerly-demo-bucket',
+        S3_SECRET_KEY: ['f6J1k9m2N7q8R4t6', 'V3s0U1p2W4z5X8y0'].join(''),
+        SMTP_HOST: 'smtp.mailtrap.io',
+        SMTP_PASS: 'MailTrapPass!2026',
+        SMTP_USER: 'ledgerly-demo-user',
+        STRIPE_API_KEY: ['sk', 'live', '1A2b3C4d5E6f7G8h9I0jK'].join('_'),
+      },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    expect(updated.status).toBe('needs_input');
+    expect(updated.env.issues).toEqual(
+      expect.arrayContaining(
+        required.map((key) =>
+          expect.objectContaining({
+            key,
+            code: 'ENV_VALUE_UNTRUSTED_EXTERNAL',
+            severity: 'fail',
+          }),
+        ),
+      ),
+    );
+  });
+
   // P1-1 status-priority gate on updatePlan: a plan that starts needs_input
   // (missing user secret) AND carries a safe proposed managed resource must
   // become needs_approval (NOT ready) once the secret is filled — otherwise the

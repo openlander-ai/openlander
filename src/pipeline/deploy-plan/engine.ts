@@ -4,7 +4,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
 import { scanForEnvUsage } from '../env-scan.js';
-import { inferEnvValueRequirement, validateEnvValue } from '../env-requirements.js';
+import {
+  inferEnvValueRequirement,
+  mergeEnvValueRequirement,
+  validateEnvValue,
+} from '../env-requirements.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { ManagedServiceLinker } from '../managed-service-linker.js';
@@ -602,8 +606,12 @@ export class PlanEngine {
 
     for (const [key, value] of Object.entries(providedEnv)) {
       const entry = byKey.get(key);
-      const requirement = entry?.requirement ?? inferEnvValueRequirement(key);
-      issues.push(...validateEnvValue(key, value, requirement, entry?.required ?? false));
+      const requirement = mergeEnvValueRequirement(key, entry?.requirement);
+      issues.push(
+        ...validateEnvValue(key, value, requirement, entry?.required ?? false, {
+          trustedSource: false,
+        }),
+      );
     }
 
     return issues;
