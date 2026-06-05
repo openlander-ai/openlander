@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Allow deploy plans to accept user-confirmed external environment values through
+  a trusted update path while keeping untrusted inline SaaS values blocked.
+- Treat app self/base URLs as normal app configuration instead of external SaaS
+  credentials, and narrow fake/reserved env heuristics to avoid blocking real
+  demo/test hosts or secrets containing common substrings.
+
 ## [0.1.14-rc.16] - 2026-06-06
 
 ### Fixed
