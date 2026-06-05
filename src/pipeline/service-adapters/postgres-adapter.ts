@@ -44,6 +44,23 @@ export class PostgresAdapter implements ServiceAdapter {
         if (result.exitCode !== 0) {
           throw new Error(result.stderr.trim() || result.stdout.trim());
         }
+        const credentialResult = await execInServiceContainer(
+          runtime,
+          service,
+          [
+            'sh',
+            '-c',
+            'PGPASSWORD="$1" psql -h 127.0.0.1 -v ON_ERROR_STOP=1 -U "$2" -d "$3" -t -A -c "SELECT 1"',
+            'openlander-pg-ready',
+            credentials.password,
+            credentials.user,
+            credentials.database,
+          ],
+          { throwOnNonZeroExit: false },
+        );
+        if (credentialResult.exitCode !== 0) {
+          throw new Error(credentialResult.stderr.trim() || credentialResult.stdout.trim());
+        }
       },
       {
         maxAttempts: 30,

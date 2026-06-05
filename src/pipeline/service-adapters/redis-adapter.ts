@@ -25,17 +25,18 @@ export class RedisAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
-    const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
-        const logs = await runtime.getLogs(containerId, 200);
-        if (!logs.includes('Ready to accept connections')) {
-          throw new Error('Readiness log line not found yet');
+        const result = await execInServiceContainer(runtime, service, ['redis-cli', 'PING'], {
+          throwOnNonZeroExit: false,
+        });
+        if (result.exitCode !== 0 || result.stdout.trim() !== 'PONG') {
+          throw new Error(result.stderr.trim() || result.stdout.trim() || 'Redis PING failed');
         }
       },
       {
         maxAttempts: 30,
-        intervalMs: 2000,
+        intervalMs: 1000,
         description: `Redis service: ${service.id}`,
       },
     );

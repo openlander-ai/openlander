@@ -28,7 +28,7 @@ export interface EnvValueIssue {
 }
 
 const PLACEHOLDER_PATTERN =
-  /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/i;
+  /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|dummy|fake|sample|test[-_](?:value|secret|key|token)|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/i;
 
 const URL_KEY_PATTERN = /(?:^|_)(URL|URI|DSN|ENDPOINT|CONNECTION)$/i;
 const INTEGER_KEY_PATTERN = /(?:^|_)(PORT|MAX|MIN|LIMIT|TTL|TIMEOUT|RETRIES|INTERVAL)$/i;
@@ -195,6 +195,12 @@ function isReservedUrlHost(value: string): boolean {
       hostname === 'example.com' ||
       hostname === 'example.org' ||
       hostname === 'example.net' ||
+      hostname
+        .split('.')
+        .some(
+          (label) =>
+            label === 'example' || label.endsWith('-example') || label.startsWith('example-'),
+        ) ||
       hostname.endsWith('.example.com') ||
       hostname.endsWith('.example.org') ||
       hostname.endsWith('.example.net') ||

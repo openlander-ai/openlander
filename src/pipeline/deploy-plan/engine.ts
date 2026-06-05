@@ -8,6 +8,7 @@ import { inferEnvValueRequirement, validateEnvValue } from '../env-requirements.
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { ManagedServiceLinker } from '../managed-service-linker.js';
+import { getServiceAdapter } from '../service-adapters/index.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import {
   extractProjectName,
@@ -743,6 +744,7 @@ export class PlanEngine {
     // the connection string keeps the persisted env identical to the deploy-time
     // value from getSuggestedEnv.
     try {
+      await this.waitForProvisionedServiceReady(created, planService, envVarName);
       const suggestedEnv = await this.serviceManager.getSuggestedEnv(created, {
         targetProjectId: targetProject.id,
       });
@@ -774,6 +776,38 @@ export class PlanEngine {
         );
       }
       throw provisionError;
+    }
+  }
+
+  private async waitForProvisionedServiceReady(
+    service: ServiceRow,
+    planService: PlanService,
+    envVarName: string,
+  ): Promise<void> {
+    if (!this.docker) {
+      throw new ServiceConfigError(
+        `Managed resource ${service.name} (${planService.type}) cannot be checked before app start because Docker is unavailable.`,
+        { serviceId: service.id, serviceType: planService.type, envVarName },
+      );
+    }
+
+    const adapter = getServiceAdapter(service.kind) ?? getServiceAdapter(planService.type);
+    if (!adapter) {
+      log.warn(
+        { serviceId: service.id, serviceType: planService.type, envVarName },
+        'Skipping managed resource readiness gate because no adapter is available',
+      );
+      return;
+    }
+
+    try {
+      await adapter.waitForReady(service, this.docker);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ServiceConfigError(
+        `Managed resource ${service.name} (${planService.type}) was not ready before app start: ${message}`,
+        { serviceId: service.id, serviceType: planService.type, envVarName },
+      );
     }
   }
 

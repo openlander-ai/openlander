@@ -285,6 +285,7 @@ describe('ServiceManager extended DB/user operations', () => {
     dockerHarness.setContainerRunning('svc-pg-container', true);
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
 
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
     const result = await manager.createDatabase('svc-pg', 'appdb');
@@ -298,7 +299,8 @@ describe('ServiceManager extended DB/user operations', () => {
 
     const commands = dockerHarness.getExecCommands('svc-pg-container');
     expect(commands[0]?.slice(0, 3)).toEqual(['pg_isready', '-U', 'openlander']);
-    expect(commands[1]?.join(' ')).toContain('CREATE DATABASE "appdb"');
+    expect(commands[1]?.join(' ')).toContain('openlander-pg-ready');
+    expect(commands[2]?.join(' ')).toContain('CREATE DATABASE "appdb"');
   });
 
   it('createUser() creates postgres user and grants DB permissions via mocked exec', async () => {
@@ -317,6 +319,7 @@ describe('ServiceManager extended DB/user operations', () => {
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
 
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
     const result = await manager.createUser('svc-pg', 'app_user', 'pw123', { database: 'appdb' });
@@ -329,13 +332,14 @@ describe('ServiceManager extended DB/user operations', () => {
     });
 
     const commands = dockerHarness.getExecCommands('svc-pg-container');
-    expect(commands).toHaveLength(4);
-    expect(commands[1]?.join(' ')).toContain('CREATE ROLE "app_user" LOGIN PASSWORD');
-    expect(commands[2]?.join(' ')).toContain(
+    expect(commands).toHaveLength(5);
+    expect(commands[1]?.join(' ')).toContain('openlander-pg-ready');
+    expect(commands[2]?.join(' ')).toContain('CREATE ROLE "app_user" LOGIN PASSWORD');
+    expect(commands[3]?.join(' ')).toContain(
       'GRANT ALL PRIVILEGES ON DATABASE "appdb" TO "app_user";',
     );
-    expect(commands[3]?.join(' ')).toContain('GRANT USAGE, CREATE ON SCHEMA public TO "app_user";');
-    expect(commands[3]?.join(' ')).toContain(
+    expect(commands[4]?.join(' ')).toContain('GRANT USAGE, CREATE ON SCHEMA public TO "app_user";');
+    expect(commands[4]?.join(' ')).toContain(
       'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "app_user";',
     );
   });
@@ -352,6 +356,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const dockerHarness = createMockDockerHarness();
     dockerHarness.setContainerRunning('svc-pg-container', true);
     dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
     dockerHarness.queueExecResult('svc-pg-container', {
       exitCode: 0,
       stdout: 'hotdeal_db|1234567\nusers_db|8901234\n',
@@ -365,7 +370,7 @@ describe('ServiceManager extended DB/user operations', () => {
     ]);
 
     const commands = dockerHarness.getExecCommands('svc-pg-container');
-    expect(commands[1]).toEqual([
+    expect(commands[2]).toEqual([
       'psql',
       '-t',
       '-A',

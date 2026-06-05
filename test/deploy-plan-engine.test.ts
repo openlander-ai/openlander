@@ -1655,6 +1655,11 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
         name: 'test-app-postgresql',
         kind: 'postgres',
         container_name: 'ol-svc-test-app-postgresql',
+        credentials: JSON.stringify({
+          user: 'openlander',
+          password: 'pw',
+          database: 'test_app_postgresql',
+        }),
       }),
       getSuggestedEnv: vi
         .fn()
@@ -1663,6 +1668,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
 
     mockDocker = {
       ensureProjectNetwork: vi.fn().mockResolvedValue('ol-test-app-net'),
+      execSimple: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '1', stderr: '' }),
     };
 
     mockEvents = {
