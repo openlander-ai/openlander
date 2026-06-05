@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Wait for auto-provisioned managed PostgreSQL and Redis services to become
+  reachable before starting the application container, preventing first-start
+  races where the app boots before its managed dependencies accept connections.
+- Strengthen managed-service readiness checks with PostgreSQL credential-level
+  `SELECT 1` and Redis `PING` probes instead of relying only on container state
+  or logs.
+- Keep reachable HTTP non-2xx dependency probes as raw diagnostic evidence
+  without synthesizing high-confidence `DEPENDENCY_UNREACHABLE` diagnoses.
+- Reject more obvious fake/sample/dummy API keys and example-like HTTP hosts
+  before deploy execution.
+
 ## [0.1.14-rc.13] - 2026-06-05
 
 ### Fixed
