@@ -74,6 +74,64 @@ describe('env value requirements', () => {
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
   });
 
+  it('blocks copied example secrets that satisfy basic shape checks', () => {
+    expect(
+      validateEnvValue(
+        'EXCHANGE_API_KEY',
+        ['key', 'supersecret'].join('_'),
+        inferEnvValueRequirement('EXCHANGE_API_KEY'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue(
+        'STRIPE_API_KEY',
+        ['sk', 'live', 'supersecret'].join('_'),
+        inferEnvValueRequirement('STRIPE_API_KEY'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue(
+        'S3_ACCESS_KEY',
+        'AKIAIOSFODNN7EXAMPLE',
+        inferEnvValueRequirement('S3_ACCESS_KEY'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue(
+        'S3_SECRET_KEY',
+        'wJalrXUtnFEMIK7mJQ',
+        inferEnvValueRequirement('S3_SECRET_KEY'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+  });
+
+  it('blocks reserved/example hosts for required host env vars', () => {
+    expect(inferEnvValueRequirement('SMTP_HOST')).toMatchObject({
+      kind: 'host',
+    });
+
+    expect(
+      validateEnvValue('SMTP_HOST', 'smtp.example.com', inferEnvValueRequirement('SMTP_HOST')),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_HOST', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue('SMTP_HOST', 'smtp.sendgrid.net', inferEnvValueRequirement('SMTP_HOST')),
+    ).toEqual([]);
+  });
+
+  it('blocks demo/sample self URLs that look like invented public routes', () => {
+    expect(
+      validateEnvValue(
+        'APP_BASE_URL',
+        'https://ledgerly-demo.openlander.app',
+        inferEnvValueRequirement('APP_BASE_URL'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_URL_HOST', severity: 'fail' })]);
+  });
+
   it('infers integer requirements for numeric knobs', () => {
     expect(inferEnvValueRequirement('SMTP_PORT')).toMatchObject({
       kind: 'int',

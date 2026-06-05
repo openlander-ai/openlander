@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep deploy plans in `needs_input` for additional fake external app env values,
+  including example SMTP hosts, demo/sample self URLs, copied AWS example keys,
+  and shape-correct but placeholder-like API secrets.
+
 ## [0.1.14-rc.14] - 2026-06-05
 
 ### Fixed
