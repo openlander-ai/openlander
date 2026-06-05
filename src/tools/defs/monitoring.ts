@@ -2465,16 +2465,6 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
-  const trafficMismatch = input.warnings[0];
-  if (trafficMismatch) {
-    return {
-      code: 'TRAFFIC_HEALTH_MISMATCH',
-      confidence: 'high',
-      summary: trafficMismatch.summary,
-      evidence: trafficMismatch.evidence,
-    };
-  }
-
   if (missingRuntimeEnvKeys.length > 0) {
     const presentKeys = missingRuntimeEnvKeys.filter((key) => currentKeys.has(key));
     const missingKeys = missingRuntimeEnvKeys.filter((key) => !currentKeys.has(key));
@@ -2516,6 +2506,16 @@ function buildSynthesizedServiceDiagnosis(input: {
         target: failed['target'],
         error: failed['error'],
       },
+    };
+  }
+
+  const trafficMismatch = input.warnings[0];
+  if (trafficMismatch) {
+    return {
+      code: 'TRAFFIC_HEALTH_MISMATCH',
+      confidence: 'high',
+      summary: trafficMismatch.summary,
+      evidence: trafficMismatch.evidence,
     };
   }
 

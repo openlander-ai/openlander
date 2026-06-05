@@ -1861,6 +1861,62 @@ describe('service-targeted monitoring tools', () => {
     expect(result['suggested_call']).toBeUndefined();
   });
 
+  it('diagnose_service prefers actionable env diagnosis over representative traffic mismatch', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Error: DATABASE_URL is not set');
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5, traffic_path: '/dashboard' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      warnings: [expect.objectContaining({ code: 'TRAFFIC_HEALTH_MISMATCH' })],
+      diagnosis: {
+        code: 'RUNTIME_ENV_MISSING',
+        confidence: 'high',
+        evidence: {
+          missing_env_keys: ['DATABASE_URL'],
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'set_env_vars',
+      },
+    });
+  });
+
+  it('diagnose_service prefers dependency diagnosis over representative traffic mismatch', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://db.example.com:5432/app',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5, traffic_path: '/dashboard' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      warnings: [expect.objectContaining({ code: 'TRAFFIC_HEALTH_MISMATCH' })],
+      diagnosis: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        confidence: 'high',
+        evidence: {
+          key: 'DATABASE_URL',
+        },
+      },
+    });
+  });
+
   it.each([
     { statusCode: 401, exitCode: 0 },
     { statusCode: 403, exitCode: 0 },
