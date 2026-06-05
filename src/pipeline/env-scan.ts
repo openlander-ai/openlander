@@ -4,6 +4,11 @@ import { join, relative } from 'node:path';
 import { scanDockerfileArgs, scanEnvFile } from '../lib/env-parser.js';
 import { findDockerfiles } from '../lib/repo-scanner.js';
 import { detectEnvFile } from './env-inject.js';
+import {
+  inferEnvValueRequirement,
+  requirementFromNodeSchemaObject,
+  type EnvValueRequirement,
+} from './env-requirements.js';
 
 const log = createModuleLogger('env-scan');
 
@@ -11,6 +16,7 @@ export interface EnvVarUsage {
   key: string;
   files: Array<{ path: string; line: number }>;
   optional: boolean;
+  requirement?: EnvValueRequirement;
 }
 
 export interface EnvScanResult {
@@ -35,7 +41,11 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
 
   const mergedByKey = new Map<
     string,
-    { files: Array<{ path: string; line: number }>; optionalFlags: boolean[] }
+    {
+      files: Array<{ path: string; line: number }>;
+      optionalFlags: boolean[];
+      requirement?: EnvValueRequirement;
+    }
   >();
   const addUsage = (usage: EnvVarUsage): void => {
     const entry = mergedByKey.get(usage.key) ?? { files: [], optionalFlags: [] };
@@ -47,6 +57,7 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
       }
     }
     entry.optionalFlags.push(usage.optional);
+    entry.requirement ??= usage.requirement ?? inferEnvValueRequirement(usage.key);
     mergedByKey.set(usage.key, entry);
   };
 
@@ -112,10 +123,11 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
 
   const vars: EnvVarUsage[] = Array.from(mergedByKey.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, { files, optionalFlags }]) => ({
+    .map(([key, { files, optionalFlags, requirement }]) => ({
       key,
       files,
       optional: optionalFlags.every((flag) => flag),
+      requirement,
     }));
 
   return {
@@ -205,6 +217,7 @@ interface Finding {
   path: string;
   line: number;
   optional: boolean;
+  requirement?: EnvValueRequirement;
 }
 
 function detectNodeFallback(content: string, key: string, matchIndex: number): boolean {
@@ -302,7 +315,13 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
           const optional = isNode
             ? detectNodeFallback(content, key, match.index)
             : detectPythonFallback(content, key, match.index);
-          findings.push({ key, path: relPath, line, optional });
+          findings.push({
+            key,
+            path: relPath,
+            line,
+            optional,
+            requirement: inferEnvValueRequirement(key),
+          });
         }
       }
 
@@ -318,7 +337,13 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
             key = key.split('=')[0]?.trim() ?? key;
             if (!key || SYSTEM_VARS.has(key)) continue;
             const optional = detectNodeDestructureFallback(raw, key);
-            findings.push({ key, path: relPath, line, optional });
+            findings.push({
+              key,
+              path: relPath,
+              line,
+              optional,
+              requirement: inferEnvValueRequirement(key),
+            });
           }
         }
 
@@ -326,9 +351,16 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
         while ((match = NODE_ENV_SCHEMA_KEY.exec(content)) !== null) {
           const key = match[1];
           const kind = match[2];
-          if (!key || SYSTEM_VARS.has(key)) continue;
+          if (!key || !kind || SYSTEM_VARS.has(key)) continue;
           const line = content.slice(0, match.index).split('\n').length;
-          findings.push({ key, path: relPath, line, optional: kind === 'optional' });
+          findings.push({
+            key,
+            path: relPath,
+            line,
+            optional: kind === 'optional',
+            requirement:
+              requirementFromNodeSchemaObject(match[0], kind) ?? inferEnvValueRequirement(key),
+          });
         }
       }
     }
@@ -343,23 +375,29 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
 
   const byKey = new Map<
     string,
-    { files: Array<{ path: string; line: number }>; optionalFlags: boolean[] }
+    {
+      files: Array<{ path: string; line: number }>;
+      optionalFlags: boolean[];
+      requirement?: EnvValueRequirement;
+    }
   >();
-  for (const { key, path, line, optional } of findings) {
+  for (const { key, path, line, optional, requirement } of findings) {
     const entry = byKey.get(key) ?? { files: [], optionalFlags: [] };
     if (!entry.files.some((e) => e.path === path && e.line === line)) {
       entry.files.push({ path, line });
       entry.optionalFlags.push(optional);
     }
+    entry.requirement ??= requirement ?? inferEnvValueRequirement(key);
     byKey.set(key, entry);
   }
 
   const vars: EnvVarUsage[] = Array.from(byKey.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, { files, optionalFlags }]) => ({
+    .map(([key, { files, optionalFlags, requirement }]) => ({
       key,
       files,
       optional: optionalFlags.every((flag) => flag),
+      requirement,
     }));
 
   const language =
