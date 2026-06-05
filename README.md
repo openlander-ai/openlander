@@ -5,7 +5,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Release](https://img.shields.io/github/v/release/openlander-ai/openlander)](https://github.com/openlander-ai/openlander/releases)
 
-[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
+[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Benchmark](#agent-native-benchmark) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
 your own server, with risky actions gated by human approval.
@@ -175,6 +175,40 @@ what's blocked — so you stay in the loop without staying at the keyboard.
 
 OpenLander is a control plane built for agentic operation; the dashboard
 is the human surface on top.
+
+---
+
+## Agent-native benchmark
+
+We test OpenLander with coding agents, not only with API smoke tests. In a
+scoped Day-1 benchmark, agents deployed a Node app plus managed Postgres and
+Redis through OpenLander's composite deploy-plan flow:
+
+1. create a deployment plan,
+2. approve safe managed resources,
+3. let OpenLander provision and wire Postgres/Redis,
+4. verify the live app.
+
+The fixture is intentionally limited to platform-managed dependencies. External
+SaaS secrets such as Stripe, SMTP, S3, and exchange APIs are tested separately:
+when those user-owned values are missing, OpenLander should block instead of
+inventing plausible secrets. Latest run: OpenLander `v0.1.14-rc.16` against
+[`openlander-ai/ledgerly@qa/managed-deps-only`](https://github.com/openlander-ai/ledgerly/tree/qa/managed-deps-only).
+
+| Model rung |     Result | MCP calls | Failed calls | Wall time |
+| ---------- | ---------: | --------: | -----------: | --------: |
+| Spark      | PASS-clean |        11 |            0 |    60.57s |
+| Mini       | PASS-clean |        10 |            0 |    78.36s |
+| GPT-5.4    | PASS-clean |        15 |            0 |    83.72s |
+| GPT-5.5    | PASS-clean |        11 |            0 |    75.95s |
+
+Every run passed the same rich oracle: `/health` returned 200, the app root
+returned 200, invoice write/read worked, Redis hit counts incremented, and the
+app, Postgres, and Redis services stayed in one OpenLander Project/network.
+
+The point is not that every deploy is faster. The point is that even weaker
+agents can stay on the correct high-level path because OpenLander owns the
+app/database/cache topology instead of asking the agent to hand-assemble it.
 
 ---
 
