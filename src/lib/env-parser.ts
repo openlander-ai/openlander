@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { PlanEnvEntry } from '../pipeline/deploy-plan/types.js';
+import { inferEnvValueRequirement } from '../pipeline/env-requirements.js';
 
 /**
  * Parse KEY=value pairs from an env-like file.
@@ -32,6 +33,7 @@ export function scanEnvFile(
         source,
         required: !hasDefault,
         default: hasDefault ? rawValue : undefined,
+        requirement: inferEnvValueRequirement(key),
       });
     }
 
@@ -93,6 +95,7 @@ export function scanDockerfileArgs(
         source: `Dockerfile ARG (${dockerfilePath})`,
         required: !defaultValue,
         default: defaultValue || undefined,
+        requirement: inferEnvValueRequirement(key),
       });
     }
 

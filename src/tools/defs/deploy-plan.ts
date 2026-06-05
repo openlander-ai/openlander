@@ -28,6 +28,11 @@ import {
   tryAcquireDeployLockOrResponse,
 } from './helpers.js';
 import { runDeployableServiceAction } from './deployable-service.js';
+import {
+  inferEnvValueRequirement,
+  validateEnvValue,
+  type EnvValueRequirement,
+} from '../../pipeline/env-requirements.js';
 
 import {
   createDeployPlanSchema,
@@ -450,17 +455,24 @@ function safeProposedResourceIds(plan: Pick<DeployPlan, 'services'>): string[] {
 function buildPlanNeedsInputResponse(params: {
   planId: string;
   missing: string[];
+  inputRequirements?: unknown[];
+  envIssues?: unknown[];
   warnings?: string[];
   message: string;
   nextSteps: string[];
   error?: string;
 }): Record<string, unknown> {
-  const { planId, missing, warnings, message, nextSteps, error } = params;
+  const { planId, missing, inputRequirements, envIssues, warnings, message, nextSteps, error } =
+    params;
   return {
     plan_id: planId,
     status: 'needs_input',
     ...(error ? { error } : {}),
     missing,
+    ...(inputRequirements && inputRequirements.length > 0
+      ? { input_requirements: inputRequirements }
+      : {}),
+    ...(envIssues && envIssues.length > 0 ? { env_issues: envIssues } : {}),
     ...(warnings ? { warnings } : {}),
     suggested_call: updateDeployPlanSuggestedCall(planId),
     _agent_guidance: {
@@ -468,6 +480,68 @@ function buildPlanNeedsInputResponse(params: {
       next_steps: nextSteps,
     },
   };
+}
+
+function buildPlanInputRequirements(plan: { env?: DeployPlan['env']; missing?: string[] }): Array<{
+  key: string;
+  source: string;
+  required: boolean;
+  requirement: EnvValueRequirement;
+}> {
+  if (!plan.env) {
+    return [];
+  }
+  const targetKeys = new Set(plan.missing ?? []);
+  for (const issue of plan.env.issues ?? []) {
+    if (issue.severity === 'fail') {
+      targetKeys.add(issue.key);
+    }
+  }
+
+  const detectedEnvEntries = Array.isArray(plan.env.detected) ? plan.env.detected : [];
+  return detectedEnvEntries
+    .flatMap((entry) => {
+      if (!targetKeys.has(entry.key) || !entry.requirement) {
+        return [];
+      }
+      const inferred = inferEnvValueRequirement(entry.key);
+      const requirement = {
+        ...inferred,
+        ...entry.requirement,
+        guidance: entry.requirement.guidance ?? inferred?.guidance,
+      };
+      return [
+        {
+          key: entry.key,
+          source: entry.source,
+          required: entry.required,
+          requirement,
+        },
+      ];
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['env'] }): string[] {
+  const steps: string[] = [];
+  const missing = plan.missing ?? [];
+  if (missing.length > 0) {
+    steps.push(`Provide missing values: ${missing.join(', ')}`);
+  }
+  const blockingIssues = (plan.env?.issues ?? []).filter((issue) => issue.severity === 'fail');
+  if (blockingIssues.length > 0) {
+    steps.push(
+      `Fix invalid env values: ${blockingIssues.map((issue) => `${issue.key} (${issue.code})`).join(', ')}`,
+    );
+  }
+  const hasRequirements = (plan.env?.detected ?? []).some((entry) => entry.requirement);
+  if (hasRequirements) {
+    steps.push(
+      'Use input_requirements[].requirement as value-shape guidance; ask the user for real secrets and reachable endpoints.',
+    );
+  }
+  steps.push('Call update_deploy_plan with corrected values, then call execute_deploy_plan.');
+  return steps;
 }
 
 function buildPlanNeedsApprovalResponse(params: {
@@ -608,11 +682,10 @@ function deployPlanResponse(
       ...buildPlanNeedsInputResponse({
         planId: plan.plan_id,
         missing: plan.missing,
+        inputRequirements: buildPlanInputRequirements(plan),
+        envIssues: (plan as Partial<DeployPlan>).env?.issues,
         message: 'Plan needs input before execution.',
-        nextSteps: [
-          `Provide missing values: ${plan.missing.join(', ') || 'review missing[]'}`,
-          'Call update_deploy_plan, then call execute_deploy_plan.',
-        ],
+        nextSteps: buildNeedsInputNextSteps(plan),
       }),
     };
   }
@@ -1168,17 +1241,21 @@ export const deployPlanToolDefs: ToolDef[] = [
           return buildDeployLockedResponse(err);
         }
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('missing environment variables')) {
+        if (msg.includes('missing environment variables') || msg.includes('environment input')) {
           const planData = planRow ? (JSON.parse(planRow.plan_json) as DeployPlan) : undefined;
           return buildPlanNeedsInputResponse({
             planId,
             error: msg,
             missing: planData?.missing ?? [],
-            message: 'The plan still has missing environment variables.',
-            nextSteps: [
-              'Call update_deploy_plan with the missing env vars',
-              'Then call execute_deploy_plan again',
-            ],
+            inputRequirements: planData ? buildPlanInputRequirements(planData) : [],
+            envIssues: planData?.env.issues,
+            message: 'The plan still needs environment input before execution.',
+            nextSteps: planData
+              ? buildNeedsInputNextSteps(planData)
+              : [
+                  'Call update_deploy_plan with the missing or corrected env vars.',
+                  'Then call execute_deploy_plan again.',
+                ],
           });
         }
         throw err;
@@ -1435,12 +1512,13 @@ export const deployPlanToolDefs: ToolDef[] = [
         return buildPlanNeedsInputResponse({
           planId: plan.plan_id,
           missing: plan.missing,
+          inputRequirements: buildPlanInputRequirements(plan),
+          envIssues: (plan as Partial<DeployPlan>).env?.issues,
           warnings: plan.warnings,
           message: 'The generated deploy plan needs more input before execution.',
           nextSteps: [
-            `Provide missing values: ${plan.missing.join(', ')}`,
-            'Call update_deploy_plan with the values, then execute_deploy_plan',
-            'Or call deploy_app again with env_vars including the missing keys',
+            ...buildNeedsInputNextSteps(plan),
+            'Or call deploy_app again with env_vars including the missing/corrected keys',
           ],
         });
       }
@@ -2076,39 +2154,18 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
       const checks: ValidationCheck[] = [];
 
-      const LOCALHOST_PATTERNS = [
-        /localhost/i,
-        /127\.0\.0\.1/,
-        /0\.0\.0\.0/,
-        /host\.docker\.internal/i,
-      ];
-      const PLACEHOLDER_PATTERNS = [
-        /^(changeme|change_me|replace_me|your[_-]?.*here|xxx+|todo|fixme|placeholder)$/i,
-        /^(password|secret|token|key)$/i,
-        /^<.*>$/,
-      ];
-
       const envEntries = Object.entries(plan.env.provided);
-      const urlKeys = envEntries.filter(([key]) =>
-        /_(URL|URI|HOST|DSN|ENDPOINT|CONNECTION)$/i.test(key),
-      );
-
-      for (const [key, value] of urlKeys) {
-        if (LOCALHOST_PATTERNS.some((p) => p.test(value))) {
-          checks.push({
-            name: 'env_vars',
-            status: 'warning',
-            message: `${key} points to localhost ("${value}") — this won't work inside a container. Use the service hostname (e.g., ol-<project>-postgres) or Docker network address.`,
-          });
-        }
-      }
-
+      const detectedEnvEntries = Array.isArray(plan.env.detected) ? plan.env.detected : [];
+      const envEntryByKey = new Map(detectedEnvEntries.map((entry) => [entry.key, entry]));
       for (const [key, value] of envEntries) {
-        if (PLACEHOLDER_PATTERNS.some((p) => p.test(value))) {
+        const entry = envEntryByKey.get(key);
+        const requirement = entry?.requirement ?? inferEnvValueRequirement(key);
+        const issues = validateEnvValue(key, value, requirement, entry?.required ?? false);
+        for (const issue of issues) {
           checks.push({
             name: 'env_vars',
-            status: 'warning',
-            message: `${key} looks like a placeholder ("${value}") — set the real value before deploying.`,
+            status: issue.severity,
+            message: issue.message,
           });
         }
       }

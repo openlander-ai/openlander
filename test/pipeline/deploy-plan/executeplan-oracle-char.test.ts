@@ -182,11 +182,11 @@ describe('executePlan Oracle — entry guards G1-G3', () => {
     }
   });
 
-  it('G2 ordering: needs_input throws the missing-env message (its own guard), before the ready check', async () => {
+  it('G2 ordering: needs_input throws the environment-input message (its own guard), before the ready check', async () => {
     const plan = createMockDeployPlan({ status: 'needs_input', missing: ['DATABASE_URL'] });
     h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
     await expect(h.engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan requires missing environment variables: DATABASE_URL',
+      'Plan requires environment input. Missing: DATABASE_URL',
     );
   });
 

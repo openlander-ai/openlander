@@ -122,6 +122,46 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
+  it('keeps plan in needs_input when provided env violates detected value requirements', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      env: {
+        auto: {},
+        required: ['JWT_SECRET'],
+        provided: {},
+        detected: [
+          {
+            key: 'JWT_SECRET',
+            source: 'config schema',
+            required: true,
+            requirement: { kind: 'minlen', source: 'schema', min: 16 },
+          },
+        ],
+      },
+      missing: ['JWT_SECRET'],
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: {
+        JWT_SECRET: 'short',
+      },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    expect(updated.status).toBe('needs_input');
+    expect(updated.env.issues).toEqual([
+      expect.objectContaining({
+        key: 'JWT_SECRET',
+        code: 'ENV_VALUE_TOO_SHORT',
+        severity: 'fail',
+      }),
+    ]);
+  });
+
   // P1-1 status-priority gate on updatePlan: a plan that starts needs_input
   // (missing user secret) AND carries a safe proposed managed resource must
   // become needs_approval (NOT ready) once the secret is filled — otherwise the
@@ -680,7 +720,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan requires missing environment variables',
+      'Plan requires environment input',
     );
   });
 

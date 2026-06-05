@@ -478,6 +478,61 @@ describe('deploy MCP guidance', () => {
     );
   });
 
+  it('surfaces env value requirements when deploy_app returns needs_input', async () => {
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => undefined),
+        getProjectByName: vi.fn(() => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-env',
+          status: 'needs_input',
+          missing: ['STRIPE_API_KEY'],
+          warnings: [],
+          env: {
+            required: ['STRIPE_API_KEY'],
+            auto: {},
+            provided: {},
+            detected: [
+              {
+                key: 'STRIPE_API_KEY',
+                source: 'config schema',
+                required: true,
+                requirement: { kind: 'prefix', source: 'key_name', prefix: 'sk_' },
+              },
+            ],
+          },
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        source: 'image',
+        image: 'httpd:latest',
+        name: 'needs-env',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'needs_input',
+      missing: ['STRIPE_API_KEY'],
+      input_requirements: [
+        expect.objectContaining({
+          key: 'STRIPE_API_KEY',
+          requirement: expect.objectContaining({
+            kind: 'prefix',
+            prefix: 'sk_',
+            guidance: expect.stringContaining('real Stripe secret key'),
+          }),
+        }),
+      ],
+    });
+  });
+
   it('uses name as the create_deploy_plan app name', async () => {
     const ctx = {
       planEngine: {

@@ -207,6 +207,7 @@ describe('scanForEnvUsage', () => {
 const schema = [
   { key: 'JWT_SECRET', kind: 'minlen', min: 16 },
   { key: 'APP_BASE_URL', kind: 'url' },
+  { key: 'EXCHANGE_API_KEY', kind: 'prefix', prefix: 'key_' },
   { key: 'OPTIONAL_FLAG', kind: 'optional' },
 ];
 for (const item of schema) {
@@ -218,14 +219,24 @@ for (const item of schema) {
     const r = scanForEnvUsage(tmp);
     const jwt = r.vars.find((v) => v.key === 'JWT_SECRET');
     const appBase = r.vars.find((v) => v.key === 'APP_BASE_URL');
+    const exchangeKey = r.vars.find((v) => v.key === 'EXCHANGE_API_KEY');
     const optional = r.vars.find((v) => v.key === 'OPTIONAL_FLAG');
 
     expect(jwt).toBeDefined();
     expect(jwt?.optional).toBe(false);
+    expect(jwt?.requirement).toMatchObject({ kind: 'minlen', min: 16, source: 'schema' });
     expect(appBase).toBeDefined();
     expect(appBase?.optional).toBe(false);
+    expect(appBase?.requirement).toMatchObject({ kind: 'url', source: 'schema' });
+    expect(exchangeKey).toBeDefined();
+    expect(exchangeKey?.requirement).toMatchObject({
+      kind: 'prefix',
+      prefix: 'key_',
+      source: 'schema',
+    });
     expect(optional).toBeDefined();
     expect(optional?.optional).toBe(true);
+    expect(optional?.requirement).toBeUndefined();
   });
 });
 

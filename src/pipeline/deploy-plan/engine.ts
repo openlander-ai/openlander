@@ -4,6 +4,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
 import { scanForEnvUsage } from '../env-scan.js';
+import { inferEnvValueRequirement, validateEnvValue } from '../env-requirements.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { ManagedServiceLinker } from '../managed-service-linker.js';
@@ -22,6 +23,7 @@ import type {
   PlanBuildService,
   DeployPlanComplexity,
 } from './types.js';
+import type { EnvValueIssue } from '../env-requirements.js';
 import { PlanStateMachine } from './types.js';
 import { computeComplexity, computeMissingEnvVars } from './plan-utils.js';
 import type { Database } from '../../db/index.js';
@@ -581,12 +583,29 @@ export class PlanEngine {
     missing: string[],
     services: PlanService[],
     providedEnv: Record<string, string> = {},
+    envIssues: EnvValueIssue[] = [],
   ): DeployPlanStatus {
-    return missing.length > 0
+    return missing.length > 0 || envIssues.some((issue) => issue.severity === 'fail')
       ? 'needs_input'
       : this.hasSafeProposedResources(services, providedEnv)
         ? 'needs_approval'
         : 'ready';
+  }
+
+  private validatePlanEnvValues(
+    entries: PlanEnvEntry[],
+    providedEnv: Record<string, string>,
+  ): EnvValueIssue[] {
+    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+    const issues: EnvValueIssue[] = [];
+
+    for (const [key, value] of Object.entries(providedEnv)) {
+      const entry = byKey.get(key);
+      const requirement = entry?.requirement ?? inferEnvValueRequirement(key);
+      issues.push(...validateEnvValue(key, value, requirement, entry?.required ?? false));
+    }
+
+    return issues;
   }
 
   /**
@@ -634,6 +653,7 @@ export class PlanEngine {
         key: planService.connect_via,
         source: `detected ${planService.type} dependency`,
         required: true,
+        requirement: inferEnvValueRequirement(planService.connect_via),
       });
     }
     return entries;
@@ -840,6 +860,7 @@ export class PlanEngine {
     requiredEnvVars: string[];
     envVars: Record<string, string>;
     detectedEnv: PlanEnvEntry[];
+    envIssues: EnvValueIssue[];
     missing: string[];
     warnings: string[];
   }): DeployPlan {
@@ -904,6 +925,7 @@ export class PlanEngine {
         required: params.requiredEnvVars,
         provided: params.envVars,
         detected: params.detectedEnv,
+        issues: params.envIssues,
       },
       health: {
         path: '/',
@@ -1018,8 +1040,14 @@ export class PlanEngine {
       const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
       const projectName = targetProject?.name ?? name ?? fallbackProjectName;
       // Image-source plans carry no detected service dependencies (services: []),
-      // so computePlanStatus resolves to 'ready' here.
-      const initialStatus: DeployPlan['status'] = this.computePlanStatus([], []);
+      // but caller-provided env_vars can still require value validation.
+      const envIssues = this.validatePlanEnvValues([], envVars);
+      const initialStatus: DeployPlan['status'] = this.computePlanStatus(
+        [],
+        [],
+        envVars,
+        envIssues,
+      );
       const complexity: DeployPlanComplexity = 'simple';
 
       const plan = this.assemblePlan({
@@ -1042,6 +1070,7 @@ export class PlanEngine {
         requiredEnvVars: [],
         envVars,
         detectedEnv: [],
+        envIssues,
         missing: [],
         warnings: [],
       });
@@ -1138,6 +1167,7 @@ export class PlanEngine {
       this.plannedServiceEnvKeys(services),
     );
     const missing = missingEntries.map((entry) => entry.key);
+    const envIssues = this.validatePlanEnvValues(detectedEnvWithServiceRequirements, envVars);
 
     const isCompose = buildMethod === 'compose';
     const serviceCount = isCompose ? (composeBuildServices?.length ?? 0) : services.length;
@@ -1147,7 +1177,12 @@ export class PlanEngine {
       isCompose,
     });
 
-    const initialStatus: DeployPlan['status'] = this.computePlanStatus(missing, services, envVars);
+    const initialStatus: DeployPlan['status'] = this.computePlanStatus(
+      missing,
+      services,
+      envVars,
+      envIssues,
+    );
 
     const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
@@ -1172,6 +1207,7 @@ export class PlanEngine {
       requiredEnvVars,
       envVars,
       detectedEnv: detectedEnvWithServiceRequirements,
+      envIssues,
       missing,
       warnings,
     });
@@ -1262,8 +1298,14 @@ export class PlanEngine {
     );
     const missing = missingEntries.map((entry) => entry.key);
     merged.missing = missing;
+    merged.env.issues = this.validatePlanEnvValues(merged.env.detected, merged.env.provided);
 
-    merged.status = this.computePlanStatus(missing, merged.services, merged.env.provided);
+    merged.status = this.computePlanStatus(
+      missing,
+      merged.services,
+      merged.env.provided,
+      merged.env.issues,
+    );
     merged.updated_at = new Date().toISOString();
 
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
@@ -1289,9 +1331,13 @@ export class PlanEngine {
       return;
     }
 
-    const missingKeys = plan.missing.join(', ') || 'unknown';
+    const blockingIssues = plan.env.issues?.filter((issue) => issue.severity === 'fail') ?? [];
+    const missingKeys = plan.missing.join(', ') || 'none';
+    const invalidKeys = blockingIssues.map((issue) => `${issue.key}: ${issue.message}`).join('; ');
     throw new Error(
-      `Plan requires missing environment variables: ${missingKeys}. ` +
+      `Plan requires environment input. Missing: ${missingKeys}.` +
+        (invalidKeys ? ` Invalid: ${invalidKeys}.` : '') +
+        ' ' +
         `Call update_deploy_plan to provide them, then execute again.`,
     );
   }

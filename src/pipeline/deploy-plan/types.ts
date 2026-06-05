@@ -1,4 +1,5 @@
 import type { DetectedServiceType } from '../../lib/infra-analyzer.js';
+import type { EnvValueIssue, EnvValueRequirement } from '../env-requirements.js';
 
 /**
  * Deployment plan status lifecycle.
@@ -92,6 +93,7 @@ export interface PlanEnvEntry {
   source: string;
   required: boolean;
   default?: string;
+  requirement?: EnvValueRequirement;
 }
 
 export interface PlanEnv {
@@ -99,6 +101,7 @@ export interface PlanEnv {
   required: string[];
   provided: Record<string, string>;
   detected: PlanEnvEntry[];
+  issues?: EnvValueIssue[];
 }
 
 /**
