@@ -762,6 +762,47 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
     });
   });
 
+  describe('startMonorepoDeploy() parent ownership', () => {
+    it('reuses a pre-created parent Project instead of creating a duplicate', async () => {
+      db.createProject({
+        id: 'p-mono-owned',
+        name: 'mono-owned-app',
+        repoUrl: 'https://github.com/test/mono-owned-app',
+        branch: 'main',
+      });
+      const deployMonorepoSpy = vi.spyOn(pipeline, 'deployMonorepo').mockResolvedValue({
+        success: true,
+        parentProjectId: 'p-mono-owned',
+        parentName: 'mono-owned-app',
+        children: [],
+        buildDurationMs: 0,
+      });
+
+      const result = await pipeline.startMonorepoDeploy({
+        repoUrl: 'https://github.com/test/mono-owned-app',
+        branch: 'main',
+        clonePath: tmpDir,
+        commitSha: 'abc123def456',
+        dockerfiles: ['Dockerfile', 'apps/api/Dockerfile'],
+        name: 'mono-owned-app',
+      });
+
+      expect(result).toEqual({
+        parentProjectId: 'p-mono-owned',
+        parentName: 'mono-owned-app',
+        status: 'building',
+      });
+      expect(db.createProject).toHaveBeenCalledTimes(1);
+      expect(db.getProject('p-mono-owned')?.status).toBe('building');
+      expect(deployMonorepoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'mono-owned-app',
+          _parentId: 'p-mono-owned',
+        }),
+      );
+    });
+  });
+
   describe('deployMonorepo() top-level entry', () => {
     it('acquires and releases the parent deploy lock for top-level monorepo deploys', async () => {
       const acquireSpy = vi.spyOn(db, 'acquireDeployLock');

@@ -67,6 +67,7 @@ function buildEngine() {
     listServices: vi.fn().mockReturnValue([]),
     getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
     getProjectByName: vi.fn().mockReturnValue(null),
+    createProject: vi.fn().mockResolvedValue({ id: 'auto-p1', name: 'test-app' }),
     getService: vi.fn().mockReturnValue(null),
     getLastDeployLog: vi.fn().mockReturnValue(null),
     attachServiceToProject: vi.fn().mockResolvedValue({
@@ -307,7 +308,7 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
     expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
-  it('B3: approved managed-create + no target project (new app) → needs_target_project, creates nothing', async () => {
+  it('B3: approved managed-create + no target project (new app) → creates target Project and executes', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_approval',
       project_id: undefined,
@@ -315,21 +316,48 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
     });
     h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
     h.mockDb.getProjectByName.mockReturnValue(null);
+    h.mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'auto-p1',
+      projectName: 'test-app',
+    });
 
     const result = await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
       approveAllSafeResources: true,
     });
 
-    expect(result.status).toBe('needs_target_project');
-    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
-    expect(result._agent_guidance?.next_steps.join('\n')).toContain('create_project');
-    // I1: nothing created, nothing persisted.
-    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
-    expect(h.mockDb.upsertServiceConnection).not.toHaveBeenCalled();
-    expect(h.mockDb.attachServiceToProject).not.toHaveBeenCalled();
-    expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
-    expect(wrotePlanStatus(h.mockDb, 'executing')).toBe(false);
-    expect(h.mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
+    expect(result.status).toBe('building');
+    expect(result.project_id).toBe('auto-p1');
+    expect(h.mockDb.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test-app',
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+      }),
+    );
+    expect(wrotePlanStatus(h.mockDb, 'executing')).toBe(true);
+    expect(h.mockDb.recordDeployPlanApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'auto-p1' }),
+    );
+    expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test-app',
+        envVars: {},
+      }),
+    );
+
+    const deferred = h.mockPipeline.startDeploy.mock.calls.at(-1)?.[0]._deferredRuntimeEnvVars;
+    expect(deferred).toEqual(expect.any(Function));
+    const settled = await deferred();
+    expect(settled).toEqual({
+      ok: true,
+      envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+    });
+    expect(h.mockDocker.ensureProjectNetwork).toHaveBeenCalledWith('test-app');
+    expect(h.mockServiceManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'auto-p1', template: 'postgresql' }),
+    );
+    expect(h.mockDb.attachServiceToProject).toHaveBeenCalledWith('svc-pg-1', 'auto-p1');
   });
 });
 
@@ -765,7 +793,7 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     );
   });
 
-  it('New app + DB, plan-then-approve: unapproved is gated (I1), approved-with-no-project is blocked (B3)', async () => {
+  it('New app + DB, plan-then-approve: unapproved is gated (I1), approved auto-owns target Project (B3)', async () => {
     // Unapproved → needs_approval, zero side effects.
     const unapprovedPlan = createMockDeployPlan({
       status: 'needs_approval',
@@ -777,8 +805,14 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     expect(gated.status).toBe('needs_approval');
     expect(h.mockServiceManager.create).not.toHaveBeenCalled();
 
-    // Approved but new app with no project row → needs_target_project, no __svc
-    // consumer synthesized before a workload exists.
+    // Approved new app with no project row → engine creates the target Project
+    // and starts the app deploy. The env/provisioning work is deferred until
+    // container start, but it still targets the same Project/network.
+    h.mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'auto-p1',
+      projectName: 'test-app',
+    });
     const approved = await h.engine.executePlan(
       unapprovedPlan.plan_id,
       undefined,
@@ -786,9 +820,14 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
       undefined,
       { approveAllSafeResources: true },
     );
-    expect(approved.status).toBe('needs_target_project');
-    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
-    expect(h.mockDb.upsertServiceConnection).not.toHaveBeenCalled();
+    expect(approved.status).toBe('building');
+    expect(approved.project_id).toBe('auto-p1');
+    const deferred = h.mockPipeline.startDeploy.mock.calls.at(-1)?.[0]._deferredRuntimeEnvVars;
+    expect(deferred).toEqual(expect.any(Function));
+    await deferred();
+    expect(h.mockServiceManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'auto-p1' }),
+    );
   });
 
   it('Add app to existing project: deploy_app(target) on a populated group attaches without a duplicate project', async () => {
@@ -845,7 +884,7 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     );
   });
 
-  it('Out-of-order / wrong target: an approved create against a missing project returns guidance, not a synthetic id', async () => {
+  it('Out-of-order / wrong target: an approved create against a stale project_id rebinds to the app Project', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_approval',
       project_id: 'does-not-exist',
@@ -855,14 +894,20 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     // project_id resolves to nothing and no project by name.
     h.mockDb.getProject.mockReturnValue(null);
     h.mockDb.getProjectByName.mockReturnValue(null);
+    h.mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'auto-p1',
+      projectName: 'test-app',
+    });
 
     const result = await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
       approveAllSafeResources: true,
     });
 
-    expect(result.status).toBe('needs_target_project');
-    // No synthetic service id is emitted for the unresolved target.
-    expect(result.service_id).toBeUndefined();
-    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    expect(result.status).toBe('building');
+    expect(result.project_id).toBe('auto-p1');
+    expect(h.mockDb.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'test-app' }),
+    );
   });
 });

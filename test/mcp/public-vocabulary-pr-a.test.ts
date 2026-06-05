@@ -26,7 +26,7 @@ function readRepoFile(path: string): string {
 }
 
 describe('public MCP/runtime vocabulary', () => {
-  it('keeps DB-first guidance on Project -> Database/Cache -> Application attach', () => {
+  it('keeps composite-first guidance for new app Database/Cache provisioning', () => {
     const promptSource = readRepoFile('src/mcp/prompts.ts');
     const serverSource = readRepoFile('src/mcp/server.ts');
     const projectOpsSource = readRepoFile('src/tools/defs/project-ops.ts');
@@ -40,11 +40,11 @@ describe('public MCP/runtime vocabulary', () => {
       expect(source).toContain('target_project_id');
     }
 
-    expect(promptSource).toContain('create_service(project_id=...)');
-    expect(promptSource).toContain('deploy_app(target_project_id=...)');
-    expect(serverSource).toContain('create_project first');
-    expect(serverSource).toContain('create_service with that project_id');
-    expect(serverSource).toContain('deploy_app with target_project_id');
+    expect(promptSource).toContain('OpenLander owns the target Project');
+    expect(promptSource).toContain('same target Project/network');
+    expect(serverSource).toContain('OpenLander owns the target Project');
+    expect(promptSource).not.toContain('call `create_project` first');
+    expect(serverSource).not.toContain('create_project first');
   });
 
   it('does not use legacy product nouns in MCP/runtime copy', () => {

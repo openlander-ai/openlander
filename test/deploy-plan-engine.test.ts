@@ -466,6 +466,7 @@ describe('PlanEngine.executePlan', () => {
       listServices: vi.fn().mockReturnValue([]),
       getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
       getProjectByName: vi.fn().mockReturnValue(null),
+      createProject: vi.fn().mockResolvedValue({ id: 'auto-p1', name: 'test-app' }),
       getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
       acquireDeployLock: vi.fn().mockResolvedValue(true),
@@ -1565,6 +1566,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       listServices: vi.fn().mockReturnValue([]),
       getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
       getProjectByName: vi.fn().mockReturnValue(null),
+      createProject: vi.fn().mockResolvedValue({ id: 'auto-p1', name: 'test-app' }),
       getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
       attachServiceToProject: vi.fn().mockResolvedValue({
@@ -1594,6 +1596,11 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       startDeploy: vi
         .fn()
         .mockResolvedValue({ status: 'building', projectId: 'p1', projectName: 'test-app' }),
+      startMonorepoDeploy: vi.fn().mockResolvedValue({
+        status: 'building',
+        parentProjectId: 'auto-p1',
+        parentName: 'test-app',
+      }),
     };
 
     mockEnv = {
@@ -1715,13 +1722,96 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
-  // (d3) New-app guard: an approved create has no target project to provision on
-  // for a brand-new app (no project_id, no project row by name). Execute returns
-  // 'needs_target_project' and creates NOTHING — no lock, no provisioning, no
-  // deploy. 'needs_target_project' is a response-only status.
-  it('returns needs_target_project and creates nothing when an approved new-app plan has no existing project', async () => {
+  // (d3) New-app ownership: an approved create with no target project is owned
+  // by the composite plan. The engine creates the Project itself, provisions
+  // approved safe resources on that Project/network, and starts the app deploy
+  // against the same Project instead of teaching the agent to hand-assemble
+  // Project + DB/cache + app.
+  it('creates the target Project and provisions approved new-app resources on the same Project', async () => {
     // No project_id, and getProjectByName returns null (default) → new app.
     const plan = createNeedsApprovalPlan({ project_id: undefined });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getProjectByName.mockReturnValue(null);
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'auto-p1',
+      projectName: 'test-app',
+    });
+
+    const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+    expect(result).toMatchObject({
+      status: 'building',
+      project_id: 'auto-p1',
+      project_name: 'test-app',
+    });
+    expect(mockDb.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'test-app',
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+        dockerfilePath: plan.build.dockerfile,
+      }),
+    );
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('auto-p1', expect.any(String));
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test-app',
+        envVars: {},
+      }),
+    );
+
+    const deferred = getLastDeferredRuntimeEnvVars();
+    const settled = await deferred();
+
+    expect(settled).toEqual({
+      ok: true,
+      envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+    });
+    expect(mockDocker.ensureProjectNetwork).toHaveBeenCalledWith('test-app');
+    expect(mockServiceManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test-app-postgresql',
+        projectId: 'auto-p1',
+        template: 'postgresql',
+        network: 'ol-test-app-net',
+      }),
+    );
+    expect(mockDb.attachServiceToProject).toHaveBeenCalledWith('svc-pg-1', 'auto-p1');
+    expect(mockDb.recordDeployPlanApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'auto-p1',
+        correlationId: plan.plan_id,
+      }),
+    );
+
+    const executingCall = mockDb.updateDeployPlan.mock.calls.find(
+      (call: any) => call[1]?.status === 'executing',
+    );
+    expect(executingCall).toBeDefined();
+    const persistedPlan = JSON.parse(executingCall[1].planJson);
+    expect(persistedPlan.project_id).toBe('auto-p1');
+    expect(persistedPlan.target_project_id).toBeUndefined();
+  });
+
+  it('creates and reuses the target Project for approved new-app monorepo resource plans', async () => {
+    const { cloneRepo } = await import('../src/pipeline/git.js');
+    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      path: '/tmp/test-clone',
+      commitSha: 'mono-sha',
+    });
+
+    const plan = createNeedsApprovalPlan({
+      project_id: undefined,
+      build: {
+        method: 'dockerfile',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        dockerfiles_found: ['Dockerfile', 'apps/api/Dockerfile'],
+      },
+    });
     mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
     mockDb.getProjectByName.mockReturnValue(null);
 
@@ -1729,23 +1819,42 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       approveAllSafeResources: true,
     });
 
-    expect(result.status).toBe('needs_target_project');
-    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
-    expect(result._agent_guidance).toBeDefined();
-    expect(result._agent_guidance?.next_steps.join('\n')).toContain('create_project');
-    // Nothing created: no managed service, no connection row, no deploy, and the
-    // status was never persisted (no executing write).
-    expect(mockServiceManager.create).not.toHaveBeenCalled();
-    expect(mockDb.upsertServiceConnection).not.toHaveBeenCalled();
-    expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
-    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
-    const wroteExecuting = mockDb.updateDeployPlan.mock.calls.some(
-      (call: any) => call[1]?.status === 'executing',
+    expect(result).toMatchObject({
+      status: 'building',
+      project_id: 'auto-p1',
+      project_name: 'test-app',
+    });
+    expect(mockDb.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'test-app',
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+      }),
     );
-    expect(wroteExecuting).toBe(false);
-    // Approval is audited only once execution commits; a blocked new-app plan
-    // records nothing.
-    expect(mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('auto-p1', expect.any(String));
+    expect(mockDocker.ensureProjectNetwork).toHaveBeenCalledWith('test-app');
+    expect(mockServiceManager.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'auto-p1',
+        template: 'postgresql',
+        network: 'ol-test-app-net',
+      }),
+    );
+    expect(mockDb.attachServiceToProject).toHaveBeenCalledWith('svc-pg-1', 'auto-p1');
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'test-app',
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+        clonePath: '/tmp/test-clone',
+        commitSha: 'mono-sha',
+        dockerfiles: ['Dockerfile', 'apps/api/Dockerfile'],
+        envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+        _lockSessionId: expect.any(String),
+      }),
+    );
   });
 
   it('uses plan.project_id as the lock target even when the project name lookup is empty', async () => {
