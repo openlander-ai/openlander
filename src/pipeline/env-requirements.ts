@@ -36,7 +36,7 @@ export interface EnvValueValidationOptions {
 }
 
 const PLACEHOLDER_PATTERN =
-  /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|dummy|fake|sample|test[-_](?:value|secret|key|token)|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/i;
+  /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|dummy[-_](?:value|secret|key|token)|fake[-_](?:value|secret|key|token)|sample[-_](?:value|secret|key|token)|test[-_](?:value|secret|key|token)|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/i;
 
 const URL_KEY_PATTERN = /(?:^|_)(URL|URI|DSN|ENDPOINT|CONNECTION)$/i;
 const HOST_KEY_PATTERN = /(?:^|_)(HOST|HOSTNAME)$/i;
@@ -44,7 +44,7 @@ const INTEGER_KEY_PATTERN = /(?:^|_)(PORT|MAX|MIN|LIMIT|TTL|TIMEOUT|RETRIES|INTE
 const SECRET_KEY_PATTERN =
   /(?:SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|JWT|PASSWORD)/i;
 const SECRET_EXAMPLE_PATTERN =
-  /(?:abcdef|123456|super[-_]?secret|very[-_]?long[-_]?secret|example(?:key)?|AKIA[0-9A-Z]*EXAMPLE|wJalrXUtnFEMI)/i;
+  /(^|[^a-z0-9])(abcdef|123456|super[-_]?secret|very[-_]?long[-_]?secret|example[-_]?(?:key|secret|token|value)?)([^a-z0-9]|$)|AKIA[0-9A-Z]*EXAMPLE|wJalrXUtnFEMI/i;
 
 const PLATFORM_MANAGED_ENV_KEYS = new Set([
   'DATABASE_URL',
@@ -75,9 +75,6 @@ function requiresTrustedExternalSource(key: string): boolean {
   const normalized = key.toUpperCase();
   if (PLATFORM_MANAGED_ENV_KEYS.has(normalized)) {
     return false;
-  }
-  if (/^(APP_BASE_URL|BASE_URL|PUBLIC_URL)$/.test(normalized)) {
-    return true;
   }
   return TRUSTED_EXTERNAL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
@@ -302,23 +299,6 @@ function isReservedHostname(hostname: string): boolean {
     normalized === 'example.com' ||
     normalized === 'example.org' ||
     normalized === 'example.net' ||
-    normalized
-      .split('.')
-      .some(
-        (label) =>
-          label === 'example' ||
-          label === 'demo' ||
-          label === 'sample' ||
-          label === 'test' ||
-          label.endsWith('-example') ||
-          label.startsWith('example-') ||
-          label.endsWith('-demo') ||
-          label.startsWith('demo-') ||
-          label.endsWith('-sample') ||
-          label.startsWith('sample-') ||
-          label.endsWith('-test') ||
-          label.startsWith('test-'),
-      ) ||
     normalized.endsWith('.example.com') ||
     normalized.endsWith('.example.org') ||
     normalized.endsWith('.example.net') ||

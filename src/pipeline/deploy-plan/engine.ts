@@ -84,7 +84,7 @@ interface PlanExecutionContext {
 }
 
 export interface PlanUpdates {
-  env?: { provided?: Record<string, string> } | Record<string, string>;
+  env?: { provided?: Record<string, string>; trusted?: string[] } | Record<string, string>;
   build?: Partial<DeployPlan['build']>;
   services?: PlanService[];
   health?: Partial<DeployPlan['health']>;
@@ -600,6 +600,7 @@ export class PlanEngine {
   private validatePlanEnvValues(
     entries: PlanEnvEntry[],
     providedEnv: Record<string, string>,
+    trustedEnvKeys: ReadonlySet<string> = new Set<string>(),
   ): EnvValueIssue[] {
     const byKey = new Map(entries.map((entry) => [entry.key, entry]));
     const issues: EnvValueIssue[] = [];
@@ -609,12 +610,16 @@ export class PlanEngine {
       const requirement = mergeEnvValueRequirement(key, entry?.requirement);
       issues.push(
         ...validateEnvValue(key, value, requirement, entry?.required ?? false, {
-          trustedSource: false,
+          trustedSource: trustedEnvKeys.has(key),
         }),
       );
     }
 
     return issues;
+  }
+
+  private trustedEnvKeySet(env: DeployPlan['env']): Set<string> {
+    return new Set((env.trusted ?? []).filter((key) => key in env.provided));
   }
 
   /**
@@ -1290,6 +1295,7 @@ export class PlanEngine {
       env: {
         ...plan.env,
         provided: plan.env.provided,
+        trusted: plan.env.trusted,
       },
       build: {
         ...plan.build,
@@ -1299,11 +1305,20 @@ export class PlanEngine {
 
     if (updates.env) {
       const envUpdate = updates.env;
-      if ('provided' in envUpdate) {
-        // Structured: { provided: { KEY: "val" } }
-        const structured: { provided?: Record<string, string> } = envUpdate;
+      if ('provided' in envUpdate || 'trusted' in envUpdate) {
+        // Structured: { provided: { KEY: "val" }, trusted: ["KEY"] }
+        const structured: { provided?: Record<string, string>; trusted?: string[] } = envUpdate;
         if (structured.provided) {
           merged.env.provided = { ...plan.env.provided, ...structured.provided };
+        }
+        if (Array.isArray(structured.trusted)) {
+          const trusted = new Set(plan.env.trusted ?? []);
+          for (const key of structured.trusted) {
+            if (typeof key === 'string' && key.length > 0) {
+              trusted.add(key);
+            }
+          }
+          merged.env.trusted = [...trusted].filter((key) => key in merged.env.provided);
         }
       } else {
         // Flat: { KEY: "val" } → treat as provided
@@ -1340,7 +1355,11 @@ export class PlanEngine {
     );
     const missing = missingEntries.map((entry) => entry.key);
     merged.missing = missing;
-    merged.env.issues = this.validatePlanEnvValues(merged.env.detected, merged.env.provided);
+    merged.env.issues = this.validatePlanEnvValues(
+      merged.env.detected,
+      merged.env.provided,
+      this.trustedEnvKeySet(merged.env),
+    );
 
     merged.status = this.computePlanStatus(
       missing,
