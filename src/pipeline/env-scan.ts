@@ -188,6 +188,10 @@ const NODE_PATTERNS = [
 ];
 // Node.js: const { A, B } = process.env
 const NODE_DESTRUCTURE = /const\s*\{([^}]+)\}\s*=\s*process\.env/g;
+// Node.js config schemas often validate env dynamically:
+// [{ key: 'JWT_SECRET', kind: 'minlen' }, ...] + process.env[s.key].
+const NODE_ENV_SCHEMA_KEY =
+  /\{\s*key\s*:\s*['"]([A-Z_][A-Z0-9_]*)['"][^}]*\bkind\s*:\s*['"](required|url|int|enum|prefix|minlen|optional)['"][^}]*\}/g;
 
 // Python: os.environ['KEY'], os.environ.get('KEY'), os.getenv('KEY')
 const PYTHON_PATTERNS = [
@@ -316,6 +320,15 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
             const optional = detectNodeDestructureFallback(raw, key);
             findings.push({ key, path: relPath, line, optional });
           }
+        }
+
+        NODE_ENV_SCHEMA_KEY.lastIndex = 0;
+        while ((match = NODE_ENV_SCHEMA_KEY.exec(content)) !== null) {
+          const key = match[1];
+          const kind = match[2];
+          if (!key || SYSTEM_VARS.has(key)) continue;
+          const line = content.slice(0, match.index).split('\n').length;
+          findings.push({ key, path: relPath, line, optional: kind === 'optional' });
         }
       }
     }
