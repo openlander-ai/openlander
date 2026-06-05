@@ -884,6 +884,41 @@ describe('executePlan Oracle — call-order permutation matrix', () => {
     );
   });
 
+  it('External URLs: stale safe proposals with explicit DATABASE_URL and REDIS_URL do not provision or pre-create a target Project', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_approval',
+      project_id: undefined,
+      services: [SAFE_PG_PROPOSAL, SAFE_REDIS_PROPOSAL],
+      env: {
+        auto: {},
+        required: ['DATABASE_URL', 'REDIS_URL'],
+        provided: {
+          DATABASE_URL: 'postgres://external-host/db',
+          REDIS_URL: 'redis://external-host:6379',
+        },
+        detected: [],
+      },
+    });
+    h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const result = await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(result.status).toBe('building');
+    expect(h.mockDb.createProject).not.toHaveBeenCalled();
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    expect(h.mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
+    expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          DATABASE_URL: 'postgres://external-host/db',
+          REDIS_URL: 'redis://external-host:6379',
+        }),
+      }),
+    );
+  });
+
   it('Out-of-order / wrong target: an approved create against a stale project_id rebinds to the app Project', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_approval',

@@ -539,15 +539,36 @@ export class PlanEngine {
    * compose_service / not_auto_creatable / explicit_resource are never in this
    * set — they are not auto-provisioned by execute_deploy_plan.
    */
-  private safeProposedResources(services: PlanService[]): PlanService[] {
+  private serviceEnvVarName(service: PlanService): string | undefined {
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+    return service.connect_via || SERVICE_ENV_VARS[service.type];
+  }
+
+  private planServiceSatisfiedByExplicitEnv(
+    service: PlanService,
+    providedEnv: Record<string, string>,
+  ): boolean {
+    const envVarName = this.serviceEnvVarName(service);
+    return Boolean(envVarName && this.hasExplicitEnvValue(providedEnv, envVarName));
+  }
+
+  private safeProposedResources(
+    services: PlanService[],
+    providedEnv: Record<string, string> = {},
+  ): PlanService[] {
     return services.filter(
       (service) =>
-        service.resolution === 'proposed_project_service' && service.approval === 'safe_resource',
+        service.resolution === 'proposed_project_service' &&
+        service.approval === 'safe_resource' &&
+        !this.planServiceSatisfiedByExplicitEnv(service, providedEnv),
     );
   }
 
-  private hasSafeProposedResources(services: PlanService[]): boolean {
-    return this.safeProposedResources(services).length > 0;
+  private hasSafeProposedResources(
+    services: PlanService[],
+    providedEnv: Record<string, string> = {},
+  ): boolean {
+    return this.safeProposedResources(services, providedEnv).length > 0;
   }
 
   /**
@@ -556,10 +577,14 @@ export class PlanEngine {
    * managed resource never downgrades a plan to 'ready' (which would skip the
    * approval gate and provision with empty approvedSafeResources).
    */
-  private computePlanStatus(missing: string[], services: PlanService[]): DeployPlanStatus {
+  private computePlanStatus(
+    missing: string[],
+    services: PlanService[],
+    providedEnv: Record<string, string> = {},
+  ): DeployPlanStatus {
     return missing.length > 0
       ? 'needs_input'
-      : this.hasSafeProposedResources(services)
+      : this.hasSafeProposedResources(services, providedEnv)
         ? 'needs_approval'
         : 'ready';
   }
@@ -770,8 +795,7 @@ export class PlanEngine {
   }): PlanService[] {
     const skipped: string[] = [];
     const filtered = params.services.filter((service) => {
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
-      const envVarName = SERVICE_ENV_VARS[service.type];
+      const envVarName = this.serviceEnvVarName(service);
       if (!envVarName || !this.hasExplicitEnvValue(params.providedEnv, envVarName)) {
         return true;
       }
@@ -1123,7 +1147,7 @@ export class PlanEngine {
       isCompose,
     });
 
-    const initialStatus: DeployPlan['status'] = this.computePlanStatus(missing, services);
+    const initialStatus: DeployPlan['status'] = this.computePlanStatus(missing, services, envVars);
 
     const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
@@ -1239,7 +1263,7 @@ export class PlanEngine {
     const missing = missingEntries.map((entry) => entry.key);
     merged.missing = missing;
 
-    merged.status = this.computePlanStatus(missing, merged.services);
+    merged.status = this.computePlanStatus(missing, merged.services, merged.env.provided);
     merged.updated_at = new Date().toISOString();
 
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
@@ -1282,7 +1306,7 @@ export class PlanEngine {
       return { approvedSafeResources };
     }
 
-    const safeProposals = this.safeProposedResources(plan.services);
+    const safeProposals = this.safeProposedResources(plan.services, plan.env.provided);
     const approvedAll = approval?.approveAllSafeResources === true;
     const approvedIds = new Set(approval?.createResources ?? []);
     const allApproved = safeProposals.every(
@@ -1374,6 +1398,7 @@ export class PlanEngine {
         svc.action === 'create' &&
         svc.resolution === 'proposed_project_service' &&
         svc.approval === 'safe_resource' &&
+        !this.planServiceSatisfiedByExplicitEnv(svc, plan.env.provided) &&
         approvedSafeResources.has(this.proposedResourceIdentifier(svc)),
     );
 
@@ -1581,7 +1606,7 @@ export class PlanEngine {
     }
     let hasDeferrableProvisioning = false;
     for (const planService of plan.services) {
-      const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
+      const envVarName = this.serviceEnvVarName(planService);
       if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
         continue;
       }
@@ -1611,7 +1636,7 @@ export class PlanEngine {
     }> = [];
 
     for (const planService of plan.services) {
-      const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
+      const envVarName = this.serviceEnvVarName(planService);
       if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
         if (envVarName) {
           log.info(

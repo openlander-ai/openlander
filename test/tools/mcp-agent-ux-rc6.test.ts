@@ -155,6 +155,40 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(plan.warnings.join('\n')).toContain('skipping automatic Database/Cache provisioning');
   });
 
+  it('keeps explicit DATABASE_URL and REDIS_URL authoritative during first-app plan creation', async () => {
+    analyzeInfrastructureSpy.mockReturnValue({
+      needs: [
+        { type: 'postgresql', detectedFrom: 'pg' },
+        { type: 'redis', detectedFrom: 'redis' },
+      ],
+      available: [],
+      missing: [
+        { type: 'postgresql', suggestion: 'Create a postgresql service' },
+        { type: 'redis', suggestion: 'Create a redis service' },
+      ],
+    });
+    const { engine } = createEngine();
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/example/app',
+      branch: 'main',
+      envVars: {
+        DATABASE_URL: 'postgres://external.example.com/app',
+        REDIS_URL: 'redis://external.example.com:6379',
+      },
+    });
+
+    expect(plan.status).toBe('ready');
+    expect(plan.services).toEqual([]);
+    expect(plan.env.auto).toEqual({});
+    expect(plan.env.provided).toEqual({
+      DATABASE_URL: 'postgres://external.example.com/app',
+      REDIS_URL: 'redis://external.example.com:6379',
+    });
+    expect(plan.warnings.join('\n')).toContain('postgresql (DATABASE_URL)');
+    expect(plan.warnings.join('\n')).toContain('redis (REDIS_URL)');
+  });
+
   it('removes pending auto services when update_deploy_plan provides the env var', async () => {
     const { engine, mockDb } = createEngine();
     const plan = createMockDeployPlan({
