@@ -1790,6 +1790,44 @@ describe('service-targeted monitoring tools', () => {
     expect(result['suggested_call']).toBeUndefined();
   });
 
+  it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      EXCHANGE_API_URL: 'https://api.exchange.test:443',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response('bad request', { status: 400 }));
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        dependencies: {
+          count: 1,
+          checks: [
+            expect.objectContaining({
+              key: 'EXCHANGE_API_URL',
+              protocol: 'https',
+              reachable: false,
+              status_code: 400,
+            }),
+          ],
+        },
+      });
+      expect(result['diagnosis']).toBeUndefined();
+      expect(result['suggested_call']).toBeUndefined();
+      expect(JSON.stringify(result['_agent_guidance'] ?? {})).not.toContain(
+        'declared dependency endpoints are unreachable',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('diagnose_service omits diagnosis for healthy ambiguous output and keeps raw fields', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Server listening on port 3000');

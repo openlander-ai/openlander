@@ -2003,12 +2003,29 @@ async function probeEnvDependencies(
         host: target.host,
         port: target.port,
         reachable: result['reachable'] === true,
+        ...(typeof result['status_code'] === 'number'
+          ? { status_code: result['status_code'] }
+          : {}),
         error: typeof result['error'] === 'string' ? sanitizeDiagnosticText(result['error']) : null,
       };
     }),
   );
 
   return { count: checks.length, checks };
+}
+
+function dependencyNetworkUnreachable(check: Record<string, unknown> | null | undefined): boolean {
+  if (!check || check['reachable'] !== false) {
+    return false;
+  }
+  const protocol = typeof check['protocol'] === 'string' ? check['protocol'] : '';
+  if (protocol === 'tcp') {
+    return true;
+  }
+  if (typeof check['error'] === 'string' && check['error'].trim().length > 0) {
+    return true;
+  }
+  return typeof check['status_code'] !== 'number';
 }
 
 function buildDiagnoseNextSteps(input: {
@@ -2054,7 +2071,7 @@ function buildDiagnoseNextSteps(input: {
   if (
     Array.isArray(depChecks) &&
     input.container['running'] === true &&
-    depChecks.some((item) => asRecord(item)?.['reachable'] === false)
+    depChecks.some((item) => dependencyNetworkUnreachable(asRecord(item)))
   ) {
     nextSteps.push(
       'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call redeploy_app.',
@@ -2482,7 +2499,7 @@ function buildSynthesizedServiceDiagnosis(input: {
   const failedDependency = Array.isArray(depChecks)
     ? depChecks
         .map((item) => asRecord(item))
-        .find((item): item is Record<string, unknown> => item?.['reachable'] === false)
+        .find((item): item is Record<string, unknown> => dependencyNetworkUnreachable(item))
     : undefined;
   if (failedDependency) {
     if (input.httpCheck['reachable'] === false) {

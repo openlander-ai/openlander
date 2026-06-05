@@ -109,6 +109,11 @@ function buildEngine() {
       name: 'test-app-postgresql',
       kind: 'postgres',
       container_name: 'ol-svc-test-app-postgresql',
+      credentials: JSON.stringify({
+        user: 'openlander',
+        password: 'pw',
+        database: 'test_app_postgresql',
+      }),
     }),
     getSuggestedEnv: vi
       .fn()
@@ -118,6 +123,7 @@ function buildEngine() {
 
   const mockDocker = {
     ensureProjectNetwork: vi.fn().mockResolvedValue('ol-test-app-net'),
+    execSimple: vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'PONG', stderr: '' }),
   };
 
   const mockEvents = {
@@ -460,6 +466,117 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       envVars: { DATABASE_URL: 'postgres://provisioned/db' },
     });
     expect(h.mockServiceManager.create).toHaveBeenCalledTimes(1);
+    expect(h.mockDocker.execSimple).toHaveBeenCalled();
+  });
+
+  it('P1 readiness: waits for provisioned managed resources before returning deferred env', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_approval',
+      project_id: 'p1',
+      services: [SAFE_PG_PROPOSAL, SAFE_REDIS_PROPOSAL],
+    });
+    h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    h.mockServiceManager.create.mockImplementation(
+      (options: { template: 'postgresql' | 'redis' }) => {
+        if (options.template === 'postgresql') {
+          return Promise.resolve({
+            id: 'svc-pg-1',
+            name: 'test-app-postgresql',
+            kind: 'postgres',
+            container_name: 'ol-svc-test-app-postgresql',
+            credentials: JSON.stringify({
+              user: 'openlander',
+              password: 'pw',
+              database: 'test_app_postgresql',
+            }),
+          });
+        }
+        return Promise.resolve({
+          id: 'svc-redis-1',
+          name: 'test-app-redis',
+          kind: 'redis',
+          container_name: 'ol-svc-test-app-redis',
+        });
+      },
+    );
+    h.mockServiceManager.getSuggestedEnv.mockImplementation(
+      (service: { id: string }): Array<{ key: string; value: string }> => {
+        if (service.id === 'svc-pg-1') {
+          return [{ key: 'DATABASE_URL', value: 'postgres://ready/db' }];
+        }
+        return [{ key: 'REDIS_URL', value: 'redis://ready/cache' }];
+      },
+    );
+
+    await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    const deferredRuntimeEnvVars = h.mockPipeline.startDeploy.mock.calls[0][0]
+      ._deferredRuntimeEnvVars as () => Promise<{
+      ok: boolean;
+      envVars?: Record<string, string>;
+    }>;
+    const runtimeEnv = await deferredRuntimeEnvVars();
+
+    expect(runtimeEnv).toMatchObject({
+      ok: true,
+      envVars: {
+        DATABASE_URL: 'postgres://ready/db',
+        REDIS_URL: 'redis://ready/cache',
+      },
+    });
+    expect(h.mockDocker.execSimple).toHaveBeenCalledWith(
+      'ol-svc-test-app-postgresql',
+      ['pg_isready', '-U', 'openlander', '-d', 'postgres'],
+    );
+    expect(h.mockDocker.execSimple).toHaveBeenCalledWith(
+      'ol-svc-test-app-postgresql',
+      expect.arrayContaining(['openlander-pg-ready', 'pw', 'openlander', 'test_app_postgresql']),
+    );
+    expect(h.mockDocker.execSimple).toHaveBeenCalledWith('ol-svc-test-app-redis', [
+      'redis-cli',
+      'PING',
+    ]);
+  });
+
+  it('P1 readiness: failed managed readiness settles deferred env as not ok before app run', async () => {
+    vi.useFakeTimers();
+    try {
+      const plan = createMockDeployPlan({
+        status: 'needs_approval',
+        project_id: 'p1',
+        services: [SAFE_PG_PROPOSAL],
+      });
+      h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+      h.mockDocker.execSimple.mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'database system is starting up',
+      });
+
+      await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+        approveAllSafeResources: true,
+      });
+
+      const deferredRuntimeEnvVars = h.mockPipeline.startDeploy.mock.calls[0][0]
+        ._deferredRuntimeEnvVars as () => Promise<{
+        ok: boolean;
+        error?: string;
+      }>;
+      const runtimeEnvPromise = deferredRuntimeEnvVars();
+      await vi.advanceTimersByTimeAsync(31_000);
+      const runtimeEnv = await runtimeEnvPromise;
+
+      expect(runtimeEnv).toMatchObject({
+        ok: false,
+        error: expect.stringContaining('was not ready before app start'),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('P1b: approved safe resources provision concurrently after deploy dispatch', async () => {
@@ -474,6 +591,7 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       name: string;
       kind: string;
       container_name: string;
+      credentials: string;
     }>();
     const redisCreate = createDeferred<{
       id: string;
@@ -525,6 +643,11 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       name: 'test-app-postgresql',
       kind: 'postgres',
       container_name: 'ol-svc-test-app-postgresql',
+      credentials: JSON.stringify({
+        user: 'openlander',
+        password: 'pw',
+        database: 'test_app_postgresql',
+      }),
     });
     await Promise.resolve();
     expect(runtimeEnvSettled).toBe(false);

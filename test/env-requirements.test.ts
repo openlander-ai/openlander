@@ -46,10 +46,32 @@ describe('env value requirements', () => {
     expect(
       validateEnvValue(
         'EXCHANGE_API_URL',
+        'https://api.exchange-example.org',
+        inferEnvValueRequirement('EXCHANGE_API_URL'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_URL_HOST', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue(
+        'EXCHANGE_API_URL',
         'https://api.github.com',
         inferEnvValueRequirement('EXCHANGE_API_URL'),
       ),
     ).toEqual([]);
+  });
+
+  it('blocks obvious dummy/sample/test secrets even when their prefix looks valid', () => {
+    expect(
+      validateEnvValue(
+        'EXCHANGE_API_KEY',
+        'key_test_dummy',
+        inferEnvValueRequirement('EXCHANGE_API_KEY'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+
+    expect(
+      validateEnvValue('STRIPE_API_KEY', 'sk_live_sample', inferEnvValueRequirement('STRIPE_API_KEY')),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
   });
 
   it('infers integer requirements for numeric knobs', () => {
