@@ -146,12 +146,12 @@ describe('MCP agent UX rc6 regressions', () => {
     const plan = await engine.createPlan({
       repoUrl: 'https://github.com/example/app',
       branch: 'main',
-      envVars: { DATABASE_URL: 'mysql://external.example.com/app' },
+      envVars: { DATABASE_URL: 'mysql://db.acme-host.net/app' },
     });
 
     expect(plan.services).toEqual([]);
     expect(plan.env.auto).toEqual({});
-    expect(plan.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
+    expect(plan.env.provided).toEqual({ DATABASE_URL: 'mysql://db.acme-host.net/app' });
     expect(plan.warnings.join('\n')).toContain('skipping automatic Database/Cache provisioning');
   });
 
@@ -173,8 +173,8 @@ describe('MCP agent UX rc6 regressions', () => {
       repoUrl: 'https://github.com/example/app',
       branch: 'main',
       envVars: {
-        DATABASE_URL: 'postgres://external.example.com/app',
-        REDIS_URL: 'redis://external.example.com:6379',
+        DATABASE_URL: 'postgres://db.acme-host.net/app',
+        REDIS_URL: 'redis://redis.acme-host.net:6379',
       },
     });
 
@@ -182,8 +182,8 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(plan.services).toEqual([]);
     expect(plan.env.auto).toEqual({});
     expect(plan.env.provided).toEqual({
-      DATABASE_URL: 'postgres://external.example.com/app',
-      REDIS_URL: 'redis://external.example.com:6379',
+      DATABASE_URL: 'postgres://db.acme-host.net/app',
+      REDIS_URL: 'redis://redis.acme-host.net:6379',
     });
     expect(plan.warnings.join('\n')).toContain('postgresql (DATABASE_URL)');
     expect(plan.warnings.join('\n')).toContain('redis (REDIS_URL)');
@@ -205,13 +205,13 @@ describe('MCP agent UX rc6 regressions', () => {
     mockDb.getDeployPlan.mockResolvedValue({ plan_json: JSON.stringify(plan) });
 
     const updated = await engine.updatePlan(plan.plan_id, {
-      env: { DATABASE_URL: 'mysql://external.example.com/app' },
+      env: { DATABASE_URL: 'mysql://db.acme-host.net/app' },
     });
 
     expect(updated.status).toBe('ready');
     expect(updated.services).toEqual([]);
     expect(updated.env.auto).toEqual({});
-    expect(updated.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
+    expect(updated.env.provided).toEqual({ DATABASE_URL: 'mysql://db.acme-host.net/app' });
   });
 
   it('surfaces needs_approval for detected managed services without localhost placeholders', async () => {

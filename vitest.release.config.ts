@@ -19,6 +19,7 @@ export default defineConfig({
       'test/deploy-plan-types.test.ts',
       'test/e2e-docker-cleanup.test.ts',
       'test/console-contract.test.ts',
+      'test/env-requirements.test.ts',
       'test/env-manager-scope.test.ts',
       'test/env-roundtrip.test.ts',
       'test/github-oauth.test.ts',

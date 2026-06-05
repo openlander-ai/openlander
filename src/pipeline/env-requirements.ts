@@ -172,23 +172,6 @@ export function inferEnvValueRequirement(key: string): EnvValueRequirement | und
         'Use the real public URL supplied or confirmed by the user; do not invent a public base URL during deploy planning.',
     });
   }
-  if (/^EXCHANGE_API_URL$/i.test(key)) {
-    return withExternalTrustRequirement(key, {
-      kind: 'url',
-      source: 'key_name',
-      allowLocalhost: false,
-      guidance:
-        'Ask the user for the real reachable HTTP(S) endpoint; this app may preflight it during startup.',
-    });
-  }
-  if (/^EXCHANGE_API_KEY$/i.test(key)) {
-    return withExternalTrustRequirement(key, {
-      kind: 'prefix',
-      source: 'key_name',
-      prefix: 'key_',
-      guidance: 'Ask the user for the real key; it must start with "key_".',
-    });
-  }
   if (/^STRIPE_(?:API|SECRET)_KEY$/i.test(key)) {
     return withExternalTrustRequirement(key, {
       kind: 'prefix',
@@ -346,26 +329,11 @@ function parseHostValue(value: string): { hostname?: string; invalid: boolean } 
   }
 }
 
-function shouldFailReservedHost(key: string, value: string, required: boolean): boolean {
-  if (!required) {
-    return false;
-  }
-  if (/^EXCHANGE_API_URL$/i.test(key)) {
-    return true;
-  }
-  try {
-    const protocol = new URL(value).protocol.toLowerCase();
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 export function validateEnvValue(
   key: string,
   value: string,
   requirement?: EnvValueRequirement,
-  required = true,
+  _required = true,
   options: EnvValueValidationOptions = {},
 ): EnvValueIssue[] {
   const issues: EnvValueIssue[] = [];
@@ -375,7 +343,7 @@ export function validateEnvValue(
     issues.push({
       key,
       code: 'ENV_VALUE_PLACEHOLDER',
-      severity: required ? 'fail' : 'warning',
+      severity: 'fail',
       message: `${key} looks empty or placeholder-like; provide the real value before deployment.`,
       requirement,
     });
@@ -391,7 +359,7 @@ export function validateEnvValue(
     issues.push({
       key,
       code: 'ENV_VALUE_PLACEHOLDER',
-      severity: required ? 'fail' : 'warning',
+      severity: 'fail',
       message: `${key} looks like a copied example secret; ask the user for the real value before deployment.`,
       requirement,
     });
@@ -405,7 +373,7 @@ export function validateEnvValue(
     issues.push({
       key,
       code: 'ENV_VALUE_UNTRUSTED_EXTERNAL',
-      severity: required ? 'fail' : 'warning',
+      severity: 'fail',
       message: `${key} is user-owned external configuration. Provide it from a saved/trusted user source; do not invent it during deploy planning.`,
       requirement,
     });
@@ -480,7 +448,7 @@ export function validateEnvValue(
       issues.push({
         key,
         code: 'ENV_VALUE_RESERVED_URL_HOST',
-        severity: shouldFailReservedHost(key, trimmed, required) ? 'fail' : 'warning',
+        severity: 'fail',
         message: `${key} points to a reserved/example host; use a real reachable URL before deployment.`,
         requirement,
       });
@@ -509,7 +477,7 @@ export function validateEnvValue(
       issues.push({
         key,
         code: 'ENV_VALUE_RESERVED_HOST',
-        severity: required ? 'fail' : 'warning',
+        severity: 'fail',
         message: `${key} points to a reserved/example host; use a real reachable host before deployment.`,
         requirement,
       });
