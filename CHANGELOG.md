@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.11] - 2026-06-05
+
+### Fixed
+
+- Honor explicit external `DATABASE_URL` and `REDIS_URL` values throughout
+  Day-1 deploy plans, so stale managed-resource proposals cannot trigger
+  approval, target-Project pre-creation, or OpenLander-managed database/cache
+  provisioning.
+
 ## [0.1.14-rc.10] - 2026-06-05
 
 ### Fixed
