@@ -548,6 +548,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const internal = (args['internal'] as boolean | undefined) ?? false;
       const pathArg = (args['path'] as string | undefined)?.trim();
       const healthCheckPathArg = (args['health_check_path'] as string | undefined)?.trim();
+      const trafficPathArg = (args['traffic_path'] as string | undefined)?.trim();
 
       const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
@@ -570,6 +571,7 @@ export const monitoringToolDefs: ToolDef[] = [
       });
       const trafficProbePath = selectServiceTrafficProbePath({
         primaryPath: probePath,
+        requestedTrafficPath: trafficPathArg,
         env: effectiveEnv,
       });
       const trafficCheck =
@@ -625,6 +627,7 @@ export const monitoringToolDefs: ToolDef[] = [
         dependencies,
         logs: runtimeLogs,
         recentDeployment,
+        warnings,
       });
 
       return {
@@ -1672,10 +1675,12 @@ function inferTrafficProbePathFromEnv(env: Record<string, string>): string | nul
 
 function selectServiceTrafficProbePath(input: {
   primaryPath: string;
+  requestedTrafficPath?: string;
   env: Record<string, string>;
 }): string | null {
   const primary = normalizeProbePath(input.primaryPath) ?? '/';
-  const explicit = inferTrafficProbePathFromEnv(input.env);
+  const explicit =
+    normalizeProbePath(input.requestedTrafficPath) ?? inferTrafficProbePathFromEnv(input.env);
   const candidate = explicit ?? '/';
   return candidate === primary ? null : candidate;
 }
@@ -2081,7 +2086,8 @@ interface SynthesizedServiceDiagnosis {
     | 'NO_RUNTIME_IMAGE'
     | 'RESTART_LOOP'
     | 'CONTAINER_NOT_RUNNING'
-    | 'DEPENDENCY_UNREACHABLE';
+    | 'DEPENDENCY_UNREACHABLE'
+    | 'TRAFFIC_HEALTH_MISMATCH';
   confidence: 'high';
   summary: string;
   evidence: Record<string, unknown>;
@@ -2306,6 +2312,7 @@ function buildSynthesizedServiceDiagnosis(input: {
   dependencies: Record<string, unknown>;
   logs: Record<string, unknown>;
   recentDeployment: Record<string, unknown>;
+  warnings: DiagnosticWarning[];
 }): SynthesizedServiceDiagnosis | null {
   const suspectedBuildEnv = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
   if (Array.isArray(suspectedBuildEnv) && suspectedBuildEnv.length > 0) {
@@ -2455,6 +2462,16 @@ function buildSynthesizedServiceDiagnosis(input: {
         action: 'apply_route_config',
         params: { service_id: input.service.id, container_port: refreshPort },
       },
+    };
+  }
+
+  const trafficMismatch = input.warnings[0];
+  if (trafficMismatch) {
+    return {
+      code: 'TRAFFIC_HEALTH_MISMATCH',
+      confidence: 'high',
+      summary: trafficMismatch.summary,
+      evidence: trafficMismatch.evidence,
     };
   }
 

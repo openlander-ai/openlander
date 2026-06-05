@@ -152,6 +152,12 @@ export const diagnoseServiceSchema = z
       .optional()
       .describe('HTTP path to probe on the service assigned port (default: health path or "/").'),
     health_check_path: z.string().optional().describe('Alias for path.'),
+    traffic_path: z
+      .string()
+      .optional()
+      .describe(
+        'Representative end-user path to probe in addition to health_check_path/path. Use this when /health can pass while real traffic fails.',
+      ),
     timeout_ms: z
       .number()
       .int()

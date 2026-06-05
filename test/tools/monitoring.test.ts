@@ -1812,14 +1812,14 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
-  it('diagnose_service warns when healthcheck passes but representative traffic returns 5xx', async () => {
+  it('diagnose_service diagnoses when healthcheck passes but representative traffic returns 5xx', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' });
 
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
-      { project_id: 'app', lines: 5 },
+      { project_id: 'app', lines: 5, traffic_path: '/dashboard' },
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
@@ -1832,7 +1832,7 @@ describe('service-targeted monitoring tools', () => {
       trafficCheck: {
         reachable: false,
         status_code: 500,
-        target_resolved: 'http://ol-app:3000/',
+        target_resolved: 'http://ol-app:3000/dashboard',
       },
       warnings: [
         {
@@ -1842,11 +1842,15 @@ describe('service-targeted monitoring tools', () => {
           evidence: {
             health_path: '/health',
             health_status_code: 200,
-            traffic_path: '/',
+            traffic_path: '/dashboard',
             traffic_status_code: 500,
           },
         },
       ],
+      diagnosis: {
+        code: 'TRAFFIC_HEALTH_MISMATCH',
+        summary: expect.stringContaining('representative traffic path /dashboard returned HTTP 500'),
+      },
       _agent_guidance: {
         message: expect.stringContaining('Health path /health is reachable'),
         next_steps: expect.arrayContaining([
@@ -1854,7 +1858,6 @@ describe('service-targeted monitoring tools', () => {
         ]),
       },
     });
-    expect(result['diagnosis']).toBeUndefined();
     expect(result['suggested_call']).toBeUndefined();
   });
 
