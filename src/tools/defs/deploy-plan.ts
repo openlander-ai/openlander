@@ -537,7 +537,7 @@ function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['
   const hasRequirements = (plan.env?.detected ?? []).some((entry) => entry.requirement);
   if (hasRequirements) {
     steps.push(
-      'Use input_requirements[].requirement as value-shape guidance; examples are format hints, not production secrets.',
+      'Use input_requirements[].requirement as value-shape guidance; ask the user for real secrets and reachable endpoints.',
     );
   }
   steps.push('Call update_deploy_plan with corrected values, then call execute_deploy_plan.');
