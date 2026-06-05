@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.13] - 2026-06-05
+
+### Fixed
+
+- Keep deploy plans in `needs_input` when supplied app environment values are
+  invalid, including reserved/example HTTP(S) hosts, too-short secrets, and
+  prefix mismatches for known API key formats.
+- Surface value-shape requirements in deploy-plan responses without copyable
+  fake secret/API examples, so agents ask users for real secrets and reachable
+  endpoints instead of deploying placeholder values.
+
 ## [0.1.14-rc.12] - 2026-06-05
 
 ### Fixed
