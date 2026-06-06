@@ -89,6 +89,16 @@ interface StabilityObservation {
   result: ReadinessResult;
 }
 
+interface RepresentativeTrafficObservation {
+  status: 'passed' | 'failed' | 'skipped';
+  path: string;
+  severity: 'ok' | 'warning' | 'fail';
+  status_code?: number;
+  attempts?: number;
+  elapsed_ms?: number;
+  message?: string;
+}
+
 type ContainerState = {
   Running?: boolean;
   Restarting?: boolean;
@@ -264,6 +274,68 @@ async function observeProjectStability(
     observed_ms: Date.now() - started,
     readiness: last.readiness,
     result: last,
+  };
+}
+
+function routeProbeStatusCode(error: string): number | undefined {
+  const match = /HTTP\s+(\d{3})/.exec(error);
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function observeRepresentativeTraffic(
+  appCtx: AppCtx,
+  routeName: string,
+  path = '/',
+): Promise<RepresentativeTrafficObservation> {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const configLike = appCtx.config as unknown;
+  const traefikMode =
+    typeof configLike === 'object' && configLike !== null && 'traefik' in configLike
+      ? (configLike as { traefik?: { mode?: unknown } }).traefik?.mode
+      : undefined;
+  if (traefikMode !== 'managed') {
+    return {
+      status: 'skipped',
+      path: normalizedPath,
+      severity: 'warning',
+      message: 'Representative traffic probe requires managed Traefik.',
+    };
+  }
+
+  const result = await appCtx.pipeline.verifyManagedTraefikRoute({
+    projectName: routeName,
+    path: normalizedPath,
+    probeTimeoutMs: 5_000,
+    maxWaitMs: 0,
+    intervalMs: 1,
+    minimumSuccessAgeMs: 0,
+  });
+
+  if (result.ok) {
+    return {
+      status: 'passed',
+      path: normalizedPath,
+      severity: 'ok',
+      status_code: result.status,
+      attempts: result.attempts,
+      elapsed_ms: result.elapsedMs,
+    };
+  }
+
+  const statusCode = routeProbeStatusCode(result.error);
+  const isServerError = typeof statusCode === 'number' && statusCode >= 500;
+  return {
+    status: 'failed',
+    path: normalizedPath,
+    severity: isServerError ? 'fail' : 'warning',
+    ...(statusCode ? { status_code: statusCode } : {}),
+    attempts: result.attempts,
+    elapsed_ms: result.elapsedMs,
+    message: result.error,
   };
 }
 
@@ -1804,16 +1876,36 @@ export const deployPlanToolDefs: ToolDef[] = [
                 (routeService ? getPreferredDeployableServiceUrl(routeService) : null) ??
                 getPreferredProjectUrl(routeName, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
+              const representativeTraffic =
+                waitHealthy && finalReadiness.ready
+                  ? await observeRepresentativeTraffic(appCtx, routeName, '/').catch(
+                      (err: unknown): RepresentativeTrafficObservation => ({
+                        status: 'skipped',
+                        path: '/',
+                        severity: 'warning',
+                        message: err instanceof Error ? err.message : String(err),
+                      }),
+                    )
+                  : undefined;
+              const trafficFailure =
+                representativeTraffic?.status === 'failed' &&
+                representativeTraffic.severity === 'fail';
+              const trafficWarning =
+                representativeTraffic && representativeTraffic.severity !== 'ok'
+                  ? (representativeTraffic.message ??
+                    `Representative traffic probe ${representativeTraffic.status}`)
+                  : undefined;
+              const effectiveCompletionStatus = trafficFailure ? 'unhealthy' : completionStatus;
               resolve({
                 plan_id: plan.plan_id,
-                status: completionStatus,
+                status: effectiveCompletionStatus,
                 project_name: result.project_name,
                 project_id: finalProjectId,
                 status_call: deployStatusCall({
                   projectId: finalProjectId,
                   projectName: result.project_name,
                 }),
-                ...(completionStatus === 'unhealthy'
+                ...(effectiveCompletionStatus === 'unhealthy'
                   ? {
                       diagnostic_call: {
                         tool: 'openlander_monitor',
@@ -1836,6 +1928,27 @@ export const deployPlanToolDefs: ToolDef[] = [
                 docker_host: getDockerHostType(),
                 readiness: finalReadiness.readiness,
                 ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
+                ...(representativeTraffic
+                  ? {
+                      representative_traffic: {
+                        status: representativeTraffic.status,
+                        severity: representativeTraffic.severity,
+                        path: representativeTraffic.path,
+                        ...(representativeTraffic.status_code
+                          ? { status_code: representativeTraffic.status_code }
+                          : {}),
+                        ...(representativeTraffic.attempts
+                          ? { attempts: representativeTraffic.attempts }
+                          : {}),
+                        ...(representativeTraffic.elapsed_ms !== undefined
+                          ? { elapsed_ms: representativeTraffic.elapsed_ms }
+                          : {}),
+                        ...(representativeTraffic.message
+                          ? { message: representativeTraffic.message }
+                          : {}),
+                      },
+                    }
+                  : {}),
                 ...(stability
                   ? {
                       post_deploy_stability: {
@@ -1854,6 +1967,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 ...([
                   ...readinessWarnings,
                   ...(stabilityWarning ? [stabilityWarning] : []),
+                  ...(trafficWarning ? [trafficWarning] : []),
                   ...(postDeployWarnings ?? []),
                   ...targetAttach.warnings,
                 ].length > 0
@@ -1861,6 +1975,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                       warnings: [
                         ...readinessWarnings,
                         ...(stabilityWarning ? [stabilityWarning] : []),
+                        ...(trafficWarning ? [trafficWarning] : []),
                         ...(postDeployWarnings ?? []),
                         ...targetAttach.warnings,
                       ],
@@ -1878,7 +1993,19 @@ export const deployPlanToolDefs: ToolDef[] = [
                       },
                     }
                   : finalReadiness.ready && finalReadiness.readiness === 'healthy'
-                    ? {}
+                    ? trafficFailure
+                      ? {
+                          _agent_guidance: {
+                            message:
+                              representativeTraffic.message ??
+                              'Deployment health passed, but representative public traffic failed.',
+                            next_steps: [
+                              'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
+                              'Do not report end-user success until the public route returns a non-5xx response',
+                            ],
+                          },
+                        }
+                      : {}
                     : {
                         _agent_guidance: {
                           message:
