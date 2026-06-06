@@ -530,6 +530,29 @@ describe('deploy MCP guidance', () => {
           }),
         }),
       ],
+      action_summary: {
+        reason: 'missing_env',
+        first_blocker: 'STRIPE_API_KEY: value required',
+        required_action: 'update_deploy_plan',
+        ask_user_for: [
+          expect.objectContaining({
+            key: 'STRIPE_API_KEY',
+            trusted_confirmation_required: true,
+          }),
+        ],
+        update_payload_template: {
+          plan_id: 'plan-env',
+          updates: {
+            env: {
+              provided: {
+                STRIPE_API_KEY: '<real STRIPE_API_KEY value from user>',
+              },
+              trusted: ['STRIPE_API_KEY'],
+            },
+          },
+        },
+        after_update: 'execute_deploy_plan',
+      },
     });
   });
 
