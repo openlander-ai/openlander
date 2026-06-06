@@ -314,12 +314,15 @@ green container is cleaned up.
 
 This is a best-effort zero-downtime path, not a hard guarantee. OpenLander waits
 for the managed Traefik HTTP provider to poll the updated route and probes the
-public route before removing blue. If Traefik polling is delayed beyond that
-window, a short blip is still possible. Stronger green-identity verification is
-tracked as a follow-up.
+public route before removing blue, then keeps blue until green survives a
+post-switch stability window. If Traefik polling is delayed beyond that window,
+a short blip is still possible. Stronger green-identity verification is tracked
+as a follow-up.
 
-The default redeploy strategy remains `force` in 0.1.3. Request
-`strategy: "blue-green"` explicitly after verifying the service is eligible.
+When `strategy` is omitted, `redeploy_app` uses blue-green automatically for
+eligible services and falls back to `force` when blue-green is not currently
+eligible. Pass `strategy: "force"` explicitly when downtime is acceptable and
+you want the shorter replacement path.
 
 Use a real readiness endpoint for `health_check_path`. If the app depends on a
 database, cache, object storage, or external service, that endpoint should verify
