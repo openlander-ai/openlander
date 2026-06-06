@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.18] - 2026-06-06
+
+### Fixed
+
+- Keep blue-green redeploys on the previous version until the green container
+  survives a 30-second post-switch stability window, and restore blue when the
+  new version starts crashing or becomes unhealthy during that window.
+- Probe representative public traffic before reporting a waited deploy as
+  successful, so healthcheck-only false positives are downgraded to unhealthy
+  with a diagnostic follow-up.
+- Add a compact deploy-plan `needs_input` action summary so agents can ask for
+  the first real missing/invalid value and retry with the correct
+  `update_deploy_plan` payload.
+- Align deploy stability policy with Swarm/Kubernetes-style min-ready behavior
+  by ignoring pre-window restart history, tolerating transient Docker inspect
+  failures, retrying public traffic probes briefly, and returning structured
+  route-probe status codes.
+
 ## [0.1.14-rc.17] - 2026-06-06
 
 ### Fixed
