@@ -32,6 +32,7 @@ import {
   inferEnvValueRequirement,
   mergeEnvValueRequirement,
   validateEnvValue,
+  type EnvValueIssue,
   type EnvValueRequirement,
 } from '../../pipeline/env-requirements.js';
 
@@ -97,6 +98,13 @@ interface RepresentativeTrafficObservation {
   attempts?: number;
   elapsed_ms?: number;
   message?: string;
+}
+
+interface PlanInputRequirement {
+  key: string;
+  source: string;
+  required: boolean;
+  requirement: EnvValueRequirement;
 }
 
 type ContainerState = {
@@ -528,8 +536,8 @@ function safeProposedResourceIds(plan: Pick<DeployPlan, 'services'>): string[] {
 function buildPlanNeedsInputResponse(params: {
   planId: string;
   missing: string[];
-  inputRequirements?: unknown[];
-  envIssues?: unknown[];
+  inputRequirements?: PlanInputRequirement[];
+  envIssues?: EnvValueIssue[];
   warnings?: string[];
   message: string;
   nextSteps: string[];
@@ -546,6 +554,12 @@ function buildPlanNeedsInputResponse(params: {
       ? { input_requirements: inputRequirements }
       : {}),
     ...(envIssues && envIssues.length > 0 ? { env_issues: envIssues } : {}),
+    action_summary: buildNeedsInputActionSummary({
+      planId,
+      missing,
+      inputRequirements: inputRequirements ?? [],
+      envIssues: envIssues ?? [],
+    }),
     ...(warnings ? { warnings } : {}),
     suggested_call: updateDeployPlanSuggestedCall(planId),
     _agent_guidance: {
@@ -555,12 +569,10 @@ function buildPlanNeedsInputResponse(params: {
   };
 }
 
-function buildPlanInputRequirements(plan: { env?: DeployPlan['env']; missing?: string[] }): Array<{
-  key: string;
-  source: string;
-  required: boolean;
-  requirement: EnvValueRequirement;
-}> {
+function buildPlanInputRequirements(plan: {
+  env?: DeployPlan['env'];
+  missing?: string[];
+}): PlanInputRequirement[] {
   if (!plan.env) {
     return [];
   }
@@ -593,6 +605,69 @@ function buildPlanInputRequirements(plan: { env?: DeployPlan['env']; missing?: s
       ];
     })
     .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function buildNeedsInputActionSummary(params: {
+  planId: string;
+  missing: string[];
+  inputRequirements: PlanInputRequirement[];
+  envIssues: EnvValueIssue[];
+}): Record<string, unknown> {
+  const blockingIssues = params.envIssues.filter((issue) => issue.severity === 'fail');
+  const issueByKey = new Map(blockingIssues.map((issue) => [issue.key, issue]));
+  const requirementByKey = new Map(params.inputRequirements.map((item) => [item.key, item]));
+  const keys = Array.from(
+    new Set([...params.missing, ...blockingIssues.map((issue) => issue.key)]),
+  ).sort((a, b) => a.localeCompare(b));
+  const trustedKeys = keys.filter((key) => {
+    const issue = issueByKey.get(key);
+    const requirement = requirementByKey.get(key)?.requirement ?? issue?.requirement;
+    return (
+      issue?.code === 'ENV_VALUE_UNTRUSTED_EXTERNAL' || requirement?.trustedSourceRequired === true
+    );
+  });
+  const firstIssue = blockingIssues[0];
+  const firstMissing = keys.find((key) => params.missing.includes(key));
+  const reason = firstIssue ? 'invalid_env' : keys.length > 0 ? 'missing_env' : 'input_required';
+  const firstBlocker = firstIssue
+    ? `${firstIssue.key}: ${firstIssue.message}`
+    : firstMissing
+      ? `${firstMissing}: value required`
+      : 'Plan needs additional input before execution.';
+  const providedTemplate = Object.fromEntries(
+    keys.map((key) => [key, `<real ${key} value from user>`]),
+  );
+
+  return {
+    reason,
+    first_blocker: firstBlocker,
+    required_action: 'update_deploy_plan',
+    ask_user_for: keys.map((key) => {
+      const issue = issueByKey.get(key);
+      const input = requirementByKey.get(key);
+      const requirement = input?.requirement ?? issue?.requirement;
+      return {
+        key,
+        prompt:
+          issue?.message ??
+          requirement?.message ??
+          requirement?.guidance ??
+          `Provide the real value for ${key}.`,
+        ...(requirement ? { requirement } : {}),
+        ...(trustedKeys.includes(key) ? { trusted_confirmation_required: true } : {}),
+      };
+    }),
+    update_payload_template: {
+      plan_id: params.planId,
+      updates: {
+        env: {
+          provided: providedTemplate,
+          ...(trustedKeys.length > 0 ? { trusted: trustedKeys } : {}),
+        },
+      },
+    },
+    after_update: 'execute_deploy_plan',
+  };
 }
 
 function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['env'] }): string[] {
