@@ -285,15 +285,6 @@ async function observeProjectStability(
   };
 }
 
-function routeProbeStatusCode(error: string): number | undefined {
-  const match = /HTTP\s+(\d{3})/.exec(error);
-  if (!match?.[1]) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 async function observeRepresentativeTraffic(
   appCtx: AppCtx,
   routeName: string,
@@ -317,9 +308,9 @@ async function observeRepresentativeTraffic(
   const result = await appCtx.pipeline.verifyManagedTraefikRoute({
     projectName: routeName,
     path: normalizedPath,
-    probeTimeoutMs: 5_000,
-    maxWaitMs: 0,
-    intervalMs: 1,
+    probeTimeoutMs: 1_000,
+    maxWaitMs: 2_500,
+    intervalMs: 500,
     minimumSuccessAgeMs: 0,
   });
 
@@ -334,7 +325,7 @@ async function observeRepresentativeTraffic(
     };
   }
 
-  const statusCode = routeProbeStatusCode(result.error);
+  const statusCode = result.status;
   const isServerError = typeof statusCode === 'number' && statusCode >= 500;
   return {
     status: 'failed',

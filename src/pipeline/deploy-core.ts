@@ -128,8 +128,9 @@ const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS =
   TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
 const DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS = 500;
-const DEFAULT_BLUE_GREEN_POST_SWITCH_STABILITY_MS = 35_000;
+const DEFAULT_BLUE_GREEN_POST_SWITCH_STABILITY_MS = 30_000;
 const DEFAULT_BLUE_GREEN_STABILITY_POLL_INTERVAL_MS = 2_000;
+const DEFAULT_BLUE_GREEN_STABILITY_INSPECT_FAILURE_THRESHOLD = 3;
 const BLUE_GREEN_LABELS = {
   ROLE: 'openlander.blue_green.role',
   PROJECT_ID: 'openlander.blue_green.project_id',
@@ -275,7 +276,7 @@ export interface RuntimeRecreateResult extends DeployResult {
 
 export type ManagedRouteVerificationResult =
   | { ok: true; status: number; attempts: number; elapsedMs: number }
-  | { ok: false; error: string; attempts: number; elapsedMs: number };
+  | { ok: false; error: string; attempts: number; elapsedMs: number; status?: number };
 
 export interface RedeployOptions {
   noCache?: boolean;
@@ -1083,13 +1084,15 @@ export class DeployPipeline {
     projectName: string;
     path: string;
     timeoutMs: number;
-  }): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
+  }): Promise<{ ok: true; status: number } | { ok: false; error: string; status?: number }> {
     const host = getEnvironmentProjectHostname(params.projectName, 'production');
     const url = new URL(`${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`);
 
     return await new Promise((resolveProbe) => {
       let settled = false;
-      const settle = (result: { ok: true; status: number } | { ok: false; error: string }) => {
+      const settle = (
+        result: { ok: true; status: number } | { ok: false; error: string; status?: number },
+      ) => {
         if (settled) return;
         settled = true;
         resolveProbe(result);
@@ -1112,7 +1115,7 @@ export class DeployPipeline {
             settle({ ok: true, status });
             return;
           }
-          settle({ ok: false, error: `Route probe returned HTTP ${String(status)}` });
+          settle({ ok: false, status, error: `Route probe returned HTTP ${String(status)}` });
         },
       );
 
@@ -1141,6 +1144,7 @@ export class DeployPipeline {
     const minimumSuccessAgeMs = Math.max(0, params.minimumSuccessAgeMs ?? 0);
     let attempts = 0;
     let lastError = 'Route probe did not run';
+    let lastStatus: number | undefined;
 
     for (;;) {
       attempts += 1;
@@ -1156,14 +1160,16 @@ export class DeployPipeline {
         }
         // A just-flipped route can still be served by Traefik's previous HTTP
         // provider snapshot. Do not treat that stale 2xx as proof of cutover.
+        lastStatus = probe.status;
         lastError = `Route probe returned HTTP ${String(probe.status)} before Traefik HTTP provider poll window elapsed`;
       } else {
+        lastStatus = probe.status;
         lastError = probe.error;
       }
 
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
-        return { ok: false, error: lastError, attempts, elapsedMs };
+        return { ok: false, error: lastError, attempts, elapsedMs, status: lastStatus };
       }
 
       await sleep(Math.min(params.intervalMs, remainingMs));
@@ -1190,8 +1196,12 @@ export class DeployPipeline {
     });
   }
 
-  private summarizeGreenStability(info: ContainerInspection): string | undefined {
+  private summarizeGreenStability(
+    info: ContainerInspection,
+    baselineRestartCount: number,
+  ): string | undefined {
     const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : 0;
+    const restartDelta = Math.max(0, restartCount - baselineRestartCount);
     const exitCode =
       typeof info.State.ExitCode === 'number' ? ` (exit code: ${String(info.State.ExitCode)})` : '';
 
@@ -1201,8 +1211,8 @@ export class DeployPipeline {
     if (!info.State.Running) {
       return `Green container stopped during post-switch stability check${exitCode}`;
     }
-    if (restartCount > 0) {
-      return `Green container restarted ${String(restartCount)} time(s) during post-switch stability check`;
+    if (restartDelta > 0) {
+      return `Green container restarted ${String(restartDelta)} time(s) during post-switch stability check`;
     }
     if (info.State.Health?.Status === 'unhealthy') {
       return 'Green container healthcheck became unhealthy during post-switch stability check';
@@ -1220,24 +1230,41 @@ export class DeployPipeline {
     const intervalMs = Math.max(1, params.intervalMs);
     const deadline = startedAt + observeMs;
     let checks = 0;
+    let baselineRestartCount: number | null = null;
+    let consecutiveInspectFailures = 0;
 
     for (;;) {
       checks += 1;
       try {
         const info = await this.runtime.inspectContainer(params.containerId);
-        const unstableReason = this.summarizeGreenStability(info);
+        consecutiveInspectFailures = 0;
+        const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : 0;
+        baselineRestartCount ??= restartCount;
+        const unstableReason = this.summarizeGreenStability(info, baselineRestartCount);
         const elapsedMs = Date.now() - startedAt;
         if (unstableReason) {
           return { ok: false, checks, elapsedMs, error: unstableReason };
         }
       } catch (error) {
+        if (isDockerNotFoundError(error)) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            ok: false,
+            checks,
+            elapsedMs: Date.now() - startedAt,
+            error: `Green container stability could not be verified: ${message}`,
+          };
+        }
+        consecutiveInspectFailures += 1;
         const message = error instanceof Error ? error.message : String(error);
-        return {
-          ok: false,
-          checks,
-          elapsedMs: Date.now() - startedAt,
-          error: `Green container stability could not be verified: ${message}`,
-        };
+        if (consecutiveInspectFailures >= DEFAULT_BLUE_GREEN_STABILITY_INSPECT_FAILURE_THRESHOLD) {
+          return {
+            ok: false,
+            checks,
+            elapsedMs: Date.now() - startedAt,
+            error: `Green container stability could not be verified after ${String(consecutiveInspectFailures)} consecutive checks: ${message}`,
+          };
+        }
       }
 
       const remainingMs = deadline - Date.now();

@@ -956,6 +956,7 @@ describe('deploy MCP guidance', () => {
       pipeline: {
         verifyManagedTraefikRoute: vi.fn(async () => ({
           ok: false,
+          status: 500,
           error: 'Route probe returned HTTP 500',
           attempts: 1,
           elapsedMs: 4,
@@ -1005,7 +1006,9 @@ describe('deploy MCP guidance', () => {
       expect.objectContaining({
         projectName: 'app',
         path: '/',
-        maxWaitMs: 0,
+        probeTimeoutMs: 1_000,
+        maxWaitMs: 2_500,
+        intervalMs: 500,
         minimumSuccessAgeMs: 0,
       }),
     );
