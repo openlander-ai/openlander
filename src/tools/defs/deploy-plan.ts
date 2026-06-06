@@ -1530,6 +1530,17 @@ export const deployPlanToolDefs: ToolDef[] = [
           ...(frontDoorTarget.kind === 'existing_project'
             ? { existing_service: frontDoorTarget.existingService }
             : {}),
+          _agent_guidance: {
+            ...(typeof redeployPayload['_agent_guidance'] === 'object' &&
+            redeployPayload['_agent_guidance'] !== null &&
+            !Array.isArray(redeployPayload['_agent_guidance'])
+              ? (redeployPayload['_agent_guidance'] as Record<string, unknown>)
+              : {}),
+            message:
+              frontDoorTarget.kind === 'existing_project'
+                ? 'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.'
+                : 'OpenLander started a redeploy of the existing Application/Compose workload. Poll status_call until terminal.',
+          },
         };
       }
 

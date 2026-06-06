@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Clarify `deploy_app` existing-Project redeploy delegation responses so agents
+  know a redeploy has already started and should poll `status_call` instead of
+  creating another Application.
+
 ## [0.1.14-rc.23] - 2026-06-07
 
 ### Fixed

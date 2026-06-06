@@ -80,6 +80,10 @@ describe('deploy MCP guidance', () => {
         params: { service_id: 'app__svc' },
       },
     });
+    expect(result['_agent_guidance']).toMatchObject({
+      message:
+        'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.',
+    });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     expect(ctx.env.setBulkForServiceDetailed).toHaveBeenCalledWith('app', 'app__svc', {
       DATABASE_URL: 'postgresql://example',
@@ -239,6 +243,10 @@ describe('deploy MCP guidance', () => {
         service_id: 'app__svc',
         service_name: 'web',
       },
+    });
+    expect(result['_agent_guidance']).toMatchObject({
+      message:
+        'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.',
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>
