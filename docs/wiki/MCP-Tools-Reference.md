@@ -380,29 +380,32 @@ Deploy or restart an Application. Project-level runtime actions have been remove
 Git-based dependency installs get a targeted dependency-layer refresh; `no_cache=true` remains the
 manual full-cache bypass.
 
-| Parameter           | Type    | Required | Description                                                                                      |
-| ------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `service_id`        | string  | No       | Application id                                                                                   |
-| `service_name`      | string  | No       | Application name                                                                                 |
-| `project_name`      | string  | No       | Optional group scope for name lookups                                                            |
-| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes                                  |
-| `strategy`          | string  | No       | `'force'` by default; `'blue-green'` only for eligible git/image services behind managed Traefik |
-| `health_check_path` | string  | No       | Health check path                                                                                |
+| Parameter           | Type    | Required | Description                                                                 |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- |
+| `service_id`        | string  | No       | Application id                                                              |
+| `service_name`      | string  | No       | Application name                                                            |
+| `project_name`      | string  | No       | Optional group scope for name lookups                                       |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes             |
+| `strategy`          | string  | No       | Defaults to `'blue-green'` when eligible; falls back to `'force'` otherwise |
+| `health_check_path` | string  | No       | Health check path                                                           |
 
 Provide either `service_id` or `service_name`.
 
-`strategy="blue-green"` is conditional in v0.1.3. It is rejected with
-`BLUE_GREEN_UNSUPPORTED` for compose stacks, services without a current running
-container, services without a health check or explicit `health_check_path`, and
-installations not using managed OpenLander/Traefik HTTP-provider routes. The
+`strategy="blue-green"` is conditional. It is rejected with
+`BLUE_GREEN_UNSUPPORTED` when requested explicitly for compose stacks, services
+without a current running container, services without a health check or explicit
+`health_check_path`, and installations not using managed OpenLander/Traefik
+HTTP-provider routes. When `strategy` is omitted, `redeploy_app` automatically
+uses blue-green for eligible services and falls back to `force` otherwise. The
 zero-downtime guarantee applies to OpenLander domain/Traefik routes only; direct
 `localhost:{assigned_port}` URLs may change during deploy.
 
-Blue-green in v0.1.3 is best-effort. OpenLander health-checks the green
-container directly, flips the active route target, waits for the managed Traefik
-HTTP provider polling window, and probes the public route before removing blue.
-It does not yet prove that the successful HTTP response came from green via a
-Traefik API resolved-target check or app version marker.
+Blue-green is best-effort. OpenLander health-checks the green container directly,
+flips the active route target, waits for the managed Traefik HTTP provider
+polling window, probes the public route, and keeps blue until green survives a
+post-switch stability window before removing blue. It does not yet prove that the
+successful HTTP response came from green via a Traefik API resolved-target check
+or app version marker.
 
 For blue-green, make `health_check_path` a readiness endpoint, not a static page.
 If the service needs a database, cache, storage bucket, or other dependency to
