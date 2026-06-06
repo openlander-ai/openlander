@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Persist representative public traffic probe evidence on deploy logs so
+  polled deploy status can surface healthcheck-only false positives.
+- Mark `get_deploy_status` results as unhealthy when representative public
+  traffic returns a 5xx, while keeping transient lazy-probe failures out of
+  permanent deploy-log evidence.
+- Include stored representative traffic evidence in `diagnose_service` recent
+  deployment summaries.
+
 ## [0.1.14-rc.19] - 2026-06-06
 
 ### Fixed
