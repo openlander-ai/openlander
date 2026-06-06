@@ -1900,6 +1900,63 @@ describe('service-targeted monitoring tools', () => {
     expect(result['suggested_call']).toBeUndefined();
   });
 
+  it('diagnose_service prefers runtime env diagnosis over representative traffic symptoms', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Error: DATABASE_URL is not set');
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      warnings: [{ code: 'TRAFFIC_HEALTH_MISMATCH' }],
+      diagnosis: {
+        code: 'RUNTIME_ENV_MISSING',
+        confidence: 'high',
+        evidence: {
+          missing_env_keys: ['DATABASE_URL'],
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'set_env_vars',
+      },
+    });
+  });
+
+  it('diagnose_service prefers dependency diagnosis over representative traffic symptoms', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://db.example.com:5432/app',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      warnings: [{ code: 'TRAFFIC_HEALTH_MISMATCH' }],
+      diagnosis: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        confidence: 'high',
+        evidence: {
+          key: 'DATABASE_URL',
+        },
+      },
+    });
+    expect(result['suggested_call']).toBeUndefined();
+  });
+
   it('diagnose_service includes persisted representative traffic evidence from recent deploys', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
@@ -1974,6 +2031,64 @@ describe('service-targeted monitoring tools', () => {
           status_code: 500,
           message: 'Route probe returned HTTP 500',
         },
+      },
+    });
+  });
+
+  it('diagnose_service does not let persisted traffic evidence mask current port mismatch', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('App listening on port 4000');
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'bad gateway' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
+    vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
+      {
+        id: 'deploy-traffic',
+        service_id: 'app__svc',
+        environment_id: null,
+        status: 'success',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: 'abc123',
+        commit_message: 'ship',
+        build_log: null,
+        runtime_log: null,
+        representative_traffic_json: JSON.stringify({
+          status: 'failed',
+          severity: 'fail',
+          path: '/',
+          status_code: 500,
+          message: 'Route probe returned HTTP 500',
+        }),
+        duration_ms: 2000,
+        created_at: '2026-05-22T00:00:00Z',
+      },
+    ]);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      recentDeployment: {
+        latest: {
+          effectiveStatus: 'unhealthy',
+          effectiveStatusReason: 'representative_traffic_failed',
+        },
+      },
+      diagnosis: {
+        code: 'PORT_MISMATCH',
+        confidence: 'high',
+        evidence: {
+          configured_container_port: 3000,
+          detected_listening_port: 4000,
+        },
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'apply_route_config',
+        params: { service_id: 'app__svc', container_port: 4000 },
       },
     });
   });

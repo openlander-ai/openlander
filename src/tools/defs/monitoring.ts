@@ -2434,11 +2434,6 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
-  const trafficHealthMismatch = buildTrafficHealthMismatchDiagnosis(input);
-  if (trafficHealthMismatch) {
-    return trafficHealthMismatch;
-  }
-
   const configuredPort = input.service.container_port;
   const logText = [
     typeof input.logs['tail'] === 'string' ? input.logs['tail'] : '',
@@ -2551,10 +2546,16 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
+  const trafficHealthMismatch = buildTrafficHealthMismatchDiagnosis(input);
+  if (trafficHealthMismatch) {
+    return trafficHealthMismatch;
+  }
+
   return null;
 }
 
 function buildTrafficHealthMismatchDiagnosis(input: {
+  httpCheck: Record<string, unknown>;
   recentDeployment: Record<string, unknown>;
   warnings: DiagnosticWarning[];
 }): SynthesizedServiceDiagnosis | null {
@@ -2574,6 +2575,7 @@ function buildTrafficHealthMismatchDiagnosis(input: {
   const latestDeployment = asRecord(input.recentDeployment['latest']);
   const representativeTraffic = asRecord(latestDeployment?.['representativeTraffic']);
   if (
+    input.httpCheck['reachable'] === true &&
     representativeTraffic?.['status'] === 'failed' &&
     representativeTraffic['severity'] === 'fail'
   ) {

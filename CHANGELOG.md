@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Prefer high-confidence actionable diagnoses over representative traffic
+  mismatch symptoms, and only promote stored representative traffic failures to
+  a diagnosis when the current health probe is still reachable.
+
 ## [0.1.14-rc.21] - 2026-06-06
 
 ### Fixed
