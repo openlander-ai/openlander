@@ -5,6 +5,24 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.14
 
+- **Representative traffic deploy-log evidence during data-model freeze:**
+  `deploy_logs` stores nullable `representative_traffic_json` so completed
+  deploy polling can surface a post-deploy public traffic mismatch without
+  reclassifying the historical deploy row as failed.
+- **Why accepted:** `deploy_app(wait=true)` already probes representative public
+  traffic, but agent workflows usually poll `get_deploy_status`. Without
+  persisting the probe result, `/health=200` plus `/=500` can still look like a
+  successful deploy in the polling path.
+- **Vocab review:** no new MCP action, REST route, or target vocabulary is
+  introduced. Existing `get_deploy_status` responses reuse
+  `representative_traffic`, `diagnostic_call`, and `_agent_guidance`.
+- **Endpoint collision check:** no endpoint or composite slot is added. The
+  schema change is limited to deploy-log evidence storage; public deploy status
+  remains derived from the existing `deploy_id` / `service_id` lookup.
+- **Follow-up:** if deploy outcome storage grows beyond traffic evidence, replace
+  this JSON text column with a typed deploy-verification table or a structured
+  JSONB column once the data model is unfrozen.
+
 - **`openlander_service.update_application_source` during data-model freeze:** a
   new deployable-touching MCP action is added to save existing
   Application/Compose source settings (`repo_url`, `branch`, `image`, `cmd`,

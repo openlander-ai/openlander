@@ -40,6 +40,7 @@ import {
 import type { ToolDef } from './types.js';
 import type { ToolContext } from './types.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
+import { parseRepresentativeTraffic } from './representative-traffic.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -1464,6 +1465,9 @@ function sanitizedTailLines(text: string | null | undefined, lines: number): str
 
 function summarizeRecentDeployments(logs: DeployLogRow[]) {
   const latest = logs[0];
+  const latestRepresentativeTraffic = parseRepresentativeTraffic(
+    latest?.representative_traffic_json,
+  );
   return {
     count: logs.length,
     latest: latest
@@ -1477,17 +1481,24 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
           createdAt: latest.created_at,
           buildLogTail: sanitizedTailLines(latest.build_log, 30),
           buildLogTailSanitized: true,
+          ...(latestRepresentativeTraffic
+            ? { representativeTraffic: latestRepresentativeTraffic }
+            : {}),
           fullBuildLogHint:
             'Call get_build_log for full raw build output and captured runtime logs.',
         }
       : null,
-    history: logs.slice(0, 5).map((entry) => ({
-      id: entry.id,
-      status: entry.status,
-      trigger: entry.trigger,
-      commitSha: entry.commit_sha,
-      createdAt: entry.created_at,
-    })),
+    history: logs.slice(0, 5).map((entry) => {
+      const representativeTraffic = parseRepresentativeTraffic(entry.representative_traffic_json);
+      return {
+        id: entry.id,
+        status: entry.status,
+        trigger: entry.trigger,
+        commitSha: entry.commit_sha,
+        createdAt: entry.created_at,
+        ...(representativeTraffic ? { representativeTraffic } : {}),
+      };
+    }),
   };
 }
 

@@ -112,6 +112,7 @@ export interface DeployLogRow {
   commit_message: string | null;
   build_log: string | null;
   runtime_log: string | null;
+  representative_traffic_json: string | null;
   duration_ms: number | null;
   created_at: string;
   /** @deprecated 0012 — column dropped; canonical FK is `service_id`. */
