@@ -494,6 +494,33 @@ describe('deployable service target resolution', () => {
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
+  it('blocks explicit blue-green redeploys when eligibility checks are unavailable', async () => {
+    const ctx = createDuplicateServiceContext();
+    const pipelineWithoutEligibility = ctx.pipeline as typeof ctx.pipeline & {
+      getBlueGreenEligibility?: unknown;
+    };
+    delete pipelineWithoutEligibility.getBlueGreenEligibility;
+
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_name: 'api', project_name: 'alpha', strategy: 'blue-green' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      fallback_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'alpha__svc', strategy: 'force' },
+      },
+    });
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+  });
+
   it('auto-selects blue-green for eligible redeploy_app calls without an explicit strategy', async () => {
     const ctx = createDuplicateServiceContext();
 
