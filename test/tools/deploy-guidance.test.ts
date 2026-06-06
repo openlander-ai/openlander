@@ -885,6 +885,132 @@ describe('deploy MCP guidance', () => {
     expect(result['readiness_message']).toBeUndefined();
   });
 
+  it('marks deploy_app wait result unhealthy when representative public traffic returns 5xx', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
+    const project = {
+      id: 'app',
+      name: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      archived_at: null,
+    };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      container_id: 'container-1',
+      assigned_port: 3000,
+      public_url: null,
+    };
+    const ctx = {
+      config: {
+        traefik: { mode: 'managed' },
+      },
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: {
+        verifyManagedTraefikRoute: vi.fn(async () => ({
+          ok: false,
+          error: 'Route probe returned HTTP 500',
+          attempts: 1,
+          elapsedMs: 4,
+        })),
+      },
+      jobManager: {
+        getStatus: vi.fn(() => null),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'ready',
+          app: { name: 'app' },
+          project_id: 'app',
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'building',
+          project_name: 'app',
+          project_id: 'app',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    const pending = getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/app',
+        name: 'app',
+        wait: true,
+      },
+      { target: 'mcp' },
+    );
+    await vi.waitFor(() => expect(eventBus.listenerCount('deploy:success')).toBeGreaterThan(0));
+    await eventBus.emit('deploy:success', {
+      projectId: 'app',
+      url: 'http://app.example.com',
+      totalDurationMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    const result = (await pending) as Record<string, unknown>;
+
+    expect(ctx.pipeline.verifyManagedTraefikRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectName: 'app',
+        path: '/',
+        maxWaitMs: 0,
+        minimumSuccessAgeMs: 0,
+      }),
+    );
+    expect(result).toMatchObject({
+      status: 'unhealthy',
+      readiness: 'healthy',
+      representative_traffic: {
+        status: 'failed',
+        severity: 'fail',
+        path: '/',
+        status_code: 500,
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'app__svc' },
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          'Do not report end-user success until the public route returns a non-5xx response',
+        ]),
+      },
+    });
+    expect(result['warnings']).toEqual(
+      expect.arrayContaining([expect.stringContaining('HTTP 500')]),
+    );
+  });
+
   it('observes post-deploy stability and warns when a healthy app starts crashing', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const project = {
