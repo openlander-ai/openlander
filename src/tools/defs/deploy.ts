@@ -505,7 +505,7 @@ export const deployToolDefs: ToolDef[] = [
           try {
             representativeTraffic = await observeRepresentativeTraffic(appCtx, routeName, '/');
             if (
-              representativeTraffic.status === 'passed' &&
+              representativeTraffic.status !== 'skipped' &&
               typeof appCtx.db.updateDeployLogRepresentativeTraffic === 'function'
             ) {
               await appCtx.db.updateDeployLogRepresentativeTraffic(

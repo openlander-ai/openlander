@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Persist lazy representative traffic failures from `get_deploy_status` so
+  `diagnose_service` can promote async deploy healthcheck-only 5xx failures to
+  `TRAFFIC_HEALTH_MISMATCH`.
+
 ## [0.1.14-rc.22] - 2026-06-06
 
 ### Fixed

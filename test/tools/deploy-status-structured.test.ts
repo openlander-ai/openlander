@@ -417,7 +417,7 @@ describe('get_deploy_status structured fields (O1)', () => {
     expect(ctx.db.updateDeployLogRepresentativeTraffic).not.toHaveBeenCalled();
   });
 
-  it('completed deploy status uses live representative traffic failure without persisting it', async () => {
+  it('completed deploy status persists representative traffic failure when missing from log', async () => {
     const project = { id: 'app', name: 'app', status: 'running', container_id: 'container-1' };
     const service = {
       id: 'app__svc',
@@ -505,7 +505,14 @@ describe('get_deploy_status structured fields (O1)', () => {
       intervalMs: 500,
       minimumSuccessAgeMs: 0,
     });
-    expect(updateDeployLogRepresentativeTraffic).not.toHaveBeenCalled();
+    expect(updateDeployLogRepresentativeTraffic).toHaveBeenCalledTimes(1);
+    const persisted = JSON.parse(updateDeployLogRepresentativeTraffic.mock.calls[0]?.[1] as string);
+    expect(persisted).toMatchObject({
+      status: 'failed',
+      severity: 'fail',
+      path: '/',
+      status_code: 500,
+    });
   });
 
   it('completed deploy status persists representative traffic success when missing from log', async () => {
