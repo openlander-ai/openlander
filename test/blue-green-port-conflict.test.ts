@@ -208,15 +208,18 @@ function createMockDb(state: {
 function createMockDocker(options?: {
   blueRunning?: boolean;
   cleanupBlueFails?: boolean;
-  greenInspectSequence?: Array<{
-    State: {
-      Running: boolean;
-      Restarting?: boolean;
-      ExitCode?: number;
-      Health?: { Status: string };
-    };
-    RestartCount?: number;
-  }>;
+  greenInspectSequence?: Array<
+    | {
+        State: {
+          Running: boolean;
+          Restarting?: boolean;
+          ExitCode?: number;
+          Health?: { Status: string };
+        };
+        RestartCount?: number;
+      }
+    | Error
+  >;
   managedContainers?: Array<{
     id: string;
     name: string;
@@ -253,6 +256,9 @@ function createMockDocker(options?: {
         const next =
           options.greenInspectSequence.shift() ??
           options.greenInspectSequence[options.greenInspectSequence.length - 1];
+        if (next instanceof Error) {
+          throw next;
+        }
         return next;
       }
       return { State: { Running: true } };
@@ -414,6 +420,26 @@ describe('blue-green route target flip', () => {
     expect(result).toMatchObject({
       ok: false,
       error: expect.stringContaining('before Traefik HTTP provider poll window elapsed'),
+      attempts: 1,
+    });
+  });
+
+  it('returns a structured status code when a managed route probe reaches a failing backend', async () => {
+    mockRouteProbe(502);
+
+    const result = await pipeline.verifyManagedTraefikRoute({
+      projectName: 'demo-app',
+      path: '/',
+      probeTimeoutMs: 5,
+      maxWaitMs: 0,
+      intervalMs: 1,
+      minimumSuccessAgeMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 502,
+      error: expect.stringContaining('HTTP 502'),
       attempts: 1,
     });
   });
@@ -625,6 +651,69 @@ describe('blue-green route target flip', () => {
     );
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-green',
+    );
+  });
+
+  it('does not roll back for restart history that predates the stability window', async () => {
+    const mockDocker = createMockDocker({
+      greenInspectSequence: [
+        { State: { Running: true }, RestartCount: 3 },
+        { State: { Running: true }, RestartCount: 3 },
+      ],
+    });
+    docker = mockDocker.docker;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbe(200);
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 2,
+      postSwitchStabilityPollIntervalMs: 1,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-blue');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-blue',
+    );
+  });
+
+  it('does not roll back for a transient green inspect failure during the stability window', async () => {
+    const mockDocker = createMockDocker({
+      greenInspectSequence: [
+        new Error('docker daemon busy'),
+        { State: { Running: true }, RestartCount: 0 },
+        { State: { Running: true }, RestartCount: 0 },
+      ],
+    });
+    docker = mockDocker.docker;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbe(200);
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 4,
+      postSwitchStabilityPollIntervalMs: 1,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-blue');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-blue',
     );
   });
 
