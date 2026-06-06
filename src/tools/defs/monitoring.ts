@@ -40,7 +40,10 @@ import {
 import type { ToolDef } from './types.js';
 import type { ToolContext } from './types.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
-import { parseRepresentativeTraffic } from './representative-traffic.js';
+import {
+  parseRepresentativeTraffic,
+  representativeTrafficFailed,
+} from './representative-traffic.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -626,6 +629,7 @@ export const monitoringToolDefs: ToolDef[] = [
         dependencies,
         logs: runtimeLogs,
         recentDeployment,
+        warnings,
       });
 
       return {
@@ -1468,12 +1472,19 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
   const latestRepresentativeTraffic = parseRepresentativeTraffic(
     latest?.representative_traffic_json,
   );
+  const latestEffectiveStatus = representativeTrafficFailed(latestRepresentativeTraffic)
+    ? 'unhealthy'
+    : latest?.status;
   return {
     count: logs.length,
     latest: latest
       ? {
           id: latest.id,
           status: latest.status,
+          effectiveStatus: latestEffectiveStatus,
+          ...(latestEffectiveStatus !== latest.status
+            ? { effectiveStatusReason: 'representative_traffic_failed' }
+            : {}),
           trigger: latest.trigger,
           commitSha: latest.commit_sha,
           commitMessage: latest.commit_message,
@@ -1493,6 +1504,9 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
       return {
         id: entry.id,
         status: entry.status,
+        effectiveStatus: representativeTrafficFailed(representativeTraffic)
+          ? 'unhealthy'
+          : entry.status,
         trigger: entry.trigger,
         commitSha: entry.commit_sha,
         createdAt: entry.created_at,
@@ -2102,6 +2116,7 @@ function buildDiagnoseNextSteps(input: {
 
 interface SynthesizedServiceDiagnosis {
   code:
+    | 'TRAFFIC_HEALTH_MISMATCH'
     | 'PORT_MISMATCH'
     | 'ROUTE_BACKEND_MISMATCH'
     | 'RUNTIME_ENV_MISSING'
@@ -2110,7 +2125,7 @@ interface SynthesizedServiceDiagnosis {
     | 'RESTART_LOOP'
     | 'CONTAINER_NOT_RUNNING'
     | 'DEPENDENCY_UNREACHABLE';
-  confidence: 'high';
+  confidence: 'high' | 'medium';
   summary: string;
   evidence: Record<string, unknown>;
   suggested_call?: SuggestedServiceDiagnosisCall;
@@ -2334,6 +2349,7 @@ function buildSynthesizedServiceDiagnosis(input: {
   dependencies: Record<string, unknown>;
   logs: Record<string, unknown>;
   recentDeployment: Record<string, unknown>;
+  warnings: DiagnosticWarning[];
 }): SynthesizedServiceDiagnosis | null {
   const suspectedBuildEnv = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
   if (Array.isArray(suspectedBuildEnv) && suspectedBuildEnv.length > 0) {
@@ -2416,6 +2432,11 @@ function buildSynthesizedServiceDiagnosis(input: {
         error: input.container['error'],
       },
     };
+  }
+
+  const trafficHealthMismatch = buildTrafficHealthMismatchDiagnosis(input);
+  if (trafficHealthMismatch) {
+    return trafficHealthMismatch;
   }
 
   const configuredPort = input.service.container_port;
@@ -2526,6 +2547,49 @@ function buildSynthesizedServiceDiagnosis(input: {
         key: failed['key'],
         target: failed['target'],
         error: failed['error'],
+      },
+    };
+  }
+
+  return null;
+}
+
+function buildTrafficHealthMismatchDiagnosis(input: {
+  recentDeployment: Record<string, unknown>;
+  warnings: DiagnosticWarning[];
+}): SynthesizedServiceDiagnosis | null {
+  const liveWarning = input.warnings[0];
+  if (liveWarning) {
+    return {
+      code: 'TRAFFIC_HEALTH_MISMATCH',
+      confidence: liveWarning.confidence,
+      summary: liveWarning.summary,
+      evidence: {
+        ...liveWarning.evidence,
+        source: 'live_probe',
+      },
+    };
+  }
+
+  const latestDeployment = asRecord(input.recentDeployment['latest']);
+  const representativeTraffic = asRecord(latestDeployment?.['representativeTraffic']);
+  if (
+    representativeTraffic?.['status'] === 'failed' &&
+    representativeTraffic['severity'] === 'fail'
+  ) {
+    return {
+      code: 'TRAFFIC_HEALTH_MISMATCH',
+      confidence: 'medium',
+      summary:
+        'Recent deploy status was recorded as successful, but the representative traffic probe failed.',
+      evidence: {
+        source: 'recent_deployment_representative_traffic',
+        deploy_id: latestDeployment?.['id'] ?? null,
+        deploy_status: latestDeployment?.['status'] ?? null,
+        effective_status: latestDeployment?.['effectiveStatus'] ?? null,
+        path: representativeTraffic['path'] ?? null,
+        status_code: representativeTraffic['status_code'] ?? null,
+        message: representativeTraffic['message'] ?? null,
       },
     };
   }

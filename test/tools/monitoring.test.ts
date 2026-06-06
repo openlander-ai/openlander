@@ -1879,6 +1879,17 @@ describe('service-targeted monitoring tools', () => {
           },
         },
       ],
+      diagnosis: {
+        code: 'TRAFFIC_HEALTH_MISMATCH',
+        confidence: 'medium',
+        evidence: {
+          source: 'live_probe',
+          health_path: '/health',
+          health_status_code: 200,
+          traffic_path: '/',
+          traffic_status_code: 500,
+        },
+      },
       _agent_guidance: {
         message: expect.stringContaining('Health path /health is reachable'),
         next_steps: expect.arrayContaining([
@@ -1886,7 +1897,6 @@ describe('service-targeted monitoring tools', () => {
         ]),
       },
     });
-    expect(result['diagnosis']).toBeUndefined();
     expect(result['suggested_call']).toBeUndefined();
   });
 
@@ -1927,6 +1937,9 @@ describe('service-targeted monitoring tools', () => {
       recentDeployment: {
         latest: {
           id: 'deploy-traffic',
+          status: 'success',
+          effectiveStatus: 'unhealthy',
+          effectiveStatusReason: 'representative_traffic_failed',
           representativeTraffic: {
             status: 'failed',
             severity: 'fail',
@@ -1938,6 +1951,8 @@ describe('service-targeted monitoring tools', () => {
         history: [
           {
             id: 'deploy-traffic',
+            status: 'success',
+            effectiveStatus: 'unhealthy',
             representativeTraffic: {
               status: 'failed',
               severity: 'fail',
@@ -1946,6 +1961,19 @@ describe('service-targeted monitoring tools', () => {
             },
           },
         ],
+      },
+      diagnosis: {
+        code: 'TRAFFIC_HEALTH_MISMATCH',
+        confidence: 'medium',
+        evidence: {
+          source: 'recent_deployment_representative_traffic',
+          deploy_id: 'deploy-traffic',
+          deploy_status: 'success',
+          effective_status: 'unhealthy',
+          path: '/',
+          status_code: 500,
+          message: 'Route probe returned HTTP 500',
+        },
       },
     });
   });
@@ -1977,6 +2005,7 @@ describe('service-targeted monitoring tools', () => {
         trafficCheck: { status_code: statusCode },
       });
       expect(result['warnings']).toBeUndefined();
+      expect(result['diagnosis']).toBeUndefined();
     },
   );
 
