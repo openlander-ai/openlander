@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Surface representative traffic failures as `TRAFFIC_HEALTH_MISMATCH` in
+  `diagnose_service`, and mark recent deploy summaries with an unhealthy
+  effective status when stored representative traffic evidence failed.
+
 ## [0.1.14-rc.20] - 2026-06-06
 
 ### Fixed
