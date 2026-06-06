@@ -27,6 +27,7 @@ import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
 import {
+  BlueGreenStabilityError,
   ContainerNotFoundError,
   ImagePullError,
   InvalidProjectNameError,
@@ -127,11 +128,19 @@ const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS =
   TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
 const DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS = 500;
+const DEFAULT_BLUE_GREEN_POST_SWITCH_STABILITY_MS = 35_000;
+const DEFAULT_BLUE_GREEN_STABILITY_POLL_INTERVAL_MS = 2_000;
 const BLUE_GREEN_LABELS = {
   ROLE: 'openlander.blue_green.role',
   PROJECT_ID: 'openlander.blue_green.project_id',
   SERVICE_ID: 'openlander.blue_green.service_id',
 } as const;
+
+type ContainerInspection = Awaited<ReturnType<RuntimeBackend['inspectContainer']>>;
+
+type BlueGreenStabilityResult =
+  | { ok: true; checks: number; elapsedMs: number }
+  | { ok: false; checks: number; elapsedMs: number; error: string };
 
 function explicitHealthCheckPath(
   view: Pick<ServiceView, 'healthCheckPath'>,
@@ -282,6 +291,10 @@ export interface RedeployOptions {
   routeProbeTimeoutMs?: number;
   /** @internal Public route path used only to verify ingress reachability after a flip. */
   routeProbePath?: string;
+  /** @internal Keep blue serving until green survives this post-switch observation window. */
+  postSwitchStabilityMs?: number;
+  /** @internal Poll interval while observing green after the route switch. */
+  postSwitchStabilityPollIntervalMs?: number;
   /** @internal Non-interactive callers cannot ask the user; fall back to a deterministic workload. */
   allowMultiServiceProjectFallback?: boolean;
   cmd?: string[];
@@ -1175,6 +1188,65 @@ export class DeployPipeline {
       minimumSuccessAgeMs:
         params.minimumSuccessAgeMs ?? Math.min(TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS, maxWaitMs),
     });
+  }
+
+  private summarizeGreenStability(info: ContainerInspection): string | undefined {
+    const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : 0;
+    const exitCode =
+      typeof info.State.ExitCode === 'number' ? ` (exit code: ${String(info.State.ExitCode)})` : '';
+
+    if (info.State.Restarting) {
+      return `Green container entered a restart loop${exitCode}`;
+    }
+    if (!info.State.Running) {
+      return `Green container stopped during post-switch stability check${exitCode}`;
+    }
+    if (restartCount > 0) {
+      return `Green container restarted ${String(restartCount)} time(s) during post-switch stability check`;
+    }
+    if (info.State.Health?.Status === 'unhealthy') {
+      return 'Green container healthcheck became unhealthy during post-switch stability check';
+    }
+    return undefined;
+  }
+
+  private async observeBlueGreenStability(params: {
+    containerId: string;
+    observeMs: number;
+    intervalMs: number;
+  }): Promise<BlueGreenStabilityResult> {
+    const startedAt = Date.now();
+    const observeMs = Math.max(0, params.observeMs);
+    const intervalMs = Math.max(1, params.intervalMs);
+    const deadline = startedAt + observeMs;
+    let checks = 0;
+
+    for (;;) {
+      checks += 1;
+      try {
+        const info = await this.runtime.inspectContainer(params.containerId);
+        const unstableReason = this.summarizeGreenStability(info);
+        const elapsedMs = Date.now() - startedAt;
+        if (unstableReason) {
+          return { ok: false, checks, elapsedMs, error: unstableReason };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          ok: false,
+          checks,
+          elapsedMs: Date.now() - startedAt,
+          error: `Green container stability could not be verified: ${message}`,
+        };
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        return { ok: true, checks, elapsedMs: Date.now() - startedAt };
+      }
+
+      await sleep(Math.min(intervalMs, remainingMs));
+    }
   }
 
   private async deployInner(
@@ -2826,6 +2898,10 @@ export class DeployPipeline {
     const routeProbeIntervalMs =
       options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
+    const postSwitchStabilityMs =
+      options?.postSwitchStabilityMs ?? DEFAULT_BLUE_GREEN_POST_SWITCH_STABILITY_MS;
+    const postSwitchStabilityPollIntervalMs =
+      options?.postSwitchStabilityPollIntervalMs ?? DEFAULT_BLUE_GREEN_STABILITY_POLL_INTERVAL_MS;
     let routeProbePath = options?.routeProbePath;
     const trigger = options?.trigger ?? 'api';
 
@@ -3112,8 +3188,30 @@ export class DeployPipeline {
         throw new Error(routeProbe.error);
       }
       routeSwitched = true;
-      shouldCleanupGreen = false;
       buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
+
+      buildLog += `[stability] Observing green container for ${String(postSwitchStabilityMs)}ms before removing blue\n`;
+      const stability = await this.observeBlueGreenStability({
+        containerId: greenContainerId,
+        observeMs: postSwitchStabilityMs,
+        intervalMs: postSwitchStabilityPollIntervalMs,
+      });
+      if (!stability.ok) {
+        buildLog += `[stability] Failed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s)): ${stability.error}\n`;
+        await this.restoreBlueState({ projectId, environmentId, blue: blueState });
+        routeTargetUpdated = false;
+        routeSwitched = false;
+        shouldCleanupGreen = true;
+        buildLog += '[route] Rolled active target back to blue after green stability failure\n';
+        throw new BlueGreenStabilityError(stability.error, {
+          projectId,
+          greenContainerId,
+          checks: stability.checks,
+          elapsedMs: stability.elapsedMs,
+        });
+      }
+      buildLog += `[stability] Passed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s))\n`;
+      shouldCleanupGreen = false;
 
       try {
         await this.runtime.stopContainer(blueContainerId);

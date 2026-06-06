@@ -404,6 +404,13 @@ export class ServiceSelectionRequiredError extends OpenLanderError {
   }
 }
 
+export class BlueGreenStabilityError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'BLUE_GREEN_STABILITY_FAILED', 500, details);
+    this.name = 'BlueGreenStabilityError';
+  }
+}
+
 export class OperationRequiresHumanUiError extends OpenLanderError {
   constructor(operation: string, message?: string) {
     super(

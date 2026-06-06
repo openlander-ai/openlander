@@ -208,6 +208,15 @@ function createMockDb(state: {
 function createMockDocker(options?: {
   blueRunning?: boolean;
   cleanupBlueFails?: boolean;
+  greenInspectSequence?: Array<{
+    State: {
+      Running: boolean;
+      Restarting?: boolean;
+      ExitCode?: number;
+      Health?: { Status: string };
+    };
+    RestartCount?: number;
+  }>;
   managedContainers?: Array<{
     id: string;
     name: string;
@@ -239,6 +248,12 @@ function createMockDocker(options?: {
     inspectContainer: blueInspectMock.mockImplementation(async (containerId: string) => {
       if (containerId === 'container-blue') {
         return { State: { Running: options?.blueRunning ?? true } };
+      }
+      if (containerId === 'container-green' && options?.greenInspectSequence?.length) {
+        const next =
+          options.greenInspectSequence.shift() ??
+          options.greenInspectSequence[options.greenInspectSequence.length - 1];
+        return next;
       }
       return { State: { Running: true } };
     }),
@@ -311,6 +326,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -510,6 +526,7 @@ describe('blue-green route target flip', () => {
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 50,
       routeProbeIntervalMs: 1,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -527,6 +544,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -552,6 +570,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -560,6 +579,45 @@ describe('blue-green route target flip', () => {
       previous_version_still_serving: true,
       route_switched: false,
     });
+    expect(state.service.container_id).toBe('container-blue');
+    expect(state.service.container_name).toBe('ol-demo-app');
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-blue',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-green',
+    );
+  });
+
+  it('keeps blue serving when green restarts during the post-switch stability window', async () => {
+    const mockDocker = createMockDocker({
+      greenInspectSequence: [
+        { State: { Running: true }, RestartCount: 0 },
+        { State: { Running: true }, RestartCount: 1 },
+      ],
+    });
+    docker = mockDocker.docker;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbe(200);
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 2,
+      postSwitchStabilityPollIntervalMs: 1,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      strategy: 'blue-green',
+      previous_version_still_serving: true,
+      route_switched: false,
+      readiness: 'unhealthy',
+    });
+    expect(result.error).toContain('previous version still serving');
+    expect(result.error).toContain('restarted 1 time');
     expect(state.service.container_id).toBe('container-blue');
     expect(state.service.container_name).toBe('ol-demo-app');
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
@@ -579,6 +637,7 @@ describe('blue-green route target flip', () => {
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
       routeProbePath: '/',
+      postSwitchStabilityMs: 0,
     });
 
     expect(result.success).toBe(true);
@@ -605,6 +664,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result.success).toBe(true);
@@ -628,6 +688,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -654,6 +715,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result).toMatchObject({
@@ -679,6 +741,7 @@ describe('blue-green route target flip', () => {
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
       trigger: 'chat',
+      postSwitchStabilityMs: 0,
     });
 
     expect(result.success).toBe(true);
@@ -700,6 +763,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result.success).toBe(true);
@@ -742,6 +806,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
     });
 
     expect(result.success).toBe(true);
