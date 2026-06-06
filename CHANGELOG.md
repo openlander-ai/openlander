@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.19] - 2026-06-06
+
+### Fixed
+
+- Prefer blue-green redeploys automatically for eligible Applications when
+  agents call `redeploy_app` without an explicit strategy, keeping the previous
+  version serving through route verification and the post-switch stability
+  window.
+- Keep explicit `strategy="force"` available for shorter replacement redeploys
+  when downtime is acceptable, and fall back to force automatically when
+  blue-green is not currently eligible.
+- Update MCP schema descriptions and public deploy docs so agent guidance no
+  longer says force is the default redeploy strategy.
+
 ## [0.1.14-rc.18] - 2026-06-06
 
 ### Fixed
