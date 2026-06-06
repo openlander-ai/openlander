@@ -6,6 +6,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import {
   getDeployableServiceRouteName,
@@ -19,12 +20,21 @@ import { loadServiceView, type ServiceView } from '../../db/views/service-view.j
 import type { ToolContext, ToolDef } from './types.js';
 import { resolveDeployableTarget } from './deployable-target.js';
 import {
+  observeRepresentativeTraffic,
+  parseRepresentativeTraffic,
+  representativeTrafficFailed,
+  representativeTrafficToJson,
+  representativeTrafficWarning,
+} from './representative-traffic.js';
+import {
   cleanupPreviewSchema,
   deployHistorySchema,
   deployStatusSchema,
   listPreviewsSchema,
   previewDeploySchema,
 } from './schemas.js';
+
+const toolLog = createModuleLogger('tools-defs-deploy');
 
 type AppCtx = ToolContext['appCtx'];
 type DeployStatusReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
@@ -489,6 +499,31 @@ export const deployToolDefs: ToolDef[] = [
           : undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
+        let representativeTraffic = parseRepresentativeTraffic(log.representative_traffic_json);
+        let representativeTrafficPersistenceWarning: string | undefined;
+        if (!representativeTraffic && phase === 'done' && routeName) {
+          try {
+            representativeTraffic = await observeRepresentativeTraffic(appCtx, routeName, '/');
+            if (
+              representativeTraffic.status === 'passed' &&
+              typeof appCtx.db.updateDeployLogRepresentativeTraffic === 'function'
+            ) {
+              await appCtx.db.updateDeployLogRepresentativeTraffic(
+                log.id,
+                representativeTrafficToJson(representativeTraffic),
+              );
+            }
+          } catch (err) {
+            representativeTrafficPersistenceWarning =
+              err instanceof Error ? err.message : String(err);
+            toolLog.warn(
+              { err, deployId: log.id, serviceId: log.service_id, routeName },
+              'Failed to observe representative traffic for deploy status',
+            );
+          }
+        }
+        const trafficFailure = representativeTrafficFailed(representativeTraffic);
+        const trafficWarning = representativeTrafficWarning(representativeTraffic);
         const readiness =
           phase === 'done' && view?.containerId
             ? await inspectContainerReadiness(appCtx, view.containerId)
@@ -496,10 +531,13 @@ export const deployToolDefs: ToolDef[] = [
         const readinessMessage =
           readiness?.message ?? (readiness ? readinessGuidance(readiness.readiness) : undefined);
         const status =
-          phase === 'done' && readiness?.readiness === 'unhealthy' ? 'unhealthy' : log.status;
-        const health =
-          readiness?.readiness ??
-          (view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown'));
+          trafficFailure || (phase === 'done' && readiness?.readiness === 'unhealthy')
+            ? 'unhealthy'
+            : log.status;
+        const health = trafficFailure
+          ? 'unhealthy'
+          : (readiness?.readiness ??
+            (view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown')));
         const completedAt = parseDBTimestamp(log.created_at);
         const durationMs =
           typeof log.duration_ms === 'number' && Number.isFinite(log.duration_ms)
@@ -529,6 +567,27 @@ export const deployToolDefs: ToolDef[] = [
           health,
           ...(readiness ? { readiness: readiness.readiness } : {}),
           ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
+          ...(representativeTraffic
+            ? {
+                representative_traffic: {
+                  status: representativeTraffic.status,
+                  severity: representativeTraffic.severity,
+                  path: representativeTraffic.path,
+                  ...(representativeTraffic.status_code
+                    ? { status_code: representativeTraffic.status_code }
+                    : {}),
+                  ...(representativeTraffic.attempts
+                    ? { attempts: representativeTraffic.attempts }
+                    : {}),
+                  ...(representativeTraffic.elapsed_ms !== undefined
+                    ? { elapsed_ms: representativeTraffic.elapsed_ms }
+                    : {}),
+                  ...(representativeTraffic.message
+                    ? { message: representativeTraffic.message }
+                    : {}),
+                },
+              }
+            : {}),
           ...(phase === 'done' && readiness?.readiness === 'unhealthy'
             ? {
                 post_deploy_stability: {
@@ -572,7 +631,7 @@ export const deployToolDefs: ToolDef[] = [
                 },
               }
             : {}),
-          ...(phase === 'done' && readiness?.readiness === 'unhealthy'
+          ...(phase === 'done' && (readiness?.readiness === 'unhealthy' || trafficFailure)
             ? {
                 diagnostic_call: {
                   tool: 'openlander_monitor',
@@ -580,31 +639,52 @@ export const deployToolDefs: ToolDef[] = [
                   params: { service_id: log.service_id },
                 },
                 warnings: [
-                  readinessMessage ??
-                    'Deployment log is successful, but current container readiness is unhealthy.',
+                  ...(readiness?.readiness === 'unhealthy'
+                    ? [
+                        readinessMessage ??
+                          'Deployment log is successful, but current container readiness is unhealthy.',
+                      ]
+                    : []),
+                  ...(trafficWarning ? [trafficWarning] : []),
+                  ...(representativeTrafficPersistenceWarning
+                    ? [
+                        `Representative traffic probe was not persisted: ${representativeTrafficPersistenceWarning}`,
+                      ]
+                    : []),
                 ],
               }
             : {}),
           _agent_guidance: {
-            ...(phase === 'done' && readiness?.readiness === 'unhealthy'
+            ...(phase === 'done' && trafficFailure
               ? {
                   message:
-                    readinessMessage ??
-                    'The deploy log is successful, but the current container is unhealthy.',
+                    representativeTraffic?.message ??
+                    'Deployment health passed, but representative public traffic failed.',
                 }
-              : {}),
+              : phase === 'done' && readiness?.readiness === 'unhealthy'
+                ? {
+                    message:
+                      readinessMessage ??
+                      'The deploy log is successful, but the current container is unhealthy.',
+                  }
+                : {}),
             next_steps:
               log.status === 'failed'
                 ? [
                     'Call get_build_log with this deploy_id for full raw build output.',
                     'Fix the issue, then redeploy the service.',
                   ]
-                : phase === 'done' && readiness?.readiness === 'unhealthy'
+                : phase === 'done' && trafficFailure
                   ? [
                       'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
-                      'Inspect logs before reporting the deployment as healthy.',
+                      'Do not report end-user success until representative public traffic returns a non-5xx response.',
                     ]
-                  : ['Use get_deploy_history for nearby deploys if you need broader context.'],
+                  : phase === 'done' && readiness?.readiness === 'unhealthy'
+                    ? [
+                        'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
+                        'Inspect logs before reporting the deployment as healthy.',
+                      ]
+                    : ['Use get_deploy_history for nearby deploys if you need broader context.'],
           },
         };
       };

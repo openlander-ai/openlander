@@ -320,6 +320,290 @@ describe('get_deploy_status structured fields (O1)', () => {
     }
   });
 
+  it('completed successful deploy log surfaces persisted representative traffic failure as unhealthy', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', container_id: 'container-1' };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      assigned_port: 10001,
+      public_url: null,
+    };
+    const verifyManagedTraefikRoute = vi.fn();
+    const ctx = {
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd6'
+            ? {
+                id: 'd6',
+                service_id: 'app__svc',
+                project_id: 'app',
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: JSON.stringify({
+                  status: 'failed',
+                  severity: 'fail',
+                  path: '/',
+                  status_code: 500,
+                  attempts: 2,
+                  elapsed_ms: 1200,
+                  message: 'Route probe returned HTTP 500',
+                }),
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === 'app' ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        updateDeployLogRepresentativeTraffic: vi.fn(),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd6' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd6',
+      phase: 'done',
+      status: 'unhealthy',
+      health: 'unhealthy',
+      representative_traffic: {
+        status: 'failed',
+        severity: 'fail',
+        path: '/',
+        status_code: 500,
+        attempts: 2,
+        elapsed_ms: 1200,
+        message: 'Route probe returned HTTP 500',
+      },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'app__svc' },
+      },
+      _agent_guidance: {
+        message: 'Route probe returned HTTP 500',
+        next_steps: expect.arrayContaining([
+          'Do not report end-user success until representative public traffic returns a non-5xx response.',
+        ]),
+      },
+    });
+    expect(job['warnings']).toEqual(expect.arrayContaining(['Route probe returned HTTP 500']));
+    expect(verifyManagedTraefikRoute).not.toHaveBeenCalled();
+    expect(ctx.db.updateDeployLogRepresentativeTraffic).not.toHaveBeenCalled();
+  });
+
+  it('completed deploy status uses live representative traffic failure without persisting it', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', container_id: 'container-1' };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      assigned_port: 10001,
+      public_url: null,
+    };
+    const updateDeployLogRepresentativeTraffic = vi.fn(async () => undefined);
+    const verifyManagedTraefikRoute = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      attempts: 3,
+      elapsedMs: 1800,
+      error: 'Route probe returned HTTP 500',
+    }));
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd7'
+            ? {
+                id: 'd7',
+                service_id: 'app__svc',
+                project_id: 'app',
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: null,
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === 'app' ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        updateDeployLogRepresentativeTraffic,
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd7' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd7',
+      phase: 'done',
+      status: 'unhealthy',
+      representative_traffic: {
+        status: 'failed',
+        severity: 'fail',
+        path: '/',
+        status_code: 500,
+        attempts: 3,
+        elapsed_ms: 1800,
+        message: 'Route probe returned HTTP 500',
+      },
+    });
+    expect(verifyManagedTraefikRoute).toHaveBeenCalledWith({
+      projectName: 'web',
+      path: '/',
+      probeTimeoutMs: 1000,
+      maxWaitMs: 2500,
+      intervalMs: 500,
+      minimumSuccessAgeMs: 0,
+    });
+    expect(updateDeployLogRepresentativeTraffic).not.toHaveBeenCalled();
+  });
+
+  it('completed deploy status persists representative traffic success when missing from log', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', container_id: 'container-1' };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      status: 'running',
+      container_id: 'container-1',
+      assigned_port: 10001,
+      public_url: null,
+    };
+    const updateDeployLogRepresentativeTraffic = vi.fn(async () => undefined);
+    const verifyManagedTraefikRoute = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      attempts: 2,
+      elapsedMs: 700,
+    }));
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd8'
+            ? {
+                id: 'd8',
+                service_id: 'app__svc',
+                project_id: 'app',
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: null,
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === 'app' ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        updateDeployLogRepresentativeTraffic,
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd8' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd8',
+      phase: 'done',
+      status: 'success',
+      representative_traffic: {
+        status: 'passed',
+        severity: 'ok',
+        path: '/',
+        status_code: 200,
+        attempts: 2,
+        elapsed_ms: 700,
+      },
+    });
+    expect(verifyManagedTraefikRoute).toHaveBeenCalledWith({
+      projectName: 'web',
+      path: '/',
+      probeTimeoutMs: 1000,
+      maxWaitMs: 2500,
+      intervalMs: 500,
+      minimumSuccessAgeMs: 0,
+    });
+    expect(updateDeployLogRepresentativeTraffic).toHaveBeenCalledTimes(1);
+    const persisted = JSON.parse(updateDeployLogRepresentativeTraffic.mock.calls[0]?.[1] as string);
+    expect(persisted).toMatchObject({
+      status: 'passed',
+      severity: 'ok',
+      path: '/',
+      status_code: 200,
+    });
+  });
+
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
     // The common active-poll path: JobManager is keyed by project id, so
     // formatJob is called without a deploy id. status_call carries service_id

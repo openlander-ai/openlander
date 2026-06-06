@@ -297,13 +297,7 @@ describe('probe_host tool', () => {
       expect(result.reachable).toBe(true);
       expect(ctx.docker.execSimple).toHaveBeenCalledWith(
         'container-2',
-        expect.arrayContaining([
-          'curl',
-          '-w',
-          '%{http_code}',
-          '5',
-          'http://my-app:3000/health',
-        ]),
+        expect.arrayContaining(['curl', '-w', '%{http_code}', '5', 'http://my-app:3000/health']),
       );
     });
 
@@ -1894,6 +1888,66 @@ describe('service-targeted monitoring tools', () => {
     });
     expect(result['diagnosis']).toBeUndefined();
     expect(result['suggested_call']).toBeUndefined();
+  });
+
+  it('diagnose_service includes persisted representative traffic evidence from recent deploys', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
+      {
+        id: 'deploy-traffic',
+        service_id: 'app__svc',
+        environment_id: null,
+        status: 'success',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: 'abc123',
+        commit_message: 'ship',
+        build_log: null,
+        runtime_log: null,
+        representative_traffic_json: JSON.stringify({
+          status: 'failed',
+          severity: 'fail',
+          path: '/',
+          status_code: 500,
+          attempts: 2,
+          elapsed_ms: 1200,
+          message: 'Route probe returned HTTP 500',
+        }),
+        duration_ms: 2000,
+        created_at: '2026-05-22T00:00:00Z',
+      },
+    ]);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      recentDeployment: {
+        latest: {
+          id: 'deploy-traffic',
+          representativeTraffic: {
+            status: 'failed',
+            severity: 'fail',
+            path: '/',
+            status_code: 500,
+            message: 'Route probe returned HTTP 500',
+          },
+        },
+        history: [
+          {
+            id: 'deploy-traffic',
+            representativeTraffic: {
+              status: 'failed',
+              severity: 'fail',
+              path: '/',
+              status_code: 500,
+            },
+          },
+        ],
+      },
+    });
   });
 
   it.each([

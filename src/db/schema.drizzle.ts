@@ -131,6 +131,7 @@ export const deployLogs = pgTable(
     commit_message: text('commit_message'),
     build_log: text('build_log'),
     runtime_log: text('runtime_log'),
+    representative_traffic_json: text('representative_traffic_json'),
     duration_ms: integer('duration_ms'),
     created_at: text('created_at').default(sql`now()::text`),
     server_id: text('server_id').notNull().default('local'),

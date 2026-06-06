@@ -456,6 +456,7 @@ export class Database implements AuthDatabase {
   getLastDeployLogForService(serviceId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLogForService(serviceId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { return this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
+  updateDeployLogRepresentativeTraffic(deployId: string, representativeTrafficJson: string) { return this.deployLogRepo.updateRepresentativeTraffic(deployId, representativeTrafficJson); }
   recordMcpSessionClose(opts: Parameters<McpSessionLogRepo['recordClose']>[0]) { return this.mcpSessionLogRepo.recordClose(opts); }
   listRecentClosedMcpSessions(limit = 50) { return this.mcpSessionLogRepo.listRecentClosed(limit); }
   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { return this.timelineRepo.createTimelineEvent(event); }

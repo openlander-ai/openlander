@@ -15,6 +15,13 @@
       "when": 1780379000000,
       "tag": "0001_env_var_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780715227000,
+      "tag": "0002_representative_traffic",
+      "breakpoints": true
     }
   ]
 }

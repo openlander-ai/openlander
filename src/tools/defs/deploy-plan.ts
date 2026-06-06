@@ -5,6 +5,7 @@ import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import {
   getDeployableServiceRouteName,
@@ -46,6 +47,13 @@ import {
   validateDeployPlanSchema,
 } from './schemas.js';
 import { resolveDeployableTarget } from './deployable-target.js';
+import {
+  observeRepresentativeTraffic,
+  representativeTrafficFailed,
+  representativeTrafficToJson,
+  representativeTrafficWarning,
+  type RepresentativeTrafficObservation,
+} from './representative-traffic.js';
 
 type AppCtx = ToolContext['appCtx'];
 type ProjectRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getProject']>>>;
@@ -53,6 +61,8 @@ type DeployPlanRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getDeployPlan'
 type DeployLogRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getDeployLog']>>>;
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
 type DeploymentReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
+
+const log = createModuleLogger('tools-defs-deploy-plan');
 
 const POST_DEPLOY_STABILITY_OBSERVE_MS = 12_000;
 const POST_DEPLOY_STABILITY_POLL_MS = 2_000;
@@ -88,16 +98,6 @@ interface StabilityObservation {
   readiness: DeploymentReadiness;
   message?: string;
   result: ReadinessResult;
-}
-
-interface RepresentativeTrafficObservation {
-  status: 'passed' | 'failed' | 'skipped';
-  path: string;
-  severity: 'ok' | 'warning' | 'fail';
-  status_code?: number;
-  attempts?: number;
-  elapsed_ms?: number;
-  message?: string;
 }
 
 interface PlanInputRequirement {
@@ -282,59 +282,6 @@ async function observeProjectStability(
     observed_ms: Date.now() - started,
     readiness: last.readiness,
     result: last,
-  };
-}
-
-async function observeRepresentativeTraffic(
-  appCtx: AppCtx,
-  routeName: string,
-  path = '/',
-): Promise<RepresentativeTrafficObservation> {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const configLike = appCtx.config as unknown;
-  const traefikMode =
-    typeof configLike === 'object' && configLike !== null && 'traefik' in configLike
-      ? (configLike as { traefik?: { mode?: unknown } }).traefik?.mode
-      : undefined;
-  if (traefikMode !== 'managed') {
-    return {
-      status: 'skipped',
-      path: normalizedPath,
-      severity: 'warning',
-      message: 'Representative traffic probe requires managed Traefik.',
-    };
-  }
-
-  const result = await appCtx.pipeline.verifyManagedTraefikRoute({
-    projectName: routeName,
-    path: normalizedPath,
-    probeTimeoutMs: 1_000,
-    maxWaitMs: 2_500,
-    intervalMs: 500,
-    minimumSuccessAgeMs: 0,
-  });
-
-  if (result.ok) {
-    return {
-      status: 'passed',
-      path: normalizedPath,
-      severity: 'ok',
-      status_code: result.status,
-      attempts: result.attempts,
-      elapsed_ms: result.elapsedMs,
-    };
-  }
-
-  const statusCode = result.status;
-  const isServerError = typeof statusCode === 'number' && statusCode >= 500;
-  return {
-    status: 'failed',
-    path: normalizedPath,
-    severity: isServerError ? 'fail' : 'warning',
-    ...(statusCode ? { status_code: statusCode } : {}),
-    attempts: result.attempts,
-    elapsed_ms: result.elapsedMs,
-    message: result.error,
   };
 }
 
@@ -1953,14 +1900,28 @@ export const deployPlanToolDefs: ToolDef[] = [
                       }),
                     )
                   : undefined;
-              const trafficFailure =
-                representativeTraffic?.status === 'failed' &&
-                representativeTraffic.severity === 'fail';
-              const trafficWarning =
-                representativeTraffic && representativeTraffic.severity !== 'ok'
-                  ? (representativeTraffic.message ??
-                    `Representative traffic probe ${representativeTraffic.status}`)
-                  : undefined;
+              if (representativeTraffic) {
+                try {
+                  const deployLog = attachedServiceId
+                    ? await appCtx.db.getLastDeployLogForService(attachedServiceId)
+                    : await appCtx.db.getLastDeployLog(projectId);
+                  if (deployLog) {
+                    if (typeof appCtx.db.updateDeployLogRepresentativeTraffic === 'function') {
+                      await appCtx.db.updateDeployLogRepresentativeTraffic(
+                        deployLog.id,
+                        representativeTrafficToJson(representativeTraffic),
+                      );
+                    }
+                  }
+                } catch (err) {
+                  log.warn(
+                    { err, projectId, attachedServiceId, routeName },
+                    'Failed to persist representative traffic observation for deploy_app result',
+                  );
+                }
+              }
+              const trafficFailure = representativeTrafficFailed(representativeTraffic);
+              const trafficWarning = representativeTrafficWarning(representativeTraffic);
               const effectiveCompletionStatus = trafficFailure ? 'unhealthy' : completionStatus;
               resolve({
                 plan_id: plan.plan_id,
@@ -2063,7 +2024,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                       ? {
                           _agent_guidance: {
                             message:
-                              representativeTraffic.message ??
+                              representativeTraffic?.message ??
                               'Deployment health passed, but representative public traffic failed.',
                             next_steps: [
                               'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',

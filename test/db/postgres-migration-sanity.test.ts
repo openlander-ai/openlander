@@ -254,8 +254,13 @@ describe('Postgres migration sanity gate', () => {
     expect(journal.entries.map((entry) => entry.tag)).toEqual([
       '0000_v0_1_initial',
       '0001_env_var_scope',
+      '0002_representative_traffic',
     ]);
-    expect(activeMigrationSqlFiles()).toEqual(['0000_v0_1_initial.sql', '0001_env_var_scope.sql']);
+    expect(activeMigrationSqlFiles()).toEqual([
+      '0000_v0_1_initial.sql',
+      '0001_env_var_scope.sql',
+      '0002_representative_traffic.sql',
+    ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
     expect(sql).toContain('CREATE TABLE "domain_mappings"');
@@ -264,6 +269,7 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CONSTRAINT "domain_mappings_target_port_check"');
     expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_service_environment_key_unique"');
     expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_project_environment_key_unique"');
+    expect(sql).toContain('"representative_traffic_json" text');
   });
 
   it('allows a fresh database or already-applied public migration rows', async () => {
@@ -281,6 +287,13 @@ describe('Postgres migration sanity gate', () => {
       assertV01BaselineCompatible(
         createFakePostgresClient({
           migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 2 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 3 }],
         }),
       ),
     ).resolves.toBeUndefined();
@@ -304,7 +317,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 3 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 4 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
@@ -328,7 +341,7 @@ describeWithDatabase('Postgres baseline guard integration', () => {
         const rows = (await sql.unsafe(
           'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
         )) as ReadonlyArray<{ count: number }>;
-        expect(rows[0]?.count).toBe(2);
+        expect(rows[0]?.count).toBe(3);
         await expect(sql.unsafe('SELECT 1 FROM domain_mappings LIMIT 1')).resolves.toBeDefined();
       } finally {
         await sql.end({ timeout: 5 });

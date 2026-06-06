@@ -43,6 +43,7 @@ export class DeployLogRepo {
     commitMessage?: string;
     buildLog?: string;
     runtimeLog?: string;
+    representativeTrafficJson?: string;
     durationMs?: number;
   }): Promise<void> {
     const serviceId = await this.resolveExistingCanonicalServiceId(log.projectId);
@@ -57,6 +58,7 @@ export class DeployLogRepo {
       commit_message: log.commitMessage ?? null,
       build_log: log.buildLog ?? null,
       runtime_log: log.runtimeLog ?? null,
+      representative_traffic_json: log.representativeTrafficJson ?? null,
       duration_ms: log.durationMs ?? null,
     });
   }
@@ -119,6 +121,16 @@ export class DeployLogRepo {
     await this.db
       .update(deployLogs)
       .set({ runtime_log: runtimeLog })
+      .where(eq(deployLogs.id, deployId));
+  }
+
+  async updateRepresentativeTraffic(
+    deployId: string,
+    representativeTrafficJson: string,
+  ): Promise<void> {
+    await this.db
+      .update(deployLogs)
+      .set({ representative_traffic_json: representativeTrafficJson })
       .where(eq(deployLogs.id, deployId));
   }
 
