@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.1.14] - 2026-06-07
+
+### Added
+
+- Add the `openlander_service.update_app` MCP action as the normal intent for
+  updating an existing Application to its latest saved source/configuration,
+  while reusing the existing deploy lock, blue-green eligibility, status, and
+  diagnostic contract.
+- Add local operator MCP token rotation commands for repeatable QA and
+  self-hosted setup workflows.
+- Add compact deploy-plan needs-input summaries so agents can ask for the first
+  real missing or invalid value instead of copying placeholder secrets.
+
+### Changed
+
+- Prefer blue-green automatically for eligible no-strategy app updates, while
+  preserving explicit `strategy="force"` for operators who intentionally accept
+  downtime.
+- Tighten MCP guidance around force-style updates: failed blue-green updates now
+  emphasize when the previous version is still serving and no longer hand agents
+  a direct force fallback call.
+- Keep Day-1 composite deploy plans responsible for the target Project and
+  project-scoped managed Postgres/Redis topology, reducing agent-side manual
+  Project/database/cache assembly.
+- Treat user-owned external SaaS values as trusted input that must come from a
+  saved or confirmed source; OpenLander blocks obvious placeholder/example
+  values instead of inventing plausible secrets.
+
+### Fixed
+
+- Wait for auto-provisioned managed PostgreSQL and Redis services to become
+  reachable before starting the application container.
+- Preserve the previous version during failed blue-green updates, including
+  crash-loop candidates caught by the post-switch stability window.
+- Surface representative public-traffic failures in deploy status and
+  `diagnose_service`, so healthcheck-only false positives can be reported as
+  `TRAFFIC_HEALTH_MISMATCH`.
+- Improve Day-2 route and port recovery diagnostics with high-confidence
+  `PORT_MISMATCH` suggestions, `apply_route_config` verification, and automatic
+  rollback when route verification fails.
+- Avoid misclassifying self/base URLs or reachable non-2xx external APIs as
+  high-confidence dependency failures.
+
 ## [0.1.14-rc.28] - 2026-06-07
 
 ### Changed

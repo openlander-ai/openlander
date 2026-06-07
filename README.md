@@ -180,9 +180,14 @@ is the human surface on top.
 
 ## Agent-native benchmark
 
-We test OpenLander with coding agents, not only with API smoke tests. In a
-scoped Day-1 benchmark, agents deployed a Node app plus managed Postgres and
-Redis through OpenLander's composite deploy-plan flow:
+We test OpenLander with coding agents, not only with API smoke tests. The
+benchmarks below are intentionally scoped: they measure whether smaller agents
+can stay on the safe, high-level OpenLander path for common deploy and update
+workflows. They are not a claim that every workload is faster or that every
+failure mode is solved.
+
+In the scoped Day-1 fixture, agents deployed a Node app plus managed Postgres
+and Redis through OpenLander's composite deploy-plan flow:
 
 1. create a deployment plan,
 2. approve safe managed resources,
@@ -192,7 +197,8 @@ Redis through OpenLander's composite deploy-plan flow:
 The fixture is intentionally limited to platform-managed dependencies. External
 SaaS secrets such as Stripe, SMTP, S3, and exchange APIs are tested separately:
 when those user-owned values are missing, OpenLander should block instead of
-inventing plausible secrets. Latest run: OpenLander `v0.1.14-rc.16` against
+inventing plausible secrets. Latest validated release-candidate run:
+OpenLander `v0.1.14-rc.16` against
 [`openlander-ai/ledgerly@qa/managed-deps-only`](https://github.com/openlander-ai/ledgerly/tree/qa/managed-deps-only).
 
 | Model rung |     Result | MCP calls | Failed calls | Wall time |
@@ -209,6 +215,26 @@ app, Postgres, and Redis services stayed in one OpenLander Project/network.
 The point is not that every deploy is faster. The point is that even weaker
 agents can stay on the correct high-level path because OpenLander owns the
 app/database/cache topology instead of asking the agent to hand-assemble it.
+
+We also test unsafe updates. In the `D3-bad-runtime` fixture, the new commit
+builds but starts crashing after boot. OpenLander's default no-strategy
+`update_app` path used blue-green safety for eligible services, kept the
+previous version serving, and reported the failed update instead of promoting
+the crash-looping candidate. Latest validated release-candidate run:
+OpenLander `v0.1.14-rc.28`.
+
+| Model rung |     Result | MCP calls | Failed calls | Public outcome           |
+| ---------- | ---------: | --------: | -----------: | ------------------------ |
+| Spark      | PASS-clean |        13 |            0 | Old version kept serving |
+| Mini       | PASS-clean |        23 |            0 | Old version kept serving |
+| GPT-5.4    | PASS-clean |        20 |            0 | Old version kept serving |
+| GPT-5.5    | PASS-clean |        20 |            0 | Old version kept serving |
+
+For context, we run the same fixtures against a reference MCP-wrapper PaaS. The
+reference runs help us spot where lower-level primitives make agents more
+model-sensitive, but OpenLander's public claim is narrower: composite deploys
+and safe default updates should be operable by smaller agents without manual
+Project/database/cache assembly or unsafe crash-loop promotion.
 
 ---
 
