@@ -634,6 +634,41 @@ function rollbackServiceGuidance(result: { success?: unknown }, serviceId: strin
   };
 }
 
+function forceStrategyWarnings(
+  action: 'redeploy_app' | 'update_app' | 'restart_service',
+  explicit: boolean,
+): string[] {
+  if (action === 'restart_service') {
+    return [
+      'restart_service uses a force-style recreate path. It can replace the current runtime and is not the safe latest-code update path.',
+      'Do not report success until status_call is terminal and diagnose_service confirms the app is healthy.',
+    ];
+  }
+
+  return [
+    explicit
+      ? 'strategy="force" was explicitly requested. Force can replace the serving version and may cause downtime.'
+      : 'OpenLander selected force because blue-green is not currently eligible. Force can replace the serving version and may cause downtime.',
+    'Do not report success until status_call is terminal and diagnose_service confirms the app is healthy.',
+  ];
+}
+
+function forceStrategyGuidance(
+  action: 'redeploy_app' | 'update_app' | 'restart_service',
+): string[] {
+  if (action === 'restart_service') {
+    return [
+      'restart_service is for an intentional runtime recreate/restart, not for normal code/config shipping.',
+      'For normal existing-app updates, use update_app without strategy so OpenLander can choose blue-green when eligible.',
+    ];
+  }
+
+  return [
+    'Use strategy="force" only when the user accepts downtime or blue-green cannot be made eligible.',
+    'If a blue-green candidate just failed, inspect diagnostics and fix source/config before trying another update.',
+  ];
+}
+
 export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
@@ -645,7 +680,8 @@ export async function runDeployableServiceAction(
     action,
   );
   const noCache = (args.no_cache as boolean | undefined) === true;
-  let strategy = args.strategy as 'blue-green' | 'force' | undefined;
+  const requestedStrategy = args.strategy as 'blue-green' | 'force' | undefined;
+  let strategy = requestedStrategy;
   const healthCheckPath = args.health_check_path as string | undefined;
   const cmd = args.cmd as string[] | undefined;
   const envVars = parseInternalRedeployEnvVars(args);
@@ -699,14 +735,13 @@ export async function runDeployableServiceAction(
         strategy: 'blue-green',
         service: serviceSummary(service, project),
         reasons: ['Blue-green eligibility checks are unavailable in this runtime.'],
-        fallback_call: {
-          tool: 'openlander_service',
-          action,
-          params: { service_id: service.id, strategy: 'force' },
-        },
         _agent_guidance: {
-          message: 'Blue-green redeploy could not verify eligibility, so no deploy was started.',
-          next_steps: [`If downtime is acceptable, call ${action} again with strategy="force".`],
+          message:
+            'Blue-green redeploy could not verify eligibility, so no deploy was started. OpenLander is not suggesting a force retry automatically.',
+          next_steps: [
+            'Fix the blue-green eligibility issue or inspect service status before retrying.',
+            'Ask the user before accepting downtime; only then call the update action with strategy="force".',
+          ],
         },
       };
     }
@@ -721,17 +756,12 @@ export async function runDeployableServiceAction(
         strategy: 'blue-green',
         service: serviceSummary(service, project),
         reasons: eligibility.reasons,
-        fallback_call: {
-          tool: 'openlander_service',
-          action,
-          params: { service_id: service.id, strategy: 'force' },
-        },
         _agent_guidance: {
           message:
-            'Blue-green is only available for eligible git/image services behind managed OpenLander Traefik routes. No force deploy was started.',
+            'Blue-green is only available for eligible git/image services behind managed OpenLander Traefik routes. No force deploy was started and OpenLander is not suggesting a force retry automatically.',
           next_steps: [
-            `If downtime is acceptable, call ${action} again with strategy="force".`,
             'If zero-downtime is required, add a health check and use an OpenLander domain route before retrying blue-green.',
+            'Ask the user before accepting downtime; only then call the update action with strategy="force".',
           ],
         },
       };
@@ -751,6 +781,9 @@ export async function runDeployableServiceAction(
     } else {
       strategy = 'force';
     }
+  }
+  if (action === 'restart_service') {
+    strategy = 'force';
   }
 
   const sessionId = `mcp-${action}-${nanoid(12)}`;
@@ -853,14 +886,21 @@ export async function runDeployableServiceAction(
 
   return {
     status: action === 'restart_service' ? 'restarting' : 'deploying',
-    ...(isUpdateAction ? { strategy } : {}),
+    strategy,
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
+    ...(strategy === 'force'
+      ? { warnings: forceStrategyWarnings(action, requestedStrategy === 'force') }
+      : {}),
     service: serviceSummary(service, project),
     message: noCache
       ? `${action === 'update_app' ? 'App update' : 'Deployment'} started (no_cache). Poll get_deploy_status to track progress.`
       : autoSelectedBlueGreen
         ? `Blue-green ${action === 'update_app' ? 'app update' : 'deployment'} started. The previous version stays live until route verification and stability checks pass.`
-        : `${action === 'update_app' ? 'App update' : 'Deployment'} started. Poll get_deploy_status to track progress.`,
+        : requestedStrategy === 'force'
+          ? `${action === 'update_app' ? 'App update' : 'Deployment'} started with strategy="force". Poll get_deploy_status and diagnose_service before reporting success.`
+          : action === 'restart_service'
+            ? 'Runtime restart/recreate started with a force-style path. Poll get_deploy_status and diagnose_service before reporting success.'
+            : `${action === 'update_app' ? 'App update' : 'Deployment'} started. Poll get_deploy_status to track progress.`,
     diagnostic_call: {
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -882,6 +922,7 @@ export async function runDeployableServiceAction(
                 `Force redeploy was used because blue-green is not currently eligible: ${blueGreenFallbackReasons.join(' ')}`,
               ]
             : []),
+        ...(strategy === 'force' ? forceStrategyGuidance(action) : []),
       ],
     },
   };
@@ -951,8 +992,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'restart_service',
     riskLevel: 'medium',
     description:
-      'Restart an Application/worker by stopping and redeploying it. Provide service_id or service_name.',
-    mcpDescription: 'Restart an Application/worker by stopping and redeploying it.',
+      'Advanced runtime recreate/restart for an Application/worker. This uses a force-style replacement path; for normal latest-code/config updates prefer update_app without strategy.',
+    mcpDescription:
+      'Advanced runtime recreate/restart for an Application/worker. Prefer update_app for normal safe updates.',
     inputSchema: restartServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'restart_service'),
   },

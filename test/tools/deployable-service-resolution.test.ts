@@ -261,11 +261,11 @@ describe('deployable service target resolution', () => {
       status: 'unarchived',
       project_id: 'alpha',
       service_id: 'alpha__svc',
-	      _agent_guidance: {
-	        message: expect.stringContaining('No container was started automatically'),
-	        next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
-	      },
-	    });
+      _agent_guidance: {
+        message: expect.stringContaining('No container was started automatically'),
+        next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
+      },
+    });
   });
 
   it('apply_route_config updates the live container port without redeploying', async () => {
@@ -483,12 +483,14 @@ describe('deployable service target resolution', () => {
       status: 'blocked',
       code: 'BLUE_GREEN_UNSUPPORTED',
       strategy: 'blue-green',
-      fallback_call: {
-        tool: 'openlander_service',
-        action: 'redeploy_app',
-        params: { service_id: 'alpha__svc', strategy: 'force' },
+      _agent_guidance: {
+        message: expect.stringContaining('not suggesting a force retry automatically'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Ask the user before accepting downtime'),
+        ]),
       },
     });
+    expect(result).not.toHaveProperty('fallback_call');
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
@@ -510,12 +512,14 @@ describe('deployable service target resolution', () => {
       status: 'blocked',
       code: 'BLUE_GREEN_UNSUPPORTED',
       strategy: 'blue-green',
-      fallback_call: {
-        tool: 'openlander_service',
-        action: 'redeploy_app',
-        params: { service_id: 'alpha__svc', strategy: 'force' },
+      _agent_guidance: {
+        message: expect.stringContaining('not suggesting a force retry automatically'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Ask the user before accepting downtime'),
+        ]),
       },
     });
+    expect(result).not.toHaveProperty('fallback_call');
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
@@ -581,7 +585,16 @@ describe('deployable service target resolution', () => {
     expect(result).toMatchObject({
       status: 'deploying',
       strategy: 'force',
-      message: 'App update started. Poll get_deploy_status to track progress.',
+      message:
+        'App update started with strategy="force". Poll get_deploy_status and diagnose_service before reporting success.',
+      warnings: expect.arrayContaining([
+        expect.stringContaining('strategy="force" was explicitly requested'),
+      ]),
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Use strategy="force" only when the user accepts downtime'),
+        ]),
+      },
     });
     expect(ctx.pipeline.getBlueGreenEligibility).not.toHaveBeenCalled();
     await vi.waitFor(() =>
@@ -609,9 +622,16 @@ describe('deployable service target resolution', () => {
     expect(result).toMatchObject({
       status: 'deploying',
       strategy: 'force',
+      warnings: expect.arrayContaining([
+        expect.stringContaining(
+          'OpenLander selected force because blue-green is not currently eligible',
+        ),
+      ]),
       _agent_guidance: {
         next_steps: expect.arrayContaining([
-          expect.stringContaining('Force redeploy was used because blue-green is not currently eligible'),
+          expect.stringContaining(
+            'Force redeploy was used because blue-green is not currently eligible',
+          ),
         ]),
       },
     });

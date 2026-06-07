@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.27] - 2026-06-07
+
+### Changed
+
+- Tighten MCP guidance around force-style app updates: explicit or fallback
+  `strategy="force"` responses now warn agents not to report success until
+  terminal deploy status and diagnostics confirm health.
+- Stop returning a direct `fallback_call` to force after blue-green eligibility
+  rejections; agents now get guidance to fix eligibility or ask before accepting
+  downtime.
+- Clarify `restart_service` as an advanced force-style runtime recreate path,
+  not the normal safe latest-code update path.
+
 ## [0.1.14-rc.26] - 2026-06-07
 
 ### Added

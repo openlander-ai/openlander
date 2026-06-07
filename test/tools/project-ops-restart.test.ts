@@ -73,7 +73,7 @@ describe('deployable restart_service non-blocking', () => {
     expect(stop).not.toHaveBeenCalled();
     expect(redeployService).toHaveBeenCalledWith('service-1', {
       noCache: false,
-      strategy: undefined,
+      strategy: 'force',
       healthCheckPath: undefined,
       cmd: undefined,
       lockSessionId: expect.any(String),
@@ -111,7 +111,7 @@ describe('deployable restart_service non-blocking', () => {
 
     expect(redeployService).toHaveBeenCalledWith('service-1', {
       noCache: true,
-      strategy: undefined,
+      strategy: 'force',
       healthCheckPath: undefined,
       cmd: undefined,
       lockSessionId: expect.any(String),
@@ -120,6 +120,10 @@ describe('deployable restart_service non-blocking', () => {
     expect(redeploy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'restarting',
+      strategy: 'force',
+      warnings: expect.arrayContaining([
+        expect.stringContaining('restart_service uses a force-style recreate path'),
+      ]),
       service: { name: 'demo-app', projectId: 'project-1', projectName: 'demo-group' },
     });
   });
