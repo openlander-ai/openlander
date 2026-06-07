@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Make failed blue-green deploy status emphasize that the previous version is
+  still serving, and warn agents not to immediately retry with force.
+
 ## [0.1.14-rc.24] - 2026-06-07
 
 ### Fixed
