@@ -622,6 +622,8 @@ describe('deployable service target resolution', () => {
     expect(result).toMatchObject({
       status: 'deploying',
       strategy: 'force',
+      message:
+        'Deployment started with force fallback because blue-green is not currently eligible. Poll get_deploy_status and diagnose_service before reporting success.',
       warnings: expect.arrayContaining([
         expect.stringContaining(
           'OpenLander selected force because blue-green is not currently eligible',

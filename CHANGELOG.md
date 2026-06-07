@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Align implicit force-fallback MCP messages with explicit `strategy="force"`
+  responses so agents see the same terminal-status and diagnosis warning in the
+  primary message.
+
 ## [0.1.14-rc.27] - 2026-06-07
 
 ### Changed

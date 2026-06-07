@@ -204,7 +204,11 @@ describe('deploy MCP guidance', () => {
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
-    expect(result).toMatchObject({ strategy: 'force' });
+    expect(result).toMatchObject({
+      strategy: 'force',
+      message:
+        'App update started with force fallback because blue-green is not currently eligible. Poll get_deploy_status and diagnose_service before reporting success.',
+    });
     expect(result['zero_downtime']).toBeUndefined();
     expect(result).toMatchObject({
       warnings: expect.arrayContaining([

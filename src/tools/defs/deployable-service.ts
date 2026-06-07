@@ -669,6 +669,23 @@ function forceStrategyGuidance(
   ];
 }
 
+function forceStrategyMessage(params: {
+  action: 'redeploy_app' | 'update_app' | 'restart_service';
+  explicit: boolean;
+  noCache: boolean;
+}): string {
+  if (params.action === 'restart_service') {
+    return 'Runtime restart/recreate started with a force-style path. Poll get_deploy_status and diagnose_service before reporting success.';
+  }
+
+  const label = params.action === 'update_app' ? 'App update' : 'Deployment';
+  const cacheSuffix = params.noCache ? ' (no_cache)' : '';
+  const reason = params.explicit
+    ? 'with strategy="force"'
+    : 'with force fallback because blue-green is not currently eligible';
+  return `${label} started ${reason}${cacheSuffix}. Poll get_deploy_status and diagnose_service before reporting success.`;
+}
+
 export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
@@ -892,15 +909,13 @@ export async function runDeployableServiceAction(
       ? { warnings: forceStrategyWarnings(action, requestedStrategy === 'force') }
       : {}),
     service: serviceSummary(service, project),
-    message: noCache
-      ? `${action === 'update_app' ? 'App update' : 'Deployment'} started (no_cache). Poll get_deploy_status to track progress.`
-      : autoSelectedBlueGreen
-        ? `Blue-green ${action === 'update_app' ? 'app update' : 'deployment'} started. The previous version stays live until route verification and stability checks pass.`
-        : requestedStrategy === 'force'
-          ? `${action === 'update_app' ? 'App update' : 'Deployment'} started with strategy="force". Poll get_deploy_status and diagnose_service before reporting success.`
-          : action === 'restart_service'
-            ? 'Runtime restart/recreate started with a force-style path. Poll get_deploy_status and diagnose_service before reporting success.'
-            : `${action === 'update_app' ? 'App update' : 'Deployment'} started. Poll get_deploy_status to track progress.`,
+    message: autoSelectedBlueGreen
+      ? `Blue-green ${action === 'update_app' ? 'app update' : 'deployment'} started. The previous version stays live until route verification and stability checks pass.`
+      : strategy === 'force'
+        ? forceStrategyMessage({ action, explicit: requestedStrategy === 'force', noCache })
+        : noCache
+          ? `${action === 'update_app' ? 'App update' : 'Deployment'} started (no_cache). Poll get_deploy_status to track progress.`
+          : `${action === 'update_app' ? 'App update' : 'Deployment'} started. Poll get_deploy_status to track progress.`,
     diagnostic_call: {
       tool: 'openlander_monitor',
       action: 'diagnose_service',
