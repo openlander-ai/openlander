@@ -586,6 +586,12 @@ describe('blue-green route target flip', () => {
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-green',
     );
+    expect(db.createDeployLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        buildLog: expect.stringContaining('Previous version is still serving'),
+      }),
+    );
   });
 
   it('rolls the DB target back to blue when route probe fails', async () => {

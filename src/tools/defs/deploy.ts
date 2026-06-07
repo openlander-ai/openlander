@@ -76,6 +76,28 @@ function readinessGuidance(readiness: DeployStatusReadiness): string | undefined
   return undefined;
 }
 
+function failedBlueGreenPreservedPreviousVersion(buildLog: string | null | undefined): boolean {
+  if (!buildLog) return false;
+  return (
+    buildLog.includes('Previous version is still serving after failed blue-green deploy') ||
+    /Blue-green deploy failed[^.\n]*previous version (?:is )?still serving/i.test(buildLog) ||
+    buildLog.includes('[route] Rolled active target back to blue')
+  );
+}
+
+function previousVersionServingGuidance(): { message: string; next_steps: string[] } {
+  return {
+    message:
+      'Blue-green deploy failed, but the previous version is still serving. Treat this as a safe failed update, not as an outage.',
+    next_steps: [
+      'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
+      'Inspect get_build_log before deciding whether a new update attempt is safe.',
+      'Do not immediately retry with strategy="force"; force redeploy can replace the serving version and turn a safe failed update into downtime.',
+      'Retry blue-green after fixing the cause, or ask the user before accepting downtime.',
+    ],
+  };
+}
+
 async function inspectContainerReadiness(
   appCtx: AppCtx,
   containerId: string,
@@ -352,6 +374,13 @@ export const deployToolDefs: ToolDef[] = [
           ? { service_id: serviceId }
           : { project_id: job.projectId };
         const terminal = isTerminalPhase(job.phase);
+        const previousVersionServing =
+          job.phase === 'failed' &&
+          typeof job.errorSummary === 'string' &&
+          /previous version (?:is )?still serving/i.test(job.errorSummary);
+        const safeFailedUpdateGuidance = previousVersionServing
+          ? previousVersionServingGuidance()
+          : undefined;
         return {
           ...(deployId ? { deploy_id: deployId } : {}),
           project_id: job.projectId,
@@ -401,6 +430,14 @@ export const deployToolDefs: ToolDef[] = [
           ...(job.phase === 'failed'
             ? {
                 docker_host: getDockerHostType(),
+                ...(previousVersionServing ? { previous_version_still_serving: true } : {}),
+                ...(previousVersionServing
+                  ? {
+                      warnings: [
+                        'Previous version is still serving. Avoid force redeploy until diagnostics identify a safe fix.',
+                      ],
+                    }
+                  : {}),
                 ...(job.autoDiagnosis
                   ? {
                       auto_diagnosis: {
@@ -415,11 +452,18 @@ export const deployToolDefs: ToolDef[] = [
                     }
                   : {}),
                 _agent_guidance: {
+                  ...(safeFailedUpdateGuidance?.message
+                    ? { message: safeFailedUpdateGuidance.message }
+                    : {}),
                   next_steps: [
-                    ...(!job.buildLogTail ? ['Call get_build_log for raw build output'] : []),
-                    ...(!job.autoDiagnosis ? ['Analyze the build log in your external agent'] : []),
-                    'Call get_deploy_history for deployment history and trends',
-                    'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
+                    ...(safeFailedUpdateGuidance?.next_steps ?? [
+                      ...(!job.buildLogTail ? ['Call get_build_log for raw build output'] : []),
+                      ...(!job.autoDiagnosis
+                        ? ['Analyze the build log in your external agent']
+                        : []),
+                      'Call get_deploy_history for deployment history and trends',
+                      'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
+                    ]),
                   ],
                 },
               }
@@ -499,6 +543,11 @@ export const deployToolDefs: ToolDef[] = [
           : undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
+        const previousVersionServing =
+          log.status === 'failed' && failedBlueGreenPreservedPreviousVersion(log.build_log);
+        const safeFailedUpdateGuidance = previousVersionServing
+          ? previousVersionServingGuidance()
+          : undefined;
         let representativeTraffic = parseRepresentativeTraffic(log.representative_traffic_json);
         let representativeTrafficPersistenceWarning: string | undefined;
         if (!representativeTraffic && phase === 'done' && routeName) {
@@ -614,6 +663,7 @@ export const deployToolDefs: ToolDef[] = [
               }
             : {}),
           ...(phase === 'failed' ? { docker_host: getDockerHostType() } : {}),
+          ...(previousVersionServing ? { previous_version_still_serving: true } : {}),
           ...(log.status === 'failed' && log.build_log
             ? { build_log_tail: tailLines(log.build_log, 30) }
             : {}),
@@ -653,23 +703,32 @@ export const deployToolDefs: ToolDef[] = [
                     : []),
                 ],
               }
-            : {}),
-          _agent_guidance: {
-            ...(phase === 'done' && trafficFailure
+            : previousVersionServing
               ? {
-                  message:
-                    representativeTraffic?.message ??
-                    'Deployment health passed, but representative public traffic failed.',
+                  warnings: [
+                    'Previous version is still serving. Avoid force redeploy until diagnostics identify a safe fix.',
+                  ],
                 }
-              : phase === 'done' && readiness?.readiness === 'unhealthy'
+              : {}),
+          _agent_guidance: {
+            ...(safeFailedUpdateGuidance?.message
+              ? { message: safeFailedUpdateGuidance.message }
+              : phase === 'done' && trafficFailure
                 ? {
                     message:
-                      readinessMessage ??
-                      'The deploy log is successful, but the current container is unhealthy.',
+                      representativeTraffic?.message ??
+                      'Deployment health passed, but representative public traffic failed.',
                   }
-                : {}),
+                : phase === 'done' && readiness?.readiness === 'unhealthy'
+                  ? {
+                      message:
+                        readinessMessage ??
+                        'The deploy log is successful, but the current container is unhealthy.',
+                    }
+                  : {}),
             next_steps:
-              log.status === 'failed'
+              safeFailedUpdateGuidance?.next_steps ??
+              (log.status === 'failed'
                 ? [
                     'Call get_build_log with this deploy_id for full raw build output.',
                     'Fix the issue, then redeploy the service.',
@@ -684,7 +743,7 @@ export const deployToolDefs: ToolDef[] = [
                         'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics.',
                         'Inspect logs before reporting the deployment as healthy.',
                       ]
-                    : ['Use get_deploy_history for nearby deploys if you need broader context.'],
+                    : ['Use get_deploy_history for nearby deploys if you need broader context.']),
           },
         };
       };

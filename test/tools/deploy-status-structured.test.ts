@@ -120,6 +120,110 @@ describe('get_deploy_status structured fields (O1)', () => {
     }
   });
 
+  it('failed blue-green deploy log tells agents the previous version is still serving', async () => {
+    const ctx = {
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd-blue'
+            ? {
+                id: 'd-blue',
+                service_id: 'app__svc',
+                project_id: 'app',
+                status: 'failed',
+                commit_sha: 'abc123',
+                commit_message: 'late crash',
+                trigger: 'chat',
+                duration_ms: 5000,
+                build_log:
+                  '[health] Checking http on port 12001/health\n' +
+                  '[error] Health check failed\n' +
+                  '[recovery] Previous version is still serving after failed blue-green deploy; inspect diagnostics before retrying with a force redeploy\n',
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) =>
+          id === 'app' ? { id: 'app', name: 'app' } : undefined,
+        ),
+        getDeployableForProject: vi.fn(async () => ({ status: 'running', assigned_port: 10001 })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd-blue' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd-blue',
+      phase: 'failed',
+      status: 'failed',
+      previous_version_still_serving: true,
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'app__svc' },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('previous version is still serving'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Do not immediately retry with strategy="force"'),
+        ]),
+      },
+    });
+    expect(job['warnings']).toEqual(
+      expect.arrayContaining([expect.stringContaining('Avoid force redeploy')]),
+    );
+    expect(JSON.stringify(job)).not.toContain('Fix the issue, then redeploy the service');
+    const serialized = JSON.stringify(result);
+    for (const field of FORBIDDEN_FIELDS) {
+      expect(serialized).not.toContain(field);
+    }
+  });
+
+  it('active failed blue-green job discourages immediate force redeploy', async () => {
+    const ctx = {
+      jobManager: {
+        getStatus: vi.fn((id: string) =>
+          id === 'd-active-blue'
+            ? {
+                projectId: 'app',
+                projectName: 'app',
+                phase: 'failed',
+                startedAt: new Date(Date.now() - 5000),
+                errorSummary:
+                  'Blue-green deploy failed; previous version still serving. Inspect diagnostics before retrying with force: Health check failed',
+              }
+            : null,
+        ),
+      },
+      db: {
+        getDeployableForProject: vi.fn(async () => null),
+        getDeployLog: vi.fn(async () => undefined),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd-active-blue' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd-active-blue',
+      phase: 'failed',
+      previous_version_still_serving: true,
+      _agent_guidance: {
+        message: expect.stringContaining('previous version is still serving'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Do not immediately retry with strategy="force"'),
+        ]),
+      },
+    });
+  });
+
   it('completed deploy log URLs use ServiceView project fallback when no service row exists', async () => {
     const ctx = {
       jobManager: { getStatus: vi.fn(() => null) },
