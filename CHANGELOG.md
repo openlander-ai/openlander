@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.26] - 2026-06-07
+
+### Added
+
+- Add `openlander_service.update_app` as the clear MCP intent for updating an
+  existing Application/worker to its latest stored source/config while reusing
+  the existing redeploy safety path.
+
+### Changed
+
+- Prefer `update_app` in MCP prompts, guidance, diagnostics, and docs whenever
+  agents need to apply saved app source/config/env changes to an existing
+  workload.
+
 ## [0.1.14-rc.25] - 2026-06-07
 
 ### Fixed

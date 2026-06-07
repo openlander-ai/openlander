@@ -537,7 +537,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose an Application/Compose workload in one MCP call. Returns workload/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized runtime logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
+      'Diagnose an Application/Compose workload in one MCP call. Returns workload/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized runtime logs, local HTTP probe, dependency probes, and recommended next actions. Use this after update_app, redeploy_app, or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
     mcpDescription:
       'One-shot Application/Compose diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
@@ -823,8 +823,8 @@ export const monitoringToolDefs: ToolDef[] = [
                       message:
                         'Restore completed. The target is back on the active lifecycle path, but no container was started automatically.',
                       next_steps: [
-                        'Call redeploy_app only if the user wants the service running again.',
-                        'After redeploying, call diagnose_service to verify runtime health.',
+                        'Call update_app only if the user wants the service running again.',
+                        'After updating, call diagnose_service to verify runtime health.',
                       ],
                     }
                   : status === 'failed'
@@ -1162,7 +1162,7 @@ function buildHostResourceNextSteps(findings: string[]): string[] {
       'Docker disk usage did not respond; avoid host cleanup until Docker responsiveness is confirmed.',
     );
   }
-  steps.push('After addressing host pressure, retry redeploy_app for the affected service_id.');
+  steps.push('After addressing host pressure, retry update_app for the affected service_id.');
   return steps;
 }
 
@@ -2065,17 +2065,17 @@ function buildDiagnoseNextSteps(input: {
   const suspected = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
   if (Array.isArray(suspected) && suspected.length > 0) {
     nextSteps.push(
-      `${suspected.join(', ')} is currently runtime-only. If the app reads it during Docker/Next build, change the app so build does not require the secret, or add an explicit safe build-time variable path before retrying redeploy_app.`,
+      `${suspected.join(', ')} is currently runtime-only. If the app reads it during Docker/Next build, change the app so build does not require the secret, or add an explicit safe build-time variable path before retrying update_app.`,
     );
   }
 
   if (input.container['status'] === 'restarting') {
     nextSteps.push(
-      'Container is in a restart loop. Check logs.tail and recentDeployment.buildLogTail, then redeploy_app after fixing the startup crash.',
+      'Container is in a restart loop. Check logs.tail and recentDeployment.buildLogTail, then update_app after fixing the startup crash.',
     );
   } else if (input.container['running'] !== true) {
     nextSteps.push(
-      'Container is not running. Check recentDeployment.buildLogTail, then call redeploy_app after fixing the cause.',
+      'Container is not running. Check recentDeployment.buildLogTail, then call update_app after fixing the cause.',
     );
   } else if (input.httpCheck['reachable'] === false) {
     nextSteps.push(
@@ -2099,7 +2099,7 @@ function buildDiagnoseNextSteps(input: {
     depChecks.some((item) => dependencyNetworkUnreachable(asRecord(item)))
   ) {
     nextSteps.push(
-      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call redeploy_app.',
+      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call update_app.',
     );
   }
 
@@ -2109,7 +2109,7 @@ function buildDiagnoseNextSteps(input: {
     );
   }
   nextSteps.push(
-    'For existing services, call openlander_deploy.deploy_app with service_id/service_name/name, or call openlander_service.redeploy_app directly with service_id.',
+    'For existing services, call openlander_service.update_app with service_id, or call openlander_deploy.deploy_app with service_id/service_name/name.',
   );
   return nextSteps;
 }
@@ -2149,7 +2149,7 @@ type SuggestedServiceDiagnosisCall =
     }
   | {
       tool: 'openlander_service';
-      action: 'redeploy_app';
+      action: 'update_app';
       params: { service_id: string };
     };
 
@@ -2306,7 +2306,7 @@ function setEnvVarsSuggestedCall(serviceId: string, keys: string[]): SuggestedSe
 function redeploySuggestedCall(serviceId: string): SuggestedServiceDiagnosisCall {
   return {
     tool: 'openlander_service',
-    action: 'redeploy_app',
+    action: 'update_app',
     params: { service_id: serviceId },
   };
 }

@@ -963,7 +963,7 @@ async function buildExistingServiceGuidance(
     suggested_call: primary
       ? {
           tool: 'openlander_service',
-          action: 'redeploy_app',
+          action: 'update_app',
           params: { service_id: primary.service_id },
         }
       : undefined,
@@ -1063,11 +1063,11 @@ function buildExistingServiceSourceOverrideResponse(params: {
       : {}),
     _agent_guidance: {
       message:
-        'deploy_app resolved an existing Application/Compose service, but the request included source/build override params that this existing-service path does not apply. OpenLander did not start a redeploy.',
+        'deploy_app resolved an existing Application/Compose service, but the request included source/build override params that this existing-service path does not apply. OpenLander did not start an update.',
       next_steps: [
-        'To rebuild the latest HEAD of the stored branch, retry deploy_app for the existing target without source/build override params, or call openlander_service.redeploy_app.',
-        'To change branch, repo_url, source, image, or saved container_port, call openlander_service.update_application_source, then call redeploy_app.',
-        'To change Dockerfile/build config, call openlander_service.update_service_config, then call redeploy_app.',
+        'To ship the latest stored source revision, retry deploy_app for the existing target without source/build override params, or call openlander_service.update_app.',
+        'To change branch, repo_url, source, image, or saved container_port, call openlander_service.update_application_source, then call update_app.',
+        'To change Dockerfile/build config, call openlander_service.update_service_config, then call update_app.',
       ],
     },
   };
@@ -1171,10 +1171,10 @@ async function resolveExistingDeployAppTarget(
         candidate_services: candidates,
         _agent_guidance: {
           message:
-            'This Project already has multiple Applications/Compose workloads. Pick the intended service_id and call deploy_app or openlander_service.redeploy_app with that service_id.',
+            'This Project already has multiple Applications/Compose workloads. Pick the intended service_id and call deploy_app or openlander_service.update_app with that service_id.',
           next_steps: [
             'Choose one candidate_services[].service_id.',
-            'Call openlander_deploy.deploy_app with service_id for a front-door redeploy, or openlander_service.redeploy_app with service_id.',
+            'Call openlander_deploy.deploy_app with service_id for a front-door update, or openlander_service.update_app with service_id.',
           ],
         },
       },
@@ -1518,11 +1518,12 @@ export const deployPlanToolDefs: ToolDef[] = [
         const redeployResult = await runDeployableServiceAction(
           redeployParams,
           context,
-          'redeploy_app',
+          'update_app',
         );
         const redeployPayload = redeployResult as Record<string, unknown>;
         return {
           ...redeployPayload,
+          delegated_action: 'update_app',
           mode:
             frontDoorTarget.kind === 'service_target'
               ? 'redeploy_service_target'
@@ -1538,8 +1539,8 @@ export const deployPlanToolDefs: ToolDef[] = [
               : {}),
             message:
               frontDoorTarget.kind === 'existing_project'
-                ? 'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.'
-                : 'OpenLander started a redeploy of the existing Application/Compose workload. Poll status_call until terminal.',
+                ? 'This Project already has one Application/Compose workload. OpenLander started an update of the existing workload; do not create a new app. Poll status_call until terminal.'
+                : 'OpenLander started an update of the existing Application/Compose workload. Poll status_call until terminal.',
           },
         };
       }
@@ -1726,12 +1727,12 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               ...(existingGuidance['suggested_call']
                 ? [
-                    'This Project already has an Application/Compose workload. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
+                    'This Project already has an Application/Compose workload. Use openlander_service.update_app with the suggested service_id to update it.',
                   ]
                 : []),
               'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
               'If this is a new app failure, call get_build_log for raw output and analyze it in your external agent',
-              'Fix the issue, then retry with redeploy_app for existing services or deploy_app for new apps',
+              'Fix the issue, then retry with update_app for existing services or deploy_app for new apps',
             ],
           },
         };
@@ -2172,14 +2173,14 @@ export const deployPlanToolDefs: ToolDef[] = [
                   next_steps: [
                     ...(existingGuidance['suggested_call']
                       ? [
-                          'This Project already has an Application/Compose workload. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
+                          'This Project already has an Application/Compose workload. Use openlander_service.update_app with the suggested service_id to update it.',
                         ]
                       : []),
                     'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
                     ...(!job?.autoDiagnosis
                       ? ['Call get_build_log for raw output and analyze it in your external agent']
                       : []),
-                    'Fix the issue, then retry with redeploy_app for existing services or deploy_app for new apps',
+                    'Fix the issue, then retry with update_app for existing services or deploy_app for new apps',
                   ],
                 },
               });

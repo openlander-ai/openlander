@@ -86,7 +86,7 @@ All actions: action="help"
 
 ## openlander_service
 Applications/Compose workloads: lifecycle, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id from list_projects.
-Key actions: redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public
+Key actions: update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -108,14 +108,14 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 
 ## Environment Variable Changes
 - Env vars belong to Applications/Compose workloads. Prefer service_id or service_name; project_name works only when the Project has exactly one workload.
-- set_env_vars/delete_env_var save only by default. To apply to a running container, call redeploy_app after the env change, or pass defer_redeploy=false for immediate apply.
+- set_env_vars/delete_env_var save only by default. To apply to a running container, call update_app after the env change, or pass defer_redeploy=false for immediate apply.
 - list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
 - export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow
 1. For a new app, start with openlander_deploy.deploy_app or create_deploy_plan. If the plan proposes safe Database/Cache resources, approve them through execute_deploy_plan; OpenLander owns the target Project, same-project resource provisioning, and env wiring in one composite path. If the user already has a real external URL (RDS, Upstash, etc.), pass it in env_vars and skip OpenLander-managed resource creation. Do not use a placeholder DATABASE_URL just to create the project.
 2. For a simple new app with no pre-created Database/Cache resources, call openlander_deploy.deploy_app directly. New apps use params.name for the Project name. Existing apps can be targeted by service_id/service_name/project_name/name.
-3. openlander_deploy({ action: "get_deploy_status", params: { service_id: "..." } })  ← poll the returned status_call until done when deploy_app/redeploy_app returns building/deploying
+3. openlander_deploy({ action: "get_deploy_status", params: { service_id: "..." } })  ← poll the returned status_call until done when deploy_app/update_app/redeploy_app returns building/deploying
 4. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later workload actions
 5. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
 

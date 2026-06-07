@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **77 unique default operations** surfaced through those composites
+- **78 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -16,17 +16,18 @@ Model note: **Project = workspace**. **Application**, **Compose**, **Database**,
 
 Agent routing rule of thumb:
 
-| User asks for                                 | Call                                                                       |
-| --------------------------------------------- | -------------------------------------------------------------------------- |
-| "Deploy this new app/repo/image"              | `openlander_deploy.deploy_app`                                             |
-| "Create a new app project before DB/cache"    | `openlander_project.create_project`                                        |
-| "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
-| "Change app branch/repo/image source"         | `openlander_service.update_application_source`, then `redeploy_app`        |
-| "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
-| "Fix route port mismatch without rebuild"     | `openlander_service.apply_route_config`                                    |
-| "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
-| "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
-| "Was this killed by host memory/Docker?"      | `openlander_monitor.diagnose_host_resources`                               |
+| User asks for                                    | Call                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                    |
+| "Create a new app project before DB/cache"       | `openlander_project.create_project`                               |
+| "Update this existing app to latest code/config" | `openlander_service.update_app`                                   |
+| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`         |
+| "Change app branch/repo/image source"            | `openlander_service.update_application_source`, then `update_app` |
+| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`              |
+| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                           |
+| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                       |
+| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`           |
+| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                      |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
@@ -290,7 +291,7 @@ environment variables, secrets, or service configuration.
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. If no previous image tag is
-available, fix the source/configuration issue and use `redeploy_app` instead.
+available, fix the source/configuration issue and use `update_app` instead.
 
 ### `preview_deploy`
 
@@ -362,7 +363,7 @@ request.
 
 Restore the archive set from a Project archive. OpenLander restores the
 Applications archived by that Project operation and does **not** redeploy them
-automatically; call `redeploy_app` with each `service_id` that should run again.
+automatically; call `update_app` with each `service_id` that should run again.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -374,11 +375,14 @@ returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
 `poll_call`; poll `mcp_action_status` after the user approves or rejects the
 request.
 
-### `redeploy_app` / `restart_service`
+### `update_app` / `redeploy_app` / `restart_service`
 
-Deploy or restart an Application. Project-level runtime actions have been removed.
-Git-based dependency installs get a targeted dependency-layer refresh; `no_cache=true` remains the
-manual full-cache bypass.
+Update or restart an Application. Use `update_app` for the normal "ship the
+latest stored source/image/config" intent on an existing app. `redeploy_app`
+remains as a compatibility/advanced alias over the same deploy primitive.
+Project-level runtime actions have been removed. Git-based dependency installs
+get a targeted dependency-layer refresh; `no_cache=true` remains the manual
+full-cache bypass.
 
 | Parameter           | Type    | Required | Description                                                                 |
 | ------------------- | ------- | -------- | --------------------------------------------------------------------------- |
@@ -395,7 +399,7 @@ Provide either `service_id` or `service_name`.
 `BLUE_GREEN_UNSUPPORTED` when requested explicitly for compose stacks, services
 without a current running container, services without a health check or explicit
 `health_check_path`, and installations not using managed OpenLander/Traefik
-HTTP-provider routes. When `strategy` is omitted, `redeploy_app` automatically
+HTTP-provider routes. When `strategy` is omitted, `update_app` and `redeploy_app` automatically
 uses blue-green for eligible services and falls back to `force` otherwise. The
 zero-downtime guarantee applies to OpenLander domain/Traefik routes only; direct
 `localhost:{assigned_port}` URLs may change during deploy.
@@ -455,7 +459,7 @@ string the human must enter).
 
 Restore an archived Application while preserving the same
 configuration and history. This reverses `archive_service` after human approval
-and does **not** redeploy automatically; call `redeploy_app` if the service
+and does **not** redeploy automatically; call `update_app` if the service
 should run again.
 
 | Parameter      | Type   | Required | Description                           |
@@ -498,7 +502,7 @@ Update Application build configuration.
 Save Application/Compose source settings without deploying. This is the MCP path
 for changing an existing app's Git repo, branch, image, image command, or saved
 container port. It does **not** start Docker, acquire a deploy lock, mutate live
-routes, or redeploy automatically; call `redeploy_app` after the update.
+routes, or deploy automatically; call `update_app` after the update.
 
 | Parameter        | Type     | Required | Description                                                                  |
 | ---------------- | -------- | -------- | ---------------------------------------------------------------------------- |
@@ -575,7 +579,7 @@ are not masked. Empty strings render as `""`; missing single-key lookups throw `
 `set_env_vars` is an upsert keyed by `(service_id, key)`. It saves only by default and returns
 `changed: [{ key, op }]`, where `op` is `insert`, `update`, or `noop`. `null` values are rejected
 with `BAD_REQUEST`; `""` stores an explicit empty value. To apply saved changes to a running
-container, call `redeploy_app`, or pass `defer_redeploy=false`. Runtime-only env changes are applied
+container, call `update_app`, or pass `defer_redeploy=false`. Runtime-only env changes are applied
 with a verified same-image recreate (`apply_mode: same_image_recreate`); build-time keys such as
 `NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`, `NUXT_PUBLIC_*`, `PUBLIC_*`, and `GATSBY_*` still require a
 full redeploy (`apply_mode: full_redeploy`).
@@ -661,7 +665,7 @@ that will consume them. Cross-project shared Database/Cache/Storage resources ar
 v0.1, and OpenLander does not expose Database/Cache resource ports over external
 TCP. Create the service with the target app's `project_id` or `project_name`.
 The standalone action does not write env vars to the app; use the returned
-`suggested_env` with `openlander_service.set_env_vars`, then redeploy.
+`suggested_env` with `openlander_service.set_env_vars`, then `update_app`.
 
 ### `list_services`
 
@@ -985,7 +989,7 @@ agents can tell whether they are looking at the whole log or a requested tail.
 
 OpenLander 0.1 does not expose built-in AI diagnosis. External MCP agents should
 read `get_build_log` / `get_logs`, inspect the failure in their own context, then
-apply config/repo changes and call `redeploy_app`.
+apply config/repo changes and call `update_app`.
 
 ---
 

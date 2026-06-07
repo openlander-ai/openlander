@@ -5,6 +5,29 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.14
 
+- **`openlander_service.update_app` during data-model freeze:** a new
+  deployable-touching MCP action is added as the clear intent for updating an
+  existing Application/worker to its latest stored source/image/config revision.
+- **Why accepted:** weak-model D3 QA showed that the word `redeploy_app` is too
+  broad for the simple "ship latest code" intent: it can read as restart,
+  rebuild, rollback recovery, or force replacement. `update_app` gives agents a
+  narrower front-door while reusing the existing `redeploy_app` deploy primitive,
+  safety policy, deploy lock, blue-green resolver, and status/diagnostic links.
+- **Vocab review:** the action lives under `openlander_service`, targets existing
+  Application/worker resources with the frozen `service_id` / `service_name` /
+  single-workload `project_name` vocabulary, and keeps `strategy`,
+  `health_check_path`, `no_cache`, `cmd`, and `env_vars` semantics identical to
+  `redeploy_app`. `redeploy_app` remains available as a compatibility/advanced
+  action.
+- **Endpoint collision check:** running `rg "\bupdate_app\b"` over `src`, `test`,
+  and `docs` before the change showed no existing MCP action, composite slot,
+  REST route, or database field collision. No REST route or schema field is
+  added; the new surface is one `openlander_service` composite slot backed by
+  existing pipeline behavior.
+- **Follow-up:** do not add lower-level "pull/build/run" primitives for this
+  release. If future benchmarks show agents still confuse app update intent,
+  improve guidance and response summaries first.
+
 - **Representative traffic deploy-log evidence during data-model freeze:**
   `deploy_logs` stores nullable `representative_traffic_json` so completed
   deploy polling can surface a post-deploy public traffic mismatch without

@@ -206,7 +206,7 @@ export async function preflightCheck(
     const nameCheck: PreflightCheck = existingContainer
       ? {
           pass: false,
-          detail: `Container "${containerName}" already exists (${existingContainer.managedByOpenLander ? 'managed' : 'external'}, ${existingContainer.state}). If this is an existing OpenLander service, use openlander_service.redeploy_app to redeploy it. Otherwise remove the conflicting container first.`,
+          detail: `Container "${containerName}" already exists (${existingContainer.managedByOpenLander ? 'managed' : 'external'}, ${existingContainer.state}). If this is an existing OpenLander service, use openlander_service.update_app to update it. Otherwise remove the conflicting container first.`,
         }
       : {
           pass: true,

@@ -2484,7 +2484,7 @@ export class DeployPipeline {
           applyMode: 'same-image-recreate',
           previous_version_still_serving: Boolean(view.containerId),
           error:
-            'Runtime env apply requires a previously built image. Call redeploy_app to build the service first.',
+            'Runtime env apply requires a previously built image. Call update_app to build the service first.',
           buildDurationMs: Date.now() - startTime,
         };
       }

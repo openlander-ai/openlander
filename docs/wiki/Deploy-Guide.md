@@ -31,7 +31,7 @@ ambiguous monorepo deploys; expose the service after attach if needed.
 | Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets.        |
 
 After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
-Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env_vars`,
+Use that `service_id` for follow-up MCP actions such as `update_app`, `set_env_vars`,
 `add_domain_route`, and `diagnose_service`.
 
 ---
@@ -55,7 +55,7 @@ database lands on the same isolated network as the app.
 1. `openlander_managed_service.create_service(name: "demo-db", template: "postgresql", project_id: "<project_id>")`
 2. `openlander_managed_service.get_service_credentials(service_id: "<db service_id>")`
 3. `openlander_service.set_env_vars(service_id: "<app service_id>", variables: { DATABASE_URL: "<connection string>" })`
-4. `openlander_service.redeploy_app(service_id: "<app service_id>")`
+4. `openlander_service.update_app(service_id: "<app service_id>")`
 5. Verify the app's `/health` reports the database as reachable.
 
 ---
@@ -280,24 +280,24 @@ container ports, then add a domain or use the generated service URL.
 
 ---
 
-## Redeployment
+## Updating An Existing App
 
-### Redeploy (Same Config)
-
-```
-redeploy_app(service_id: "my-app__svc")
-```
-
-### Redeploy with Fresh Build
+### Update To Latest Stored Source
 
 ```
-redeploy_app(service_id: "my-app__svc", no_cache: true)
+update_app(service_id: "my-app__svc")
+```
+
+### Update with Fresh Build
+
+```
+update_app(service_id: "my-app__svc", no_cache: true)
 ```
 
 ### Blue-Green Deploy (Conditional Zero Downtime)
 
 ```
-redeploy_app(
+update_app(
   service_id: "my-app__svc",
   strategy: "blue-green",
   health_check_path: "/health"
@@ -319,7 +319,7 @@ post-switch stability window. If Traefik polling is delayed beyond that window,
 a short blip is still possible. Stronger green-identity verification is tracked
 as a follow-up.
 
-When `strategy` is omitted, `redeploy_app` uses blue-green automatically for
+When `strategy` is omitted, `update_app` uses blue-green automatically for
 eligible services and falls back to `force` when blue-green is not currently
 eligible. Pass `strategy: "force"` explicitly when downtime is acceptable and
 you want the shorter replacement path.
@@ -340,7 +340,7 @@ rollback_service(service_name: "my-app")
 Reverts to the stored previous Docker image immediately. This does not restore
 databases, volumes, environment variables, secrets, or service configuration. If
 there is no previous image available, fix the source/configuration issue and run
-`redeploy_app` instead.
+`update_app` instead.
 
 ---
 

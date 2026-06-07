@@ -98,7 +98,7 @@ describe('update_application_source MCP action', () => {
       needs_redeploy: true,
       suggested_call: {
         tool: 'openlander_service',
-        action: 'redeploy_app',
+        action: 'update_app',
         params: { service_id: 'hotdeal__svc' },
       },
     });

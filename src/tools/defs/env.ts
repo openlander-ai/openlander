@@ -804,7 +804,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a Project or Application/Compose workload. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate workload redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope when explicit or non-service, keys, changed, needs_redeploy }.',
+      'Set environment variables for a Project or Application/Compose workload. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call update_app separately to apply to a running container, or pass defer_redeploy=false for immediate workload redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope when explicit or non-service, keys, changed, needs_redeploy }.',
     mcpDescription:
       'Set project/service env vars. Use scope and environment_key for environment-specific writes. Default saves only.',
     inputSchema: setEnvVarsSchema,
@@ -950,7 +950,7 @@ export const envToolDefs: ToolDef[] = [
         needs_redeploy: redeploy.needsRedeploy,
         _agent_guidance: {
           next_steps: redeploy.needsRedeploy
-            ? ['Redeploy required: call redeploy_app to apply env changes.']
+            ? ['Update required: call update_app to apply env changes.']
             : ['No redeploy required for these env changes.'],
         },
       };
@@ -988,7 +988,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'delete_env_var',
     riskLevel: 'medium',
     description:
-      'Delete one Project or Application/Compose environment variable. Use scope and environment_key for environment-specific vars. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running workload, or pass defer_redeploy=false for immediate redeploy.',
+      'Delete one Project or Application/Compose environment variable. Use scope and environment_key for environment-specific vars. By default this saves only and does NOT redeploy; call update_app separately to apply to a running workload, or pass defer_redeploy=false for immediate redeploy.',
     mcpDescription: 'Delete one project/service env var. Default saves only.',
     inputSchema: deleteEnvVarSchema,
     execute: async (args, context) => {
@@ -1032,7 +1032,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'bulk_delete_env_vars',
     riskLevel: 'high',
     description:
-      'Delete multiple Project or Application/Compose environment variables. Use scope and environment_key for environment-specific vars. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false for immediate redeploy.',
+      'Delete multiple Project or Application/Compose environment variables. Use scope and environment_key for environment-specific vars. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call update_app separately to apply, or pass defer_redeploy=false for immediate redeploy.',
     mcpDescription: 'Bulk delete project/service env vars with confirm-gated dry-run behavior.',
     inputSchema: bulkDeleteEnvVarsSchema,
     execute: async (args, context) => {

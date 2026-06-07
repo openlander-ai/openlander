@@ -348,10 +348,10 @@ describe('MCP destructive safety', () => {
     expect(result).toMatchObject({
       status: 'succeeded',
       lifecycle_effect: { kind: 'unarchive', runtime: 'no_auto_start' },
-      _agent_guidance: {
-        message: expect.stringContaining('no container was started automatically'),
-        next_steps: expect.arrayContaining([expect.stringContaining('Call redeploy_app only if')]),
-      },
+	      _agent_guidance: {
+	        message: expect.stringContaining('no container was started automatically'),
+	        next_steps: expect.arrayContaining([expect.stringContaining('Call update_app only if')]),
+	      },
     });
   });
 

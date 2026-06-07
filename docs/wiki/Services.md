@@ -2,13 +2,13 @@
 
 OpenLander's user-facing resources are:
 
-| Kind               | What it is                                                          | MCP composite                |
-| ------------------ | ------------------------------------------------------------------- | ---------------------------- |
-| Application        | Your app, API, worker, or image workload.                           | `openlander_service`         |
-| Compose            | A compose stack represented as one Project-level resource.           | `openlander_service`         |
-| Database           | PostgreSQL, MySQL, or MongoDB.                                      | `openlander_managed_service` |
-| Cache              | Redis.                                                              | `openlander_managed_service` |
-| Storage            | MinIO.                                                              | `openlander_managed_service` |
+| Kind        | What it is                                                 | MCP composite                |
+| ----------- | ---------------------------------------------------------- | ---------------------------- |
+| Application | Your app, API, worker, or image workload.                  | `openlander_service`         |
+| Compose     | A compose stack represented as one Project-level resource. | `openlander_service`         |
+| Database    | PostgreSQL, MySQL, or MongoDB.                             | `openlander_managed_service` |
+| Cache       | Redis.                                                     | `openlander_managed_service` |
+| Storage     | MinIO.                                                     | `openlander_managed_service` |
 
 This page covers **Database/Cache/Storage resources**. Project-scoped Database/Cache/Storage resources run on
 the same project Docker network as the app that uses them and are usually
@@ -224,7 +224,7 @@ set_env_vars(
 
 MCP env changes target Applications and save only by default. Prefer `service_id` from
 `list_projects().projects[].deployable_service.service_id`; `project_name` works only for groups
-with exactly one Application. Redeploy the app with `redeploy_app`, or pass
+with exactly one Application. Update the app with `update_app`, or pass
 `defer_redeploy=false` to `set_env_vars`, for the new value to reach a running container.
 
 Typical agent flow:
@@ -233,11 +233,11 @@ Typical agent flow:
 create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 get_service_credentials(service_name: "my-postgres")
 set_env_vars(service_id: "my-app__svc", variables: { DATABASE_URL: "..." })
-redeploy_app(service_id: "my-app__svc")
+update_app(service_id: "my-app__svc")
 ```
 
 This standalone `create_service` flow is separate from deploy-plan approval.
 When `execute_deploy_plan` approves a proposed project-scoped Database/Cache/Storage resource on
 an existing project, that plan execution may provision the resource, write its
 connection env, and deploy in one flow. Standalone `create_service` remains
-explicit: create infrastructure, then set env vars, then redeploy.
+explicit: create infrastructure, then set env vars, then `update_app`.

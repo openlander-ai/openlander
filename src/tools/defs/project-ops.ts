@@ -466,7 +466,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'unarchive_project',
     riskLevel: 'medium',
     description:
-      'Restore a Project archive set. Does not redeploy Applications automatically; call redeploy_app for workloads that should run again.',
+      'Restore a Project archive set. Does not redeploy Applications automatically; call update_app for workloads that should run again.',
     mcpDescription:
       'Request human approval to restore a Project archive set. Restored Applications are not redeployed automatically.',
     inputSchema: projectLifecycleSchema,
@@ -483,8 +483,8 @@ export const projectOpsToolDefs: ToolDef[] = [
             'Project restore completed. OpenLander restores the archive set to the active lifecycle path without redeploying Applications automatically.',
           next_steps: [
             'Use list_projects to confirm which Applications are active.',
-            'Call redeploy_app with service_id for each Application that should run again.',
-            'Call diagnose_service after redeploying to verify runtime health before reporting success.',
+            'Call update_app with service_id for each Application that should run again.',
+            'Call diagnose_service after updating to verify runtime health before reporting success.',
           ],
         },
       };

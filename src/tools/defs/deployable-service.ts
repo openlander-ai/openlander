@@ -576,8 +576,8 @@ function unarchiveLifecycleGuidance(serviceId: string) {
     message:
       'Service restored to the active lifecycle path. No container was started automatically.',
     next_steps: [
-      `Call redeploy_app with service_id="${serviceId}" if this service should run again.`,
-      `Call openlander_monitor.diagnose_service with service_id="${serviceId}" after redeploying to verify runtime health.`,
+      `Call update_app with service_id="${serviceId}" if this service should run again.`,
+      `Call openlander_monitor.diagnose_service with service_id="${serviceId}" after updating to verify runtime health.`,
     ],
   };
 }
@@ -629,7 +629,7 @@ function rollbackServiceGuidance(result: { success?: unknown }, serviceId: strin
     message: `${sharedLimit} A rollback requires a stored previous image tag that still exists locally or can be pulled.`,
     next_steps: [
       `Call openlander_monitor.diagnose_service with service_id="${serviceId}" to inspect the current failure.`,
-      'If no previous image is available, fix the source/configuration issue and call redeploy_app instead.',
+      'If no previous image is available, fix the source/configuration issue and call update_app instead.',
     ],
   };
 }
@@ -637,7 +637,7 @@ function rollbackServiceGuidance(result: { success?: unknown }, serviceId: strin
 export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
-  action: 'redeploy_app' | 'restart_service',
+  action: 'redeploy_app' | 'update_app' | 'restart_service',
 ) {
   const { service, project, runtimeProject } = await resolveDeployableService(
     args,
@@ -675,7 +675,7 @@ export async function runDeployableServiceAction(
       service: serviceSummary(service, project),
       _agent_guidance: {
         message:
-          'This service has no reproducible deploy source, so redeploy/restart was not started and the existing container was left untouched.',
+          'This service has no reproducible deploy source, so update/redeploy/restart was not started and the existing container was left untouched.',
         next_steps: [
           'Use the web UI to inspect the live container before making changes.',
           'Create a new Application from GitHub or an image if you need a reproducible redeploy path.',
@@ -689,7 +689,9 @@ export async function runDeployableServiceAction(
       ? context.appCtx.pipeline.getBlueGreenEligibility.bind(context.appCtx.pipeline)
       : undefined;
 
-  if (action === 'redeploy_app' && strategy === 'blue-green') {
+  const isUpdateAction = action === 'redeploy_app' || action === 'update_app';
+
+  if (isUpdateAction && strategy === 'blue-green') {
     if (!getBlueGreenEligibility) {
       return {
         status: 'blocked',
@@ -699,12 +701,12 @@ export async function runDeployableServiceAction(
         reasons: ['Blue-green eligibility checks are unavailable in this runtime.'],
         fallback_call: {
           tool: 'openlander_service',
-          action: 'redeploy_app',
+          action,
           params: { service_id: service.id, strategy: 'force' },
         },
         _agent_guidance: {
           message: 'Blue-green redeploy could not verify eligibility, so no deploy was started.',
-          next_steps: ['If downtime is acceptable, call redeploy_app again with strategy="force".'],
+          next_steps: [`If downtime is acceptable, call ${action} again with strategy="force".`],
         },
       };
     }
@@ -721,20 +723,20 @@ export async function runDeployableServiceAction(
         reasons: eligibility.reasons,
         fallback_call: {
           tool: 'openlander_service',
-          action: 'redeploy_app',
+          action,
           params: { service_id: service.id, strategy: 'force' },
         },
         _agent_guidance: {
           message:
             'Blue-green is only available for eligible git/image services behind managed OpenLander Traefik routes. No force deploy was started.',
           next_steps: [
-            'If downtime is acceptable, call redeploy_app again with strategy="force".',
+            `If downtime is acceptable, call ${action} again with strategy="force".`,
             'If zero-downtime is required, add a health check and use an OpenLander domain route before retrying blue-green.',
           ],
         },
       };
     }
-  } else if (action === 'redeploy_app' && strategy === undefined) {
+  } else if (isUpdateAction && strategy === undefined) {
     if (getBlueGreenEligibility) {
       const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
         healthCheckPath: healthCheckPath?.trim() || undefined,
@@ -851,14 +853,14 @@ export async function runDeployableServiceAction(
 
   return {
     status: action === 'restart_service' ? 'restarting' : 'deploying',
-    ...(action === 'redeploy_app' ? { strategy } : {}),
+    ...(isUpdateAction ? { strategy } : {}),
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     service: serviceSummary(service, project),
     message: noCache
-      ? 'Deployment started (no_cache). Poll get_deploy_status to track progress.'
+      ? `${action === 'update_app' ? 'App update' : 'Deployment'} started (no_cache). Poll get_deploy_status to track progress.`
       : autoSelectedBlueGreen
-        ? 'Blue-green deployment started. The previous version stays live until route verification and stability checks pass.'
-        : 'Deployment started. Poll get_deploy_status to track progress.',
+        ? `Blue-green ${action === 'update_app' ? 'app update' : 'deployment'} started. The previous version stays live until route verification and stability checks pass.`
+        : `${action === 'update_app' ? 'App update' : 'Deployment'} started. Poll get_deploy_status to track progress.`,
     diagnostic_call: {
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -929,10 +931,21 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'redeploy_app',
     riskLevel: 'medium',
     description:
-      'Deploy or redeploy an Application/worker. Provide service_id or service_name. Runs in background; poll get_deploy_status for progress.',
-    mcpDescription: 'Deploy/redeploy an Application/worker. Provide service_id or service_name.',
+      'Compatibility redeploy action for an existing Application/worker. For normal "ship latest code" updates, prefer update_app. Runs in background; poll get_deploy_status for progress.',
+    mcpDescription:
+      'Compatibility redeploy action for an existing Application/worker. Prefer update_app for normal latest-code updates.',
     inputSchema: deployServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'redeploy_app'),
+  },
+  {
+    name: 'update_app',
+    riskLevel: 'medium',
+    description:
+      'Update an existing Application/worker from its stored source/image to the latest revision. Defaults to blue-green when eligible; otherwise force fallback. Runs in background; poll get_deploy_status for progress.',
+    mcpDescription:
+      'Update an existing Application/worker to the latest stored source revision. Safe default: blue-green when eligible.',
+    inputSchema: deployServiceSchema,
+    execute: (args, context) => runDeployableServiceAction(args, context, 'update_app'),
   },
   {
     name: 'restart_service',
@@ -1062,7 +1075,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     riskLevel: 'medium',
     description:
       'Restore an archived Application/worker. Provide service_id or service_name. Does not deploy automatically.',
-    mcpDescription: 'Restore an archived Application/worker. Call redeploy_app to run it.',
+    mcpDescription: 'Restore an archived Application/worker. Call update_app to run it.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -1084,8 +1097,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_service_config',
     riskLevel: 'medium',
     description:
-      'Update Application/Compose build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy_app.',
-    mcpDescription: 'Update Application/Compose build config. Takes effect on next redeploy_app.',
+      'Update Application/Compose build config (dockerfile_path, docker_target, build_context). Takes effect on next update_app.',
+    mcpDescription: 'Update Application/Compose build config. Takes effect on next update_app.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(
@@ -1130,7 +1143,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
           docker_target: updated?.docker_target ?? service.docker_target,
           build_context: updated?.build_context ?? service.build_context,
         },
-        _agent_guidance: { next_steps: ['Call redeploy_app to apply the new configuration.'] },
+        _agent_guidance: { next_steps: ['Call update_app to apply the new configuration.'] },
       };
     },
   },
@@ -1138,9 +1151,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_application_source',
     riskLevel: 'medium',
     description:
-      'Save Application/Compose source settings (Git repo/branch, image/cmd, or container_port). Save-only: does not redeploy, mutate routes, or touch Docker. Call redeploy_app to apply.',
+      'Save Application/Compose source settings (Git repo/branch, image/cmd, or container_port). Save-only: does not deploy, mutate routes, or touch Docker. Call update_app to apply.',
     mcpDescription:
-      'Save Application/Compose source settings. Save-only; call redeploy_app to apply.',
+      'Save Application/Compose source settings. Save-only; call update_app to apply.',
     inputSchema: updateApplicationSourceSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveSourceUpdateService(args, context);
@@ -1178,14 +1191,14 @@ export const deployableServiceToolDefs: ToolDef[] = [
         needs_redeploy: true,
         suggested_call: {
           tool: 'openlander_service',
-          action: 'redeploy_app',
+          action: 'update_app',
           params: { service_id: service.id },
         },
         _agent_guidance: {
           message:
             'Source settings were saved only. No image build, container restart, route mutation, or deploy lock was started.',
           next_steps: [
-            `Call openlander_service.redeploy_app with service_id="${service.id}" to apply the saved source settings.`,
+            `Call openlander_service.update_app with service_id="${service.id}" to apply the saved source settings.`,
             mode === undefined
               ? 'container_port was saved for the next redeploy. Use apply_route_config only when you need a live route change without rebuilding.'
               : 'Use update_service_config separately for dockerfile_path, docker_target, or build_context.',
@@ -1233,7 +1246,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
             message:
               'Route config can only be applied in-place while the Application has a running container.',
             next_steps: [
-              `Call redeploy_app with service_id="${service.id}" if the service should be started.`,
+              `Call update_app with service_id="${service.id}" if the service should be started.`,
               `Call openlander_monitor.diagnose_service with service_id="${service.id}" to inspect the current runtime state.`,
             ],
           },

@@ -2208,7 +2208,7 @@ describe('service-targeted monitoring tools', () => {
       },
       suggested_call: {
         tool: 'openlander_service',
-        action: 'redeploy_app',
+        action: 'update_app',
         params: { service_id: 'app__svc' },
       },
     });
@@ -2239,7 +2239,7 @@ describe('service-targeted monitoring tools', () => {
       },
       suggested_call: {
         tool: 'openlander_service',
-        action: 'redeploy_app',
+        action: 'update_app',
         params: { service_id: 'app__svc' },
       },
     });

@@ -396,11 +396,11 @@ function createServiceGuidance(params: {
       params.autoInjectedEnvKeys.length > 0
         ? [
             'Connection env was saved automatically on the target Application/Compose workload.',
-            'Call redeploy_app for the target service/project to apply it.',
+            'Call update_app for the target service/project to apply it.',
           ]
         : [
             'Call set_env_vars on the Application/Compose workload with suggested_env to save the binding.',
-            'Then call redeploy_app for the target service/project to apply it.',
+            'Then call update_app for the target service/project to apply it.',
           ],
   };
 }
@@ -424,7 +424,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/rabbitmq/minio, or a custom container) inside a Project. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/rabbitmq/minio, or a custom container) inside a Project. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then call update_app for the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
       'Create a Database/Cache/Storage resource inside a Project. Pass project_id or project_name. Use this manual path for existing groups/shared resources; for new apps with safe DB/cache proposals, prefer deploy-plan approval. Existing Application: redeploy to apply saved env.',
     inputSchema: createServiceSchema,

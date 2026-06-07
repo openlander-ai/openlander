@@ -160,6 +160,7 @@ describe('openlander_service direct deployable runtime actions', () => {
     const byName = new Map(result.actions.map((action) => [action.name, action.description]));
 
     expect(byName.get('restart_service')).toContain('Application/worker');
+    expect(byName.get('update_app')).toContain('Application/worker');
     expect(byName.get('redeploy_app')).toContain('Application/worker');
     expect(byName.get('rollback_service')).toContain('Application/worker');
     expect(byName.get('update_service_config')).toContain('Application/Compose build config');
@@ -182,7 +183,12 @@ describe('openlander_service direct deployable runtime actions', () => {
   });
 
   it('routes deployable service actions directly and validates service target params', async () => {
-    for (const action of ['redeploy_app', 'restart_service', 'rollback_service'] as const) {
+    for (const action of [
+      'update_app',
+      'redeploy_app',
+      'restart_service',
+      'rollback_service',
+    ] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown

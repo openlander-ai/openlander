@@ -1770,7 +1770,7 @@ export class PlanEngine {
               envVarName,
               nextSteps: [
                 `Provide an external ${envVarName} value in env_vars.`,
-                'Or call openlander_managed_service.create_service for the target Project, set its suggested_env on the Application, then redeploy.',
+                'Or call openlander_managed_service.create_service for the target Project, set its suggested_env on the Application, then call update_app.',
               ],
             },
           );

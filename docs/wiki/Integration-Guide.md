@@ -202,13 +202,13 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **77 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **78 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                         |
 | ---------------------------- | ------- | --------------------------------------------------------------- |
 | `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build             |
-| `openlander_project`         | 16      | Projects: metadata, secrets, exposure                           |
-| `openlander_service`         | 23      | Application lifecycle, config, domains                          |
+| `openlander_project`         | 17      | Projects: metadata, secrets, exposure                           |
+| `openlander_service`         | 25      | Application lifecycle, config, domains                          |
 | `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes                |
 | `openlander_monitor`         | 11      | Monitoring & ops: logs, topology, alerts, stats, host diagnosis |
 
@@ -221,6 +221,7 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | List     | `openlander_project` → `list_projects`          | Show all projects                      |
 | Logs     | `openlander_monitor` → `get_logs`               | Container logs                         |
 | Env Vars | `openlander_service` → `set_env_vars`           | Save Application environment variables |
+| Update   | `openlander_service` → `update_app`             | Ship latest stored source/config       |
 | Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only   |
 | Share    | `openlander_project` → `expose_public`          | Generate temporary share URL           |
 | Service  | `openlander_managed_service` → `create_service` | Create database/cache                  |
@@ -234,7 +235,7 @@ targeting rule; prefer the `deployable_service.service_id` returned by
 MCP env changes are service-scoped and conservative by default: `set_env_vars`,
 `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless
 `defer_redeploy=false` is passed. To apply saved changes to a running container, call
-`redeploy_app`.
+`update_app`.
 
 Run `{ action: "help" }` on any composite for the full action list.
 
@@ -261,13 +262,13 @@ or the returned `status_call` from the deploy response.
 
 > "my-app deployment failed, can you check?"
 
-Agent will: `get_build_log` / `get_logs` → inspect the error itself → fix → `redeploy_app`
+Agent will: `get_build_log` / `get_logs` → inspect the error itself → fix → `update_app`
 
 ### Create a database
 
 > "Create a PostgreSQL database for my-app"
 
-Agent will: `create_service(project_id | project_name, template)` → `get_service_credentials` → `set_env_vars` → `redeploy_app`
+Agent will: `create_service(project_id | project_name, template)` → `get_service_credentials` → `set_env_vars` → `update_app`
 
 (`create_service` requires a `project_id` or `project_name` target — get it from
 `list_projects` — and the database template provisions the database itself; there is no

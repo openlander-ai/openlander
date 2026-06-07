@@ -48,8 +48,8 @@ const PROMPTS: PromptDef[] = [
 2. **Choose Project order** — For a new Application, prefer the composite front door: \`deploy_app\` with \`repo_url\` (or \`image\`) + \`name\`, or \`create_deploy_plan\` followed by \`execute_deploy_plan\`. If the plan proposes safe Database/Cache resources, approve them through \`execute_deploy_plan\`; OpenLander owns the target Project, same-project provisioning, and env wiring. If the user already has a real URL such as RDS or Upstash, provide it only after user confirmation: \`update_deploy_plan\` with \`updates.env.provided\` plus \`updates.env.trusted\` for those keys. Do not use placeholder connection strings just to force Project creation.
 3. **Approve proposed Database/Cache creation** — When a plan would auto-provision a Project-scoped Database/Cache resource (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). For a brand-new Application, approved resources are provisioned into the same target Project/network that the app deploy uses. If the dependency is external and the user confirms a real connection URL, mark that key trusted in \`update_deploy_plan\` instead of creating an OpenLander Database/Cache.
 4. **Link a resource manually (alternative)** — For Compose stacks, not-auto-creatable resources, or an external/shared dependency: compatibility action \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. Use this only when the composite plan cannot own the resource lifecycle.
-5. **Monitor** — Behavior depends on the path. A **new Application** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** Application/Compose workload (\`service_id\`/\`service_name\`, or a single-workload \`name\`) it delegates to \`redeploy_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
-6. **On failure** — use the \`recover-failed-deploy\` prompt: gather evidence (\`get_build_log\`, \`get_logs\`, \`diagnose_service\`, \`diagnose_host_resources\`), apply the fix, and \`redeploy_app\`.
+5. **Monitor** — Behavior depends on the path. A **new Application** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** Application/Compose workload (\`service_id\`/\`service_name\`, or a single-workload \`name\`) it delegates to \`update_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
+6. **On failure** — use the \`recover-failed-deploy\` prompt: gather evidence (\`get_build_log\`, \`get_logs\`, \`diagnose_service\`, \`diagnose_host_resources\`), apply the fix, and \`update_app\`.
 
 ## Manual Service-Link Pattern (alternative to step 3 auto-provisioning)
 
@@ -96,7 +96,7 @@ Variables with these prefixes are automatically injected as Docker build args:
 - PUBLIC_* (SvelteKit/general)
 - GATSBY_* (Gatsby)
 
-No special configuration needed — pass them via env_vars in create_deploy_plan or save them with set_env_vars. For user-owned external SaaS values, only mark them trusted after the user supplies or confirms the value. MCP env changes are saved only by default; call redeploy_app or pass defer_redeploy=false when you want to apply them to a running container.
+No special configuration needed — pass them via env_vars in create_deploy_plan or save them with set_env_vars. For user-owned external SaaS values, only mark them trusted after the user supplies or confirms the value. MCP env changes are saved only by default; call update_app or pass defer_redeploy=false when you want to apply them to a running container.
 
 ## Deploy Triggering
 
@@ -141,12 +141,12 @@ ${typeSpecific}`,
     - \`diagnose_host_resources\` — run this BEFORE falling back to SSH/Docker whenever logs show \`SIGKILL\`, OOM, disk pressure, or Docker daemon instability.
 3. **Decide the fix** from the failed phase (table below).
 4. **Apply the smallest fix**, then:
-    - \`redeploy_app\` for code/config fixes (add \`no_cache:true\` when a dependency or lockfile changed but the build still reuses stale layers).
-    - \`set_env_vars\` then \`redeploy_app\` for missing/incorrect env (MCP env writes save-only by default — redeploy to apply, or pass \`defer_redeploy:false\`).
-    - \`update_application_source\` then \`redeploy_app\` for branch / repo_url / image / saved container_port changes.
+    - \`update_app\` for code/config fixes (add \`no_cache:true\` when a dependency or lockfile changed but the build still reuses stale layers).
+    - \`set_env_vars\` then \`update_app\` for missing/incorrect env (MCP env writes save-only by default — redeploy to apply, or pass \`defer_redeploy:false\`).
+    - \`update_application_source\` then \`update_app\` for branch / repo_url / image / saved container_port changes.
     - \`update_service_config\` for Dockerfile path / build target / build context fixes.
     - \`rollback_service\` to get the app back up fast when the new build is broken. NOTE: rollback is **image-only** — it does NOT restore databases, volumes, env vars, or service config.
-5. **Confirm — do not trust the execute call.** \`execute_deploy_plan\` and \`redeploy_app\` are non-blocking. Poll \`get_deploy_status\` until terminal, then \`diagnose_service\` (or \`probe_host\`) to confirm health. Follow \`status_call\` / \`diagnostic_call\` links in responses when present.
+5. **Confirm — do not trust the execute call.** \`execute_deploy_plan\` and \`update_app\` are non-blocking. Poll \`get_deploy_status\` until terminal, then \`diagnose_service\` (or \`probe_host\`) to confirm health. Follow \`status_call\` / \`diagnostic_call\` links in responses when present.
 
 ## Failure Phase → First Move
 
@@ -155,7 +155,7 @@ ${typeSpecific}`,
 | clone             | bad repo_url / branch / private auth          | verify \`repo_url\` + \`branch\`, then re-run the deploy                          |
 | image_pull        | wrong image ref / private registry            | fix the image ref (private registries are roadmap, not 0.1)                  |
 | build             | Dockerfile / deps / missing build-arg env     | \`get_build_log\`; fix Dockerfile or build-time env; redeploy \`no_cache:true\`   |
-| container_start   | bad CMD / missing runtime env / port mismatch | \`get_logs\`; fix CMD / env / port; \`redeploy_app\`                              |
+| container_start   | bad CMD / missing runtime env / port mismatch | \`get_logs\`; fix CMD / env / port; \`update_app\`                                |
 | healthcheck_wait  | slow boot / wrong health path / crash on boot | \`diagnose_service\` with \`path\`; fix the health path or the boot crash         |
 | (process killed)  | host OOM / disk pressure                      | \`diagnose_host_resources\`; free resources or lower the workload, then redeploy |
 
@@ -170,7 +170,7 @@ ${typeSpecific}`,
 ## Common Mistakes
 
 1. **Reporting success off the execute call** — it is non-blocking; the build may still fail. Always poll \`get_deploy_status\`.
-2. **Rolling back to "fix" an env/DB problem** — rollback restores only the image. If the cause is env / volume / config, fix that and \`redeploy_app\`.
+2. **Rolling back to "fix" an env/DB problem** — rollback restores only the image. If the cause is env / volume / config, fix that and \`update_app\`.
 3. **SSHing for OOM before \`diagnose_host_resources\`** — the diagnosis is read-only and usually sufficient.
 4. **Asking the user to read logs you never fetched** — pull \`get_build_log\` / \`get_logs\` and analyze them yourself first.
 
@@ -224,8 +224,8 @@ function getRecoveryAdvice(failureType: string): string {
       return `## Build-Failure Tips
 - Read \`get_build_log\` to the actual error line; the failing phase marker (\`build\`) narrows it.
 - Missing build-time env? Prefixes \`NEXT_PUBLIC_*\`, \`VITE_*\`, \`REACT_APP_*\`, \`NUXT_PUBLIC_*\`, \`PUBLIC_*\`, \`GATSBY_*\` are auto-injected as Docker build args — set them via \`set_env_vars\` and redeploy.
-- Dependency/lockfile changed but the build reused old layers? \`redeploy_app\` with \`no_cache:true\`.
-- Wrong branch, repo, image, or saved port? \`update_application_source\`, then \`redeploy_app\`.
+- Dependency/lockfile changed but the build reused old layers? \`update_app\` with \`no_cache:true\`.
+- Wrong branch, repo, image, or saved port? \`update_application_source\`, then \`update_app\`.
 - Wrong Dockerfile or build target? \`update_service_config\` (\`dockerfile_path\`, \`docker_target\`, \`build_context\`).`;
 
     case 'oom':

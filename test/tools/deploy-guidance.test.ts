@@ -19,7 +19,7 @@ describe('deploy MCP guidance', () => {
     vi.useRealTimers();
   });
 
-  it('routes deploy_app to redeploy_app when name matches one existing deployable service', async () => {
+  it('routes deploy_app to update_app when name matches one existing deployable service', async () => {
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -68,8 +68,9 @@ describe('deploy MCP guidance', () => {
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
-      status: 'deploying',
-      mode: 'redeploy_existing_project',
+	      status: 'deploying',
+	      delegated_action: 'update_app',
+	      mode: 'redeploy_existing_project',
       existing_service: {
         service_id: 'app__svc',
         service_name: 'web',
@@ -80,10 +81,10 @@ describe('deploy MCP guidance', () => {
         params: { service_id: 'app__svc' },
       },
     });
-    expect(result['_agent_guidance']).toMatchObject({
-      message:
-        'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.',
-    });
+	    expect(result['_agent_guidance']).toMatchObject({
+	      message:
+	        'This Project already has one Application/Compose workload. OpenLander started an update of the existing workload; do not create a new app. Poll status_call until terminal.',
+	    });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     expect(ctx.env.setBulkForServiceDetailed).toHaveBeenCalledWith('app', 'app__svc', {
       DATABASE_URL: 'postgresql://example',
@@ -95,6 +96,112 @@ describe('deploy MCP guidance', () => {
       ),
     );
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
+  // Regression pin (2026-06-07): deploy_app delegation to an existing service must resolve the
+  // deploy strategy exactly like redeploy_app — eligible -> blue-green, explicit -> respected,
+  // ineligible -> force fallback with a reason. Guards against re-misreading a force *fallback*
+  // (or an explicit operator force) as a "delegation defaults to force" platform gap.
+  const makeExistingServiceDeployCtx = (eligibility?: {
+    supported: boolean;
+    reasons?: string[];
+  }) => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
+      status: 'running',
+    };
+    return {
+      db: {
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        isCircuitBreakerOpen: vi.fn(async () => false),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+        releaseDeployLock: vi.fn(async () => undefined),
+      },
+      pipeline: {
+        redeploy: vi.fn(async () => undefined),
+        redeployService: vi.fn(async () => undefined),
+        ...(eligibility
+          ? { getBlueGreenEligibility: vi.fn(async () => eligibility) }
+          : {}),
+      },
+      env: {
+        setBulkForServiceDetailed: vi.fn(async () => []),
+        verifyRoundTripForService: vi.fn(async () => []),
+      },
+      planEngine: { createPlan: vi.fn(), executePlan: vi.fn() },
+    } as unknown as AppContext;
+  };
+
+  it('deploy_app delegation auto-selects blue-green for an eligible existing service', async () => {
+    const ctx = makeExistingServiceDeployCtx({ supported: true });
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      { name: 'app', wait: false },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      mode: 'redeploy_existing_project',
+      strategy: 'blue-green',
+      zero_downtime: true,
+    });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
+        expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+  });
+
+  it('deploy_app delegation respects an explicit strategy:force (no eligibility check)', async () => {
+    const ctx = makeExistingServiceDeployCtx({ supported: true });
+    await getTool(ctx, 'deploy_app').execute(
+      { name: 'app', strategy: 'force', wait: false },
+      { target: 'mcp' },
+    );
+
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
+        expect.objectContaining({ strategy: 'force' }),
+      ),
+    );
+    // explicit strategy short-circuits the resolver — eligibility is never consulted
+    expect(ctx.pipeline.getBlueGreenEligibility).not.toHaveBeenCalled();
+  });
+
+  it('deploy_app delegation falls back to force with a reason when ineligible for blue-green', async () => {
+    const ctx = makeExistingServiceDeployCtx({
+      supported: false,
+      reasons: ['No managed OpenLander Traefik route configured.'],
+    });
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      { name: 'app', wait: false },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({ strategy: 'force' });
+    expect(result['zero_downtime']).toBeUndefined();
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
+        expect.objectContaining({ strategy: 'force' }),
+      ),
+    );
+    // force fallback must surface WHY blue-green was skipped (survives the delegation guidance merge)
+    expect(JSON.stringify(result)).toContain('blue-green is not currently eligible');
   });
 
   it('rejects source/build overrides when deploy_app resolves an existing service by name', async () => {
@@ -151,10 +258,12 @@ describe('deploy MCP guidance', () => {
       expect.not.arrayContaining(['wait', 'wait_healthy', 'timeout']),
     );
     const guidance = result['_agent_guidance'] as Record<string, unknown>;
-    expect(String(guidance['message'])).toContain('did not start a redeploy');
+    expect(String(guidance['message'])).toContain('did not start an update');
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_service_config');
     expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_application_source');
-    expect((guidance['next_steps'] as string[]).join('\n')).toContain('stored branch');
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain(
+      'latest stored source revision',
+    );
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
@@ -196,7 +305,7 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
-  it('routes deploy_app to redeploy_app when project_name matches one existing deployable service', async () => {
+  it('routes deploy_app to update_app when project_name matches one existing deployable service', async () => {
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -237,17 +346,18 @@ describe('deploy MCP guidance', () => {
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
-      status: 'deploying',
-      mode: 'redeploy_existing_project',
+	      status: 'deploying',
+	      delegated_action: 'update_app',
+	      mode: 'redeploy_existing_project',
       existing_service: {
         service_id: 'app__svc',
         service_name: 'web',
       },
     });
-    expect(result['_agent_guidance']).toMatchObject({
-      message:
-        'This Project already has one Application/Compose workload. OpenLander started a redeploy of the existing workload; do not create a new app. Poll status_call until terminal.',
-    });
+	    expect(result['_agent_guidance']).toMatchObject({
+	      message:
+	        'This Project already has one Application/Compose workload. OpenLander started an update of the existing workload; do not create a new app. Poll status_call until terminal.',
+	    });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>
       expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(

@@ -25,6 +25,7 @@ const EXPECTED_TOOL_NAMES = [
   'unexpose_public',
   'get_system_stats',
   'redeploy_app',
+  'update_app',
   'restart_service',
   'list_archived_services',
   'archive_service',
@@ -351,7 +352,7 @@ describe('Tool Registry', () => {
       changed: [{ key: 'API_URL', op: 'insert' }],
       needs_redeploy: true,
       _agent_guidance: {
-        next_steps: ['Redeploy required: call redeploy_app to apply env changes.'],
+        next_steps: ['Update required: call update_app to apply env changes.'],
       },
     });
 

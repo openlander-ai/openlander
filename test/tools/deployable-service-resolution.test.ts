@@ -261,11 +261,11 @@ describe('deployable service target resolution', () => {
       status: 'unarchived',
       project_id: 'alpha',
       service_id: 'alpha__svc',
-      _agent_guidance: {
-        message: expect.stringContaining('No container was started automatically'),
-        next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
-      },
-    });
+	      _agent_guidance: {
+	        message: expect.stringContaining('No container was started automatically'),
+	        next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
+	      },
+	    });
   });
 
   it('apply_route_config updates the live container port without redeploying', async () => {
@@ -543,6 +543,51 @@ describe('deployable service target resolution', () => {
       expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
         'alpha__svc',
         expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+  });
+
+  it('update_app uses the same blue-green resolver as redeploy_app', async () => {
+    const ctx = createDuplicateServiceContext();
+
+    const result = await getTool(ctx, 'update_app').execute(
+      { service_name: 'api', project_name: 'alpha' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      strategy: 'blue-green',
+      zero_downtime: true,
+      message:
+        'Blue-green app update started. The previous version stays live until route verification and stability checks pass.',
+    });
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+  });
+
+  it('update_app respects explicit force strategy', async () => {
+    const ctx = createDuplicateServiceContext();
+
+    const result = await getTool(ctx, 'update_app').execute(
+      { service_name: 'api', project_name: 'alpha', strategy: 'force' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      strategy: 'force',
+      message: 'App update started. Poll get_deploy_status to track progress.',
+    });
+    expect(ctx.pipeline.getBlueGreenEligibility).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'alpha__svc',
+        expect.objectContaining({ strategy: 'force' }),
       ),
     );
   });

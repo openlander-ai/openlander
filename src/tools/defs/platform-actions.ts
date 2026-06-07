@@ -214,7 +214,7 @@ export const platformActionToolDefs: ToolDef[] = [
           'stop_service',
           'remove_service',
         ],
-        unsupported_operations: ['redeploy_app', 'restart_service', 'build'],
+        unsupported_operations: ['update_app', 'redeploy_app', 'restart_service', 'build'],
       };
     },
     targets: ['mcp'],

@@ -190,10 +190,26 @@ describe('MCP service runtime mutation policy rejections', () => {
     });
   });
 
+  describe('update_app', () => {
+    it('rejects archived project up-front instead of returning fake deploying', async () => {
+      const ctx = createPolicyContext({ archived: true });
+      const result = await getTool(ctx, 'update_app').execute(serviceArgs, { target: 'mcp' });
+      expectPolicyRejection(result, 'PROJECT_ARCHIVED');
+      expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+      expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('healthy service regression', () => {
     it('redeploy_app returns deploying for a healthy service', async () => {
       const ctx = createPolicyContext();
       const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
+      expect(result).toMatchObject({ status: 'deploying', service: { name: 'rejected-api' } });
+    });
+
+    it('update_app returns deploying for a healthy service', async () => {
+      const ctx = createPolicyContext();
+      const result = await getTool(ctx, 'update_app').execute(serviceArgs, { target: 'mcp' });
       expect(result).toMatchObject({ status: 'deploying', service: { name: 'rejected-api' } });
     });
 

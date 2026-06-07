@@ -86,6 +86,7 @@ const EXPECTED_TOOLS = [
   'unarchive_project',
   'unarchive_service',
   'unexpose_public',
+  'update_app',
   'update_application_source',
   'update_deploy_plan',
   'update_service_config',
@@ -135,8 +136,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 77 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(77);
+  it('maintains exactly 78 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(78);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

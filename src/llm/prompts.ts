@@ -184,7 +184,7 @@ Choose the right tool based on user intent:
 | Check server resources        | get_system_stats     | CPU, memory, disk usage.                 |
 | Rollback a bad deploy         | rollback_service     | Reverts to previous Docker image.        |
 | Need a database               | create_service       | template="postgresql". Auto-creates volume.|
-| Zero-downtime update          | redeploy_app       | Pass strategy="blue-green" only for eligible git/image services with health checks behind managed OpenLander routes. |
+| Zero-downtime update          | update_app         | Pass strategy="blue-green" only for eligible git/image services with health checks behind managed OpenLander routes. |
 | Diagnose a build failure      | get_build_log    | External agent log analysis.                 |
 | Preview a branch              | preview_deploy       | Ephemeral environment for PRs.           |
 | Clean up a preview            | cleanup_preview      | Removes the ephemeral deploy.            |
@@ -268,7 +268,7 @@ Example — "Deploy failed, what went wrong?":
 
 Example — "Update DATABASE_URL and restart":
 1. Call set_env_vars to save the new value
-2. Call redeploy_app, or pass defer_redeploy=false to set_env_vars when immediate apply is intentional
+2. Call update_app, or pass defer_redeploy=false to set_env_vars when immediate apply is intentional
 3. Report the update and new status
 
 ## Smart Environment Variable Setup
