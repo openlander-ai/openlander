@@ -380,6 +380,8 @@ request.
 Update or restart an Application. Use `update_app` for the normal "ship the
 latest stored source/image/config" intent on an existing app. `redeploy_app`
 remains as a compatibility/advanced alias over the same deploy primitive.
+`restart_service` is an advanced force-style runtime recreate path, not the
+normal safe update path.
 Project-level runtime actions have been removed. Git-based dependency installs
 get a targeted dependency-layer refresh; `no_cache=true` remains the manual
 full-cache bypass.
@@ -399,10 +401,13 @@ Provide either `service_id` or `service_name`.
 `BLUE_GREEN_UNSUPPORTED` when requested explicitly for compose stacks, services
 without a current running container, services without a health check or explicit
 `health_check_path`, and installations not using managed OpenLander/Traefik
-HTTP-provider routes. When `strategy` is omitted, `update_app` and `redeploy_app` automatically
-uses blue-green for eligible services and falls back to `force` otherwise. The
-zero-downtime guarantee applies to OpenLander domain/Traefik routes only; direct
-`localhost:{assigned_port}` URLs may change during deploy.
+HTTP-provider routes. When `strategy` is omitted, `update_app` and
+`redeploy_app` automatically use blue-green for eligible services and fall back
+to `force` otherwise. If `force` is used explicitly or as a fallback, do not
+report success until `get_deploy_status` reaches a terminal state and
+`diagnose_service` confirms health. The zero-downtime guarantee applies to
+OpenLander domain/Traefik routes only; direct `localhost:{assigned_port}` URLs
+may change during deploy.
 
 Blue-green is best-effort. OpenLander health-checks the green container directly,
 flips the active route target, waits for the managed Traefik HTTP provider
@@ -415,6 +420,11 @@ For blue-green, make `health_check_path` a readiness endpoint, not a static page
 If the service needs a database, cache, storage bucket, or other dependency to
 serve real traffic, the readiness endpoint should check those dependencies before
 returning 2xx.
+
+If blue-green fails while the previous version is still serving, treat it as a
+safe failed update. Inspect diagnostics and fix source/config before trying
+another update; do not immediately force the failed candidate over the serving
+version unless the user explicitly accepts downtime.
 
 ### `archive_service`
 

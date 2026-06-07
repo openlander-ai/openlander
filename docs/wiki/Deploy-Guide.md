@@ -321,13 +321,20 @@ as a follow-up.
 
 When `strategy` is omitted, `update_app` uses blue-green automatically for
 eligible services and falls back to `force` when blue-green is not currently
-eligible. Pass `strategy: "force"` explicitly when downtime is acceptable and
-you want the shorter replacement path.
+eligible. If `force` is used explicitly or as a fallback, wait for
+`get_deploy_status` to reach a terminal state and call `diagnose_service` before
+reporting success. Pass `strategy: "force"` explicitly only when downtime is
+acceptable and the user wants the shorter replacement path.
 
 Use a real readiness endpoint for `health_check_path`. If the app depends on a
 database, cache, object storage, or external service, that endpoint should verify
 those dependencies; a static 200 response can allow blue-green promotion while
 part of the app is still broken.
+
+If a blue-green update fails while the previous version is still serving, treat
+that as a safe failed update. Inspect diagnostics and fix source/config before
+trying another update; do not immediately force the failed candidate over the
+serving version unless the user explicitly accepts downtime.
 
 ---
 

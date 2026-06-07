@@ -5,6 +5,26 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.14
 
+- **Force-strategy guidance tightening during data-model freeze:** existing
+  `update_app` / `redeploy_app` / `deploy_app` delegation / `restart_service`
+  responses now warn when the force replacement path is used and no longer return
+  a top-level `fallback_call` that directly suggests `strategy="force"` after an
+  explicit blue-green eligibility rejection.
+- **Why accepted:** weak-model D3 QA showed that even when OpenLander's default
+  no-strategy path selected blue-green correctly, a model could follow force
+  wording and replace a serving version after a safe failed blue-green attempt.
+  The change keeps operator override available but makes the agent-facing
+  contract say "diagnose/fix first, ask before accepting downtime."
+- **Vocab review:** no new MCP action, REST route, input parameter, database
+  field, or target vocabulary is introduced. Existing call-link fields remain
+  `status_call`, `diagnostic_call`, `suggested_call`, and `poll_call`.
+- **Endpoint collision check:** no endpoint or composite slot is added. The MCP
+  response removes the non-contract `fallback_call` from blue-green eligibility
+  rejections and uses warnings / `_agent_guidance` instead.
+- **Follow-up:** if agents still force a just-failed blue-green candidate, add a
+  stronger policy gate around explicit `strategy="force"` after recent preserved
+  blue-green failures rather than adding more update verbs.
+
 - **`openlander_service.update_app` during data-model freeze:** a new
   deployable-touching MCP action is added as the clear intent for updating an
   existing Application/worker to its latest stored source/image/config revision.

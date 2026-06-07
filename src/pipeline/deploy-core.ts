@@ -3393,7 +3393,7 @@ export class DeployPipeline {
       if (blueStillServing && blueState) {
         await this.restoreBlueState({ projectId, environmentId, blue: blueState });
         buildLog +=
-          '[recovery] Previous version is still serving after failed blue-green deploy; inspect diagnostics before retrying with a force redeploy\n';
+          '[recovery] Previous version is still serving after failed blue-green deploy; inspect diagnostics and fix source/config before trying another update. Do not immediately retry with force.\n';
       } else {
         await this.transitionProjectState(projectId, 'error', 'deploy-runtime-error');
         if (environmentId) {
@@ -3418,7 +3418,7 @@ export class DeployPipeline {
 
       const finalErrorMsg =
         blueStillServing && blueState
-          ? `Blue-green deploy failed; previous version still serving. Inspect diagnostics before retrying with force: ${errorMsg}`
+          ? `Blue-green deploy failed; previous version still serving. Inspect diagnostics and fix source/config before trying another update. Do not immediately retry with force: ${errorMsg}`
           : errorMsg;
       this.jobManager?.updatePhase(projectId, 'failed', finalErrorMsg);
 

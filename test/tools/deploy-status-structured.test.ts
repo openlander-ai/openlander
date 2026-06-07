@@ -138,7 +138,7 @@ describe('get_deploy_status structured fields (O1)', () => {
                 build_log:
                   '[health] Checking http on port 12001/health\n' +
                   '[error] Health check failed\n' +
-                  '[recovery] Previous version is still serving after failed blue-green deploy; inspect diagnostics before retrying with a force redeploy\n',
+                  '[recovery] Previous version is still serving after failed blue-green deploy; inspect diagnostics and fix source/config before trying another update. Do not immediately retry with force.\n',
                 created_at: '2026-05-22T00:00:00Z',
               }
             : undefined,
@@ -194,7 +194,7 @@ describe('get_deploy_status structured fields (O1)', () => {
                 phase: 'failed',
                 startedAt: new Date(Date.now() - 5000),
                 errorSummary:
-                  'Blue-green deploy failed; previous version still serving. Inspect diagnostics before retrying with force: Health check failed',
+                  'Blue-green deploy failed; previous version still serving. Inspect diagnostics and fix source/config before trying another update. Do not immediately retry with force: Health check failed',
               }
             : null,
         ),
