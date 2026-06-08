@@ -25,6 +25,12 @@ interface TraefikConfigResponse {
   };
 }
 
+interface PreviewRouteFixture {
+  routeName: string;
+  containerName: string;
+  containerPort: number;
+}
+
 const NOW = '2026-05-11T00:00:00.000Z';
 
 function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
@@ -117,6 +123,7 @@ function createTraefikConfigApp(params: {
   projects: ProjectRow[];
   services: ServiceRow[];
   mappings: DomainMappingRow[];
+  previews?: PreviewRouteFixture[];
 }): {
   app: Hono;
   db: {
@@ -124,6 +131,7 @@ function createTraefikConfigApp(params: {
     getProject: ReturnType<typeof vi.fn>;
     getDeployableForProject: ReturnType<typeof vi.fn>;
     listServices: ReturnType<typeof vi.fn>;
+    previewDeployer: { list: ReturnType<typeof vi.fn> };
   };
 } {
   const projectsById = new Map(params.projects.map((project) => [project.id, project]));
@@ -139,10 +147,13 @@ function createTraefikConfigApp(params: {
     getService: vi.fn(async (serviceId: string) => servicesById.get(serviceId)),
     getProject: vi.fn(async (projectId: string) => projectsById.get(projectId)),
     releaseDeployLock: vi.fn(async () => undefined),
+    previewDeployer: {
+      list: vi.fn(() => params.previews ?? []),
+    },
   };
 
   const app = new Hono();
-  app.route('/api', createApiRoutes({ db } as unknown as AppContext));
+  app.route('/api', createApiRoutes({ db, previewDeployer: db.previewDeployer } as unknown as AppContext));
   return { app, db };
 }
 
@@ -182,6 +193,69 @@ describe('GET /api/traefik/config domain routing', () => {
     );
     expect(harness.db.listServices).toHaveBeenCalledOnce();
     expect(harness.db.getDeployableForProject).not.toHaveBeenCalled();
+  });
+
+  it('routes compose child auto hosts from non-canonical service rows', async () => {
+    const project = makeProject({ name: 'stack' });
+    const defaultService = makeService({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      kind: 'compose',
+      status: 'stopped',
+      container_id: null,
+    });
+    const webService = makeService({
+      id: 'child-web__svc',
+      project_id: 'stack',
+      name: 'stack/web__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-web',
+      container_name: 'ol-stack-web',
+    });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({
+        projects: [project],
+        services: [defaultService, webService],
+        mappings: [],
+      }).app,
+    );
+
+    expect(config.http.services['svc-stack']).toBeUndefined();
+    expect(config.http.services['svc-stack-web']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack-web:3000',
+    );
+    expect(Object.values(config.http.routers).some((router) => router.service === 'svc-stack-web'))
+      .toBe(true);
+  });
+
+  it('routes in-memory previews through the HTTP provider', async () => {
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({
+        projects: [],
+        services: [],
+        mappings: [],
+        previews: [
+          {
+            routeName: 'preview-feature',
+            containerName: 'ol-preview-feature',
+            containerPort: 4173,
+          },
+        ],
+      }).app,
+    );
+
+    expect(config.http.services['svc-preview-feature']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-preview-feature:4173',
+    );
+    expect(
+      Object.values(config.http.routers).some(
+        (router) => router.service === 'svc-preview-feature',
+      ),
+    ).toBe(true);
   });
 
   it('flips auto routes from the service row with priority over Docker label routers', async () => {

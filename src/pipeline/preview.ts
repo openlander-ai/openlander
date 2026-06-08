@@ -49,6 +49,9 @@ export interface PreviewDeploy {
   projectId: string;
   branch: string;
   containerId: string;
+  containerName: string;
+  containerPort: number;
+  routeName: string;
   port: number;
   url: string;
   imageTag: string;
@@ -122,10 +125,11 @@ export class PreviewDeployer {
         this.routeProvider,
       );
       const previewLimits = buildResourceLimitConfig('small', null);
+      const containerName = `ol-preview-${safeBranch}`;
 
       const containerId = await this.docker.runContainer({
         imageTag,
-        name: `ol-preview-${safeBranch}`,
+        name: containerName,
         port,
         containerPort,
         envVars: {},
@@ -143,6 +147,9 @@ export class PreviewDeployer {
         projectId,
         branch: options.branch,
         containerId,
+        containerName,
+        containerPort,
+        routeName: previewName,
         port,
         url,
         imageTag,

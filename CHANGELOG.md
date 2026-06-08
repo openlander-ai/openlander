@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Make OpenLander-managed Traefik app routing HTTP-provider-only. Managed app,
   compose, preview, recovery, and rollback containers no longer publish Docker
   Host routers; `/api/traefik/config` is the single source of truth for public
-  app routes.
+  app routes from active service rows and active preview records.
 - Recreate older managed Traefik containers that still enable the Docker
   provider, so upgraded hosts do not keep stale Docker-label routers around
   blue-green cutovers.

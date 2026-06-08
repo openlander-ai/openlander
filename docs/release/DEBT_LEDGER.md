@@ -40,7 +40,7 @@ a release should be recorded here so follow-up work is explicit.
 - **Managed app routes are HTTP-provider-only:** managed-mode app, compose,
   preview, recovery, and rollback containers no longer publish Docker-label
   Host routers. Their public routes are emitted only by `/api/traefik/config`
-  from the active service row.
+  from active service rows and active preview records.
 - **Why accepted:** blue-green, same-image recreate, and live route re-pointing
   all mutate the active backend in the OpenLander database. Keeping Docker-label
   routers on app containers creates two route authorities and makes route probes

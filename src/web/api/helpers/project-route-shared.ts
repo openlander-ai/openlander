@@ -330,7 +330,7 @@ function isComposeInternalDependency(service: ServiceRow): boolean {
   );
 }
 
-export function getDeployableServiceRouteName(service: ServiceRow): string {
+export function getDeployableServiceRouteName(service: Pick<ServiceRow, 'name'>): string {
   return deriveProjectSlug(getDeployableServiceDisplayName(service));
 }
 
@@ -422,9 +422,12 @@ export function getDeployableServiceUrl(
 
 export function getDeployableServiceAutoRouteName(
   project: Pick<ProjectRow, 'id' | 'name'>,
-  service: Pick<ServiceRow, 'id'>,
+  service: Pick<ServiceRow, 'id' | 'name'>,
 ): string | null {
-  return service.id === projectIdToDeployableServiceId(project.id) ? project.name : null;
+  if (service.id === projectIdToDeployableServiceId(project.id)) {
+    return project.name;
+  }
+  return getDeployableServiceRouteName(service);
 }
 
 export async function loadDomainMappingsByService(
@@ -550,7 +553,7 @@ export function parseImageCommandField(
   return { ok: false };
 }
 
-export function getDeployableServiceDisplayName(service: ServiceRow): string {
+export function getDeployableServiceDisplayName(service: Pick<ServiceRow, 'name'>): string {
   return deployableServiceIdToProjectId(service.name);
 }
 

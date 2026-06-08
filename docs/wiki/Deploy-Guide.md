@@ -307,8 +307,9 @@ update_app(
 Eligible git/image services only. Compose stacks, services without a health
 check, services outside managed OpenLander/Traefik routing, and direct
 `localhost:{assigned_port}` host-port access are not covered. In managed mode,
-OpenLander app routes are emitted by the Traefik HTTP provider from the active
-service row; app containers do not publish their own Docker-label Host routers.
+OpenLander app routes are emitted by the Traefik HTTP provider from active
+service rows and active preview records; app containers do not publish their own
+Docker-label Host routers.
 OpenLander starts a green container, waits for health, flips the HTTP-provider
 route to the green container, probes the route, stops blue, verifies the public
 route still reaches green, then removes the old blue container. If the green

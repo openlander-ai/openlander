@@ -8,8 +8,6 @@ import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { CloudflareNotFoundError } from '../errors.js';
 import { targetIdentityResolver } from '../db/target-identity-resolver.js';
-import { containerName as projectContainerName } from './helpers.js';
-import { buildTraefikLabels } from './traefik.js';
 
 interface CloudflareApiError {
   code?: number;
@@ -46,8 +44,6 @@ type TunnelIngressRule =
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 
 export class CloudflareTunnelManager {
-  private readonly traefikLabels = new Map<string, Record<string, string>>();
-
   constructor(
     private config: CloudflareConfig,
     private readonly db: Database,
@@ -174,7 +170,6 @@ export class CloudflareTunnelManager {
     const project = service ? await this.db.getProject(service.project_id) : undefined;
     const assignedPort = service?.assigned_port ?? service?.container_port ?? null;
     if (!service || !project || !assignedPort) {
-      this.traefikLabels.delete(serviceId);
       return;
     }
 
@@ -182,36 +177,13 @@ export class CloudflareTunnelManager {
       (mapping) => mapping.domain,
     );
     if (domains.length === 0) {
-      this.traefikLabels.delete(serviceId);
       await this.db.updateService(serviceId, { visibility: 'internal', publicUrl: null });
       return;
     }
 
-    const routeName = service.container_name?.replace(/^ol-/, '') || service.name;
-    const labels = this.buildCustomDomainLabels(routeName, assignedPort, domains);
-    this.traefikLabels.set(serviceId, labels);
-
     const primaryUrl = `https://${domains[0] ?? 'unknown'}`;
     await this.db.updateService(serviceId, { visibility: 'production', publicUrl: primaryUrl });
     await this.events.emit('tunnel:url', { projectId: project.id, url: primaryUrl });
-  }
-
-  private buildCustomDomainLabels(
-    projectName: string,
-    containerPort: number,
-    domains: string[],
-  ): Record<string, string> {
-    const labels = buildTraefikLabels(projectName, containerPort, domains[0]);
-    if (domains.length <= 1) {
-      return labels;
-    }
-
-    const routerName = projectContainerName(projectName);
-    labels[`traefik.http.routers.${routerName}.rule`] = domains
-      .map((domain) => `Host(\`${domain}\`)`)
-      .join(' || ');
-
-    return labels;
   }
 
   private async updateTunnelConfig(): Promise<void> {

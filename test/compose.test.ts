@@ -365,6 +365,33 @@ describe('ComposePipeline', () => {
     expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
+  it('disables compose child Docker-label routes when managed HTTP provider owns routing', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
+      'utf8',
+    );
+
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events, undefined, undefined, 'http-provider');
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject(
+      {
+        traefikLabels: { 'traefik.enable': 'false' },
+      },
+    );
+  });
+
   it('deployCompose retries once and succeeds on port conflict', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(

@@ -27,7 +27,7 @@ import { createOverviewRoutes } from './overview-routes.js';
 import { createNotificationsRoutes } from './notifications-routes.js';
 import { createWebServerRoutes } from './web-server-routes.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getProjectUrls } from '../../pipeline/traefik.js';
+import { getDeployableServiceRouteName, getProjectUrls } from '../../pipeline/traefik.js';
 import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { serviceViewFromRows } from '../../db/views/service-view.js';
@@ -73,6 +73,8 @@ type TraefikHttpMiddleware =
   | { stripPrefix: { prefixes: string[] } }
   | { addPrefix: { prefix: string } };
 
+const MANAGED_SERVICE_KINDS = new Set(['postgres', 'mysql', 'redis', 'mongo', 'minio']);
+
 function traefikObjectName(value: string): string {
   return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'route';
 }
@@ -104,6 +106,14 @@ function resolveServiceContainerName(service: ServiceRow, project: ProjectRow): 
     return projectContainerName(project.name);
   }
   return null;
+}
+
+function serviceIsHttpProviderRoutable(service: ServiceRow): boolean {
+  if (service.archived_at) return false;
+  if (MANAGED_SERVICE_KINDS.has(service.kind)) return false;
+  const status = service.status as ServiceRow['status'] | 'building';
+  if (status === 'running') return true;
+  return status === 'building' && Boolean(service.container_id);
 }
 
 export function createApiRoutes(ctx: AppContext): Hono {
@@ -280,6 +290,40 @@ export function createApiRoutes(ctx: AppContext): Hono {
         servicesById.get(projectIdToDeployableServiceId(project.id)),
       ]),
     );
+    const addHttpProviderService = (
+      serviceName: string,
+      containerName: string,
+      internalPort: number,
+    ): boolean => {
+      if (traefikServices[serviceName]) {
+        log.warn({ serviceName }, 'Skipping Traefik HTTP service with colliding object name');
+        return false;
+      }
+      traefikServices[serviceName] = {
+        loadBalancer: {
+          servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
+        },
+      };
+      return true;
+    };
+    const addAutoHostRouters = (routeName: string, serviceName: string): void => {
+      for (const route of getProjectUrls(routeName)) {
+        const host = new URL(route.url).hostname;
+        if (!host) continue;
+        const rule = `Host(\`${host}\`)`;
+        const routerName = `route-${routeName}-${traefikObjectName(`${route.type}-${host}`)}`;
+        if (routers[routerName]) {
+          log.warn({ routerName, routeName }, 'Skipping colliding Traefik HTTP router');
+          continue;
+        }
+        routers[routerName] = {
+          rule,
+          entryPoints: ['web'],
+          service: serviceName,
+          priority: httpProviderPriority(rule),
+        };
+      }
+    };
     const allProjects: ProjectRow[] = [];
     for (const p of projects) {
       // S2.4 canonical-first via the service-first read model: status +
@@ -311,11 +355,41 @@ export function createApiRoutes(ctx: AppContext): Hono {
         continue;
       }
       const svcName = `svc-${project.name}`;
-      traefikServices[svcName] = {
-        loadBalancer: {
-          servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
-        },
-      };
+      addHttpProviderService(svcName, containerName, internalPort);
+    }
+
+    for (const service of serviceRows) {
+      const project = projectsById.get(service.project_id);
+      if (!project) continue;
+      if (service.id === projectIdToDeployableServiceId(project.id)) continue;
+      if (!serviceIsHttpProviderRoutable(service)) continue;
+
+      const internalPort = service.container_port ?? service.assigned_port;
+      if (!internalPort) continue;
+
+      const containerName = resolveServiceContainerName(service, project);
+      if (!containerName) {
+        log.warn(
+          { serviceId: service.id, projectId: service.project_id },
+          'Skipping non-canonical auto route without a resolvable service container name',
+        );
+        continue;
+      }
+
+      const routeName = getDeployableServiceRouteName(service);
+      const svcName = `svc-${routeName}`;
+      if (addHttpProviderService(svcName, containerName, internalPort)) {
+        addAutoHostRouters(routeName, svcName);
+      }
+    }
+
+    const previewDeployer = (ctx as Partial<Pick<AppContext, 'previewDeployer'>>).previewDeployer;
+    for (const preview of previewDeployer?.list() ?? []) {
+      if (!preview.routeName || !preview.containerName || !preview.containerPort) continue;
+      const svcName = `svc-${preview.routeName}`;
+      if (addHttpProviderService(svcName, preview.containerName, preview.containerPort)) {
+        addAutoHostRouters(preview.routeName, svcName);
+      }
     }
 
     for (const mapping of mappings) {
@@ -375,11 +449,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         continue;
       }
 
-      traefikServices[svcName] = {
-        loadBalancer: {
-          servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
-        },
-      };
+      addHttpProviderService(svcName, containerName, internalPort);
 
       const routerMiddlewares: string[] = [];
       if (mapping.strip_prefix && pathPrefix !== '/') {
@@ -416,18 +486,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     for (const project of allProjects) {
       const svcName = `svc-${project.name}`;
       if (!traefikServices[svcName]) continue;
-      for (const route of getProjectUrls(project.name)) {
-        const host = new URL(route.url).hostname;
-        if (host) {
-          const rule = `Host(\`${host}\`)`;
-          routers[`route-${project.name}-${traefikObjectName(`${route.type}-${host}`)}`] = {
-            rule,
-            entryPoints: ['web'],
-            service: svcName,
-            priority: httpProviderPriority(rule),
-          };
-        }
-      }
+      addAutoHostRouters(project.name, svcName);
 
       // S2.4 canonical-first via the service-first read model: visibility
       // + public_url from the deployable services row, then the deprecated
