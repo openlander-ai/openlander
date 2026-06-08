@@ -3294,17 +3294,37 @@ export class DeployPipeline {
         buildLog += '[route] Rolled active target back to blue\n';
         throw new Error(routeProbe.error);
       }
-      routeSwitched = true;
       buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
-      shouldCleanupGreen = false;
 
       try {
         await this.runtime.stopContainer(blueContainerId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        warnings.push(`Blue cleanup warning: failed to stop previous container: ${message}`);
         log.warn({ err, projectId, blueContainerId }, 'Blue-green cleanup stop failed');
+        throw new Error(
+          `Failed to stop previous container before route cutover verification: ${message}`,
+        );
       }
+
+      buildLog += '[route] Verifying public route after blue stop\n';
+      const postBlueStopRouteProbe = await this.waitForManagedTraefikRoute({
+        projectName,
+        path: routeProbePath,
+        probeTimeoutMs: routeProbeTimeoutMs,
+        maxWaitMs: routeSwitchDelayMs,
+        intervalMs: routeProbeIntervalMs,
+        minimumSuccessAgeMs: 0,
+      });
+      if (!postBlueStopRouteProbe.ok) {
+        buildLog += `[route] Failed after blue stop: ${postBlueStopRouteProbe.error}\n`;
+        throw new Error(
+          `Route did not remain reachable after previous container stopped: ${postBlueStopRouteProbe.error}`,
+        );
+      }
+      routeSwitched = true;
+      shouldCleanupGreen = false;
+      buildLog += `[route] Verified after blue stop (HTTP ${String(postBlueStopRouteProbe.status)}) after ${String(postBlueStopRouteProbe.elapsedMs)}ms (${String(postBlueStopRouteProbe.attempts)} attempt(s))\n`;
+
       try {
         await this.runtime.safeRemoveContainer(blueContainerId);
       } catch (err) {

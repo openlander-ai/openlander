@@ -571,6 +571,41 @@ describe('blue-green route target flip', () => {
     expect(mockHttpRequest.mock.calls.length - previousProbeCalls).toBeGreaterThan(2);
   });
 
+  it('rolls back when a stale blue route passes before cleanup but disappears after blue stops', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbeSequence([200, 404]);
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      strategy: 'blue-green',
+      previous_version_still_serving: true,
+      route_switched: false,
+    });
+    expect(result.error).toContain('Route did not remain reachable after previous container stopped');
+    expect(state.service.container_id).toBe('container-blue');
+    expect(state.service.container_name).toBe('ol-demo-app');
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-blue');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-blue',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-green',
+    );
+    expect(db.createDeployLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        buildLog: expect.stringContaining('[route] Failed after blue stop'),
+      }),
+    );
+  });
+
   it('keeps blue serving when green health fails', async () => {
     mockRunProbe.mockResolvedValue({ healthy: false, source: 'http', error: '500' });
 

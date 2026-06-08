@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `EXCHANGE_API_*` rules and treating any provided placeholder or structurally
   invalid value as blocking input, even when the key itself is optional.
 
+### Fixed
+
+- Verify blue-green cutovers after the previous container is stopped before
+  removing it, so stale Docker-label routes cannot make a promotion look
+  successful while the public route would become 404 after cleanup.
+
 ## [0.1.16-rc.3] - 2026-06-08
 
 ### Changed
