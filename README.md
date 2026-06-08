@@ -5,7 +5,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Release](https://img.shields.io/github/v/release/openlander-ai/openlander)](https://github.com/openlander-ai/openlander/releases)
 
-[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Benchmark](#agent-native-benchmark) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
+[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Deploy evals](#agent-native-deploy-evals) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
 your own server, with risky actions gated by human approval.
@@ -178,13 +178,17 @@ is the human surface on top.
 
 ---
 
-## Agent-native benchmark
+## Agent-native deploy evals
 
 We test OpenLander with coding agents, not only with API smoke tests. The
-benchmarks below are intentionally scoped: they measure whether smaller agents
+evals below are intentionally scoped: they measure whether smaller agents
 can stay on the safe, high-level OpenLander path for common deploy and update
 workflows. They are not a claim that every workload is faster or that every
 failure mode is solved.
+
+Each table row is a single validated run, not a statistically significant
+multi-run benchmark. I use repeated lower-rung runs internally to catch variance
+before turning a scenario into a stronger claim.
 
 In the scoped Day-1 fixture, agents deployed a Node app plus managed Postgres
 and Redis through OpenLander's composite deploy-plan flow:
@@ -236,21 +240,12 @@ the crash-looping candidate. Full ladder evidence was collected on OpenLander
 Spark and Mini smoke checks on the final `v0.1.14` image also passed this
 bad-runtime update path.
 
-For context, we run the same fixtures against a reference MCP-wrapper PaaS. The
-reference runs help us spot where lower-level primitives make agents more
-model-sensitive, but OpenLander's public claim is narrower: composite deploys
-and safe default updates should be operable by smaller agents without manual
-Project/database/cache assembly or unsafe crash-loop promotion.
-
-In the same `D3-bad-runtime` fixture, the reference MCP-wrapper PaaS agents were
-able to ship the bad branch, but the platform continued reporting the deployment
-as done while public traffic hit the crash-looping candidate and intermittently
-returned 502:
-
-| Platform                   | Control-plane result | Public outcome                                  |
-| -------------------------- | -------------------- | ----------------------------------------------- |
-| OpenLander                 | failed update        | old version kept serving                        |
-| Reference MCP-wrapper PaaS | done                 | bad candidate exposed; traffic included 200/502 |
+For context, I also run these scenarios against lower-level MCP-wrapper
+deployment surfaces internally. Those reference runs are useful for finding
+where agents fall off the intended path, but the public claim here is narrower:
+OpenLander's own composite deploys and safe default updates should be operable
+by smaller agents without manual Project/database/cache assembly or unsafe
+crash-loop promotion.
 
 ---
 
