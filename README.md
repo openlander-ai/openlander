@@ -199,7 +199,9 @@ app/database/cache topology is correct.
 
 I track agent behavior separately from product correctness. Some lower-rung
 agents still take tool-discipline or efficiency detours; those do not become
-product failures unless the Product Gate fails.
+product failures unless the Product Gate fails. If the Product Gate fails, the
+agent behavior is reported as not scored rather than given a clean-looking
+operability score.
 
 See [Agent Operability Evals](docs/evals/agent-operability.md) for the
 methodology, tables, fixture, and limitations.
