@@ -38,6 +38,7 @@ export function getDynamicConfigDir(): string {
 export class TraefikManager {
   private static readonly CONTAINERIZED_OPENLANDER_HOST = 'openlander';
   private readonly containerName: string;
+  private activeContainerName: string;
   private readonly networkName: string;
   private readonly httpPort: number;
   private readonly dashboardPort: number;
@@ -49,6 +50,7 @@ export class TraefikManager {
   ) {
     const defaultPolicy = getPolicy('production');
     this.containerName = options?.containerName ?? 'traefik-ol';
+    this.activeContainerName = this.containerName;
     this.networkName = options?.networkName ?? defaultPolicy.networkName;
     this.httpPort = options?.httpPort ?? 80;
     this.dashboardPort = options?.dashboardPort ?? 8080;
@@ -105,7 +107,7 @@ export class TraefikManager {
    * No-op if already connected.
    */
   async connectToNetwork(networkName: string): Promise<void> {
-    await this.connectContainerToNetworkByName(this.containerName, networkName);
+    await this.connectContainerToNetworkByName(this.activeContainerName, networkName);
   }
 
   private async connectContainerToNetworkByName(
@@ -147,6 +149,7 @@ export class TraefikManager {
       'Found legacy OpenLander Traefik — adopting',
     );
 
+    this.activeContainerName = candidate.name;
     await this.ensureTraefikRuntimeNetworks(candidate.name);
 
     try {
