@@ -458,6 +458,16 @@ describe('getProxyStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('TraefikManager', () => {
+  const originalContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+
+  afterEach(() => {
+    if (originalContainerized === undefined) {
+      delete process.env['OPENLANDER_CONTAINERIZED'];
+    } else {
+      process.env['OPENLANDER_CONTAINERIZED'] = originalContainerized;
+    }
+  });
+
   it('exports TraefikManager class', () => {
     // Just verify the class is exported and can be instantiated
     const mockDocker = createMockDocker();
@@ -517,6 +527,78 @@ describe('TraefikManager', () => {
     expect(runtime.connectContainerToNetwork).not.toHaveBeenCalledWith(
       legacy.name,
       expect.any(String),
+    );
+  });
+
+  it('uses the OpenLander container DNS endpoint in containerized runtime', async () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const runtime = {
+      listAllContainers: vi.fn(async () => []),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander' });
+
+    await manager.start();
+
+    expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: expect.arrayContaining([
+          '--providers.http.endpoint=http://openlander:10114/api/traefik/config',
+        ]),
+      }),
+    );
+    const runCall = (runtime.runInfraContainer as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(runCall?.Cmd).not.toContain(
+      '--providers.http.endpoint=http://host.docker.internal:10114/api/traefik/config',
+    );
+  });
+
+  it('recreates containerized Traefik when its HTTP provider still points at host.docker.internal', async () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const legacy = createMockContainer('traefik-ol', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+      state: 'running',
+    });
+    const runtime = {
+      listAllContainers: vi.fn(async () => [legacy]),
+      inspectContainer: vi.fn(async () => ({
+        Config: {
+          Cmd: [
+            '--api.insecure=true',
+            '--providers.http.endpoint=http://host.docker.internal:10114/api/traefik/config',
+            '--providers.http.pollInterval=5s',
+            '--entrypoints.web.address=:80',
+          ],
+        },
+      })),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander' });
+
+    await manager.start();
+
+    expect(runtime.removeContainer).toHaveBeenCalledWith(legacy.id);
+    expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: expect.arrayContaining([
+          '--providers.http.endpoint=http://openlander:10114/api/traefik/config',
+        ]),
+      }),
     );
   });
 

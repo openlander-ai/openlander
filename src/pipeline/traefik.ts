@@ -36,6 +36,7 @@ export function getDynamicConfigDir(): string {
  * backend through the database without stale container labels racing it.
  */
 export class TraefikManager {
+  private static readonly CONTAINERIZED_OPENLANDER_HOST = 'openlander';
   private readonly containerName: string;
   private readonly networkName: string;
   private readonly httpPort: number;
@@ -70,7 +71,8 @@ export class TraefikManager {
       const info = await this.runtime.inspectContainer(containerName);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const cmd: string[] = info.Config.Cmd ?? [];
-      const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
+      const expectedHttpEndpoint = `--providers.http.endpoint=${this.getHttpProviderEndpoint()}`;
+      const hasHttpProvider = cmd.some((arg: string) => arg === expectedHttpEndpoint);
       const hasDockerProvider = cmd.some((arg: string) => arg === '--providers.docker=true');
       return hasHttpProvider && !hasDockerProvider;
     } catch (_err) {
@@ -80,6 +82,13 @@ export class TraefikManager {
 
   private async hasCurrentConfig(): Promise<boolean> {
     return await this.containerHasCurrentConfig(this.containerName);
+  }
+
+  private getHttpProviderEndpoint(): string {
+    const host = isContainerizedRuntime()
+      ? TraefikManager.CONTAINERIZED_OPENLANDER_HOST
+      : 'host.docker.internal';
+    return `http://${host}:${String(this.openLanderPort)}/api/traefik/config`;
   }
 
   async ensureNetwork(): Promise<void> {
@@ -217,7 +226,7 @@ export class TraefikManager {
       name: this.containerName,
       Cmd: [
         '--api.insecure=true',
-        `--providers.http.endpoint=http://host.docker.internal:${String(this.openLanderPort)}/api/traefik/config`,
+        `--providers.http.endpoint=${this.getHttpProviderEndpoint()}`,
         '--providers.http.pollInterval=5s',
         '--entrypoints.web.address=:80',
       ],
