@@ -5,13 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Apply the OpenLander container network attachment to adopted managed Traefik
+  containers as well as the standard `traefik-ol` container, so adoption does
+  not leave the HTTP provider unable to resolve the `openlander` endpoint.
+
 ## [0.1.16-rc.8] - 2026-06-08
 
 ### Fixed
 
-- Connect OpenLander-managed Traefik to the OpenLander container's compose
-  network in containerized installs, including adopted Traefik containers, so
-  the HTTP provider endpoint can resolve the `openlander` container DNS name.
+- Connect the standard OpenLander-managed Traefik container to the OpenLander
+  container's compose network in containerized installs, so the HTTP provider
+  endpoint can resolve the `openlander` container DNS name.
 
 ## [0.1.16-rc.7] - 2026-06-08
 
