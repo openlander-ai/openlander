@@ -183,7 +183,9 @@ is the human surface on top.
 We test OpenLander with coding agents, not only with API smoke tests. These are
 scoped scenario evals: they ask whether smaller agents can stay on safe,
 high-level OpenLander workflows for common deploy and update tasks. They are not
-a claim that every workload is faster or that every failure mode is solved.
+a claim that every workload is faster or that every failure mode is solved, and
+they are not intended as a PaaS ranking. I use them as a sanity check for the
+agent-native control-plane direction.
 
 Current public evals use a small Node app with managed Postgres and Redis. The
 headline rows are lower-rung repeat runs on one release-candidate version, so

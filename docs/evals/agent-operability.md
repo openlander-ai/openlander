@@ -6,7 +6,8 @@ OpenLander control plane to deploy and update an app without hand-assembling
 low-level infrastructure or silently promoting an unsafe candidate.
 
 They are not a broad benchmark suite, a universal uptime claim, or proof that
-every workload is faster.
+every workload is faster. They are product-direction checks for an agent-native
+control plane, not a feature race against mature PaaS products.
 
 ## What Is Being Measured
 
