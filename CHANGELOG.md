@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Rename adopted managed Traefik containers to the standard `traefik-ol` name,
+  so stop/status checks and project-network sync all target the same active
+  container after adoption.
+
 ## [0.1.16-rc.9] - 2026-06-09
 
 ### Fixed
