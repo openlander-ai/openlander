@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Apply the OpenLander container network attachment to adopted managed Traefik
-  containers as well as the standard `traefik-ol` container, so adoption does
-  not leave the HTTP provider unable to resolve the `openlander` endpoint.
+  containers as well as the standard `traefik-ol` container, and keep subsequent
+  project-network sync pointed at the adopted container, so adoption does not
+  leave the HTTP provider unable to resolve either OpenLander or app backends.
 
 ## [0.1.16-rc.8] - 2026-06-08
 

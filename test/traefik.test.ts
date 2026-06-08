@@ -683,6 +683,7 @@ describe('TraefikManager', () => {
     const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander' });
 
     await manager.start();
+    await manager.connectToNetwork('ol-ledgerly');
 
     expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
       'openlander-traefik',
@@ -691,6 +692,14 @@ describe('TraefikManager', () => {
     expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
       'openlander-traefik',
       'openlander_default',
+    );
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+      'openlander-traefik',
+      'ol-ledgerly',
+    );
+    expect(runtime.connectContainerToNetwork).not.toHaveBeenCalledWith(
+      'traefik-ol',
+      'ol-ledgerly',
     );
     expect(runtime.runInfraContainer).not.toHaveBeenCalled();
   });
