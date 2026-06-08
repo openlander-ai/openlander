@@ -6,6 +6,7 @@ import { createLocalServerContext } from './pipeline/server-context.js';
 import { serializeConfig, deserializeConfig, CONFIG_VERSION } from './pipeline/config-snapshot.js';
 import { DeployPipeline } from './pipeline/deploy.js';
 import { appRouteProviderForTraefikMode, TraefikManager } from './pipeline/traefik.js';
+import { containerName as projectContainerName } from './pipeline/helpers.js';
 import { EnvManager } from './pipeline/env.js';
 import type { Agent } from './llm/agent.js';
 import { DeployQueue } from './pipeline/deploy-queue.js';
@@ -200,6 +201,47 @@ export interface AppContext {
   stateManager: ProjectStateManager;
   providerHealth: ProviderHealthMonitor;
   llmVerified: boolean;
+}
+
+function serviceNeedsManagedTraefikNetwork(service: {
+  status: string | null;
+  container_id: string | null;
+  archived_at: string | null;
+}): boolean {
+  if (service.archived_at) return false;
+  return (
+    service.status === 'running' || (service.status === 'building' && Boolean(service.container_id))
+  );
+}
+
+export async function syncManagedTraefikProjectNetworks(
+  ctx: Pick<AppContext, 'config' | 'db' | 'traefik'>,
+): Promise<void> {
+  if (ctx.config.traefik.mode !== 'managed') {
+    return;
+  }
+
+  const [projects, services] = await Promise.all([
+    ctx.db.listProjects(undefined, { includeArchived: false }),
+    ctx.db.listServices(),
+  ]);
+  const projectNamesById = new Map(projects.map((project) => [project.id, project.name]));
+  const networkNames = new Set<string>();
+
+  for (const service of services) {
+    if (!serviceNeedsManagedTraefikNetwork(service)) {
+      continue;
+    }
+    const projectName = projectNamesById.get(service.project_id);
+    if (!projectName) {
+      continue;
+    }
+    networkNames.add(projectContainerName(projectName));
+  }
+
+  for (const networkName of networkNames) {
+    await ctx.traefik.connectToNetwork(networkName);
+  }
 }
 
 /**

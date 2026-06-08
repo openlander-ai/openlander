@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { syncManagedTraefikProjectNetworks } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
@@ -101,6 +102,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       }
 
       await ctx.traefik.start();
+      await syncManagedTraefikProjectNetworks(ctx);
       return c.json({ status: 'started', message: 'Traefik started successfully.' });
     } catch (error) {
       return c.json(

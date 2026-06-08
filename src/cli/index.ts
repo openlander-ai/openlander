@@ -183,7 +183,7 @@ program
     config.server.port = port;
     config.server.host = options.host;
 
-    const { createAppContext } = await import('../app.js');
+    const { createAppContext, syncManagedTraefikProjectNetworks } = await import('../app.js');
     const ctx = await createAppContext(config, getDatabaseUrl());
 
     registerUnhandledRejectionHandler();
@@ -203,6 +203,7 @@ program
     // Step 3: Traefik (auto-start or upgrade if config is outdated)
     try {
       await ctx.traefik.start();
+      await syncManagedTraefikProjectNetworks(ctx);
     } catch (err) {
       log.debug({ err }, 'Traefik start failed');
       console.log(pc.yellow('  ⚠ Traefik could not start'));
@@ -291,7 +292,7 @@ program
     config.server.port = port;
     config.server.host = options.host;
 
-    const { createAppContext } = await import('../app.js');
+    const { createAppContext, syncManagedTraefikProjectNetworks } = await import('../app.js');
     const ctx = await createAppContext(config, getDatabaseUrl());
 
     registerUnhandledRejectionHandler();
@@ -309,6 +310,7 @@ program
 
     try {
       await ctx.traefik.start();
+      await syncManagedTraefikProjectNetworks(ctx);
     } catch (err) {
       log.debug({ err }, 'Traefik start failed');
       console.log(pc.yellow('  ⚠ Traefik could not start'));
