@@ -16,18 +16,18 @@ Model note: **Project = workspace**. **Application**, **Compose**, **Database**,
 
 Agent routing rule of thumb:
 
-| User asks for                                    | Call                                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                    |
-| "Create a new app project before DB/cache"       | `openlander_project.create_project`                               |
-| "Update this existing app to latest code/config" | `openlander_service.update_app`                                   |
-| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`         |
-| "Change app branch/repo/image source"            | `openlander_service.update_application_source`, then `update_app` |
-| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`              |
-| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                           |
-| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                       |
-| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`           |
-| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                      |
+| User asks for                                    | Call                                                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                                                              |
+| "Create a new app project before DB/cache"       | `openlander_project.create_project`                                                                         |
+| "Update this existing app to latest code/config" | `openlander_service.update_app`                                                                             |
+| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`                                                   |
+| "Change app branch/repo/image source"            | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
+| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                                        |
+| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
+| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
+| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
+| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
@@ -180,6 +180,10 @@ v0.1 MCP surface.
 One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
 project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
 For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
+When `deploy_app` resolves an existing app and includes source-only changes (`repo_url`, `branch`,
+`source`, `image`, or `port`), OpenLander saves those source settings first and then starts
+`update_app`. Dockerfile/build config changes still require `update_service_config`, then
+`update_app`.
 When dependency manifests declare git-based dependencies, OpenLander refreshes the dependency
 install layer while preserving normal Docker cache behavior for other repos. Use `no_cache=true`
 only when you need a fully uncached build.

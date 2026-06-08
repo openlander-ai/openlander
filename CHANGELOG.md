@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- Allow existing-service `deploy_app` requests with source-only changes
+  (`repo_url`, `branch`, `source`, `image`, or `port`) to save the source update
+  and start `update_app` in one structured path when the caller explicitly
+  targets a service. Dockerfile/build config changes still use
+  `update_service_config`, then `update_app`.
+
 ## [0.1.16-rc.3] - 2026-06-08
 
 ### Changed

@@ -113,14 +113,17 @@ describe('deploy MCP guidance', () => {
     reasons?: string[];
   }) => {
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
-    const service = {
+    let service = {
       id: 'app__svc',
       name: 'web',
       project_id: 'app',
       kind: 'git',
       source: 'git',
       repo_url: 'https://github.com/acme/app',
+      branch: 'main',
       image_url: null,
+      image_cmd: null,
+      container_port: 3000,
       status: 'running',
     };
     return {
@@ -128,6 +131,21 @@ describe('deploy MCP guidance', () => {
         getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        updateService: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
+          service = {
+            ...service,
+            ...(updates.kind !== undefined ? { kind: updates.kind } : {}),
+            ...(updates.source !== undefined ? { source: updates.source } : {}),
+            ...(updates.repoUrl !== undefined ? { repo_url: updates.repoUrl } : {}),
+            ...(updates.branch !== undefined ? { branch: updates.branch } : {}),
+            ...(updates.imageUrl !== undefined ? { image_url: updates.imageUrl } : {}),
+            ...(updates.imageCmd !== undefined ? { image_cmd: updates.imageCmd } : {}),
+            ...(updates.containerPort !== undefined
+              ? { container_port: updates.containerPort }
+              : {}),
+          };
+          return service;
+        }),
         getDeployablesByGroup: vi.fn(async () => [service]),
         listServices: vi.fn(async () => [service]),
         getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
@@ -304,8 +322,27 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
-  it('rejects source overrides when deploy_app resolves an existing service by service_id', async () => {
+  it('rejects source-only overrides when deploy_app resolves an existing service by bare name', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
+      status: 'running',
+    };
     const ctx = {
+      db: {
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        updateService: vi.fn(async () => undefined),
+      },
       pipeline: {
         redeployService: vi.fn(async () => undefined),
       },
@@ -313,6 +350,34 @@ describe('deploy MCP guidance', () => {
         createPlan: vi.fn(),
       },
     } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        name: 'app',
+        repo_url: 'https://github.com/acme/app',
+        branch: 'staging',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      code: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      action: 'deploy_app',
+      invalid_params: ['repo_url', 'branch'],
+    });
+    const guidance = result['_agent_guidance'] as Record<string, unknown>;
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_application_source');
+    // A bare-name match may be a new-app intent colliding with an existing
+    // single-workload Project, so the source must not be silently repointed.
+    expect(ctx.db.updateService).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+  });
+
+  it('saves source overrides and starts update_app when deploy_app resolves an existing service by service_id', async () => {
+    const ctx = makeExistingServiceDeployCtx({ supported: true });
 
     const result = (await getTool(ctx, 'deploy_app').execute(
       {
@@ -325,18 +390,73 @@ describe('deploy MCP guidance', () => {
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
-      error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
-      invalid_params: ['repo_url', 'branch'],
-      suggested_call: {
-        tool: 'openlander_service',
-        action: 'update_application_source',
-        params: {
-          service_id: 'app__svc',
-          repo_url: 'https://github.com/acme/app',
-          branch: 'staging',
-        },
+      status: 'deploying',
+      delegated_action: 'update_app',
+      mode: 'redeploy_service_target',
+      strategy: 'blue-green',
+      zero_downtime: true,
+      source_update: {
+        status: 'updated',
+        changed_fields: ['branch'],
+      },
+      _agent_guidance: {
+        message:
+          'OpenLander saved the requested source settings for this existing Application/Compose workload, then started update_app. Poll status_call until terminal.',
       },
     });
+    expect(ctx.db.updateService).toHaveBeenCalledWith(
+      'app__svc',
+      expect.objectContaining({
+        repoUrl: 'https://github.com/acme/app',
+        branch: 'staging',
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'app__svc',
+        expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+  });
+
+  it('saves source overrides but preserves blocked update_app guidance when blue-green is not eligible', async () => {
+    const ctx = makeExistingServiceDeployCtx({
+      supported: false,
+      reasons: ['No managed OpenLander Traefik route configured.'],
+    });
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        service_id: 'app__svc',
+        branch: 'staging',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      reasons: ['No managed OpenLander Traefik route configured.'],
+      source_update: {
+        status: 'updated',
+        changed_fields: ['branch'],
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('but update_app did not start'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('First make the Application eligible for blue-green'),
+          expect.stringContaining('If the user explicitly accepts downtime'),
+        ]),
+      },
+    });
+    expect(JSON.stringify(result)).toContain('No managed OpenLander Traefik route configured.');
+    expect(ctx.db.updateService).toHaveBeenCalledWith(
+      'app__svc',
+      expect.objectContaining({ branch: 'staging' }),
+    );
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });

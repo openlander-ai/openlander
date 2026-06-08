@@ -28,7 +28,10 @@ import {
   deployTriggerForToolContext,
   tryAcquireDeployLockOrResponse,
 } from './helpers.js';
-import { runDeployableServiceAction } from './deployable-service.js';
+import {
+  runDeployableServiceAction,
+  runUpdateApplicationSourceAction,
+} from './deployable-service.js';
 import {
   inferEnvValueRequirement,
   mergeEnvValueRequirement,
@@ -1000,6 +1003,34 @@ function existingServiceSourceOverrideParams(args: Record<string, unknown>): str
   return EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS.filter((name) => args[name] !== undefined);
 }
 
+function existingServiceSourceUpdateParams(args: Record<string, unknown>): string[] {
+  return EXISTING_SERVICE_SOURCE_UPDATE_PARAMS.filter((name) => args[name] !== undefined);
+}
+
+function buildExistingServiceSourceUpdateParams(
+  args: Record<string, unknown>,
+  targetParams: Record<string, unknown>,
+): Record<string, unknown> {
+  const sourceUpdateParams: Record<string, unknown> = {
+    ...(typeof targetParams['service_id'] === 'string'
+      ? { service_id: targetParams['service_id'] }
+      : {}),
+    ...(typeof targetParams['service_name'] === 'string'
+      ? { service_name: targetParams['service_name'] }
+      : {}),
+    ...(typeof targetParams['project_name'] === 'string'
+      ? { project_name: targetParams['project_name'] }
+      : {}),
+  };
+  for (const name of EXISTING_SERVICE_SOURCE_UPDATE_PARAMS) {
+    const value = args[name];
+    if (value !== undefined) {
+      sourceUpdateParams[name === 'port' ? 'container_port' : name] = value;
+    }
+  }
+  return sourceUpdateParams;
+}
+
 function buildExistingServiceSourceOverrideResponse(params: {
   invalidParams: string[];
   originalArgs: Record<string, unknown>;
@@ -1503,12 +1534,40 @@ export const deployPlanToolDefs: ToolDef[] = [
         frontDoorTarget?.kind === 'existing_project'
       ) {
         const invalidParams = existingServiceSourceOverrideParams(args);
+        let sourceUpdatePayload: Record<string, unknown> | undefined;
         if (invalidParams.length > 0) {
-          return buildExistingServiceSourceOverrideResponse({
-            invalidParams,
-            originalArgs: args,
-            frontDoorTarget,
-          });
+          const buildConfigParams = invalidParams.filter(
+            (name) => !EXISTING_SERVICE_SOURCE_UPDATE_PARAMS.includes(name),
+          );
+          // Only auto-save source settings when the caller explicitly targeted an
+          // existing service (service_id/service_name). When the service was matched
+          // by bare project name, deploy_app may have been a new-app intent that
+          // collided with an existing single-workload Project — reject and steer to
+          // update_application_source rather than silently repointing its source.
+          if (buildConfigParams.length > 0 || frontDoorTarget.kind === 'existing_project') {
+            return buildExistingServiceSourceOverrideResponse({
+              invalidParams,
+              originalArgs: args,
+              frontDoorTarget,
+            });
+          }
+
+          const sourceUpdateResult = await runUpdateApplicationSourceAction(
+            buildExistingServiceSourceUpdateParams(args, frontDoorTarget.params),
+            context,
+          );
+          sourceUpdatePayload = sourceUpdateResult;
+          const changedFields = Array.isArray(sourceUpdatePayload['changed_fields'])
+            ? (sourceUpdatePayload['changed_fields'] as unknown[])
+            : [];
+          log.info(
+            {
+              serviceId: frontDoorTarget.params['service_id'],
+              sourceFields: existingServiceSourceUpdateParams(args),
+              changedFields,
+            },
+            'deploy_app saved existing-service source override before update',
+          );
         }
 
         const redeployParams =
@@ -1545,6 +1604,16 @@ export const deployPlanToolDefs: ToolDef[] = [
               (step): step is string => typeof step === 'string',
             )
           : [];
+        const guidanceMessage =
+          invalidParams.length > 0
+            ? redeployStarted
+              ? 'OpenLander saved the requested source settings for this existing Application/Compose workload, then started update_app. Poll status_call until terminal.'
+              : `OpenLander saved the requested source settings for this existing Application/Compose workload, but update_app did not start. ${
+                  typeof redeployGuidance['message'] === 'string'
+                    ? redeployGuidance['message']
+                    : 'Follow the returned guidance before retrying update_app.'
+                }`
+            : existingProjectMessage;
         return {
           ...redeployPayload,
           delegated_action: 'update_app',
@@ -1555,9 +1624,19 @@ export const deployPlanToolDefs: ToolDef[] = [
           ...(frontDoorTarget.kind === 'existing_project'
             ? { existing_service: frontDoorTarget.existingService }
             : {}),
+          ...(invalidParams.length > 0
+            ? {
+                source_update: {
+                  status: sourceUpdatePayload?.['status'] ?? 'updated',
+                  changed_fields: Array.isArray(sourceUpdatePayload?.['changed_fields'])
+                    ? sourceUpdatePayload['changed_fields']
+                    : [],
+                },
+              }
+            : {}),
           _agent_guidance: {
             ...redeployGuidance,
-            message: existingProjectMessage,
+            message: guidanceMessage,
             next_steps: [
               ...redeployNextSteps,
               ...(frontDoorTarget.kind === 'existing_project'

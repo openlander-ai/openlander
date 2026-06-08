@@ -522,6 +522,61 @@ function buildSourceUpdate(
   return { updates, changedFields, mode };
 }
 
+export async function runUpdateApplicationSourceAction(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<Record<string, unknown>> {
+  const { service, project } = await resolveSourceUpdateService(args, context);
+  if (service.kind === 'compose-child') {
+    throw new ServiceOperationUnsupportedError('update_application_source', service.kind);
+  }
+
+  const { updates, changedFields, mode } = buildSourceUpdate(args, service);
+  if (changedFields.length === 0) {
+    return {
+      status: 'unchanged',
+      project_id: project.id,
+      service_id: service.id,
+      service: serviceSummary(service, project),
+      source: sourceSnapshot(service),
+      changed_fields: [],
+      needs_redeploy: false,
+      _agent_guidance: {
+        message:
+          'The requested source settings already match the saved Application/Compose configuration. No database write, deploy lock, Docker action, route mutation, or redeploy was started.',
+        next_steps: ['No redeploy is required for this source update request.'],
+      },
+    };
+  }
+  await context.appCtx.db.updateService(service.id, updates);
+  const updated = (await context.appCtx.db.getService(service.id)) ?? service;
+
+  return {
+    status: 'updated',
+    project_id: project.id,
+    service_id: service.id,
+    service: serviceSummary(updated, project),
+    source: sourceSnapshot(updated),
+    changed_fields: changedFields,
+    needs_redeploy: true,
+    suggested_call: {
+      tool: 'openlander_service',
+      action: 'update_app',
+      params: { service_id: service.id },
+    },
+    _agent_guidance: {
+      message:
+        'Source settings were saved only. No image build, container restart, route mutation, or deploy lock was started.',
+      next_steps: [
+        `Call openlander_service.update_app with service_id="${service.id}" to apply the saved source settings.`,
+        mode === undefined
+          ? 'container_port was saved for the next redeploy. Use apply_route_config only when you need a live route change without rebuilding.'
+          : 'Use update_service_config separately for dockerfile_path, docker_target, or build_context.',
+      ],
+    },
+  };
+}
+
 function explicitRouteVerificationPath(service: Pick<ResolvedServiceRow, 'health_check_path'>) {
   const path = service.health_check_path?.trim();
   if (!path) return undefined;
@@ -1232,57 +1287,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Save Application/Compose source settings. Save-only; call update_app to apply.',
     inputSchema: updateApplicationSourceSchema,
-    execute: async (args, context) => {
-      const { service, project } = await resolveSourceUpdateService(args, context);
-      if (service.kind === 'compose-child') {
-        throw new ServiceOperationUnsupportedError('update_application_source', service.kind);
-      }
-
-      const { updates, changedFields, mode } = buildSourceUpdate(args, service);
-      if (changedFields.length === 0) {
-        return {
-          status: 'unchanged',
-          project_id: project.id,
-          service_id: service.id,
-          service: serviceSummary(service, project),
-          source: sourceSnapshot(service),
-          changed_fields: [],
-          needs_redeploy: false,
-          _agent_guidance: {
-            message:
-              'The requested source settings already match the saved Application/Compose configuration. No database write, deploy lock, Docker action, route mutation, or redeploy was started.',
-            next_steps: ['No redeploy is required for this source update request.'],
-          },
-        };
-      }
-      await context.appCtx.db.updateService(service.id, updates);
-      const updated = (await context.appCtx.db.getService(service.id)) ?? service;
-
-      return {
-        status: 'updated',
-        project_id: project.id,
-        service_id: service.id,
-        service: serviceSummary(updated, project),
-        source: sourceSnapshot(updated),
-        changed_fields: changedFields,
-        needs_redeploy: true,
-        suggested_call: {
-          tool: 'openlander_service',
-          action: 'update_app',
-          params: { service_id: service.id },
-        },
-        _agent_guidance: {
-          message:
-            'Source settings were saved only. No image build, container restart, route mutation, or deploy lock was started.',
-          next_steps: [
-            `Call openlander_service.update_app with service_id="${service.id}" to apply the saved source settings.`,
-            mode === undefined
-              ? 'container_port was saved for the next redeploy. Use apply_route_config only when you need a live route change without rebuilding.'
-              : 'Use update_service_config separately for dockerfile_path, docker_target, or build_context.',
-          ],
-        },
-      };
-    },
+    execute: runUpdateApplicationSourceAction,
   },
   {
     name: 'apply_route_config',
