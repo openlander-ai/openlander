@@ -1045,6 +1045,13 @@ describe('deploy MCP guidance', () => {
     expect(result).toMatchObject({
       status: 'done',
       readiness: 'healthy',
+      _agent_guidance: {
+        message: expect.stringContaining('Deployment verified'),
+        next_steps: expect.arrayContaining([
+          'Use preferred_url as the app URL.',
+          'Do not call expose_public unless the user explicitly asks for a temporary tunnel URL.',
+        ]),
+      },
     });
     expect(result['readiness_message']).toBeUndefined();
   });

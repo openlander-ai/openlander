@@ -105,6 +105,7 @@ export default defineConfig({
       'test/tools/deploy-status-structured.test.ts',
       'test/tools/deployable-service-resolution.test.ts',
       'test/tools/env-source.test.ts',
+      'test/tools/expose-public.test.ts',
       'test/tools/image-schema.test.ts',
       'test/tools/list-projects-mcp.test.ts',
       'test/tools/mcp-agent-ux-rc6.test.ts',

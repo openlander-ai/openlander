@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Return `status: "already_public"` from `expose_public` when an app already has
+  a reachable public route, instead of forcing agents through optional tunnel
+  creation.
+- Add success guidance to `deploy_app` wait responses so agents know to report
+  `preferred_url` and stop instead of calling extra expose/deploy actions.
+
 ## [0.1.14] - 2026-06-07
 
 ### Added

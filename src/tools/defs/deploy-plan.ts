@@ -1488,7 +1488,7 @@ export const deployPlanToolDefs: ToolDef[] = [
               'OpenLander did not create a temp project. Retry without expose=true, then expose the service after the target attach completes.',
             next_steps: [
               'Retry deploy_app with target_project_id and expose=false or omitted.',
-              'After deployment succeeds, use expose_public with service_id if a temporary public URL is still needed.',
+              'After deployment succeeds, use expose_public with project_name if a temporary public URL is still needed.',
             ],
           },
         };
@@ -2044,7 +2044,16 @@ export const deployPlanToolDefs: ToolDef[] = [
                             ],
                           },
                         }
-                      : {}
+                      : {
+                          _agent_guidance: {
+                            message:
+                              'Deployment verified. Report preferred_url to the user; no additional deploy or expose action is needed.',
+                            next_steps: [
+                              'Use preferred_url as the app URL.',
+                              'Do not call expose_public unless the user explicitly asks for a temporary tunnel URL.',
+                            ],
+                          },
+                        }
                     : {
                         _agent_guidance: {
                           message:

@@ -12,6 +12,10 @@ import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { loadServiceView } from '../../db/views/service-view.js';
 import {
+  getDeployableServiceUrls,
+  getPreferredDeployableServiceUrl,
+} from '../../pipeline/traefik.js';
+import {
   bulkDeleteEnvVarsSchema,
   deleteEnvVarSchema,
   exportEnvVarsSchema,
@@ -1139,6 +1143,33 @@ export const envToolDefs: ToolDef[] = [
       const view = await loadServiceView(appCtx.db, project);
       if (!view.assignedPort) {
         throw new Error('Project is not running — deploy it first');
+      }
+
+      const routeService = {
+        name: view.name,
+        assigned_port: view.assignedPort,
+        public_url: view.publicUrl,
+      };
+      const existingUrls = getDeployableServiceUrls(routeService);
+      const existingExternalUrl = existingUrls.find((entry) => entry.reachable === 'external');
+      if (existingExternalUrl) {
+        const preferredUrl =
+          getPreferredDeployableServiceUrl(routeService) ?? existingExternalUrl.url;
+        return {
+          status: 'already_public',
+          project: projectName,
+          publicUrl: preferredUrl,
+          preferred_url: preferredUrl,
+          urls: existingUrls,
+          _agent_guidance: {
+            message:
+              'This app already has a reachable public route. Use publicUrl/preferred_url; no tunnel creation is needed.',
+            next_steps: [
+              'Report the publicUrl/preferred_url above to the user.',
+              'Do not call expose_public again unless the user explicitly asks for a temporary tunnel URL.',
+            ],
+          },
+        };
       }
 
       const url = await appCtx.pipeline.exposeTunnel(project.id, view.assignedPort);

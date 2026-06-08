@@ -488,7 +488,9 @@ request.
 Create or remove a temporary public share URL for a project. This is an optional public-access
 feature and requires a configured tunnel backend on the OpenLander host. If the tunnel backend is
 not installed/configured, use the normal service URL, custom domain routing, or configure the tunnel
-first.
+first. If the app already has a reachable public route, `expose_public` returns
+`status: "already_public"` with `publicUrl` / `preferred_url` and does not try to
+open a tunnel.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -639,7 +641,9 @@ when no build-time env key is involved.
 ### `expose_public` / `unexpose_public`
 
 Project composite aliases for temporary public URLs. This is optional and depends on the configured
-tunnel backend; it is not required for normal deploy/redeploy flows.
+tunnel backend; it is not required for normal deploy/redeploy flows. When a reachable public route
+already exists, `expose_public` returns `status: "already_public"` and the existing URL instead of
+calling the tunnel backend.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
