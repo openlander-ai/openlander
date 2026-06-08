@@ -54,4 +54,17 @@ describe('Traefik Labels', () => {
 
     expect(labels['traefik.docker.network']).toBe(SHARED_NETWORK_NAME);
   });
+
+  it('disables Docker-provider routes when HTTP provider owns app routing', () => {
+    const labels = buildTraefikLabels(
+      'my-app',
+      10001,
+      undefined,
+      'production',
+      SHARED_NETWORK_NAME,
+      'http-provider',
+    );
+
+    expect(labels).toEqual({ 'traefik.enable': 'false' });
+  });
 });

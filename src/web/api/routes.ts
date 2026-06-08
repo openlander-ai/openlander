@@ -48,10 +48,10 @@ type TraefikHttpRouter = {
 const TRAEFIK_HTTP_PROVIDER_PRIORITY_BASE = 100_000;
 
 function httpProviderPriority(rule: string): number {
-  // Managed Traefik runs both Docker and HTTP providers. During swaps, the
-  // old container can still expose a Docker-label router for the same Host
-  // rule, so DB-driven HTTP-provider routers must win deterministically while
-  // preserving rule-length ordering inside this config.
+  // Managed Traefik uses the HTTP provider as the app-route source of truth.
+  // Keep a high priority anyway so DB-driven routes win deterministically if
+  // an older/externally-managed Docker-label router for the same Host still
+  // exists during upgrades or manual recovery.
   return TRAEFIK_HTTP_PROVIDER_PRIORITY_BASE + rule.length;
 }
 

@@ -262,10 +262,6 @@ export async function preflightCheck(
           pass: true,
           detail: proxyStatus,
         };
-        warnings.push(
-          `Traefik detected (${proxyDetection.container ?? 'unknown'}) but Docker provider may not be enabled. ` +
-            `Ensure '--providers.docker=true' is set for automatic routing.`,
-        );
       } else {
         proxyCheck = {
           pass: true,

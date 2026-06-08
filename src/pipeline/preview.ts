@@ -68,6 +68,7 @@ export class PreviewDeployer {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly routeProvider: 'docker-labels' | 'http-provider' = 'docker-labels',
   ) {}
 
   /**
@@ -118,6 +119,7 @@ export class PreviewDeployer {
         undefined,
         'production',
         networkName,
+        this.routeProvider,
       );
       const previewLimits = buildResourceLimitConfig('small', null);
 

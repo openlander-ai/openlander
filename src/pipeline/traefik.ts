@@ -30,9 +30,10 @@ export function getDynamicConfigDir(): string {
 /**
  * Traefik reverse proxy management.
  *
- * OpenLander uses Traefik as a Docker-label-based reverse proxy.
- * Each deployed container gets Traefik labels that automatically
- * configure routing without touching any config files.
+ * OpenLander-managed Traefik uses the HTTP provider as the source of truth
+ * for app routes. Docker-label routes are deliberately disabled for managed
+ * app containers so blue-green and in-place route updates can flip the active
+ * backend through the database without stale container labels racing it.
  */
 export class TraefikManager {
   private readonly containerName: string;
@@ -70,10 +71,8 @@ export class TraefikManager {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const cmd: string[] = info.Config.Cmd ?? [];
       const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
-      const hasCorrectNetwork = cmd.some(
-        (arg: string) => arg === `--providers.docker.network=${this.networkName}`,
-      );
-      return hasHttpProvider && hasCorrectNetwork;
+      const hasDockerProvider = cmd.some((arg: string) => arg === '--providers.docker=true');
+      return hasHttpProvider && !hasDockerProvider;
     } catch (_err) {
       return false;
     }
@@ -129,7 +128,7 @@ export class TraefikManager {
     if (!(await this.containerHasCurrentConfig(candidate.name))) {
       log.info(
         { existingContainer: candidate.name },
-        'Found legacy OpenLander Traefik without HTTP provider — recreating',
+        'Found legacy OpenLander Traefik with outdated provider config — recreating',
       );
       return false;
     }
@@ -218,9 +217,6 @@ export class TraefikManager {
       name: this.containerName,
       Cmd: [
         '--api.insecure=true',
-        '--providers.docker=true',
-        '--providers.docker.exposedbydefault=false',
-        `--providers.docker.network=${this.networkName}`,
         `--providers.http.endpoint=http://host.docker.internal:${String(this.openLanderPort)}/api/traefik/config`,
         '--providers.http.pollInterval=5s',
         '--entrypoints.web.address=:80',
@@ -234,7 +230,6 @@ export class TraefikManager {
           '80/tcp': [{ HostPort: httpPortStr }],
           '8080/tcp': [{ HostPort: dashboardPortStr }],
         },
-        Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
         ...(platform() !== 'darwin' ? { ExtraHosts: ['host.docker.internal:host-gateway'] } : {}),
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
@@ -551,7 +546,12 @@ export function buildTraefikLabels(
   hostname?: string,
   _environment: TraefikEnvironment = 'production',
   networkName = getPolicy('production').networkName,
+  routeProvider: 'docker-labels' | 'http-provider' = 'docker-labels',
 ): Record<string, string> {
+  if (routeProvider === 'http-provider') {
+    return { 'traefik.enable': 'false' };
+  }
+
   const routerName = projectContainerName(projectName);
   const host = hostname ?? getEnvironmentProjectHostname(projectName, 'production');
 
@@ -563,6 +563,12 @@ export function buildTraefikLabels(
     [`traefik.http.services.${routerName}.loadbalancer.server.port`]: String(containerPort),
     'traefik.docker.network': networkName,
   };
+}
+
+export function appRouteProviderForTraefikMode(
+  mode: 'managed' | 'external',
+): 'docker-labels' | 'http-provider' {
+  return mode === 'managed' ? 'http-provider' : 'docker-labels';
 }
 
 export async function ensureManagedTraefikNetwork(
@@ -767,7 +773,7 @@ export async function switchToExternalMode(
 /**
  * Connect a container to the Traefik-facing network.
  * OpenLander 0.1 deploys apps onto project-scoped networks; managed Traefik must join
- * those networks to route Docker-provider traffic.
+ * those networks so HTTP-provider backends can resolve container names.
  *
  * @param runtime - Runtime backend
  * @param containerId - Container ID to connect

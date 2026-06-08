@@ -39,6 +39,7 @@ export class ContainerRunner {
   constructor(
     private readonly runtime: RuntimeBackend,
     private readonly db: Database,
+    private readonly routeProvider: 'docker-labels' | 'http-provider' = 'docker-labels',
   ) {}
 
   async run(config: RunConfig): Promise<{ containerId: string; port: number; url: string }> {
@@ -93,6 +94,7 @@ export class ContainerRunner {
         undefined,
         envType,
         projectNetwork,
+        this.routeProvider,
       );
 
       try {

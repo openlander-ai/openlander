@@ -127,9 +127,7 @@ describe('DeployPipeline deployEnvironment', () => {
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('demo-app.'),
-        }),
+        traefikLabels: { 'traefik.enable': 'false' },
       }),
     );
     expect(result.url).toContain('demo-app.');
@@ -195,9 +193,7 @@ describe('DeployPipeline deployEnvironment', () => {
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-prod-app.rule': expect.stringContaining('prod-app.'),
-        }),
+        traefikLabels: { 'traefik.enable': 'false' },
       }),
     );
     expect(result.url).toContain('prod-app.');
@@ -377,9 +373,7 @@ describe('DeployPipeline deployEnvironment', () => {
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-dev-app.rule': expect.stringContaining('dev-app.'),
-        }),
+        traefikLabels: { 'traefik.enable': 'false' },
       }),
     );
     expect(result.url).toContain('dev-app.');
