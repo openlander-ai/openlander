@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Observe blue-green green-container stability before switching the public route,
+  so delayed crash-loop candidates fail while the previous version remains the
+  active backend.
+
 ## [0.1.16-rc.1] - 2026-06-08
 
 ### Fixed
