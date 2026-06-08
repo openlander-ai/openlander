@@ -67,7 +67,7 @@ import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { createLocalProbeRunner } from '../health/probe-runner.js';
 import { resolveMonitoringProfile } from '../health/profile-resolver.js';
-import type { ProbeContext } from '../health/types.js';
+import type { HealthCheckConfig, ProbeContext, ProbeResult } from '../health/types.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
@@ -131,6 +131,8 @@ const DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS = 500;
 const DEFAULT_BLUE_GREEN_POST_SWITCH_STABILITY_MS = 30_000;
 const DEFAULT_BLUE_GREEN_STABILITY_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_BLUE_GREEN_STABILITY_INSPECT_FAILURE_THRESHOLD = 3;
+const DEFAULT_BLUE_GREEN_HEALTH_CHECK_RETRIES = 30;
+const DEFAULT_BLUE_GREEN_HEALTH_CHECK_INTERVAL_MS = 2_000;
 const BLUE_GREEN_LABELS = {
   ROLE: 'openlander.blue_green.role',
   PROJECT_ID: 'openlander.blue_green.project_id',
@@ -142,6 +144,11 @@ type ContainerInspection = Awaited<ReturnType<RuntimeBackend['inspectContainer']
 type BlueGreenStabilityResult =
   | { ok: true; checks: number; elapsedMs: number }
   | { ok: false; checks: number; elapsedMs: number; error: string };
+
+type BlueGreenHealthResult = ProbeResult & {
+  attempts: number;
+  elapsedMs: number;
+};
 
 function explicitHealthCheckPath(
   view: Pick<ServiceView, 'healthCheckPath'>,
@@ -1274,6 +1281,52 @@ export class DeployPipeline {
 
       await sleep(Math.min(intervalMs, remainingMs));
     }
+  }
+
+  private isTerminalGreenHealthFailure(result: ProbeResult): boolean {
+    const error = result.error ?? '';
+    return (
+      error.startsWith('Container is not running') ||
+      error.startsWith('Container is restarting') ||
+      error.includes('Docker health status: unhealthy')
+    );
+  }
+
+  private async waitForBlueGreenHealth(params: {
+    probeRunner: ReturnType<typeof createLocalProbeRunner>;
+    config: HealthCheckConfig;
+    context: ProbeContext;
+    maxAttempts: number;
+    intervalMs: number;
+  }): Promise<BlueGreenHealthResult> {
+    const startedAt = Date.now();
+    const maxAttempts = Math.max(1, params.maxAttempts);
+    const intervalMs = Math.max(1, params.intervalMs);
+    let lastResult: ProbeResult = { healthy: false, source: 'none' };
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      lastResult = await params.probeRunner.runProbe(
+        {
+          ...params.config,
+          // Blue-green owns the readiness window. Keep each runner call to one
+          // probe so Docker HEALTHCHECK start-period states can be observed
+          // across the caller-level interval instead of collapsing into a
+          // 200ms retry loop.
+          failureThreshold: 1,
+        },
+        params.context,
+      );
+
+      if (lastResult.healthy || this.isTerminalGreenHealthFailure(lastResult)) {
+        return { ...lastResult, attempts: attempt, elapsedMs: Date.now() - startedAt };
+      }
+
+      if (attempt < maxAttempts) {
+        await sleep(intervalMs);
+      }
+    }
+
+    return { ...lastResult, attempts: maxAttempts, elapsedMs: Date.now() - startedAt };
   }
 
   private async deployInner(
@@ -2918,8 +2971,10 @@ export class DeployPipeline {
     options?: RedeployOptions,
   ): Promise<DeployResult> {
     const startTime = Date.now();
-    const healthCheckRetries = options?.healthCheckRetries ?? 10;
-    const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
+    const healthCheckRetries =
+      options?.healthCheckRetries ?? DEFAULT_BLUE_GREEN_HEALTH_CHECK_RETRIES;
+    const healthCheckIntervalMs =
+      options?.healthCheckIntervalMs ?? DEFAULT_BLUE_GREEN_HEALTH_CHECK_INTERVAL_MS;
     const routeSwitchDelayMs =
       options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
     const routeProbeIntervalMs =
@@ -3167,14 +3222,20 @@ export class DeployPipeline {
       const probeRunner = createLocalProbeRunner(this.runtime);
 
       buildLog += `[health] Checking ${probeConfig.strategy} on port ${String(newPort)}${probeConfig.path ?? ''}\n`;
-      const probeResult = await probeRunner.runProbe(probeConfig, probeContext);
+      const probeResult = await this.waitForBlueGreenHealth({
+        probeRunner,
+        config: probeConfig,
+        context: probeContext,
+        maxAttempts: healthCheckRetries,
+        intervalMs: healthCheckIntervalMs,
+      });
 
       if (!probeResult.healthy) {
         throw new Error(
           `Health check failed for ${projectName} on port ${String(newPort)}: ${probeResult.error ?? 'no details'}`,
         );
       }
-      buildLog += '[health] Passed\n';
+      buildLog += `[health] Passed after ${String(probeResult.elapsedMs)}ms (${String(probeResult.attempts)} attempt(s), ${probeResult.source})\n`;
 
       buildLog += `[route] Switching active Traefik target to ${greenName}\n`;
       await this.transitionProjectState(projectId, 'running', 'deploy-success', {

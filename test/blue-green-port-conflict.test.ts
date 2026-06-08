@@ -569,6 +569,7 @@ describe('blue-green route target flip', () => {
     const result = await pipeline.redeploy('p1', {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
+      healthCheckRetries: 1,
       routeSwitchDelayMs: 0,
       postSwitchStabilityMs: 0,
     });
@@ -590,6 +591,45 @@ describe('blue-green route target flip', () => {
       expect.objectContaining({
         status: 'failed',
         buildLog: expect.stringContaining('Previous version is still serving'),
+      }),
+    );
+  });
+
+  it('waits for Docker HEALTHCHECK starting state before promoting green', async () => {
+    const previousProbeCalls = mockRunProbe.mock.calls.length;
+    mockRunProbe
+      .mockResolvedValueOnce({
+        healthy: false,
+        source: 'docker',
+        error: 'Docker health status: starting',
+      })
+      .mockResolvedValueOnce({
+        healthy: false,
+        source: 'docker',
+        error: 'Docker health status: starting',
+      })
+      .mockResolvedValueOnce({ healthy: true, source: 'docker' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      healthCheckRetries: 5,
+      healthCheckIntervalMs: 1,
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      readiness: 'healthy',
+      route_switched: true,
+    });
+    expect(mockRunProbe.mock.calls.length - previousProbeCalls).toBe(3);
+    expect(db.createDeployLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'success',
+        buildLog: expect.stringContaining('[health] Passed after'),
       }),
     );
   });

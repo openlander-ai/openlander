@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Wait across the blue-green green-container readiness window instead of
+  collapsing Docker `HEALTHCHECK` `starting` states into the probe runner's
+  short retry loop, so healthy candidates with a Docker start period can be
+  promoted correctly before the post-switch stability check.
+
 ## [0.1.15] - 2026-06-08
 
 ### Changed
