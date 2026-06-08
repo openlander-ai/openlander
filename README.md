@@ -197,7 +197,8 @@ and Redis through OpenLander's composite deploy-plan flow:
 The fixture is intentionally limited to platform-managed dependencies. External
 SaaS secrets such as Stripe, SMTP, S3, and exchange APIs are tested separately:
 when those user-owned values are missing, OpenLander should block instead of
-inventing plausible secrets. Latest validated release-candidate run:
+inventing plausible secrets. Full ladder evidence was collected during the
+v0.1.14 release-candidate cycle:
 OpenLander `v0.1.14-rc.16` against
 [`openlander-ai/ledgerly@qa/managed-deps-only`](https://github.com/openlander-ai/ledgerly/tree/qa/managed-deps-only).
 
@@ -211,6 +212,8 @@ OpenLander `v0.1.14-rc.16` against
 Every run passed the same rich oracle: `/health` returned 200, the app root
 returned 200, invoice write/read worked, Redis hit counts incremented, and the
 app, Postgres, and Redis services stayed in one OpenLander Project/network.
+After the final `v0.1.14` tag was published, Spark and Mini smoke checks on the
+final image passed the same Day-1 path.
 
 The point is not that every deploy is faster. The point is that even weaker
 agents can stay on the correct high-level path because OpenLander owns the
@@ -220,8 +223,8 @@ We also test unsafe updates. In the `D3-bad-runtime` fixture, the new commit
 builds but starts crashing after boot. OpenLander's default no-strategy
 `update_app` path used blue-green safety for eligible services, kept the
 previous version serving, and reported the failed update instead of promoting
-the crash-looping candidate. Latest validated release-candidate run:
-OpenLander `v0.1.14-rc.28`.
+the crash-looping candidate. Full ladder evidence was collected on OpenLander
+`v0.1.14-rc.28`.
 
 | Model rung |     Result | MCP calls | Failed calls | Public outcome           |
 | ---------- | ---------: | --------: | -----------: | ------------------------ |
@@ -230,11 +233,24 @@ OpenLander `v0.1.14-rc.28`.
 | GPT-5.4    | PASS-clean |        20 |            0 | Old version kept serving |
 | GPT-5.5    | PASS-clean |        20 |            0 | Old version kept serving |
 
+Spark and Mini smoke checks on the final `v0.1.14` image also passed this
+bad-runtime update path.
+
 For context, we run the same fixtures against a reference MCP-wrapper PaaS. The
 reference runs help us spot where lower-level primitives make agents more
 model-sensitive, but OpenLander's public claim is narrower: composite deploys
 and safe default updates should be operable by smaller agents without manual
 Project/database/cache assembly or unsafe crash-loop promotion.
+
+In the same `D3-bad-runtime` fixture, the reference MCP-wrapper PaaS agents were
+able to ship the bad branch, but the platform continued reporting the deployment
+as done while public traffic hit the crash-looping candidate and intermittently
+returned 502:
+
+| Platform                   | Control-plane result | Public outcome                                  |
+| -------------------------- | -------------------- | ----------------------------------------------- |
+| OpenLander                 | failed update        | old version kept serving                        |
+| Reference MCP-wrapper PaaS | done                 | bad candidate exposed; traffic included 200/502 |
 
 ---
 
