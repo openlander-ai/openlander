@@ -322,6 +322,60 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
+  it('rejects source-only overrides when deploy_app resolves an existing service by bare name', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
+      status: 'running',
+    };
+    const ctx = {
+      db: {
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        updateService: vi.fn(async () => undefined),
+      },
+      pipeline: {
+        redeployService: vi.fn(async () => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        name: 'app',
+        repo_url: 'https://github.com/acme/app',
+        branch: 'staging',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      code: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      action: 'deploy_app',
+      invalid_params: ['repo_url', 'branch'],
+    });
+    const guidance = result['_agent_guidance'] as Record<string, unknown>;
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_application_source');
+    // A bare-name match may be a new-app intent colliding with an existing
+    // single-workload Project, so the source must not be silently repointed.
+    expect(ctx.db.updateService).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+  });
+
   it('saves source overrides and starts update_app when deploy_app resolves an existing service by service_id', async () => {
     const ctx = makeExistingServiceDeployCtx({ supported: true });
 

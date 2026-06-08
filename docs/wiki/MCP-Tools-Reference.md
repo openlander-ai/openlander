@@ -16,18 +16,18 @@ Model note: **Project = workspace**. **Application**, **Compose**, **Database**,
 
 Agent routing rule of thumb:
 
-| User asks for                                    | Call                                                                                   |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                                         |
-| "Create a new app project before DB/cache"       | `openlander_project.create_project`                                                    |
-| "Update this existing app to latest code/config" | `openlander_service.update_app`                                                        |
-| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`                              |
-| "Change app branch/repo/image source"            | `deploy_app` with an existing target, or `update_application_source` then `update_app` |
-| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                   |
-| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                |
-| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                            |
-| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                |
-| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                           |
+| User asks for                                    | Call                                                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                                                              |
+| "Create a new app project before DB/cache"       | `openlander_project.create_project`                                                                         |
+| "Update this existing app to latest code/config" | `openlander_service.update_app`                                                                             |
+| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`                                                   |
+| "Change app branch/repo/image source"            | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
+| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                                        |
+| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
+| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
+| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
+| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
