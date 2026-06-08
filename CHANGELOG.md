@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Connect OpenLander-managed Traefik to the OpenLander container's compose
-  network in containerized installs, so the HTTP provider endpoint can resolve
-  the `openlander` container DNS name.
+  network in containerized installs, including adopted Traefik containers, so
+  the HTTP provider endpoint can resolve the `openlander` container DNS name.
 
 ## [0.1.16-rc.7] - 2026-06-08
 

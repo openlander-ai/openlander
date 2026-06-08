@@ -147,16 +147,7 @@ export class TraefikManager {
       'Found legacy OpenLander Traefik — adopting',
     );
 
-    const connected = await this.connectContainerToNetworkByName(
-      candidate.name,
-      SHARED_NETWORK_NAME,
-    );
-    if (!connected) {
-      log.warn(
-        'Failed to connect adopted Traefik to shared network — falling back to new container',
-      );
-      return false;
-    }
+    await this.ensureTraefikRuntimeNetworks(candidate.name);
 
     try {
       await this.runtime.removeContainer(this.containerName);
@@ -254,11 +245,15 @@ export class TraefikManager {
   }
 
   private async ensureMultiNetwork(): Promise<void> {
-    await this.connectToNetwork(SHARED_NETWORK_NAME);
-    await this.ensureOpenLanderContainerNetworks();
+    await this.ensureTraefikRuntimeNetworks(this.containerName);
   }
 
-  private async ensureOpenLanderContainerNetworks(): Promise<void> {
+  private async ensureTraefikRuntimeNetworks(containerName: string): Promise<void> {
+    await this.connectContainerToNetworkByName(containerName, SHARED_NETWORK_NAME);
+    await this.ensureOpenLanderContainerNetworks(containerName);
+  }
+
+  private async ensureOpenLanderContainerNetworks(traefikContainerName: string): Promise<void> {
     if (!isContainerizedRuntime()) {
       return;
     }
@@ -269,7 +264,7 @@ export class TraefikManager {
       );
       const networks = Object.keys(info.NetworkSettings.Networks);
       for (const networkName of networks) {
-        await this.connectContainerToNetworkByName(this.containerName, networkName);
+        await this.connectContainerToNetworkByName(traefikContainerName, networkName);
       }
     } catch (err) {
       log.warn(

@@ -637,6 +637,64 @@ describe('TraefikManager', () => {
     );
   });
 
+  it('connects adopted Traefik to the OpenLander container network in containerized runtime', async () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const adopted = createMockContainer('openlander-traefik', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+      state: 'running',
+    });
+    const runtime = {
+      listAllContainers: vi.fn(async () => [adopted]),
+      inspectContainer: vi.fn(async (containerName: string) => {
+        if (containerName === adopted.name) {
+          return {
+            Config: {
+              Cmd: [
+                '--api.insecure=true',
+                '--providers.http.endpoint=http://openlander:10114/api/traefik/config',
+                '--providers.http.pollInterval=5s',
+                '--entrypoints.web.address=:80',
+              ],
+            },
+          };
+        }
+        if (containerName === 'openlander') {
+          return {
+            NetworkSettings: {
+              Networks: {
+                openlander_default: {},
+              },
+            },
+          };
+        }
+        throw new Error('container not found');
+      }),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander' });
+
+    await manager.start();
+
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+      'openlander-traefik',
+      'openlander',
+    );
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+      'openlander-traefik',
+      'openlander_default',
+    );
+    expect(runtime.runInfraContainer).not.toHaveBeenCalled();
+  });
+
   it('recreates legacy Traefik containers that still enable the Docker provider', async () => {
     const legacy = createMockContainer('legacy-traefik', {
       labels: {
