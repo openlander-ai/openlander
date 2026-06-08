@@ -502,6 +502,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -538,6 +539,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -584,6 +586,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -622,6 +625,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -676,6 +680,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -685,20 +690,15 @@ describe('TraefikManager', () => {
     await manager.start();
     await manager.connectToNetwork('ol-ledgerly');
 
+    expect(runtime.renameContainer).toHaveBeenCalledWith(adopted.id, 'traefik-ol');
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'openlander');
     expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
-      'openlander-traefik',
-      'openlander',
-    );
-    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
-      'openlander-traefik',
+      'traefik-ol',
       'openlander_default',
     );
-    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
-      'openlander-traefik',
-      'ol-ledgerly',
-    );
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'ol-ledgerly');
     expect(runtime.connectContainerToNetwork).not.toHaveBeenCalledWith(
-      'traefik-ol',
+      'openlander-traefik',
       'ol-ledgerly',
     );
     expect(runtime.runInfraContainer).not.toHaveBeenCalled();
@@ -732,6 +732,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -777,6 +778,7 @@ describe('TraefikManager', () => {
       ensureNetwork: vi.fn(async () => undefined),
       connectContainerToNetwork: vi.fn(async () => undefined),
       removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
       pullImage: vi.fn(async () => undefined),
       runInfraContainer: vi.fn(async () => 'new-traefik'),
     } as unknown as Docker;
@@ -785,7 +787,8 @@ describe('TraefikManager', () => {
 
     await manager.start();
 
-    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(legacy.name, 'openlander');
+    expect(runtime.renameContainer).toHaveBeenCalledWith(legacy.id, 'traefik-ol');
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'openlander');
     expect(runtime.runInfraContainer).not.toHaveBeenCalled();
   });
 });
