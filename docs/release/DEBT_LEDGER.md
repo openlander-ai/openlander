@@ -39,6 +39,26 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.14
 
+- **Existing-service `deploy_app` source-update composition during data-model
+  freeze:** existing-service `deploy_app` can now accept source-only changes
+  (`repo_url`, `branch`, `source`, `image`, `port`) and compose the existing
+  `update_application_source` save step with `update_app`.
+- **Why accepted:** lower-rung D3 QA showed agents naturally try
+  `deploy_app(service_id, branch=...)` when asked to ship a branch update. The
+  previous response was safe but forced a detour through
+  `update_application_source` before `update_app`, which made otherwise safe
+  updates fail strict clean-agent scoring.
+- **Vocab review:** no new MCP action, REST route, input parameter, database
+  field, or helper-call field is introduced. The response reuses existing
+  `status_call`, `diagnostic_call`, `_agent_guidance`, and the existing source
+  vocabulary. `dockerfile_path` / `docker_target` remain build-config changes
+  and still require `update_service_config`, then `update_app`.
+- **Endpoint collision check:** no composite slot or endpoint is added; this is
+  a behavior change inside the existing `openlander_deploy.deploy_app` slot.
+- **Follow-up:** if agents start mixing build config and source changes in one
+  call, keep rejecting the mixed request rather than broadening `deploy_app`
+  into a general settings API.
+
 - **Force-strategy guidance tightening during data-model freeze:** existing
   `update_app` / `redeploy_app` / `deploy_app` delegation / `restart_service`
   responses now warn when the force replacement path is used and no longer return
