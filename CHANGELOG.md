@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and start `update_app` in one structured path when the caller explicitly
   targets a service. Dockerfile/build config changes still use
   `update_service_config`, then `update_app`.
+- Tighten deploy-plan env value validation by removing fixture-specific
+  `EXCHANGE_API_*` rules and treating any provided placeholder or structurally
+  invalid value as blocking input, even when the key itself is optional.
 
 ## [0.1.16-rc.3] - 2026-06-08
 
