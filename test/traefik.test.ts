@@ -602,6 +602,41 @@ describe('TraefikManager', () => {
     );
   });
 
+  it('connects managed Traefik to the OpenLander container network in containerized runtime', async () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const runtime = {
+      listAllContainers: vi.fn(async () => []),
+      inspectContainer: vi.fn(async (containerName: string) => {
+        if (containerName !== 'openlander') {
+          throw new Error('container not found');
+        }
+        return {
+          NetworkSettings: {
+            Networks: {
+              openlander_default: {},
+            },
+          },
+        };
+      }),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander' });
+
+    await manager.start();
+
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'openlander');
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+      'traefik-ol',
+      'openlander_default',
+    );
+  });
+
   it('recreates legacy Traefik containers that still enable the Docker provider', async () => {
     const legacy = createMockContainer('legacy-traefik', {
       labels: {
