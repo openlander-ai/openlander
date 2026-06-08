@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.1.16-rc.4] - 2026-06-08
+
 ### Changed
 
 - Allow existing-service `deploy_app` requests with source-only changes
