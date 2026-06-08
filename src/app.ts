@@ -5,7 +5,7 @@ import type { ServerContext } from './pipeline/server-context.js';
 import { createLocalServerContext } from './pipeline/server-context.js';
 import { serializeConfig, deserializeConfig, CONFIG_VERSION } from './pipeline/config-snapshot.js';
 import { DeployPipeline } from './pipeline/deploy.js';
-import { TraefikManager } from './pipeline/traefik.js';
+import { appRouteProviderForTraefikMode, TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
 import type { Agent } from './llm/agent.js';
 import { DeployQueue } from './pipeline/deploy-queue.js';
@@ -259,7 +259,8 @@ export async function createAppContext(
 
   const jobManager = new JobManager();
   const env = new EnvManager(db);
-  const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);
+  const routeProvider = appRouteProviderForTraefikMode(config.traefik.mode);
+  const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env, routeProvider);
   const traefik = new TraefikManager(runtime, config.server.port, {
     networkName: config.docker.networkName,
   });
@@ -402,7 +403,7 @@ export async function createAppContext(
   // (Build debugger moved above pipeline creation)
 
   // v0.4: Preview deployer
-  const previewDeployer = new PreviewDeployer(docker, db);
+  const previewDeployer = new PreviewDeployer(docker, db, routeProvider);
 
   // v0.5: Alert monitor
   const alertMonitor = new AlertMonitor(docker, db, eventBus);

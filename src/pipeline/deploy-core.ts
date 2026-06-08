@@ -13,6 +13,7 @@ import type { RuntimeBackend } from './runtime/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, clearPortScanCache, releasePortReservation, scanUsedPorts } from './port.js';
 import {
+  appRouteProviderForTraefikMode,
   ensureManagedTraefikNetwork,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
@@ -476,9 +477,16 @@ export class DeployPipeline {
       this.stateManager,
       this.coordinator,
     );
-    this.rollbackExecutor = new RollbackExecutor(this.runtime, this.db, this.stateManager);
+    const configuredTraefik = (this.config as Partial<OpenLanderConfig>).traefik;
+    const routeProvider = appRouteProviderForTraefikMode(configuredTraefik?.mode ?? 'managed');
+    this.rollbackExecutor = new RollbackExecutor(
+      this.runtime,
+      this.db,
+      this.stateManager,
+      routeProvider,
+    );
     this.buildExecutor = new BuildExecutor(this.runtime);
-    this.containerRunner = new ContainerRunner(this.runtime, this.db);
+    this.containerRunner = new ContainerRunner(this.runtime, this.db, routeProvider);
     void this.cleanupStaleTunnels().catch((err: unknown) => {
       log.debug({ err }, 'Stale tunnel cleanup failed');
     });

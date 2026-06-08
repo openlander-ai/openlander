@@ -23,19 +23,34 @@ a release should be recorded here so follow-up work is explicit.
   downtime before force replacement.
 
 - **Managed Traefik adoption guard:** legacy OpenLander Traefik containers are
-  no longer adopted unless their command includes the HTTP provider endpoint and
-  the expected Docker network.
-- **Why accepted:** ordinary Docker-label deployments can keep working with a
-  legacy Docker-provider-only Traefik container, but blue-green cutover and
-  route-config updates depend on the DB-driven HTTP provider. Adopting a legacy
-  container without that provider lets route probes see the old blue container
-  and then drop to 404 when blue is removed.
+  no longer adopted unless their command uses the OpenLander HTTP provider
+  without the Docker provider.
+- **Why accepted:** managed app routing now has one source of truth: the
+  DB-driven HTTP provider. Docker-label app routers can let a stale blue
+  container return 200 during blue-green verification, then disappear when blue
+  is stopped. Recreating older Docker+HTTP-provider Traefik containers removes
+  that split-brain route source during upgrades.
 - **Vocab review:** no user-facing vocabulary changes. This is startup/runtime
   compatibility hardening for the managed Traefik container.
 - **Endpoint collision check:** no MCP action, REST route, or schema field is
   added.
 - **Follow-up:** add an operator-visible diagnostic if managed Traefik is
   running without the HTTP provider after manual container changes.
+
+- **Managed app routes are HTTP-provider-only:** managed-mode app, compose,
+  preview, recovery, and rollback containers no longer publish Docker-label
+  Host routers. Their public routes are emitted only by `/api/traefik/config`
+  from active service rows and active preview records.
+- **Why accepted:** blue-green, same-image recreate, and live route re-pointing
+  all mutate the active backend in the OpenLander database. Keeping Docker-label
+  routers on app containers creates two route authorities and makes route probes
+  unable to distinguish "green is live" from "stale blue answered." HTTP-only
+  managed routing makes route cutover deterministic.
+- **Vocab review:** no new action, route, schema field, or MCP response helper.
+  This changes only the internal routing provider used by managed Traefik.
+- **Endpoint collision check:** no endpoint or composite slot is added.
+- **Follow-up:** run one upgraded-host blue-green success promotion smoke before
+  publishing the next RC as stable.
 
 ## v0.1.14
 

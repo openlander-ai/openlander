@@ -306,22 +306,26 @@ update_app(
 
 Eligible git/image services only. Compose stacks, services without a health
 check, services outside managed OpenLander/Traefik routing, and direct
-`localhost:{assigned_port}` host-port access are not covered. OpenLander starts a
-green container, waits for health, flips the Traefik HTTP-provider route to the
-green container, probes the route, then removes the old blue container. If the
-green build/health/route probe fails, the old blue route stays active and the
-green container is cleaned up.
+`localhost:{assigned_port}` host-port access are not covered. In managed mode,
+OpenLander app routes are emitted by the Traefik HTTP provider from active
+service rows and active preview records; app containers do not publish their own
+Docker-label Host routers.
+OpenLander starts a green container, waits for health, flips the HTTP-provider
+route to the green container, probes the route, stops blue, verifies the public
+route still reaches green, then removes the old blue container. If the green
+build/health/route probe fails, the old blue route stays active and the green
+container is cleaned up.
 
 This is a best-effort zero-downtime path, not a hard guarantee. OpenLander waits
-for the managed Traefik HTTP provider to poll the updated route and probes the
-public route before removing blue, then keeps blue until green survives a
-post-switch stability window. If Traefik polling is delayed beyond that window,
-a short blip is still possible. Stronger green-identity verification is tracked
-as a follow-up.
+for the managed Traefik HTTP provider to poll the updated route, probes the
+public route before stopping blue, and verifies the route again after blue is
+stopped. If Traefik polling is delayed beyond that window, a short blip is still
+possible, but OpenLander rolls back to blue when the post-blue-stop route check
+does not stay reachable.
 
 When `strategy` is omitted, `update_app` uses blue-green automatically for
-eligible services and falls back to `force` when blue-green is not currently
-eligible. If `force` is used explicitly or as a fallback, wait for
+eligible services and blocks when blue-green is not currently eligible. If
+`force` is used explicitly, wait for
 `get_deploy_status` to reach a terminal state and call `diagnose_service` before
 reporting success. Pass `strategy: "force"` explicitly only when downtime is
 acceptable and the user wants the shorter replacement path.

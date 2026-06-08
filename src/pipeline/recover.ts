@@ -9,7 +9,11 @@ import {
 } from './helpers.js';
 import { SERVICE_MEMORY_LIMITS, SERVICE_TEMPLATES } from './service-manager.js';
 import { getServiceAdapter } from './service-adapters/index.js';
-import { buildTraefikLabels, ensureManagedTraefikNetwork } from './traefik.js';
+import {
+  appRouteProviderForTraefikMode,
+  buildTraefikLabels,
+  ensureManagedTraefikNetwork,
+} from './traefik.js';
 import { allocatePort } from './port.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
@@ -278,7 +282,7 @@ async function recoverProject(
       }
     }
 
-    // Build traefik labels
+    // Build app route labels. Managed Traefik routes are emitted by the HTTP provider.
     const networkName = await ctx.docker.ensureProjectNetwork(project.name);
     await ensureManagedTraefikNetwork(ctx.docker, networkName);
     const traefikLabels = buildTraefikLabels(
@@ -287,6 +291,7 @@ async function recoverProject(
       undefined,
       'production',
       networkName,
+      appRouteProviderForTraefikMode(ctx.config.traefik.mode),
     );
 
     // Remove any stale container with same name

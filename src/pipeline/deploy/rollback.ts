@@ -62,6 +62,7 @@ export class RollbackExecutor {
         options?: StateTransitionOptions,
       ) => Promise<boolean>;
     },
+    private readonly routeProvider: 'docker-labels' | 'http-provider' = 'docker-labels',
   ) {
     this.stateManager = stateManager ?? createFallbackStateManager(db);
   }
@@ -165,6 +166,7 @@ export class RollbackExecutor {
           undefined,
           envType,
           networkName,
+          this.routeProvider,
         ),
         network: networkName,
         aliases: [project.name],

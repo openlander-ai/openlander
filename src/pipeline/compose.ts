@@ -187,6 +187,7 @@ export class ComposePipeline {
     private readonly events: EventBus,
     private readonly jobManager?: JobManager,
     private readonly env?: EnvManager,
+    private readonly routeProvider: 'docker-labels' | 'http-provider' = 'docker-labels',
   ) {}
 
   setStateManager(stateManager: ProjectStateTransitioner): void {
@@ -875,6 +876,7 @@ export class ComposePipeline {
               undefined,
               envType,
               activeProjectNetwork,
+              this.routeProvider,
             );
             const resolvedEnvVars = this.resolveComposeServiceEnvVars(composeService, envVars);
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
