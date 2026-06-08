@@ -5,15 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Connect OpenLander-managed Traefik to the OpenLander container's compose
+  network in containerized installs, so the HTTP provider endpoint can resolve
+  the `openlander` container DNS name.
+
 ## [0.1.16-rc.7] - 2026-06-08
 
 ### Fixed
 
 - Point the managed Traefik HTTP provider at the OpenLander container DNS name
-  in containerized installs, connect Traefik to the OpenLander container's
-  compose network, and recreate older Traefik containers whose provider
-  endpoint still targets `host.docker.internal`, so custom `OPENLANDER_PORT`
-  host mappings do not break app routes or blue-green cutovers.
+  in containerized installs, and recreate older Traefik containers whose
+  provider endpoint still targets `host.docker.internal`, so custom
+  `OPENLANDER_PORT` host mappings do not break app routes or blue-green
+  cutovers.
 
 ## [0.1.16-rc.6] - 2026-06-08
 
