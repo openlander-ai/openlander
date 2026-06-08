@@ -299,9 +299,9 @@ export interface RedeployOptions {
   routeProbeTimeoutMs?: number;
   /** @internal Public route path used only to verify ingress reachability after a flip. */
   routeProbePath?: string;
-  /** @internal Keep blue serving until green survives this post-switch observation window. */
+  /** @internal Keep blue serving until green survives this pre-switch observation window. */
   postSwitchStabilityMs?: number;
-  /** @internal Poll interval while observing green after the route switch. */
+  /** @internal Poll interval while observing green before the route switch. */
   postSwitchStabilityPollIntervalMs?: number;
   /** @internal Non-interactive callers cannot ask the user; fall back to a deterministic workload. */
   allowMultiServiceProjectFallback?: boolean;
@@ -1216,13 +1216,13 @@ export class DeployPipeline {
       return `Green container entered a restart loop${exitCode}`;
     }
     if (!info.State.Running) {
-      return `Green container stopped during post-switch stability check${exitCode}`;
+      return `Green container stopped during blue-green stability check${exitCode}`;
     }
     if (restartDelta > 0) {
-      return `Green container restarted ${String(restartDelta)} time(s) during post-switch stability check`;
+      return `Green container restarted ${String(restartDelta)} time(s) during blue-green stability check`;
     }
     if (info.State.Health?.Status === 'unhealthy') {
-      return 'Green container healthcheck became unhealthy during post-switch stability check';
+      return 'Green container healthcheck became unhealthy during blue-green stability check';
     }
     return undefined;
   }
@@ -3237,6 +3237,25 @@ export class DeployPipeline {
       }
       buildLog += `[health] Passed after ${String(probeResult.elapsedMs)}ms (${String(probeResult.attempts)} attempt(s), ${probeResult.source})\n`;
 
+      buildLog += `[stability] Observing green container for ${String(postSwitchStabilityMs)}ms before switching route\n`;
+      const stability = await this.observeBlueGreenStability({
+        containerId: greenContainerId,
+        observeMs: postSwitchStabilityMs,
+        intervalMs: postSwitchStabilityPollIntervalMs,
+      });
+      if (!stability.ok) {
+        buildLog += `[stability] Failed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s)): ${stability.error}\n`;
+        shouldCleanupGreen = true;
+        buildLog += '[route] Active target remained on blue after green stability failure\n';
+        throw new BlueGreenStabilityError(stability.error, {
+          projectId,
+          greenContainerId,
+          checks: stability.checks,
+          elapsedMs: stability.elapsedMs,
+        });
+      }
+      buildLog += `[stability] Passed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s))\n`;
+
       buildLog += `[route] Switching active Traefik target to ${greenName}\n`;
       await this.transitionProjectState(projectId, 'running', 'deploy-success', {
         containerId: greenContainerId,
@@ -3277,28 +3296,6 @@ export class DeployPipeline {
       }
       routeSwitched = true;
       buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
-
-      buildLog += `[stability] Observing green container for ${String(postSwitchStabilityMs)}ms before removing blue\n`;
-      const stability = await this.observeBlueGreenStability({
-        containerId: greenContainerId,
-        observeMs: postSwitchStabilityMs,
-        intervalMs: postSwitchStabilityPollIntervalMs,
-      });
-      if (!stability.ok) {
-        buildLog += `[stability] Failed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s)): ${stability.error}\n`;
-        await this.restoreBlueState({ projectId, environmentId, blue: blueState });
-        routeTargetUpdated = false;
-        routeSwitched = false;
-        shouldCleanupGreen = true;
-        buildLog += '[route] Rolled active target back to blue after green stability failure\n';
-        throw new BlueGreenStabilityError(stability.error, {
-          projectId,
-          greenContainerId,
-          checks: stability.checks,
-          elapsedMs: stability.elapsedMs,
-        });
-      }
-      buildLog += `[stability] Passed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s))\n`;
       shouldCleanupGreen = false;
 
       try {

@@ -365,15 +365,23 @@ describe('blue-green route target flip', () => {
     );
 
     const updateProjectMock = db.updateProject as ReturnType<typeof vi.fn>;
+    const inspectContainerMock = docker.inspectContainer as ReturnType<typeof vi.fn>;
     const stopContainerMock = docker.stopContainer as ReturnType<typeof vi.fn>;
+    const inspectGreenCallIndex = inspectContainerMock.mock.calls.findIndex(
+      ([containerId]) => containerId === 'container-green',
+    );
     const greenUpdateCallIndex = updateProjectMock.mock.calls.findIndex(
       ([, updates]) => (updates as Record<string, unknown>).containerId === 'container-green',
     );
     const stopBlueCallIndex = stopContainerMock.mock.calls.findIndex(
       ([containerId]) => containerId === 'container-blue',
     );
+    expect(inspectGreenCallIndex).toBeGreaterThanOrEqual(0);
     expect(greenUpdateCallIndex).toBeGreaterThanOrEqual(0);
     expect(stopBlueCallIndex).toBeGreaterThanOrEqual(0);
+    expect(inspectContainerMock.mock.invocationCallOrder[inspectGreenCallIndex]).toBeLessThan(
+      updateProjectMock.mock.invocationCallOrder[greenUpdateCallIndex],
+    );
     expect(updateProjectMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
       stopContainerMock.mock.invocationCallOrder[stopBlueCallIndex],
     );
@@ -661,7 +669,7 @@ describe('blue-green route target flip', () => {
     );
   });
 
-  it('keeps blue serving when green restarts during the post-switch stability window', async () => {
+  it('keeps blue serving when green restarts during the pre-switch stability window', async () => {
     const mockDocker = createMockDocker({
       greenInspectSequence: [
         { State: { Running: true }, RestartCount: 0 },
@@ -672,6 +680,7 @@ describe('blue-green route target flip', () => {
     pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
     mockRouteProbe(200);
+    const previousRouteProbeCalls = mockHttpRequest.mock.calls.length;
 
     const result = await pipeline.redeploy('p1', {
       strategy: 'blue-green',
@@ -692,6 +701,11 @@ describe('blue-green route target flip', () => {
     expect(result.error).toContain('restarted 1 time');
     expect(state.service.container_id).toBe('container-blue');
     expect(state.service.container_name).toBe('ol-demo-app');
+    expect(mockHttpRequest.mock.calls.length).toBe(previousRouteProbeCalls);
+    expect(db.updateProject).not.toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ containerId: 'container-green' }),
+    );
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
       'container-blue',
     );
