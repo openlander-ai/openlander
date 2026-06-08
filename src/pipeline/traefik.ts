@@ -64,9 +64,9 @@ export class TraefikManager {
     }
   }
 
-  private async hasCurrentConfig(): Promise<boolean> {
+  private async containerHasCurrentConfig(containerName: string): Promise<boolean> {
     try {
-      const info = await this.runtime.inspectContainer(this.containerName);
+      const info = await this.runtime.inspectContainer(containerName);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const cmd: string[] = info.Config.Cmd ?? [];
       const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
@@ -77,6 +77,10 @@ export class TraefikManager {
     } catch (_err) {
       return false;
     }
+  }
+
+  private async hasCurrentConfig(): Promise<boolean> {
+    return await this.containerHasCurrentConfig(this.containerName);
   }
 
   async ensureNetwork(): Promise<void> {
@@ -119,6 +123,14 @@ export class TraefikManager {
     const candidate = running.find((c) => c.name !== this.containerName);
 
     if (!candidate) {
+      return false;
+    }
+
+    if (!(await this.containerHasCurrentConfig(candidate.name))) {
+      log.info(
+        { existingContainer: candidate.name },
+        'Found legacy OpenLander Traefik without HTTP provider — recreating',
+      );
       return false;
     }
 

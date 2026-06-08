@@ -605,7 +605,7 @@ describe('deployable service target resolution', () => {
     );
   });
 
-  it('falls back to force when implicit blue-green is not eligible', async () => {
+  it('blocks implicit updates when blue-green is not eligible instead of falling back to force', async () => {
     const ctx = createDuplicateServiceContext();
     (ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       supported: false,
@@ -620,29 +620,23 @@ describe('deployable service target resolution', () => {
     );
 
     expect(result).toMatchObject({
-      status: 'deploying',
-      strategy: 'force',
-      message:
-        'Deployment started with force fallback because blue-green is not currently eligible. Poll get_deploy_status and diagnose_service before reporting success.',
-      warnings: expect.arrayContaining([
-        expect.stringContaining(
-          'OpenLander selected force because blue-green is not currently eligible',
-        ),
-      ]),
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      reasons: ['An explicit health_check_path is required.'],
       _agent_guidance: {
+        message:
+          'No update was started because this Application is not currently eligible for zero-downtime blue-green. OpenLander will not fall back to force without an explicit user downtime decision.',
         next_steps: expect.arrayContaining([
           expect.stringContaining(
-            'Force redeploy was used because blue-green is not currently eligible',
+            'First make the Application eligible for blue-green',
           ),
+          expect.stringContaining('If the user explicitly accepts downtime'),
         ]),
       },
     });
-    await vi.waitFor(() =>
-      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
-        'alpha__svc',
-        expect.objectContaining({ strategy: 'force' }),
-      ),
-    );
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
   it('blocks image/manual-restore redeploys without an image source before acquiring a deploy lock', async () => {

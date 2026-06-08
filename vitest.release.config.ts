@@ -25,6 +25,7 @@ export default defineConfig({
       'test/mcp-service-tools.test.ts',
       'test/notifications-routes-ssrf.test.ts',
       'test/tool-registry.test.ts',
+      'test/traefik.test.ts',
       'test/traefik-env.test.ts',
       'test/auth/google-oauth.test.ts',
       'test/auth/token-refresh.test.ts',

@@ -374,11 +374,8 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
             code: eligibility.code,
             strategy: 'blue-green',
             reasons: eligibility.reasons,
-            fallback_strategy: eligibility.fallback_strategy,
-            fallback_call: {
-              method: 'POST',
-              path: `/api/projects/${project.id}/services/${service.id}/deploy?strategy=force`,
-            },
+            guidance:
+              'Make the service eligible for blue-green first. Use strategy=force only after the user explicitly accepts downtime.',
           },
           409,
         );

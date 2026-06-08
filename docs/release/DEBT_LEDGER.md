@@ -3,6 +3,40 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.16
+
+- **No automatic force fallback for app updates:** existing
+  `update_app` / `redeploy_app` no-strategy calls now block when blue-green is
+  not eligible instead of silently selecting `strategy="force"`.
+- **Why accepted:** OpenLander's update policy is zero-downtime by default.
+  Force replacement can cause downtime and must represent an explicit user
+  decision, not an agent fallback. Weak-model QA showed that force wording can
+  turn a safe preserved blue-green failure into a downtime-prone retry path.
+- **Vocab review:** no new MCP action, REST route, input parameter, database
+  field, or target vocabulary is introduced. Existing `strategy="force"` remains
+  the compatibility opt-in for users who explicitly accept downtime.
+- **Endpoint collision check:** no endpoint or composite slot is added. The
+  change only alters the no-strategy branch and removes force fallback call
+  guidance from existing responses.
+- **Follow-up:** after blue-green route cutover is stable across fresh and
+  upgraded hosts, consider adding a clearer operator UI affordance for accepting
+  downtime before force replacement.
+
+- **Managed Traefik adoption guard:** legacy OpenLander Traefik containers are
+  no longer adopted unless their command includes the HTTP provider endpoint and
+  the expected Docker network.
+- **Why accepted:** ordinary Docker-label deployments can keep working with a
+  legacy Docker-provider-only Traefik container, but blue-green cutover and
+  route-config updates depend on the DB-driven HTTP provider. Adopting a legacy
+  container without that provider lets route probes see the old blue container
+  and then drop to 404 when blue is removed.
+- **Vocab review:** no user-facing vocabulary changes. This is startup/runtime
+  compatibility hardening for the managed Traefik container.
+- **Endpoint collision check:** no MCP action, REST route, or schema field is
+  added.
+- **Follow-up:** add an operator-visible diagnostic if managed Traefik is
+  running without the HTTP provider after manual container changes.
+
 ## v0.1.14
 
 - **Force-strategy guidance tightening during data-model freeze:** existing

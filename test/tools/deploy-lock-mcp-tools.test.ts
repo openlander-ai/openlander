@@ -52,7 +52,14 @@ function createLockedContext(): AppContext {
       executePlan: vi.fn(),
     },
     pipeline: {
+      getBlueGreenEligibility: vi.fn(async () => ({
+        supported: true,
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        reasons: [],
+        fallback_strategy: 'force',
+      })),
       redeploy: vi.fn(),
+      redeployService: vi.fn(),
       rollback: vi.fn(),
     },
     deployQueue: {

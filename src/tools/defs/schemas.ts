@@ -1016,7 +1016,7 @@ export const deploySchema = z
       .enum(['blue-green', 'force'])
       .optional()
       .describe(
-        'When deploy_app resolves an existing service, redeploy strategy. Defaults to blue-green when eligible; otherwise force.',
+        'When deploy_app resolves an existing service, redeploy strategy. Omit for the safe default: blue-green when eligible, otherwise block. Use force only when the user explicitly accepts downtime.',
       ),
     health_check_path: z
       .string()

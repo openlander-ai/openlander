@@ -47,6 +47,12 @@ describe('deploy MCP guidance', () => {
       pipeline: {
         redeploy: vi.fn(async () => undefined),
         redeployService: vi.fn(async () => undefined),
+        getBlueGreenEligibility: vi.fn(async () => ({
+          supported: true,
+          code: 'BLUE_GREEN_UNSUPPORTED',
+          fallback_strategy: 'force',
+          reasons: [],
+        })),
       },
       env: {
         setBulkForServiceDetailed: vi.fn(async () => [{ key: 'DATABASE_URL', op: 'set' }]),
@@ -100,8 +106,8 @@ describe('deploy MCP guidance', () => {
 
   // Regression pin (2026-06-07): deploy_app delegation to an existing service must resolve the
   // deploy strategy exactly like redeploy_app — eligible -> blue-green, explicit -> respected,
-  // ineligible -> force fallback with a reason. Guards against re-misreading a force *fallback*
-  // (or an explicit operator force) as a "delegation defaults to force" platform gap.
+  // ineligible -> blocked with a reason. Guards against treating force fallback
+  // as an implicit user downtime decision.
   const makeExistingServiceDeployCtx = (eligibility?: {
     supported: boolean;
     reasons?: string[];
@@ -133,7 +139,16 @@ describe('deploy MCP guidance', () => {
       pipeline: {
         redeploy: vi.fn(async () => undefined),
         redeployService: vi.fn(async () => undefined),
-        ...(eligibility ? { getBlueGreenEligibility: vi.fn(async () => eligibility) } : {}),
+        ...(eligibility
+          ? {
+              getBlueGreenEligibility: vi.fn(async () => ({
+                code: 'BLUE_GREEN_UNSUPPORTED',
+                fallback_strategy: 'force',
+                reasons: [],
+                ...eligibility,
+              })),
+            }
+          : {}),
       },
       env: {
         setBulkForServiceDetailed: vi.fn(async () => []),
@@ -194,7 +209,7 @@ describe('deploy MCP guidance', () => {
     expect(ctx.pipeline.getBlueGreenEligibility).not.toHaveBeenCalled();
   });
 
-  it('deploy_app delegation falls back to force with a reason when ineligible for blue-green', async () => {
+  it('deploy_app delegation blocks with a reason when ineligible for blue-green', async () => {
     const ctx = makeExistingServiceDeployCtx({
       supported: false,
       reasons: ['No managed OpenLander Traefik route configured.'],
@@ -205,26 +220,24 @@ describe('deploy MCP guidance', () => {
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
-      strategy: 'force',
-      message:
-        'App update started with force fallback because blue-green is not currently eligible. Poll get_deploy_status and diagnose_service before reporting success.',
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      reasons: ['No managed OpenLander Traefik route configured.'],
     });
     expect(result['zero_downtime']).toBeUndefined();
     expect(result).toMatchObject({
-      warnings: expect.arrayContaining([
-        expect.stringContaining(
-          'OpenLander selected force because blue-green is not currently eligible',
-        ),
-      ]),
+      _agent_guidance: {
+        message: expect.stringContaining('will not fall back to force'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('First make the Application eligible for blue-green'),
+          expect.stringContaining('If the user explicitly accepts downtime'),
+        ]),
+      },
     });
-    await vi.waitFor(() =>
-      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
-        'app__svc',
-        expect.objectContaining({ strategy: 'force' }),
-      ),
-    );
-    // force fallback must surface WHY blue-green was skipped (survives the delegation guidance merge)
-    expect(JSON.stringify(result)).toContain('blue-green is not currently eligible');
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    // blocked response must surface WHY blue-green was skipped (survives the delegation guidance merge)
+    expect(JSON.stringify(result)).toContain('No managed OpenLander Traefik route configured.');
   });
 
   it('rejects source/build overrides when deploy_app resolves an existing service by name', async () => {
@@ -356,6 +369,12 @@ describe('deploy MCP guidance', () => {
       pipeline: {
         redeploy: vi.fn(async () => undefined),
         redeployService: vi.fn(async () => undefined),
+        getBlueGreenEligibility: vi.fn(async () => ({
+          supported: true,
+          code: 'BLUE_GREEN_UNSUPPORTED',
+          fallback_strategy: 'force',
+          reasons: [],
+        })),
       },
       planEngine: {
         createPlan: vi.fn(),

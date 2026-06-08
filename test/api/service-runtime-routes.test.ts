@@ -398,7 +398,7 @@ describe('createServiceRuntimeRoutes', () => {
       status: 'blocked',
       code: 'BLUE_GREEN_UNSUPPORTED',
       strategy: 'blue-green',
-      fallback_strategy: 'force',
+      guidance: expect.stringContaining('explicitly accepts downtime'),
     });
   });
 

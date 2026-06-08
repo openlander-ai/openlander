@@ -464,4 +464,94 @@ describe('TraefikManager', () => {
     const manager = new TraefikManager(mockDocker);
     expect(manager).toBeDefined();
   });
+
+  it('recreates legacy Traefik containers that do not expose the HTTP provider', async () => {
+    const legacy = createMockContainer('legacy-traefik', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+    });
+    const runtime = {
+      listAllContainers: vi.fn(async () => [legacy]),
+      inspectContainer: vi.fn(async (containerName: string) => {
+        if (containerName === legacy.name) {
+          return {
+            Config: {
+              Cmd: [
+                '--api.insecure=true',
+                '--providers.docker=true',
+                '--providers.docker.network=openlander-prod',
+              ],
+            },
+          };
+        }
+        throw new Error('container not found');
+      }),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander-prod' });
+
+    await manager.start();
+
+    expect(runtime.inspectContainer).toHaveBeenCalledWith(legacy.name);
+    expect(runtime.removeContainer).toHaveBeenCalledWith(legacy.id);
+    expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: expect.arrayContaining([
+          '--providers.http.endpoint=http://host.docker.internal:10114/api/traefik/config',
+        ]),
+      }),
+    );
+    expect(runtime.connectContainerToNetwork).not.toHaveBeenCalledWith(
+      legacy.name,
+      expect.any(String),
+    );
+  });
+
+  it('adopts legacy Traefik containers only when the HTTP provider config is current', async () => {
+    const legacy = createMockContainer('legacy-traefik', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+    });
+    const runtime = {
+      listAllContainers: vi.fn(async () => [legacy]),
+      inspectContainer: vi.fn(async (containerName: string) => {
+        if (containerName === legacy.name) {
+          return {
+            Config: {
+              Cmd: [
+                '--api.insecure=true',
+                '--providers.docker=true',
+                '--providers.docker.network=openlander-prod',
+                '--providers.http.endpoint=http://host.docker.internal:10114/api/traefik/config',
+              ],
+            },
+          };
+        }
+        throw new Error('container not found');
+      }),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, { networkName: 'openlander-prod' });
+
+    await manager.start();
+
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(legacy.name, 'openlander');
+    expect(runtime.runInfraContainer).not.toHaveBeenCalled();
+  });
 });

@@ -1521,6 +1521,30 @@ export const deployPlanToolDefs: ToolDef[] = [
           'update_app',
         );
         const redeployPayload = redeployResult as Record<string, unknown>;
+        const redeployGuidance =
+          typeof redeployPayload['_agent_guidance'] === 'object' &&
+          redeployPayload['_agent_guidance'] !== null &&
+          !Array.isArray(redeployPayload['_agent_guidance'])
+            ? (redeployPayload['_agent_guidance'] as Record<string, unknown>)
+            : {};
+        const redeployStarted = redeployPayload['status'] === 'deploying';
+        const existingProjectMessage =
+          frontDoorTarget.kind === 'existing_project'
+            ? redeployStarted
+              ? 'This Project already has one Application/Compose workload. OpenLander started an update of the existing workload; do not create a new app. Poll status_call until terminal.'
+              : typeof redeployGuidance['message'] === 'string'
+                ? redeployGuidance['message']
+                : 'This Project already has one Application/Compose workload, but OpenLander did not start an update.'
+            : redeployStarted
+              ? 'OpenLander started an update of the existing Application/Compose workload. Poll status_call until terminal.'
+              : typeof redeployGuidance['message'] === 'string'
+                ? redeployGuidance['message']
+                : 'OpenLander did not start an update of the existing Application/Compose workload.';
+        const redeployNextSteps = Array.isArray(redeployGuidance['next_steps'])
+          ? redeployGuidance['next_steps'].filter(
+              (step): step is string => typeof step === 'string',
+            )
+          : [];
         return {
           ...redeployPayload,
           delegated_action: 'update_app',
@@ -1532,15 +1556,16 @@ export const deployPlanToolDefs: ToolDef[] = [
             ? { existing_service: frontDoorTarget.existingService }
             : {}),
           _agent_guidance: {
-            ...(typeof redeployPayload['_agent_guidance'] === 'object' &&
-            redeployPayload['_agent_guidance'] !== null &&
-            !Array.isArray(redeployPayload['_agent_guidance'])
-              ? (redeployPayload['_agent_guidance'] as Record<string, unknown>)
-              : {}),
-            message:
-              frontDoorTarget.kind === 'existing_project'
-                ? 'This Project already has one Application/Compose workload. OpenLander started an update of the existing workload; do not create a new app. Poll status_call until terminal.'
-                : 'OpenLander started an update of the existing Application/Compose workload. Poll status_call until terminal.',
+            ...redeployGuidance,
+            message: existingProjectMessage,
+            next_steps: [
+              ...redeployNextSteps,
+              ...(frontDoorTarget.kind === 'existing_project'
+                ? [
+                    'Do not create a new app for this Project unless the user explicitly asks for another Application/Compose workload.',
+                  ]
+                : []),
+            ],
           },
         };
       }

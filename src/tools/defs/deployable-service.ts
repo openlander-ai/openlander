@@ -67,7 +67,7 @@ const deployServiceSchema = z
       .enum(['blue-green', 'force'])
       .optional()
       .describe(
-        'Deploy strategy. Defaults to blue-green when the Application is eligible; otherwise falls back to force.',
+        'Deploy strategy. Omit for the safe default: blue-green when eligible, otherwise block. Use force only when the user explicitly accepts downtime.',
       ),
     health_check_path: z.string().optional().describe('Health check endpoint path'),
     cmd: z.array(z.string()).optional().describe('Override container start command'),
@@ -648,7 +648,7 @@ function forceStrategyWarnings(
   return [
     explicit
       ? 'strategy="force" was explicitly requested. Force can replace the serving version and may cause downtime.'
-      : 'OpenLander selected force because blue-green is not currently eligible. Force can replace the serving version and may cause downtime.',
+      : 'A force-style replacement path was selected. It can replace the serving version and may cause downtime.',
     'Do not report success until status_call is terminal and diagnose_service confirms the app is healthy.',
   ];
 }
@@ -680,9 +680,7 @@ function forceStrategyMessage(params: {
 
   const label = params.action === 'update_app' ? 'App update' : 'Deployment';
   const cacheSuffix = params.noCache ? ' (no_cache)' : '';
-  const reason = params.explicit
-    ? 'with strategy="force"'
-    : 'with force fallback because blue-green is not currently eligible';
+  const reason = params.explicit ? 'with strategy="force"' : 'with a force-style replacement path';
   return `${label} started ${reason}${cacheSuffix}. Poll get_deploy_status and diagnose_service before reporting success.`;
 }
 
@@ -703,7 +701,6 @@ export async function runDeployableServiceAction(
   const cmd = args.cmd as string[] | undefined;
   const envVars = parseInternalRedeployEnvVars(args);
   let autoSelectedBlueGreen = false;
-  let blueGreenFallbackReasons: string[] = [];
 
   if (service.archived_at) {
     return buildArchivedServiceRejection(runtimeProject, project);
@@ -784,19 +781,46 @@ export async function runDeployableServiceAction(
       };
     }
   } else if (isUpdateAction && strategy === undefined) {
-    if (getBlueGreenEligibility) {
-      const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
-        healthCheckPath: healthCheckPath?.trim() || undefined,
-      });
-      if (eligibility.supported) {
-        strategy = 'blue-green';
-        autoSelectedBlueGreen = true;
-      } else {
-        strategy = 'force';
-        blueGreenFallbackReasons = eligibility.reasons;
-      }
+    if (!getBlueGreenEligibility) {
+      return {
+        status: 'blocked',
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        strategy: 'blue-green',
+        service: serviceSummary(service, project),
+        reasons: ['Blue-green eligibility checks are unavailable in this runtime.'],
+        _agent_guidance: {
+          message:
+            'No update was started because OpenLander could not verify the zero-downtime path. OpenLander will not use force without an explicit user downtime decision.',
+          next_steps: [
+            'Fix the blue-green eligibility check or inspect service status before retrying.',
+            'If the user explicitly accepts downtime, call the update action with strategy="force".',
+          ],
+        },
+      };
+    }
+
+    const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
+      healthCheckPath: healthCheckPath?.trim() || undefined,
+    });
+    if (eligibility.supported) {
+      strategy = 'blue-green';
+      autoSelectedBlueGreen = true;
     } else {
-      strategy = 'force';
+      return {
+        status: 'blocked',
+        code: eligibility.code,
+        strategy: 'blue-green',
+        service: serviceSummary(service, project),
+        reasons: eligibility.reasons,
+        _agent_guidance: {
+          message:
+            'No update was started because this Application is not currently eligible for zero-downtime blue-green. OpenLander will not fall back to force without an explicit user downtime decision.',
+          next_steps: [
+            'First make the Application eligible for blue-green, for example by configuring a health_check_path and an OpenLander-managed route.',
+            'If the user explicitly accepts downtime, call the update action with strategy="force".',
+          ],
+        },
+      };
     }
   }
   if (action === 'restart_service') {
@@ -932,11 +956,7 @@ export async function runDeployableServiceAction(
         `If deployment fails or times out, call openlander_monitor.diagnose_service with service_id="${service.id}".`,
         ...(autoSelectedBlueGreen
           ? ['Blue-green was selected automatically because this Application is eligible.']
-          : blueGreenFallbackReasons.length > 0
-            ? [
-                `Force redeploy was used because blue-green is not currently eligible: ${blueGreenFallbackReasons.join(' ')}`,
-              ]
-            : []),
+          : []),
         ...(strategy === 'force' ? forceStrategyGuidance(action) : []),
       ],
     },
@@ -997,9 +1017,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_app',
     riskLevel: 'medium',
     description:
-      'Update an existing Application/worker from its stored source/image to the latest revision. Defaults to blue-green when eligible; otherwise force fallback. Runs in background; poll get_deploy_status for progress.',
+      'Update an existing Application/worker from its stored source/image to the latest revision. Defaults to blue-green when eligible; otherwise blocks until the user explicitly accepts force downtime. Runs in background; poll get_deploy_status for progress.',
     mcpDescription:
-      'Update an existing Application/worker to the latest stored source revision. Safe default: blue-green when eligible.',
+      'Update an existing Application/worker to the latest stored source revision. Safe default: blue-green when eligible; no automatic force fallback.',
     inputSchema: deployServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'update_app'),
   },

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.16-rc.3] - 2026-06-08
+
+### Changed
+
+- Block no-strategy `update_app` / `redeploy_app` calls when blue-green is not
+  eligible instead of falling back to `strategy="force"` without an explicit
+  user downtime decision.
+
+### Fixed
+
+- Recreate legacy OpenLander Traefik containers that do not expose the HTTP
+  provider, so blue-green route cutovers and route-config updates are not
+  validated against stale Docker-label routes that disappear after blue cleanup.
+
 ## [0.1.16-rc.2] - 2026-06-08
 
 ### Fixed
