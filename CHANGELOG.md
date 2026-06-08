@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Reconnect OpenLander-managed Traefik to existing active project networks on
+  startup/adoption, so HTTP-provider-only upgraded hosts can still resolve
+  existing app, compose, rollback, and recovery container backends.
+
 ## [0.1.16-rc.5] - 2026-06-08
 
 ### Changed

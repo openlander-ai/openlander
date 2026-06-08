@@ -52,6 +52,23 @@ a release should be recorded here so follow-up work is explicit.
 - **Follow-up:** run one upgraded-host blue-green success promotion smoke before
   publishing the next RC as stable.
 
+- **Managed Traefik network resync on startup:** after managed Traefik starts or
+  is recreated/adopted, OpenLander reconnects it to active project networks that
+  have running/building service containers.
+- **Why accepted:** `/api/traefik/config` intentionally routes to container DNS
+  inside project networks so custom-domain target ports, compose children,
+  rollback, recovery, and blue-green containers share one backend model. When an
+  upgraded host recreates Traefik with the Docker provider disabled, existing
+  project networks must be reattached or otherwise-valid HTTP-provider routes
+  return 502 because Traefik cannot resolve the backend container name.
+- **Vocab review:** no new action, route, schema field, or MCP response helper.
+  This is startup/adoption wiring for the existing managed HTTP-provider route
+  contract.
+- **Endpoint collision check:** no endpoint or composite slot is added.
+- **Follow-up:** keep `/api/traefik/config` using container DNS unless the
+  routing model deliberately moves to host-published ports; mixing both backend
+  address models would reintroduce route-owner ambiguity.
+
 ## v0.1.14
 
 - **Existing-service `deploy_app` source-update composition during data-model
