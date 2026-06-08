@@ -255,6 +255,28 @@ export class TraefikManager {
 
   private async ensureMultiNetwork(): Promise<void> {
     await this.connectToNetwork(SHARED_NETWORK_NAME);
+    await this.ensureOpenLanderContainerNetworks();
+  }
+
+  private async ensureOpenLanderContainerNetworks(): Promise<void> {
+    if (!isContainerizedRuntime()) {
+      return;
+    }
+
+    try {
+      const info = await this.runtime.inspectContainer(
+        TraefikManager.CONTAINERIZED_OPENLANDER_HOST,
+      );
+      const networks = Object.keys(info.NetworkSettings.Networks);
+      for (const networkName of networks) {
+        await this.connectContainerToNetworkByName(this.containerName, networkName);
+      }
+    } catch (err) {
+      log.warn(
+        { err, containerName: TraefikManager.CONTAINERIZED_OPENLANDER_HOST },
+        'Failed to connect Traefik to OpenLander container networks',
+      );
+    }
   }
 
   async stop(): Promise<void> {
