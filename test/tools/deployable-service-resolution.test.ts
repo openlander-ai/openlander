@@ -769,9 +769,9 @@ describe('deployable service target resolution', () => {
       host: 'api.example.com',
       path: '/',
       probeTimeoutMs: 1000,
-      maxWaitMs: 2500,
+      maxWaitMs: 7500,
       intervalMs: 500,
-      minimumSuccessAgeMs: 0,
+      minimumSuccessAgeMs: 5000,
     });
     expect(ctx.db.createDomainMappingForService).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -964,6 +964,15 @@ describe('deployable service target resolution', () => {
 
     expect(ctx.db.updateService).toHaveBeenNthCalledWith(1, 'alpha__svc', { containerPort: 4000 });
     expect(ctx.db.updateService).toHaveBeenNthCalledWith(2, 'alpha__svc', { containerPort: 3000 });
+    expect(ctx.pipeline.verifyManagedTraefikRoute).toHaveBeenNthCalledWith(2, {
+      projectName: 'api',
+      host: 'api.example.com',
+      path: '/',
+      probeTimeoutMs: 1000,
+      maxWaitMs: 7500,
+      intervalMs: 500,
+      minimumSuccessAgeMs: 5000,
+    });
     expect(result).toMatchObject({
       status: 'rolled_back',
       domain_route_health: [

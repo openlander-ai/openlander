@@ -6,6 +6,12 @@ type AppCtx = ToolContext['appCtx'];
 
 export type RouteHealthStatus = 'healthy' | 'warning' | 'error' | 'unknown';
 
+const DOMAIN_ROUTE_PROBE_TIMEOUT_MS = 1_000;
+const DOMAIN_ROUTE_PROBE_INTERVAL_MS = 500;
+const DOMAIN_ROUTE_QUICK_MAX_WAIT_MS = 2_500;
+const TRAEFIK_HTTP_PROVIDER_POLL_WINDOW_MS = 5_000;
+const DOMAIN_ROUTE_MUTATION_MAX_WAIT_MS = TRAEFIK_HTTP_PROVIDER_POLL_WINDOW_MS + 2_500;
+
 export interface ManagedRouteProbe {
   status: 'passed' | 'failed' | 'skipped';
   severity: 'ok' | 'warning' | 'fail';
@@ -25,6 +31,20 @@ export interface DomainRouteHealth {
   mapping_status: DomainMappingRow['status'];
   direct_probe?: ManagedRouteProbe;
 }
+
+export interface DomainRouteProbeTiming {
+  probeTimeoutMs?: number;
+  maxWaitMs?: number;
+  intervalMs?: number;
+  minimumSuccessAgeMs?: number;
+}
+
+export const domainRouteMutationProbeTiming = {
+  probeTimeoutMs: DOMAIN_ROUTE_PROBE_TIMEOUT_MS,
+  maxWaitMs: DOMAIN_ROUTE_MUTATION_MAX_WAIT_MS,
+  intervalMs: DOMAIN_ROUTE_PROBE_INTERVAL_MS,
+  minimumSuccessAgeMs: TRAEFIK_HTTP_PROVIDER_POLL_WINDOW_MS,
+} satisfies Required<DomainRouteProbeTiming>;
 
 function normalizeProbePath(path: string | null | undefined): string {
   const trimmed = path?.trim();
@@ -95,6 +115,7 @@ export async function probeManagedDomainRoute(
     domain: string;
     pathPrefix?: string | null;
   },
+  timing: DomainRouteProbeTiming = {},
 ): Promise<ManagedRouteProbe> {
   const path = normalizeProbePath(params.pathPrefix);
   if (appCtx.config.traefik.mode !== 'managed') {
@@ -113,10 +134,10 @@ export async function probeManagedDomainRoute(
     projectName: getDeployableServiceRouteName(params.service),
     host: params.domain,
     path,
-    probeTimeoutMs: 1_000,
-    maxWaitMs: 2_500,
-    intervalMs: 500,
-    minimumSuccessAgeMs: 0,
+    probeTimeoutMs: timing.probeTimeoutMs ?? DOMAIN_ROUTE_PROBE_TIMEOUT_MS,
+    maxWaitMs: timing.maxWaitMs ?? DOMAIN_ROUTE_QUICK_MAX_WAIT_MS,
+    intervalMs: timing.intervalMs ?? DOMAIN_ROUTE_PROBE_INTERVAL_MS,
+    minimumSuccessAgeMs: timing.minimumSuccessAgeMs ?? 0,
   });
 
   if (result.ok) {
@@ -153,7 +174,7 @@ export async function buildDomainRouteHealth(
   appCtx: AppCtx,
   service: Pick<ServiceRow, 'name'>,
   mappings: readonly DomainMappingRow[],
-  options: { verify?: boolean } = {},
+  options: { verify?: boolean; probeTiming?: DomainRouteProbeTiming } = {},
 ): Promise<DomainRouteHealth[]> {
   return await Promise.all(
     mappings.map(async (mapping) => ({
@@ -162,11 +183,15 @@ export async function buildDomainRouteHealth(
       mapping_status: mapping.status,
       ...(options.verify
         ? {
-            direct_probe: await probeManagedDomainRoute(appCtx, {
-              service,
-              domain: mapping.domain,
-              pathPrefix: mapping.path_prefix,
-            }),
+            direct_probe: await probeManagedDomainRoute(
+              appCtx,
+              {
+                service,
+                domain: mapping.domain,
+                pathPrefix: mapping.path_prefix,
+              },
+              options.probeTiming,
+            ),
           }
         : {}),
     })),
