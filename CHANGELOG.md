@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.17-rc.2] - 2026-06-10
+
+### Fixed
+
+- Wait past the managed Traefik HTTP provider poll window before accepting
+  direct custom-domain route probe success for live domain/route mutations, so
+  `apply_route_config` can no longer treat a stale old-route 2xx as proof that a
+  newly broken `container_port` route is healthy.
+
 ## [0.1.17-rc.1] - 2026-06-10
 
 ### Added
