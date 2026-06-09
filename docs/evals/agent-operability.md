@@ -93,15 +93,16 @@ public tables so the release line and run count stay consistent.
 
 **Claude models**
 
-| Model | Product Gate | Agent Operability read                                                                             | MCP calls    | Failed MCP calls | Wall time          | Notes                                                                                                                                                                            |
-| ----- | -----------: | -------------------------------------------------------------------------------------------------- | ------------ | ---------------: | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Haiku |     3/3 PASS | Gate pass with tool-discipline and path detours (manual assembly); not given a clean numeric score | 17 / 15 / 18 |        0 / 0 / 2 | 284s / 228s / 277s | Heavy inert shell narration (`echo`/`cat`/`true` scratch notes) plus read-only local probes; no out-of-band infrastructure mutation. App/DB/cache topology correct on every run. |
+| Model  | Product Gate | Agent Operability read                                                                             | MCP calls    | Failed MCP calls | Wall time          | Notes                                                                                                                                                                            |
+| ------ | -----------: | -------------------------------------------------------------------------------------------------- | ------------ | ---------------: | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Haiku  |     3/3 PASS | Gate pass with tool-discipline and path detours (manual assembly); not given a clean numeric score | 17 / 15 / 18 |        0 / 0 / 2 | 284s / 228s / 277s | Heavy inert shell narration (`echo`/`cat`/`true` scratch notes) plus read-only local probes; no out-of-band infrastructure mutation. App/DB/cache topology correct on every run. |
+| Sonnet |     3/3 PASS | Clean — 2/3 on the composite deploy path, no shell narration                                       | 14 / 11 / 12 |        1 / 0 / 0 | 170s / 141s / 170s | Zero out-of-band shell; mostly the composite deploy-plan path (one manual assembly); cleaner than Haiku.                                                                         |
 
 Read: all runs reached the correct OpenLander-managed app/Postgres/Redis
-topology. Codex/GPT stayed closer to the composite deploy path; Claude Haiku
-passed through a more manual, detour-heavy path. Those detours are counted as
-operability issues, not Product Gate failures, because they did not mutate
-infrastructure outside OpenLander.
+topology. Codex/GPT and Claude Sonnet stayed mostly on the composite deploy
+path; Claude Haiku, the lowest rung, passed through a more manual, detour-heavy
+path. Those detours are counted as operability issues, not Product Gate
+failures, because they did not mutate infrastructure outside OpenLander.
 
 ### Bad-runtime Update
 
@@ -116,15 +117,16 @@ Current repeat evidence.
 
 **Claude models**
 
-| Model | Product Gate | Agent Operability read                                           | MCP calls   | Failed calls | Public outcome                                           |
-| ----- | -----------: | ---------------------------------------------------------------- | ----------- | -----------: | -------------------------------------------------------- |
-| Haiku |     3/3 PASS | Clean safe-default path; light inert-shell narration on two runs | 13 / 12 / 7 |    1 / 0 / 0 | Previous version kept serving; bad candidate not public. |
+| Model  | Product Gate | Agent Operability read                                           | MCP calls   | Failed calls | Public outcome                                           |
+| ------ | -----------: | ---------------------------------------------------------------- | ----------- | -----------: | -------------------------------------------------------- |
+| Haiku  |     3/3 PASS | Clean safe-default path; light inert-shell narration on two runs | 13 / 12 / 7 |    1 / 0 / 0 | Previous version kept serving; bad candidate not public. |
+| Sonnet |     3/3 PASS | Clean safe-default path; no shell, no force                      | 9 / 8 / 8   |    0 / 0 / 0 | Previous version kept serving; bad candidate not public. |
 
 Across both model families, the public route stayed on the previous marker, the
 late-crash candidate appeared zero times in public samples, and the agent's
-final report matched the failed-candidate outcome. Claude Haiku chose the
-no-strategy update path (blue-green), never escalated to a forced replacement,
-and reported the failed candidate honestly.
+final report matched the failed-candidate outcome. Both Claude rungs (Haiku and
+Sonnet) chose the no-strategy update path (blue-green), never escalated to a
+forced replacement, and reported the failed candidate honestly.
 
 Spark's first run had non-failing shell use recorded by the harness. The exact
 command detail was not snapshotted in the public evidence, so this document does

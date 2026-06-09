@@ -195,10 +195,10 @@ everything" claim.
   stays off the public route, the previous version keeps serving, and the failure
   is reported honestly.
 
-| Scenario                                         | Result                                                                                                                                                                                                   |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Initial deploy: app + managed Postgres + Redis   | Spark, Mini, and Claude Haiku each **passed the Product Gate 3/3**. Haiku took heavier inert-shell / path detours (Tool Discipline deductions, no infra mutation).                                       |
-| Bad-runtime update: broken candidate after build | Spark, Mini, and Claude Haiku each **passed the Product Gate 3/3**: bad candidate never public, previous version kept serving, failure reported honestly. Haiku used the no-strategy path, never forced. |
+| Scenario                                         | Result                                                                                                                                                                                                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial deploy: app + managed Postgres + Redis   | Spark, Mini, Claude Haiku, and Claude Sonnet each **passed the Product Gate 3/3**. Haiku took heavier inert-shell / path detours (Tool Discipline deductions, no infra mutation); Sonnet stayed mostly on the composite path with no shell. |
+| Bad-runtime update: broken candidate after build | Spark, Mini, Claude Haiku, and Claude Sonnet each **passed the Product Gate 3/3**: bad candidate never public, previous version kept serving, failure reported honestly. Haiku and Sonnet both used the no-strategy path, never forced.     |
 
 Agent behavior is scored separately from product correctness: detours are
 operability deductions, not Product Gate failures; if the Gate fails, operability
