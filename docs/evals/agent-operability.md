@@ -100,9 +100,9 @@ public tables so the release line and run count stay consistent.
 
 Read: all runs reached the correct OpenLander-managed app/Postgres/Redis
 topology. Codex/GPT and Claude Sonnet stayed mostly on the composite deploy
-path; Claude Haiku, the lowest rung, passed through a more manual, detour-heavy
-path. Those detours are counted as operability issues, not Product Gate
-failures, because they did not mutate infrastructure outside OpenLander.
+path; Claude Haiku passed through a more manual, detour-heavy path. Those
+detours are counted as operability issues, not Product Gate failures, because
+they did not mutate infrastructure outside OpenLander.
 
 ### Bad-runtime Update
 
@@ -124,7 +124,7 @@ Current repeat evidence.
 
 Across both model families, the public route stayed on the previous marker, the
 late-crash candidate appeared zero times in public samples, and the agent's
-final report matched the failed-candidate outcome. Both Claude rungs (Haiku and
+final report matched the failed-candidate outcome. Both Claude models (Haiku and
 Sonnet) chose the no-strategy update path (blue-green), never escalated to a
 forced replacement, and reported the failed candidate honestly.
 
