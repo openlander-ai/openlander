@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Expose custom-domain route health and direct managed Traefik Host verification
+  in MCP domain repair surfaces, including `add_domain_route`,
+  `list_domain_routes`, `apply_route_config`, and `list_projects`.
+
+### Fixed
+
+- Group service-scoped incidents by their owning Project in agent context, and
+  return a clear `MCP_PAT_NOT_ACCEPTED_FOR_REST` error when MCP personal access
+  tokens are used against REST API routes.
+
 ## [0.1.16] - 2026-06-09
 
 ### Changed
