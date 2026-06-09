@@ -165,15 +165,13 @@ They show that, on these scoped scenarios, OpenLander's composite deploy and
 safe default update surfaces are usable by smaller agents without forcing those
 agents to hand-assemble the deployment topology.
 
-## Reference Comparisons
+## Scope Of The Claim
 
-OpenLander is also compared internally against mature deployment platforms
-exposed through lower-level MCP wrappers. Those runs are useful for measuring
-model sensitivity, but they are not presented here as a feature race.
-
-The public claim is narrower: OpenLander's own agent-native workflows should
-give smaller agents enough structure to deploy, inspect, and update safely on a
-trusted self-hosted server.
+These evals are about OpenLander's own agent-native surface: whether smaller
+agents can deploy, inspect, and update safely on a trusted self-hosted server
+using the structured MCP tools. Internal runs against other MCP-exposed
+platforms inform our model-sensitivity work, but they are not reproduced here,
+and this document makes no cross-platform ranking claim.
 
 ## Reproducing The Shape Of The Eval
 
