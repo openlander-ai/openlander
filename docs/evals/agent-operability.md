@@ -77,9 +77,14 @@ keeps the previous version serving and reports the failed candidate honestly.
 
 ## Results
 
-The tables below use the same OpenLander release line (`v0.1.16-rc.10`), with
-three clean-agent runs per row. Two model cohorts are reported separately and
-are never merged into a single ladder:
+The tables below are anchored to the `v0.1.16` release line, with three
+clean-agent runs per row. The product-behavior evidence was collected on the
+accepted final RC for that line
+(`ghcr.io/openlander-ai/openlander:0.1.16-rc.10@sha256:20b71b46cc63d13b641ef7b82c1a0e84cf80d72988713a11cb38d3b215fccd52`);
+the final release image is
+`ghcr.io/openlander-ai/openlander:0.1.16@sha256:e79210865d49c6afc9e8a356996214935b942c8561fe64bb3c1b1895912bf117`,
+and the final tag differs from that accepted RC only by release metadata. Two
+model cohorts are reported separately and are never merged into a single ladder:
 
 - **Codex/GPT cohort:** Spark and Mini (lower rungs).
 - **Claude cohort:** Haiku (lowest rung).
