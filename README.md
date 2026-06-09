@@ -187,8 +187,8 @@ everything" claim.
 - **Question:** can smaller agents stay on safe, high-level workflows for common
   deploy and update tasks?
 - **Fixture:** a small Node app with managed Postgres + Redis.
-- **Rows:** lowest-rung repeat runs across two model families (Codex/GPT, Claude),
-  reported as separate cohorts — no mixing across release lines or families.
+- **Rows:** repeat runs from Codex/GPT and Claude models, reported separately
+  so release lines and model families are not mixed.
 - **Product Gate (pass/fail), scenario-specific:** initial deploy → app live,
   `/health` 200, DB write/read, Redis counter increments, advertised URL serves,
   app/DB/cache in one project/network; bad-runtime update → the bad candidate
