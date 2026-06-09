@@ -18,7 +18,11 @@ import {
   analyzeInfrastructureSchema,
   listDomainRoutesSchema,
 } from './schemas.js';
-import { buildDomainRouteHealth, summarizeRouteHealth } from '../route-health.js';
+import {
+  buildDomainRouteHealth,
+  domainRouteMutationProbeTiming,
+  summarizeRouteHealth,
+} from '../route-health.js';
 import { nanoid } from 'nanoid';
 import { domainToASCII } from 'node:url';
 
@@ -302,6 +306,7 @@ export const infraToolDefs: ToolDef[] = [
       });
       const domainRouteHealth = await buildDomainRouteHealth(appCtx, service, [mapping], {
         verify: true,
+        probeTiming: domainRouteMutationProbeTiming,
       });
       const routeHealth = summarizeRouteHealth({ service, domainRoutes: domainRouteHealth });
 

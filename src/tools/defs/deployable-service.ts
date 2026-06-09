@@ -23,6 +23,7 @@ import {
 } from './helpers.js';
 import {
   buildDomainRouteHealth,
+  domainRouteMutationProbeTiming,
   routeProbeShouldRollback,
   summarizeRouteHealth,
   type DomainRouteHealth,
@@ -1452,7 +1453,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
             context.appCtx,
             effectiveService,
             domainMappings,
-            { verify: true },
+            { verify: true, probeTiming: domainRouteMutationProbeTiming },
           );
           const rollbackProbe = domainRouteHealth
             .map((route) => route.direct_probe)
