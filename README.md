@@ -180,34 +180,29 @@ is the human surface on top.
 
 ## Agent operability evals
 
-We test OpenLander with coding agents, not only with API smoke tests. These are
-scoped scenario evals: they ask whether smaller agents can stay on safe,
-high-level OpenLander workflows for common deploy and update tasks. They are not
-a claim that every workload is faster or that every failure mode is solved, and
-they are not intended as a PaaS ranking. I use them as a sanity check for the
-agent-native control-plane direction.
+I test OpenLander with coding agents, not just API smoke tests — a sanity check
+for the agent-native direction, not a PaaS ranking or a "faster / solved
+everything" claim.
 
-Current public evals use a small Node app with managed Postgres and Redis. The
-headline rows are lowest-rung repeat runs from two model families (Codex/GPT and
-Claude) on the same OpenLander release line, reported as separate cohorts so the
-tables do not mix evidence across release lines or model families. A run passes
-the Product Gate only if the app is live, `/health` passes, DB write/read works,
-Redis hits increment, the advertised URL serves the app, and the
-app/database/cache topology is correct.
+- **Question:** can smaller agents stay on safe, high-level workflows for common
+  deploy and update tasks?
+- **Fixture:** a small Node app with managed Postgres + Redis.
+- **Rows:** lowest-rung repeat runs across two model families (Codex/GPT, Claude),
+  reported as separate cohorts — no mixing across release lines or families.
+- **Product Gate (pass/fail):** app live, `/health` 200, DB write/read, Redis
+  counter increments, advertised URL serves, app/DB/cache in one project/network.
 
-| Scenario                                         | Public result                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Initial deploy: app + managed Postgres + Redis   | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the app, database, cache, route, and same-project topology were correct. Haiku took heavier inert-shell detours (Tool Discipline deductions, no infrastructure mutation).                            |
-| Bad-runtime update: broken candidate after build | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the bad candidate did not become public, the previous version stayed serving, and OpenLander reported the failed candidate honestly. Haiku used the no-strategy path and never forced a replacement. |
+| Scenario                                         | Result                                                                                                                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial deploy: app + managed Postgres + Redis   | Spark/Mini + Claude Haiku each **3/3 Product Gate**. Haiku took heavier inert-shell / path detours (Tool Discipline deductions, no infra mutation).                                       |
+| Bad-runtime update: broken candidate after build | Spark/Mini + Claude Haiku each **3/3 Product Gate**: bad candidate never public, previous version kept serving, failure reported honestly. Haiku used the no-strategy path, never forced. |
 
-I track agent behavior separately from product correctness. Some lower-rung
-agents still take tool-discipline or efficiency detours; those do not become
-product failures unless the Product Gate fails. If the Product Gate fails, the
-agent behavior is reported as not scored rather than given a clean-looking
-operability score.
+Agent behavior is scored separately from product correctness: detours are
+operability deductions, not Product Gate failures; if the Gate fails, operability
+is "not scored" rather than given a clean-looking number.
 
-See [Agent Operability Evals](docs/evals/agent-operability.md) for the
-methodology, tables, fixture, and limitations.
+See [Agent Operability Evals](docs/evals/agent-operability.md) for methodology,
+full tables, fixtures, and limitations.
 
 ---
 
