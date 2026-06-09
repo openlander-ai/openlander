@@ -189,13 +189,16 @@ everything" claim.
 - **Fixture:** a small Node app with managed Postgres + Redis.
 - **Rows:** lowest-rung repeat runs across two model families (Codex/GPT, Claude),
   reported as separate cohorts — no mixing across release lines or families.
-- **Product Gate (pass/fail):** app live, `/health` 200, DB write/read, Redis
-  counter increments, advertised URL serves, app/DB/cache in one project/network.
+- **Product Gate (pass/fail), scenario-specific:** initial deploy → app live,
+  `/health` 200, DB write/read, Redis counter increments, advertised URL serves,
+  app/DB/cache in one project/network; bad-runtime update → the bad candidate
+  stays off the public route, the previous version keeps serving, and the failure
+  is reported honestly.
 
-| Scenario                                         | Result                                                                                                                                                                                    |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Initial deploy: app + managed Postgres + Redis   | Spark/Mini + Claude Haiku each **3/3 Product Gate**. Haiku took heavier inert-shell / path detours (Tool Discipline deductions, no infra mutation).                                       |
-| Bad-runtime update: broken candidate after build | Spark/Mini + Claude Haiku each **3/3 Product Gate**: bad candidate never public, previous version kept serving, failure reported honestly. Haiku used the no-strategy path, never forced. |
+| Scenario                                         | Result                                                                                                                                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial deploy: app + managed Postgres + Redis   | Spark, Mini, and Claude Haiku each **passed the Product Gate 3/3**. Haiku took heavier inert-shell / path detours (Tool Discipline deductions, no infra mutation).                                       |
+| Bad-runtime update: broken candidate after build | Spark, Mini, and Claude Haiku each **passed the Product Gate 3/3**: bad candidate never public, previous version kept serving, failure reported honestly. Haiku used the no-strategy path, never forced. |
 
 Agent behavior is scored separately from product correctness: detours are
 operability deductions, not Product Gate failures; if the Gate fails, operability
