@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.16] - 2026-06-09
+
+### Changed
+
+- Make OpenLander-managed Traefik app routing HTTP-provider-only. Managed app,
+  compose, preview, recovery, and rollback containers no longer publish Docker
+  Host routers; `/api/traefik/config` is the single source of truth for public
+  app routes from active service rows and active preview records.
+- Allow existing-service `deploy_app` requests with source-only changes
+  (`repo_url`, `branch`, `source`, `image`, or `port`) to save the source update
+  and start `update_app` in one structured path when the caller explicitly
+  targets a service. Dockerfile/build config changes still use
+  `update_service_config`, then `update_app`.
+- Block no-strategy `update_app` / `redeploy_app` calls when blue-green is not
+  eligible instead of falling back to `strategy="force"` without an explicit
+  user downtime decision.
+- Tighten deploy-plan env value validation by treating provided placeholder or
+  structurally invalid values as blocking input.
+
+### Fixed
+
+- Rename adopted managed Traefik containers to the standard `traefik-ol` name,
+  so stop/status checks and project-network sync all target the same active
+  container after adoption.
+- Reconnect OpenLander-managed Traefik to existing active project networks on
+  startup/adoption, so HTTP-provider-only upgraded hosts can still resolve
+  existing app, compose, rollback, and recovery container backends.
+- Connect the managed Traefik container to the OpenLander container's compose
+  network in containerized installs, and point the HTTP provider at the
+  OpenLander container DNS name, so custom host ports and containerized installs
+  keep managed routes reachable.
+- Recreate older managed Traefik containers whose provider configuration still
+  enables Docker routing or targets stale endpoints.
+- Verify blue-green cutovers after the previous container is stopped before
+  removing it, and observe green-container stability before switching the public
+  route, so stale routes and delayed crash-loop candidates fail while the
+  previous version remains serving.
+- Wait across the blue-green green-container readiness window instead of
+  treating Docker `HEALTHCHECK` `starting` states as immediate probe failures.
+
 ## [0.1.16-rc.10] - 2026-06-09
 
 ### Fixed
