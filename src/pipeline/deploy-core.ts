@@ -1097,10 +1097,11 @@ export class DeployPipeline {
 
   private async probeManagedTraefikRoute(params: {
     projectName: string;
+    host?: string;
     path: string;
     timeoutMs: number;
   }): Promise<{ ok: true; status: number } | { ok: false; error: string; status?: number }> {
-    const host = getEnvironmentProjectHostname(params.projectName, 'production');
+    const host = params.host ?? getEnvironmentProjectHostname(params.projectName, 'production');
     const url = new URL(`${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`);
 
     return await new Promise((resolveProbe) => {
@@ -1148,6 +1149,7 @@ export class DeployPipeline {
 
   private async waitForManagedTraefikRoute(params: {
     projectName: string;
+    host?: string;
     path: string;
     probeTimeoutMs: number;
     maxWaitMs: number;
@@ -1165,6 +1167,7 @@ export class DeployPipeline {
       attempts += 1;
       const probe = await this.probeManagedTraefikRoute({
         projectName: params.projectName,
+        host: params.host,
         path: params.path,
         timeoutMs: params.probeTimeoutMs,
       });
@@ -1193,6 +1196,7 @@ export class DeployPipeline {
 
   async verifyManagedTraefikRoute(params: {
     projectName: string;
+    host?: string;
     path: string;
     probeTimeoutMs?: number;
     maxWaitMs?: number;
@@ -1202,6 +1206,7 @@ export class DeployPipeline {
     const maxWaitMs = params.maxWaitMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
     return await this.waitForManagedTraefikRoute({
       projectName: params.projectName,
+      host: params.host,
       path: params.path,
       probeTimeoutMs: params.probeTimeoutMs ?? 5_000,
       maxWaitMs,

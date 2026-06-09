@@ -19,6 +19,7 @@ function createDuplicateServiceContext(
     project_id: alpha.id,
     kind: 'git',
     source: 'git',
+    status: 'running',
     repo_url: 'https://github.com/acme/alpha.git',
     image_url: null,
     ...options.alphaService,
@@ -29,6 +30,7 @@ function createDuplicateServiceContext(
     project_id: beta.id,
     kind: 'git',
     source: 'git',
+    status: 'running',
     repo_url: 'https://github.com/acme/beta.git',
     image_url: null,
     ...options.betaService,
@@ -628,9 +630,7 @@ describe('deployable service target resolution', () => {
         message:
           'No update was started because this Application is not currently eligible for zero-downtime blue-green. OpenLander will not fall back to force without an explicit user downtime decision.',
         next_steps: expect.arrayContaining([
-          expect.stringContaining(
-            'First make the Application eligible for blue-green',
-          ),
+          expect.stringContaining('First make the Application eligible for blue-green'),
           expect.stringContaining('If the user explicitly accepts downtime'),
         ]),
       },
@@ -752,6 +752,26 @@ describe('deployable service target resolution', () => {
         docker_labels_expected: false,
         requires_redeploy: false,
       },
+      route_health: {
+        status: 'healthy',
+        custom_domain_count: 1,
+      },
+      route_verification: {
+        status: 'passed',
+        provider: 'traefik_http',
+        scope: 'traefik_direct',
+        host: 'api.example.com',
+        path: '/',
+      },
+    });
+    expect(ctx.pipeline.verifyManagedTraefikRoute).toHaveBeenCalledWith({
+      projectName: 'api',
+      host: 'api.example.com',
+      path: '/',
+      probeTimeoutMs: 1000,
+      maxWaitMs: 2500,
+      intervalMs: 500,
+      minimumSuccessAgeMs: 0,
     });
     expect(ctx.db.createDomainMappingForService).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -895,12 +915,68 @@ describe('deployable service target resolution', () => {
     expect(ctx.db.listDomainMappingsForService).toHaveBeenCalledWith('alpha__svc');
     expect(result).toMatchObject({
       count: 1,
-      routes: [{ service_id: 'alpha__svc', domain: 'api.example.com' }],
+      routes: [
+        {
+          service_id: 'alpha__svc',
+          domain: 'api.example.com',
+          route_health: { status: 'healthy', custom_domain_count: 1 },
+          route_verification: {
+            status: 'passed',
+            host: 'api.example.com',
+            path: '/',
+          },
+        },
+      ],
       routing: {
         backend: 'traefik_http_provider',
         config_endpoint: '/api/traefik/config',
         docker_labels_expected: false,
+        verification: 'traefik_direct_host_probe',
       },
+    });
+  });
+
+  it('apply_route_config rolls back when a custom domain direct probe fails', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        status: 'running',
+        container_id: 'container-alpha',
+        container_name: 'ol-alpha',
+        container_port: 3000,
+      },
+    });
+    await getTool(ctx, 'add_domain_route').execute(
+      { service_id: 'alpha__svc', domain: 'api.example.com' },
+      { target: 'mcp' },
+    );
+    (ctx.pipeline.verifyManagedTraefikRoute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      error: 'Route probe returned HTTP 502',
+      attempts: 2,
+      elapsedMs: 700,
+    });
+
+    const result = (await getTool(ctx, 'apply_route_config').execute(
+      { service_id: 'alpha__svc', container_port: 4000 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.updateService).toHaveBeenNthCalledWith(1, 'alpha__svc', { containerPort: 4000 });
+    expect(ctx.db.updateService).toHaveBeenNthCalledWith(2, 'alpha__svc', { containerPort: 3000 });
+    expect(result).toMatchObject({
+      status: 'rolled_back',
+      domain_route_health: [
+        {
+          domain: 'api.example.com',
+          direct_probe: {
+            status: 'failed',
+            severity: 'fail',
+            host: 'api.example.com',
+            http_status: 502,
+          },
+        },
+      ],
     });
   });
 
@@ -915,6 +991,25 @@ describe('deployable service target resolution', () => {
     ).rejects.toMatchObject({
       code: 'SERVICE_SELECTION_REQUIRED',
       statusCode: 400,
+    });
+  });
+
+  it('returns service candidates when a scoped domain route service_name is not found', async () => {
+    const ctx = createDuplicateServiceContext();
+
+    await expect(
+      getTool(ctx, 'add_domain_route').execute(
+        { project_name: 'alpha', service_name: 'hotdeal', domain: 'hotdeal.example.com' },
+        { target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_NOT_FOUND',
+      statusCode: 404,
+      details: {
+        serviceName: 'hotdeal',
+        project: { id: 'alpha', name: 'alpha' },
+        candidates: [{ serviceId: 'alpha__svc', serviceName: 'api' }],
+      },
     });
   });
 

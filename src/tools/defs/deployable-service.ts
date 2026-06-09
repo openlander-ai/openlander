@@ -21,6 +21,12 @@ import {
   tryAcquireDeployLockOrResponse,
   tryRejectIfNotMutable,
 } from './helpers.js';
+import {
+  buildDomainRouteHealth,
+  routeProbeShouldRollback,
+  summarizeRouteHealth,
+  type DomainRouteHealth,
+} from '../route-health.js';
 import type { ToolContext, ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-deployable-service');
@@ -1375,6 +1381,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
               provider: 'traefik_http';
               reason: 'missing_health_check_path';
             };
+        let domainRouteHealth: DomainRouteHealth[] = [];
         if (verificationPath) {
           const verification = await context.appCtx.pipeline.verifyManagedTraefikRoute({
             projectName: runtimeProject.name,
@@ -1439,6 +1446,54 @@ export const deployableServiceToolDefs: ToolDef[] = [
             reason: 'missing_health_check_path',
           };
         }
+        const domainMappings = await context.appCtx.db.listDomainMappingsForService(service.id);
+        if (domainMappings.length > 0) {
+          domainRouteHealth = await buildDomainRouteHealth(
+            context.appCtx,
+            effectiveService,
+            domainMappings,
+            { verify: true },
+          );
+          const rollbackProbe = domainRouteHealth
+            .map((route) => route.direct_probe)
+            .find((probe) => probe && routeProbeShouldRollback(probe));
+          if (rollbackProbe) {
+            await context.appCtx.db.updateService(service.id, {
+              containerPort: previousContainerPort ?? null,
+            });
+            const restored = (await context.appCtx.db.getService(service.id)) ?? service;
+            return {
+              status: 'rolled_back',
+              project_id: project.id,
+              service_id: service.id,
+              service: serviceSummary(restored, project),
+              route_config: {
+                previous_container_port: previousContainerPort,
+                container_port: restored.container_port,
+                attempted_container_port: containerPort,
+                container_name: restored.container_name,
+                provider: 'traefik_http',
+                applied_without_redeploy: true,
+                rolled_back: true,
+              },
+              route_verification: routeVerification,
+              domain_route_health: domainRouteHealth,
+              diagnostic_call: {
+                tool: 'openlander_monitor',
+                action: 'diagnose_service',
+                params: { service_id: service.id },
+              },
+              _agent_guidance: {
+                message:
+                  'Route config was re-pointed, but at least one custom domain route failed a direct Traefik probe, so OpenLander restored the previous container_port.',
+                next_steps: [
+                  'Call diagnostic_call to inspect the current route and container state before trying another port.',
+                  'If the domain probe returned HTTP 5xx or timed out, verify the container_port and the app listener before applying route config again.',
+                ],
+              },
+            };
+          }
+        }
         return {
           status: 'applied',
           project_id: project.id,
@@ -1452,6 +1507,15 @@ export const deployableServiceToolDefs: ToolDef[] = [
             applied_without_redeploy: true,
           },
           route_verification: routeVerification,
+          ...(domainRouteHealth.length > 0
+            ? {
+                domain_route_health: domainRouteHealth,
+                route_health: summarizeRouteHealth({
+                  service: effectiveService,
+                  domainRoutes: domainRouteHealth,
+                }),
+              }
+            : {}),
           diagnostic_call: {
             tool: 'openlander_monitor',
             action: 'diagnose_service',

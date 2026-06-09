@@ -269,6 +269,11 @@ describe('Tool Registry', () => {
           url: getProjectUrl('web'),
           preferred_url: getProjectUrl('web'),
           publicUrl: null,
+          route_health: {
+            status: 'unknown',
+            summary: 'No custom domain routes are registered.',
+            custom_domain_count: 0,
+          },
           deployable_service_count: 1,
         },
       ],

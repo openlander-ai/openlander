@@ -18,6 +18,7 @@ import {
   analyzeInfrastructureSchema,
   listDomainRoutesSchema,
 } from './schemas.js';
+import { buildDomainRouteHealth, summarizeRouteHealth } from '../route-health.js';
 import { nanoid } from 'nanoid';
 import { domainToASCII } from 'node:url';
 
@@ -97,6 +98,29 @@ async function resolveDomainServiceTarget(
     }
     const service = services[0];
     if (!service) {
+      if (project) {
+        const candidates = await appCtx.db.getDeployablesByGroup(project.id);
+        const singleCandidate = candidates.length === 1 ? candidates[0] : undefined;
+        throw new OpenLanderError(
+          `No Application/Compose workload named '${serviceName}' was found in Project '${project.name}'. Specify one of the candidate service_id values.`,
+          'SERVICE_NOT_FOUND',
+          404,
+          {
+            serviceName,
+            project: { id: project.id, name: project.name },
+            candidates: serviceSelectionCandidates(candidates),
+            ...(singleCandidate
+              ? {
+                  suggested_call: {
+                    tool: 'openlander_service',
+                    action: 'add_domain_route',
+                    params: { service_id: singleCandidate.id },
+                  },
+                }
+              : {}),
+          },
+        );
+      }
       throw new ServiceNotFoundError(
         projectName ? `${serviceName} in ${projectName}` : serviceName,
       );
@@ -276,12 +300,22 @@ export const infraToolDefs: ToolDef[] = [
         tlsEnabled: null,
         tlsResolver: null,
       });
+      const domainRouteHealth = await buildDomainRouteHealth(appCtx, service, [mapping], {
+        verify: true,
+      });
+      const routeHealth = summarizeRouteHealth({ service, domainRoutes: domainRouteHealth });
 
       return {
         status: 'route_registered',
         project: { id: project.id, name: project.name },
         service: { id: service.id, name: service.name },
         route: mapRoute(mapping),
+        route_health: routeHealth,
+        route_verification: domainRouteHealth[0]?.direct_probe ?? {
+          status: 'skipped',
+          provider: 'traefik_http',
+          reason: 'route_probe_unavailable',
+        },
         routing: {
           backend: 'traefik_http_provider',
           config_endpoint: '/api/traefik/config',
@@ -331,13 +365,41 @@ export const infraToolDefs: ToolDef[] = [
             (await resolveDomainServiceTarget(appCtx, args)).service.id,
           )
         : await appCtx.db.listDomainMappings();
+      const verify = args['verify'] === true || (hasTarget && args['verify'] !== false);
+      const serviceById = verify
+        ? new Map((await appCtx.db.listServices()).map((service) => [service.id, service]))
+        : new Map<string, ServiceRow>();
+      const routes = await Promise.all(
+        mappings.map(async (mapping) => {
+          const service = serviceById.get(mapping.service_id);
+          const domainRouteHealth =
+            verify && service
+              ? await buildDomainRouteHealth(appCtx, service, [mapping], { verify: true })
+              : [];
+          return {
+            ...mapRoute(mapping),
+            ...(service && domainRouteHealth[0]
+              ? {
+                  route_health: summarizeRouteHealth({
+                    service,
+                    domainRoutes: domainRouteHealth,
+                  }),
+                  route_verification: domainRouteHealth[0].direct_probe,
+                }
+              : {}),
+          };
+        }),
+      );
       return Promise.resolve({
         count: mappings.length,
-        routes: mappings.map(mapRoute),
+        routes,
         routing: {
           backend: 'traefik_http_provider',
           config_endpoint: '/api/traefik/config',
           docker_labels_expected: false,
+          verification: verify
+            ? 'traefik_direct_host_probe'
+            : 'not_checked_for_unfiltered_list_by_default',
         },
       });
     },

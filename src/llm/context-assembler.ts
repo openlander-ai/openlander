@@ -23,6 +23,7 @@ import { BUILD_RECIPES } from '../pipeline/recipes.js';
 
 const log = createModuleLogger('context-assembler');
 const MAX_PATTERN_CONTEXT_CHARS = 800;
+const MAX_INCIDENT_BRIEFING_GROUPS = 8;
 
 /**
  * Scope for context assembly — controls what level of detail is included.
@@ -134,7 +135,7 @@ export async function buildIncidentBriefing(
 
   const incidentsByProject = new Map<string, RuntimeIncidentRow[]>();
   for (const incident of incidents) {
-    const key = incident.service_id;
+    const key = incident.project_id ?? incident.service_id.replace(/__svc$/, '');
     const projectIncidents = incidentsByProject.get(key);
     if (projectIncidents) {
       projectIncidents.push(incident);
@@ -145,7 +146,10 @@ export async function buildIncidentBriefing(
 
   const lines: string[] = ['⚠️ Active incidents:'];
 
-  for (const [projectId, projectIncidents] of incidentsByProject) {
+  for (const [projectId, projectIncidents] of Array.from(incidentsByProject).slice(
+    0,
+    MAX_INCIDENT_BRIEFING_GROUPS,
+  )) {
     if (projectIncidents.length === 0) continue;
 
     const project = await db.getProject(projectId);
@@ -164,6 +168,12 @@ export async function buildIncidentBriefing(
 
     lines.push(
       `- ${projectName}: ${categorySummary} (${String(crashCount)}x crashes). Last error: ${errorSnippet}`,
+    );
+  }
+
+  if (incidentsByProject.size > MAX_INCIDENT_BRIEFING_GROUPS) {
+    lines.push(
+      `- ${String(incidentsByProject.size - MAX_INCIDENT_BRIEFING_GROUPS)} more Projects have unresolved incidents; call list_projects or inspect the Activity page for the full list.`,
     );
   }
 

@@ -117,6 +117,21 @@ export function createAuthMiddleware(authService: AuthService) {
       return next();
     }
 
+    const authHeader = c.req.header('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      if (token.startsWith('olp_')) {
+        return c.json(
+          {
+            error: 'MCP_PAT_NOT_ACCEPTED_FOR_REST',
+            message:
+              'This bearer token is an MCP personal access token. Use it with /mcp, or use a REST API token/session for /api routes.',
+          },
+          401,
+        );
+      }
+    }
+
     return c.json({ error: 'Unauthorized' }, 401);
   };
 }
