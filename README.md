@@ -189,9 +189,9 @@ agent-native control-plane direction.
 
 Current public evals use a small Node app with managed Postgres and Redis. The
 headline rows are lowest-rung repeat runs from two model families (Codex/GPT and
-Claude) on one release-candidate version, reported as separate cohorts so the
-tables do not mix evidence across release lines or model families. A run passes the
-Product Gate only if the app is live, `/health` passes, DB write/read works,
+Claude) on the same OpenLander release line, reported as separate cohorts so the
+tables do not mix evidence across release lines or model families. A run passes
+the Product Gate only if the app is live, `/health` passes, DB write/read works,
 Redis hits increment, the advertised URL serves the app, and the
 app/database/cache topology is correct.
 

@@ -98,7 +98,7 @@ release line and run count stay consistent.
 | Model rung | Product Gate | Agent Operability read                              | MCP calls   | Failed MCP calls | Wall time         | Notes                                                                                                                                                                     |
 | ---------- | -----------: | --------------------------------------------------- | ----------- | ---------------: | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Spark      |     3/3 PASS | Two clean runs; one read-only tool-discovery detour | 9 / 10 / 12 |        3 / 0 / 0 | 86s / 48s / 57s   | One attempt tried MCP resource discovery and a local `openlander` CLI discovery command before using OpenLander MCP; no out-of-band infrastructure mutation was observed. |
-| Mini       |     3/3 PASS | Near-P0 across all three runs                       | 9 / 11 / 10 |        0 / 0 / 0 | 77s / 104s / 118s | Clean platform path; app/DB/cache topology correct.                                                                                                                       |
+| Mini       |     3/3 PASS | Near-clean across all three runs                    | 9 / 11 / 10 |        0 / 0 / 0 | 77s / 104s / 118s | Clean platform path; app/DB/cache topology correct.                                                                                                                       |
 
 **Claude cohort**
 
@@ -127,10 +127,10 @@ Current lower-rung repeat evidence.
 
 **Codex/GPT cohort**
 
-| Model rung | Product Gate | Agent Operability read                              | MCP calls   | Failed calls | Public outcome                                           |
-| ---------- | -----------: | --------------------------------------------------- | ----------- | -----------: | -------------------------------------------------------- |
-| Spark      |     3/3 PASS | Two P0-like runs; one unclassified shell-detour run | 8 / 10 / 12 |    0 / 0 / 0 | Previous version kept serving; bad candidate not public. |
-| Mini       |     3/3 PASS | P0-like across all three runs                       | 8 / 10 / 9  |    0 / 0 / 0 | Previous version kept serving; bad candidate not public. |
+| Model rung | Product Gate | Agent Operability read                            | MCP calls   | Failed calls | Public outcome                                           |
+| ---------- | -----------: | ------------------------------------------------- | ----------- | -----------: | -------------------------------------------------------- |
+| Spark      |     3/3 PASS | Two clean runs; one unclassified shell-detour run | 8 / 10 / 12 |    0 / 0 / 0 | Previous version kept serving; bad candidate not public. |
+| Mini       |     3/3 PASS | Clean across all three runs                       | 8 / 10 / 9  |    0 / 0 / 0 | Previous version kept serving; bad candidate not public. |
 
 **Claude cohort**
 
