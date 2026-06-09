@@ -5,7 +5,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Release](https://img.shields.io/github/v/release/openlander-ai/openlander)](https://github.com/openlander-ai/openlander/releases)
 
-[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Deploy evals](#agent-native-deploy-evals) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
+[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Agent evals](#agent-operability-evals) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
 your own server, with risky actions gated by human approval.
@@ -178,74 +178,36 @@ is the human surface on top.
 
 ---
 
-## Agent-native deploy evals
+## Agent operability evals
 
-We test OpenLander with coding agents, not only with API smoke tests. The
-evals below are intentionally scoped: they measure whether smaller agents
-can stay on the safe, high-level OpenLander path for common deploy and update
-workflows. They are not a claim that every workload is faster or that every
-failure mode is solved.
+We test OpenLander with coding agents, not only with API smoke tests. These are
+scoped scenario evals: they ask whether smaller agents can stay on safe,
+high-level OpenLander workflows for common deploy and update tasks. They are not
+a claim that every workload is faster or that every failure mode is solved, and
+they are not intended as a PaaS ranking. I use them as a sanity check for the
+agent-native control-plane direction.
 
-Each table row is a single validated run, not a statistically significant
-multi-run benchmark. I use repeated lower-rung runs internally to catch variance
-before turning a scenario into a stronger claim.
+Current public evals use a small Node app with managed Postgres and Redis. The
+headline rows are lowest-rung repeat runs from two model families (Codex/GPT and
+Claude) on the same OpenLander release line, reported as separate cohorts so the
+tables do not mix evidence across release lines or model families. A run passes
+the Product Gate only if the app is live, `/health` passes, DB write/read works,
+Redis hits increment, the advertised URL serves the app, and the
+app/database/cache topology is correct.
 
-In the scoped Day-1 fixture, agents deployed a Node app plus managed Postgres
-and Redis through OpenLander's composite deploy-plan flow:
+| Scenario                                         | Public result                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial deploy: app + managed Postgres + Redis   | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the app, database, cache, route, and same-project topology were correct. Haiku took heavier inert-shell detours (Tool Discipline deductions, no infrastructure mutation).                            |
+| Bad-runtime update: broken candidate after build | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the bad candidate did not become public, the previous version stayed serving, and OpenLander reported the failed candidate honestly. Haiku used the no-strategy path and never forced a replacement. |
 
-1. create a deployment plan,
-2. approve safe managed resources,
-3. let OpenLander provision and wire Postgres/Redis,
-4. verify the live app.
+I track agent behavior separately from product correctness. Some lower-rung
+agents still take tool-discipline or efficiency detours; those do not become
+product failures unless the Product Gate fails. If the Product Gate fails, the
+agent behavior is reported as not scored rather than given a clean-looking
+operability score.
 
-The fixture is intentionally limited to platform-managed dependencies. External
-SaaS secrets such as Stripe, SMTP, S3, and exchange APIs are tested separately:
-when those user-owned values are missing, OpenLander should block instead of
-inventing plausible secrets. Full ladder evidence was collected during the
-v0.1.14 release-candidate cycle:
-OpenLander `v0.1.14-rc.16` against
-[`openlander-ai/ledgerly@qa/managed-deps-only`](https://github.com/openlander-ai/ledgerly/tree/qa/managed-deps-only).
-
-| Model rung |     Result | MCP calls | Failed calls | Wall time |
-| ---------- | ---------: | --------: | -----------: | --------: |
-| Spark      | PASS-clean |        11 |            0 |    60.57s |
-| Mini       | PASS-clean |        10 |            0 |    78.36s |
-| GPT-5.4    | PASS-clean |        15 |            0 |    83.72s |
-| GPT-5.5    | PASS-clean |        11 |            0 |    75.95s |
-
-Every run passed the same rich oracle: `/health` returned 200, the app root
-returned 200, invoice write/read worked, Redis hit counts incremented, and the
-app, Postgres, and Redis services stayed in one OpenLander Project/network.
-After the final `v0.1.14` tag was published, Spark and Mini smoke checks on the
-final image passed the same Day-1 path.
-
-The point is not that every deploy is faster. The point is that even weaker
-agents can stay on the correct high-level path because OpenLander owns the
-app/database/cache topology instead of asking the agent to hand-assemble it.
-
-We also test unsafe updates. In the `D3-bad-runtime` fixture, the new commit
-builds but starts crashing after boot. OpenLander's default no-strategy
-`update_app` path used blue-green safety for eligible services, kept the
-previous version serving, and reported the failed update instead of promoting
-the crash-looping candidate. Full ladder evidence was collected on OpenLander
-`v0.1.14-rc.28`.
-
-| Model rung |     Result | MCP calls | Failed calls | Public outcome           |
-| ---------- | ---------: | --------: | -----------: | ------------------------ |
-| Spark      | PASS-clean |        13 |            0 | Old version kept serving |
-| Mini       | PASS-clean |        23 |            0 | Old version kept serving |
-| GPT-5.4    | PASS-clean |        20 |            0 | Old version kept serving |
-| GPT-5.5    | PASS-clean |        20 |            0 | Old version kept serving |
-
-Spark and Mini smoke checks on the final `v0.1.14` image also passed this
-bad-runtime update path.
-
-For context, I also run these scenarios against lower-level MCP-wrapper
-deployment surfaces internally. Those reference runs are useful for finding
-where agents fall off the intended path, but the public claim here is narrower:
-OpenLander's own composite deploys and safe default updates should be operable
-by smaller agents without manual Project/database/cache assembly or unsafe
-crash-loop promotion.
+See [Agent Operability Evals](docs/evals/agent-operability.md) for the
+methodology, tables, fixture, and limitations.
 
 ---
 
@@ -343,7 +305,7 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Dashboard for human oversight + intervention.
 - Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
   MongoDB, and MinIO through agent/MCP workflows.
-- Deterministic Day-2 recovery primitives for external agents: structured
+- Deterministic post-deploy recovery primitives for external agents: structured
   `diagnose_service` findings, safe route re-pointing, same-image runtime env
   apply, verification details, and rollback when a hot path fails.
 
