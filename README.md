@@ -188,16 +188,17 @@ they are not intended as a PaaS ranking. I use them as a sanity check for the
 agent-native control-plane direction.
 
 Current public evals use a small Node app with managed Postgres and Redis. The
-headline rows are lower-rung repeat runs on one release-candidate version, so
-the tables do not mix evidence from different release lines. A run passes the
+headline rows are lowest-rung repeat runs from two model families (Codex/GPT and
+Claude) on one release-candidate version, reported as separate cohorts so the
+tables do not mix evidence across release lines or model families. A run passes the
 Product Gate only if the app is live, `/health` passes, DB write/read works,
 Redis hits increment, the advertised URL serves the app, and the
 app/database/cache topology is correct.
 
-| Scenario                                         | Public result                                                                                                                                                                                   |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Initial deploy: app + managed Postgres + Redis   | Spark/Mini lower-rung repeats passed the Product Gate 3/3: the app, database, cache, route, and same-project topology were correct.                                                             |
-| Bad-runtime update: broken candidate after build | Spark/Mini lower-rung repeats passed the Product Gate 3/3: the bad candidate did not become public, the previous version stayed serving, and OpenLander reported the failed candidate honestly. |
+| Scenario                                         | Public result                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial deploy: app + managed Postgres + Redis   | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the app, database, cache, route, and same-project topology were correct. Haiku took heavier inert-shell detours (Tool Discipline deductions, no infrastructure mutation).                            |
+| Bad-runtime update: broken candidate after build | Spark/Mini and Claude Haiku lower-rung repeats each passed the Product Gate 3/3: the bad candidate did not become public, the previous version stayed serving, and OpenLander reported the failed candidate honestly. Haiku used the no-strategy path and never forced a replacement. |
 
 I track agent behavior separately from product correctness. Some lower-rung
 agents still take tool-discipline or efficiency detours; those do not become
