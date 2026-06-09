@@ -187,8 +187,8 @@ everything" claim.
 - **Question:** can smaller agents stay on safe, high-level workflows for common
   deploy and update tasks?
 - **Fixture:** a small Node app with managed Postgres + Redis.
-- **Rows:** repeat runs from Codex/GPT and Claude models, listed separately —
-  I don't merge model families into one ranking.
+- **Rows:** repeat runs from Codex/GPT and Claude models, reported separately
+  so release lines and model families are not mixed.
 - **Product Gate (pass/fail), scenario-specific:** initial deploy → app live,
   `/health` 200, DB write/read, Redis counter increments, advertised URL serves,
   app/DB/cache in one project/network; bad-runtime update → the bad candidate
@@ -312,15 +312,15 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - **Recovery loop hardening** — expand high-confidence diagnostics and verified
   hot paths before turning on built-in automation. External agents still decide
   and call each remediation step explicitly.
-- **Environment contract** — first-class project / environment / service /
-  generated runtime variable scopes, with clear redeploy guidance.
+- **Deployment target and env contract** — clearer production / development
+  target handling, target-scoped env vars, generated runtime variables, and
+  redeploy guidance.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
   any OCI registry behind cloud-provider auth.
-- **Service templates** — beyond Postgres / Redis. Object storage, message
-  queues, search, vector DBs.
-- **Environments** — first-class `prod` / `staging` / `dev` per project,
-  with environment-scoped env vars and approvals.
-- **Notifications** — Slack and Discord webhooks for deploy / health /
+- **Managed service templates** — broader agent-friendly templates and
+  connection surfaces for queues, search, vector DBs, and other common backing
+  services.
+- **Notifications** — productize Slack and Discord setup for deploy / health /
   approval events.
 - **Internal AI Ops** — optional incident response inside a policy you set,
   built on the deterministic recovery contracts above rather than a separate
