@@ -42,12 +42,12 @@ For the scenarios below:
 
 ### Agent Operability
 
-After the Product Gate passes, I read the agent trace separately: did it stay on
-the intended path, avoid unsafe overrides, use status/diagnostics, avoid shell
-detours, and avoid excessive retry loops?
+Once the Product Gate passes, I look at the trace on its own: did the agent stay
+on the intended path, skip unsafe overrides, lean on status/diagnostics, avoid
+shell workarounds, and not loop on retries?
 
-Not every evidence row has enough trace detail for a precise numeric score, so
-the tables use a qualitative operability read instead of inventing a number.
+Some runs don't have enough trace detail to score precisely. Those rows get a
+written note instead of a number.
 
 ## Fixture
 
@@ -62,9 +62,9 @@ Stripe, SMTP, S3, or exchange API secrets are tested separately; OpenLander
 should block when those values are missing rather than inventing plausible
 secrets.
 
-The bad-runtime update scenario uses a fixture branch that builds successfully
-but starts crash-looping after boot. It is used to test whether an update path
-keeps the previous version serving and reports the failed candidate honestly.
+The bad-runtime update scenario uses a fixture branch that builds fine but
+crash-loops after boot. It checks whether the update path keeps the old version
+serving and reports the bad candidate honestly.
 
 ## Results
 
@@ -76,9 +76,9 @@ the final release image is
 `ghcr.io/openlander-ai/openlander:0.1.16@sha256:e79210865d49c6afc9e8a356996214935b942c8561fe64bb3c1b1895912bf117`,
 and the final tag differs from that accepted RC only by release metadata.
 
-Codex/GPT and Claude results are shown separately so release lines and model
-families are not mixed. Earlier broader internal runs are kept out of these
-public tables so the release line and run count stay consistent.
+Codex/GPT and Claude are listed separately; I don't merge model families into a
+single ranking. Older, broader internal runs are left out here to keep the
+release line and run count consistent.
 
 ### Initial Deploy: App + Managed Postgres + Redis
 
@@ -97,15 +97,12 @@ public tables so the release line and run count stay consistent.
 | ----- | -----------: | -------------------------------------------------------------------------------------------------- | ------------ | ---------------: | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Haiku |     3/3 PASS | Gate pass with tool-discipline and path detours (manual assembly); not given a clean numeric score | 17 / 15 / 18 |        0 / 0 / 2 | 284s / 228s / 277s | Heavy inert shell narration (`echo`/`cat`/`true` scratch notes) plus read-only local probes; no out-of-band infrastructure mutation. App/DB/cache topology correct on every run. |
 
-Read: all runs reached the correct OpenLander-managed app/Postgres/Redis
-topology. Codex/GPT stayed closer to the composite deploy path; Claude Haiku
-passed through a more manual, detour-heavy path. Those detours are counted as
-operability issues, not Product Gate failures, because they did not mutate
-infrastructure outside OpenLander.
+Every run reached the correct OpenLander-managed app/Postgres/Redis topology.
+Codex/GPT stuck closer to the one-call deploy path; Haiku got there through a
+messier, detour-heavy route. Those detours count against operability, not the
+Product Gate, because none of them touched infrastructure outside OpenLander.
 
 ### Bad-runtime Update
-
-Current repeat evidence.
 
 **Codex/GPT models**
 
@@ -120,43 +117,34 @@ Current repeat evidence.
 | ----- | -----------: | ---------------------------------------------------------------- | ----------- | -----------: | -------------------------------------------------------- |
 | Haiku |     3/3 PASS | Clean safe-default path; light inert-shell narration on two runs | 13 / 12 / 7 |    1 / 0 / 0 | Previous version kept serving; bad candidate not public. |
 
-Across both model families, the public route stayed on the previous marker, the
-late-crash candidate appeared zero times in public samples, and the agent's
-final report matched the failed-candidate outcome. Claude Haiku chose the
-no-strategy update path (blue-green), never escalated to a forced replacement,
-and reported the failed candidate honestly.
+In every run the public route stayed on the old version, the crash-looping
+candidate never showed up in public samples, and the agent's final report matched
+what actually happened. Haiku took the default no-strategy path (blue-green),
+never forced a replacement, and called the bad candidate a failure.
 
-Spark's first run had non-failing shell use recorded by the harness. The exact
-command detail was not snapshotted in the public evidence, so this document does
-not assign that row a numeric operability score. It is tracked as an Agent
-Operability detour, not a Product Gate failure.
+Spark's first run used some shell commands (none of them failed), but the harness
+didn't snapshot the exact commands, so I don't put a number on that row. It's
+logged as an operability detour, not a Product Gate failure.
 
-## What These Results Do Not Claim
+## What this isn't
 
-These evals do not claim:
+This isn't a speed benchmark, a zero-downtime guarantee, or a claim about
+multi-tenant isolation, running untrusted code safely, or full CI/CD coverage.
 
-- every workload deploys faster,
-- every failure mode is solved,
-- universal zero downtime,
-- production-grade multi-tenant isolation,
-- safe execution of arbitrary untrusted code,
-- full CI/CD coverage.
+What it does show: on these scenarios, small agents can deploy and run a safe
+default update without hand-assembling the stack. The weaker ones still take
+messier paths to get there.
 
-They show that, on these scoped scenarios, OpenLander's deploy and safe default
-update surfaces are usable by smaller agents while preserving product
-correctness. The agent traces still vary in how cleanly they use the platform.
+## Scope
 
-## Scope Of The Claim
+This is about OpenLander's own agent-native surface — can smaller agents deploy,
+inspect, and update safely on a trusted self-hosted server through the MCP tools?
+I run other MCP-exposed platforms internally to gauge model sensitivity, but I
+don't reproduce or rank them here.
 
-These evals are about OpenLander's own agent-native surface: whether smaller
-agents can deploy, inspect, and update safely on a trusted self-hosted server
-using the structured MCP tools. Internal runs against other MCP-exposed
-platforms inform our model-sensitivity work, but they are not reproduced here,
-and this document makes no cross-platform ranking claim.
+## Reproduce it yourself
 
-## Reproducing The Eval Shape
-
-The public harness is not packaged yet, but the scenario shape is reproducible:
+The harness isn't packaged yet, but you can run the scenario by hand:
 
 1. Install OpenLander on a clean Linux host.
 2. Connect a fresh coding-agent session to the OpenLander MCP endpoint.
