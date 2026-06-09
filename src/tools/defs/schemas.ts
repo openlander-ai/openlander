@@ -759,7 +759,17 @@ export const addDomainRouteSchema = z
     },
   );
 
-export const listDomainRoutesSchema = z.object({ ...domainRouteTargetFields }).strict();
+export const listDomainRoutesSchema = z
+  .object({
+    ...domainRouteTargetFields,
+    verify: z
+      .boolean()
+      .optional()
+      .describe(
+        'Probe registered routes through the managed Traefik HTTP provider. Defaults to true for targeted lookups and false for unfiltered lists.',
+      ),
+  })
+  .strict();
 
 // Agent-specific schemas
 export const agentExecuteGoalSchema = z.object({

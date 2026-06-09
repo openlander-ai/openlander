@@ -19,6 +19,7 @@ import {
   ProjectNotFoundError,
 } from '../../errors.js';
 import { emptySchema } from './schemas.js';
+import { summarizeRouteHealth, type DomainRouteHealth } from '../route-health.js';
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
@@ -278,6 +279,25 @@ export const projectOpsToolDefs: ToolDef[] = [
       const projects = await context.appCtx.db.listProjects();
       const serviceRecords = await loadProjectServiceRecords(context.appCtx, projects);
       const deployables = new Map<string, ServiceRow | undefined>();
+      const domainMappings =
+        typeof context.appCtx.db.listDomainMappings === 'function'
+          ? await context.appCtx.db.listDomainMappings()
+          : [];
+      const domainMappingsByService = new Map<string, DomainRouteHealth[]>();
+      for (const mapping of domainMappings) {
+        const routes = domainMappingsByService.get(mapping.service_id) ?? [];
+        routes.push({
+          domain: mapping.domain,
+          path_prefix: mapping.path_prefix,
+          mapping_status: mapping.status,
+        });
+        domainMappingsByService.set(mapping.service_id, routes);
+      }
+      const routeHealthFor = (service: ServiceRow) =>
+        summarizeRouteHealth({
+          service,
+          domainRoutes: domainMappingsByService.get(service.id) ?? [],
+        });
       const deployableGroups =
         typeof context.appCtx.db.getDeployablesByGroupIds === 'function'
           ? await context.appCtx.db.getDeployablesByGroupIds(projects.map((p) => p.id))
@@ -351,6 +371,7 @@ export const projectOpsToolDefs: ToolDef[] = [
                   status: deployable.status,
                   port: deployable.assigned_port,
                   container_name: deployableContainerName,
+                  route_health: routeHealthFor(deployable),
                 }
               : null;
             const deployableServices = (deployableGroups.get(project.id) ?? []).map((service) => ({
@@ -363,6 +384,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               container_name:
                 service.container_name ??
                 (deployable?.id === service.id ? deployableContainerName : null),
+              route_health: routeHealthFor(service),
             }));
             const deployableServiceCount = deployableServices.length;
             return {
@@ -377,6 +399,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               preferred_url: routeService ? getPreferredDeployableServiceUrl(routeService) : null,
               urls: serviceUrls,
               publicUrl,
+              route_health: deployable ? routeHealthFor(deployable) : undefined,
               deployable_service_count: deployableServiceCount,
               deployable_service: deployableService,
               deployable_services: deployableServices,
@@ -428,6 +451,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             url: preferredUrl,
             preferred_url: preferredUrl,
             publicUrl,
+            route_health: deployable ? routeHealthFor(deployable) : undefined,
             deployable_service_count: deployableServiceCount,
           };
         }),

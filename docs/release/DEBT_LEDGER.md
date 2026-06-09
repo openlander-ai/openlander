@@ -3,6 +3,26 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.17
+
+- **Domain route visibility response expansion:** existing
+  `openlander_service.add_domain_route`,
+  `openlander_service.list_domain_routes`, `openlander_service.apply_route_config`,
+  and `openlander_project.list_projects` now expose route-health fields for
+  custom-domain visibility and repair guidance.
+- **Why accepted:** operator QA showed Projects can look healthy while the
+  public/custom Host route is 404/502. Agent-native operation needs the route
+  state in the same MCP surfaces that create, list, or repair those routes.
+- **Vocab review:** no action names, REST routes, database tables, or wire
+  identity fields are renamed. `service_id` remains the target identity;
+  `route_health`, `route_verification`, and `domain_route_health` describe
+  route state, not a new resource type.
+- **Endpoint collision check:** no MCP action, composite slot, REST route, or
+  database field is added. `list_domain_routes.verify` is an optional parameter
+  on an existing action.
+- **Follow-up:** if route health becomes a web dashboard concern, reuse this
+  route-health contract instead of creating a separate UI-only status vocabulary.
+
 ## v0.1.16
 
 - **No automatic force fallback for app updates:** existing

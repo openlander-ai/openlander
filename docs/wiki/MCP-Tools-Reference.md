@@ -562,6 +562,12 @@ fails, OpenLander restores the previous `container_port` and returns
 without a configured health path return `route_verification.status: "skipped"`
 and keep the usual `diagnostic_call` for follow-up inspection.
 
+When the Application has custom domain routes, the response also includes
+`domain_route_health`. OpenLander probes those Host routes through the managed
+Traefik HTTP provider after the port change. HTTP 5xx or probe failures roll
+the port change back; HTTP 4xx is reported as a warning because some apps do not
+serve `/` or the route prefix as a health endpoint.
+
 ---
 
 ## Environment Variables & Secrets
@@ -805,10 +811,23 @@ OpenLander v0.1 does not create DNS records, Cloudflare tunnels, ngrok endpoints
 certificates. Docker labels are not the source of truth for custom domains; check
 `/api/traefik/config` and Traefik loaded routers when debugging.
 
+The response includes `route_health` and `route_verification`. Verification is
+a direct managed-Traefik Host-header probe from the OpenLander host; it proves
+that Traefik has loaded the Host/path route, not that external DNS, Cloudflare,
+or TLS are configured.
+
 ### `list_domain_routes`
 
 Optional `service_id`, `service_name`, `project_id`, or `project_name` filters. With no parameters,
 lists all registered domain routes.
+
+| Parameter | Type    | Required | Description                                                                 |
+| --------- | ------- | -------- | --------------------------------------------------------------------------- |
+| `verify`  | boolean | No       | Probe routes through managed Traefik. Defaults to true for targeted lookups |
+
+Targeted responses include `route_health` and `route_verification` by default.
+Unfiltered lists skip live probes unless `verify: true` is provided, to avoid
+turning inventory calls into large probe fanouts.
 
 ---
 

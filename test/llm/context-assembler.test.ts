@@ -201,6 +201,24 @@ describe('context-assembler', () => {
       expect(briefing).toContain('frontend');
     });
 
+    it('groups service-scoped incidents by owning project_id instead of raw service_id', async () => {
+      const incidents: RuntimeIncidentRow[] = [
+        {
+          id: 'inc-1',
+          service_id: 'api-real-service',
+          project_id: 'proj-1',
+          category: 'crash',
+          error_snippet: 'API failed',
+          restart_count: 1,
+          created_at: '2025-01-01T00:00:00Z',
+        } as RuntimeIncidentRow,
+      ];
+
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
+      expect(briefing).toContain('frontend');
+      expect(briefing).not.toContain('api-real-service');
+    });
+
     it('should include incident category', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {

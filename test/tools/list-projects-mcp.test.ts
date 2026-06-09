@@ -34,6 +34,7 @@ function createContext(params: {
   projects: Array<Record<string, unknown>>;
   deployables: Record<string, ReturnType<typeof makeService> | undefined>;
   groups?: Record<string, Array<ReturnType<typeof makeService>>>;
+  domainMappings?: Array<Record<string, unknown>>;
 }) {
   const services = Object.values(params.deployables).filter(
     (service): service is ReturnType<typeof makeService> => service !== undefined,
@@ -46,6 +47,7 @@ function createContext(params: {
       ),
       getDeployableForProject: vi.fn(async (id: string) => params.deployables[id]),
       getDeployablesByGroup: vi.fn(async (id: string) => params.groups?.[id] ?? []),
+      listDomainMappings: vi.fn(async () => params.domainMappings ?? []),
       updateProject: vi.fn(async () => undefined),
     },
     docker: { inspectContainer: vi.fn() },
@@ -97,12 +99,31 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
             }),
           ],
         },
+        domainMappings: [
+          {
+            id: 'domain-urlnest',
+            service_id: 'urlnest__svc',
+            domain: 'urlnest.example.com',
+            status: 'active',
+            path_prefix: '/',
+          },
+        ],
       });
 
       const wire = await runWire(ctx);
       const project = wire.projects[0]!;
       expect(project['name']).toBe('p2probe');
       expect(project['url']).toBe('http://urlnest.apps.example.com');
+      expect(project['route_health']).toMatchObject({
+        status: 'healthy',
+        custom_domain_count: 1,
+      });
+      expect(
+        (project['deployable_service'] as Record<string, unknown>)['route_health'],
+      ).toMatchObject({
+        status: 'healthy',
+        custom_domain_count: 1,
+      });
       expect(project['preferred_url']).toBe('http://urlnest.apps.example.com');
       expect(project['urls']).toEqual([
         expect.objectContaining({ url: 'http://urlnest.apps.example.com' }),
