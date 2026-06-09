@@ -102,24 +102,26 @@ release line and run count stay consistent.
 
 **Claude cohort**
 
-| Model rung | Product Gate | Agent Operability read                                                              | MCP calls    | Failed MCP calls | Wall time          | Notes                                                                                                                                                                                |
-| ---------- | -----------: | ----------------------------------------------------------------------------------- | ------------ | ---------------: | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Haiku      |     3/3 PASS | Gate pass with low-rung tool-discipline deductions; not given a clean numeric score | 17 / 15 / 18 |        0 / 0 / 2 | 284s / 228s / 277s | Heavy inert shell narration (`echo`/`cat`/`true` scratch notes) plus read-only local probes; **no out-of-band infrastructure mutation**. App/DB/cache topology correct on every run. |
+| Model rung | Product Gate | Agent Operability read                                                                                      | MCP calls    | Failed MCP calls | Wall time          | Notes                                                                                                                                                                                |
+| ---------- | -----------: | ----------------------------------------------------------------------------------------------------------- | ------------ | ---------------: | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Haiku      |     3/3 PASS | Gate pass with low-rung tool-discipline and path detours (manual assembly); not given a clean numeric score | 17 / 15 / 18 |        0 / 0 / 2 | 284s / 228s / 277s | Heavy inert shell narration (`echo`/`cat`/`true` scratch notes) plus read-only local probes; **no out-of-band infrastructure mutation**. App/DB/cache topology correct on every run. |
 
-The lowest rung in each cohort (Spark, Haiku) stayed on OpenLander's composite
-deploy workflow and reached a correct app/Postgres/Redis topology. The Claude
-Haiku rung leans on inert local narration far more than the Codex/GPT rungs, so
-it carries Tool Discipline deductions rather than a clean operability score — but
-those detours never touched infrastructure outside the platform tools, and the
-Product Gate still passed every run.
+The lowest rung in each cohort reached the correct OpenLander-managed
+app/Postgres/Redis topology. Codex/GPT stayed closer to the composite deploy
+path; Claude Haiku took tool-discipline and path detours (manual assembly plus
+heavy inert-shell narration), reported as operability deductions rather than
+Product Gate failures. None of those detours touched infrastructure outside the
+platform tools, and the Product Gate still passed every run.
 
 All runs passed the same rich oracle: `/health`, app root, invoice
 write/read, Redis hit increment, public URL correctness, and same-project
 app/database/cache topology.
 
-The important signal is not the exact wall-clock time. It is that every model
-rung stayed on OpenLander's composite deploy workflow instead of manually
-constructing a Project, database, cache, env wiring, route, and status loop.
+The important signal is not the exact wall-clock time. It is that each rung
+reached a correct, OpenLander-managed topology through the platform tools — the
+stronger rungs via the composite deploy path, and the weakest (Claude Haiku) via
+a more manual, detour-heavy path that still avoided any out-of-band
+infrastructure step.
 
 ### Bad-runtime Update
 
