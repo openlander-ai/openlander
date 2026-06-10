@@ -79,13 +79,13 @@ export function getAgentGuideContent(
     case 'add-domain':
       return {
         heading: 'Tell your agent which domain to attach',
-        lead: 'Domain attachment, DNS verification, and TLS issuance all run through MCP. Your agent will surface verification records and confirm when the cert is live.',
+        lead: 'Domain attachment registers an OpenLander route for a host that already points at this server. DNS and TLS stay outside OpenLander in v0.1; your agent can verify route health after registration.',
         prompts: [
           {
-            text: `Attach app.example.com to ${serviceName} on project ${projectName} as the primary domain.`,
+            text: `Attach app.example.com to ${serviceName} on Project ${projectName}, then verify the domain route health.`,
           },
           {
-            text: `Move the existing domain off ${serviceName} to staging.`,
+            text: `List domain routes for ${serviceName} and tell me which hosts are healthy.`,
           },
         ],
       };
@@ -104,15 +104,15 @@ export function getAgentGuideContent(
       };
     case 'delete-service':
       return {
-        heading: 'Tell your agent to remove this service',
-        lead: 'Service removal goes through your agent so the reasoning — and any preflight check — lives in your chat history. Containers, env vars, and DNS are cleaned up together.',
+        heading: 'Tell your agent to archive this Application',
+        lead: 'Permanent Project/Application deletion is human UI-only. Your agent can request reversible archive/restore, then explain what remains before you use the web Danger zone.',
         prompts: [
           {
-            text: `Stop and remove ${serviceName} from ${projectName}. Drop its env vars but keep any Database/Cache resource it referenced.`,
+            text: `Archive ${serviceName} in Project ${projectName} and tell me what will remain restorable.`,
           },
           {
-            text: `Remove ${serviceName} from ${projectName} and any Database/Cache resource it was the only consumer of.`,
-            hint: 'Use this only when that Database/Cache resource is no longer needed by anything else.',
+            text: `Check whether ${serviceName} in Project ${projectName} still references any Database/Cache resource before I delete anything in the web UI.`,
+            hint: 'Use the web Danger zone for permanent deletion; MCP archive is reversible and approval-gated.',
           },
         ],
       };
@@ -120,14 +120,14 @@ export function getAgentGuideContent(
       const domain = ctx.domain ?? 'app.example.com';
       return {
         heading: 'Tell your agent which domain to detach',
-        lead: 'Domain detachment, DNS deactivation, and cert revocation run through MCP so the agent can confirm propagation and stop traffic cleanly.',
+        lead: 'Domain removal is handled in the web Domains tab in v0.1. Your agent can inspect current route health and confirm which Host/path route you are about to remove.',
         prompts: [
           {
-            text: `Detach ${domain} from ${serviceName} and tell me when DNS has propagated.`,
+            text: `List domain routes for ${serviceName} and confirm whether ${domain} is currently healthy before I remove it in the web UI.`,
           },
           {
-            text: `Move ${domain} off ${serviceName} and over to staging.`,
-            hint: 'Useful when promoting/demoting between environments.',
+            text: `Diagnose why ${domain} is failing on ${serviceName} before I change the route.`,
+            hint: 'OpenLander v0.1 does not create DNS records or TLS certificates; check those outside OpenLander.',
           },
         ],
       };
@@ -136,7 +136,7 @@ export function getAgentGuideContent(
       const key = ctx.envVarKey ?? 'KEY_NAME';
       return {
         heading: 'Tell your agent which env var to set',
-        lead: 'Env var changes flow through the agent so secrets land in the right scope and the redeploy is queued automatically.',
+        lead: 'Env var changes are saved through MCP. Ask the agent to apply them with a redeploy, or request immediate runtime apply only when that is intentional.',
         prompts: [
           {
             text: `Set ${key} on ${projectName} to <value> and redeploy.`,
@@ -152,7 +152,7 @@ export function getAgentGuideContent(
       const key = ctx.envVarKey ?? 'KEY_NAME';
       return {
         heading: 'Tell your agent which env var to remove',
-        lead: 'Env var removals go through the agent so the redeploy and any consumer-impact check are part of the same operation.',
+        lead: 'Env var removals are saved through MCP. Ask the agent to check impact and redeploy the affected Application/Compose workload when needed.',
         prompts: [
           {
             text: `Remove ${key} from ${projectName} and redeploy.`,
