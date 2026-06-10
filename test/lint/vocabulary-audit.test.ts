@@ -1,9 +1,10 @@
 /**
- * Vocabulary audit — guardrails for the Project=group / Service=deployable model.
+ * Vocabulary audit — guardrails for the Project resource model.
  *
- * Runtime/deploy actions belong to services only. Project composite keeps group
- * lifecycle, listing, and project-scoped configuration, but no deploy/runtime
- * *_project aliases.
+ * User-facing resources are Application, Compose, Database, Cache, and Storage.
+ * Runtime/deploy actions belong to the service composite for compatibility.
+ * Project composite keeps lifecycle, listing, and project-scoped configuration,
+ * but no deploy/runtime *_project aliases.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -98,7 +99,7 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'list_domain_routes',
 ] as const;
 
-describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () => {
+describe('vocabulary-audit (Project resources / compatibility service guardrail)', () => {
   it('PROJECT_ACTIONS contains only group/config actions', () => {
     const actions = PROJECT_ACTIONS as readonly string[];
     expect(actions).toEqual([...FROZEN_PROJECT_GROUP_ACTIONS]);
@@ -107,7 +108,7 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     }
   });
 
-  it('SERVICE_ACTIONS contains the canonical deployable runtime actions', () => {
+  it('SERVICE_ACTIONS contains the Application/Compose runtime actions', () => {
     const actions = SERVICE_ACTIONS as readonly string[];
     expect(actions).toEqual([...FROZEN_DEPLOYABLE_SERVICE_ACTIONS]);
     expect(actions).toEqual(
@@ -124,7 +125,7 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     );
   });
 
-  it('MANAGED_SERVICE_ACTIONS remains the infrastructure-service surface', () => {
+  it('MANAGED_SERVICE_ACTIONS remains the Database/Cache/Storage compatibility surface', () => {
     expect(MANAGED_SERVICE_ACTIONS as readonly string[]).toEqual([
       ...FROZEN_MANAGED_SERVICE_ACTIONS,
     ]);
@@ -161,7 +162,7 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     expect(typeof VERSION === 'string' && VERSION.length > 0).toBe(true);
   });
 
-  it('project archived/default filters derive deployable service kinds from the shared set', () => {
+  it('project archived/default filters derive workload kinds from the shared set', () => {
     const projectRepo = readFileSync(
       resolve(REPO_ROOT, 'src', 'db', 'repos', 'project.repo.ts'),
       'utf8',

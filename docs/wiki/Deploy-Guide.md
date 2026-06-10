@@ -30,9 +30,11 @@ ambiguous monorepo deploys; expose the service after attach if needed.
 | Compose                         | A compose stack represented as one Project-level resource.                         | Stack deploys and stack-level diagnostics.       |
 | Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets.        |
 
-After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
-Use that `service_id` for follow-up MCP actions such as `update_app`, `set_env_vars`,
-`add_domain_route`, and `diagnose_service`.
+After a deploy, call `list_projects` and keep the returned Application/Compose
+`service_id`. In v0.1.x this compatibility field appears at
+`projects[].deployable_service.service_id`. Use that `service_id` for follow-up
+MCP actions such as `update_app`, `set_env_vars`, `add_domain_route`, and
+`diagnose_service`.
 
 ---
 
@@ -49,8 +51,9 @@ polls `get_deploy_status`, and returns the app URL. Confirm the app responds at 
 
 A new-app deploy does **not** auto-provision a database in one shot. Wire one explicitly.
 First call `list_projects` and note the demo's `project_id` (or `project_name`) and its
-`deployable_service.service_id` — `create_service` requires a project target so the
-database lands on the same isolated network as the app.
+Application `service_id` (`deployable_service.service_id` in v0.1.x compatibility
+output) — `create_service` requires a project target so the database lands on the
+same isolated network as the app.
 
 1. `openlander_managed_service.create_service(name: "demo-db", template: "postgresql", project_id: "<project_id>")`
 2. `openlander_managed_service.get_service_credentials(service_id: "<db service_id>")`

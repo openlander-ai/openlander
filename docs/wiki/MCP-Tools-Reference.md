@@ -31,8 +31,9 @@ Agent routing rule of thumb:
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
-`list_projects().projects[].deployable_service_count` is the app/worker count for the group; it
-does not include Database resources, caches, buckets, or the compose parent metadata row.
+`list_projects().projects[].deployable_service_count` is the v0.1.x compatibility
+field for Application/worker count in the Project; it does not include Database
+resources, caches, buckets, or the Compose parent metadata row.
 
 Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
 dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, **shown only

@@ -224,13 +224,13 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | Update   | `openlander_service` → `update_app`             | Ship latest stored source/config       |
 | Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only   |
 | Share    | `openlander_project` → `expose_public`          | Generate temporary share URL           |
-| Service  | `openlander_managed_service` → `create_service` | Create database/cache                  |
+| Resource | `openlander_managed_service` → `create_service` | Create Database/Cache resource         |
 
 MCP env changes target Applications. Use `service_id` or `service_name`;
-`project_name` works only for groups with exactly one Application.
+`project_name` works only for Projects with exactly one Application.
 Monitoring actions such as `get_logs` and `get_project_stats` follow the same
-targeting rule; prefer the `deployable_service.service_id` returned by
-`list_projects`.
+targeting rule; prefer the Application `service_id` returned by `list_projects`
+(`deployable_service.service_id` in v0.1.x compatibility output).
 
 MCP env changes are service-scoped and conservative by default: `set_env_vars`,
 `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless

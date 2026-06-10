@@ -11,8 +11,8 @@ The main product direction is:
 - treat the v0.1.14 Day-2 recovery loop as the automation foundation: agents get
   one high-confidence diagnosis, one safe next action, and an explicit
   verification result,
-- keep project groups, deployable services, managed services, and deployment
-  targets easy to distinguish,
+- keep Projects, Application/Compose workloads, Database/Cache/Storage
+  resources, and deployment targets easy to distinguish,
 - make deployment-target-specific configuration predictable,
 - make every important mutation usable from both the web UI and MCP,
 - keep built-in AI/Ops automation dormant until its product surface and tests
@@ -43,11 +43,11 @@ and read verification results.
 The first 0.2 milestone is the environment-variable scope refactor described in
 `docs/release/ENVIRONMENT_VARIABLES_0_2_PLAN.md`.
 
-This comes first because staging, preview deployments, managed-service binding,
-agent workflows, Swarm, and Kubernetes all need the same answers:
+This comes first because staging, preview deployments, Database/Cache/Storage
+binding, agent workflows, Swarm, and Kubernetes all need the same answers:
 
 - which deployment target is being deployed,
-- which deployable service receives the change,
+- which Application/Compose workload receives the change,
 - which value is effective at runtime,
 - whether saving a change requires redeploying a running service.
 
@@ -86,12 +86,13 @@ agent workflows, Swarm, and Kubernetes all need the same answers:
 - Keep custom arbitrary environment names, and staging as a default product
   surface, out of 0.2 until the fixed-key model is stable.
 
-### 4. Managed Service Binding Across Deployment Targets
+### 4. Database/Cache/Storage Binding Across Deployment Targets
 
 - Make generated connection variables deployment-target-aware.
 - Show generated/managed values as a separate source in effective env views.
 - Prevent managed runtime values from being silently overridden by user writes.
-- Keep standalone managed-service creation and deploy-plan auto-wiring aligned.
+- Keep standalone Database/Cache/Storage creation and deploy-plan auto-wiring
+  aligned.
 
 ### 5. Agent And UI Contract Stabilization
 

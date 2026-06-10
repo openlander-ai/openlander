@@ -108,11 +108,11 @@ export function getAgentGuideContent(
         lead: 'Service removal goes through your agent so the reasoning — and any preflight check — lives in your chat history. Containers, env vars, and DNS are cleaned up together.',
         prompts: [
           {
-            text: `Stop and remove ${serviceName} from ${projectName}. Drop its env vars but keep any managed DB it referenced.`,
+            text: `Stop and remove ${serviceName} from ${projectName}. Drop its env vars but keep any Database/Cache resource it referenced.`,
           },
           {
-            text: `Remove ${serviceName} from ${projectName} and any managed DB it was the only consumer of.`,
-            hint: 'Use this only when the managed DB is no longer needed by anything else.',
+            text: `Remove ${serviceName} from ${projectName} and any Database/Cache resource it was the only consumer of.`,
+            hint: 'Use this only when that Database/Cache resource is no longer needed by anything else.',
           },
         ],
       };

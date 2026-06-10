@@ -11,15 +11,15 @@ export interface ServiceTemplate {
 }
 
 /**
- * Service — covers BOTH deployables and managed services in 1.0-rc.2's
- * additive schema (P1). The `kind` discriminator is the canonical way to
- * tell them apart post-fullsplit; legacy callers may still inspect `type`
- * (preserved on the wire for backward-compat through 1.x).
+ * Service row — compatibility API shape for Application/Compose workloads and
+ * Database/Cache/Storage resources. The `kind` discriminator is the canonical
+ * way to tell product resource types apart; legacy callers may still inspect
+ * `type` (preserved on the wire for backward-compat through 1.x).
  *
  * `kind` values:
- *   - Project-level deployables: 'git' | 'image' | 'compose'
+ *   - Project-level workloads: 'git' | 'image' | 'compose'
  *   - Internal Compose nodes: 'compose-child'
- *   - Managed:     'postgres' | 'mysql' | 'redis' | 'mongo' | 'minio'
+ *   - Database/Cache/Storage resources: 'postgres' | 'mysql' | 'redis' | 'mongo' | 'minio'
  *
  * Fields like `status`, `container_id`, `port` remain populated on the row
  * so today's UI keeps rendering during the additive-schema transition.
@@ -59,17 +59,16 @@ export interface ProjectManagedService {
   autoInjectedEnvKeys?: string[];
 }
 
-// ─── 1.0-rc.2: infrastructure-service namespace ───────────────────────────
+// ─── 1.0-rc.2: Database/Cache/Storage resource namespace ──────────────────
 //
-// Per ralplan-data-model-full-migration §6.8: managed-service helpers
-// split into a dedicated namespace so the deployable-vocab `getService(id)`
+// Resource helpers stay in a dedicated namespace so the workload `getService(id)`
 // (which will live under `/api/projects/:p/services/:s` once P2 lands the
-// canonical handler) doesn't collide with managed-service callers.
+// canonical handler) doesn't collide with Database/Cache/Storage callers.
 
 export const managedServices = {
-  /** Get a managed service by id. */
+  /** Get a Database/Cache/Storage resource by id. */
   get: (id: string): Promise<Service> => apiGet<Service>(`/api/services/${id}`),
-  /** List managed services attached to a group via service_connections. */
+  /** List Database/Cache/Storage resources attached to a Project via service_connections. */
   listForGroup: (groupId: string): Promise<ProjectManagedService[]> =>
     apiGet<ProjectManagedService[]>(`/api/projects/${groupId}/managed-services`),
   logs: (id: string, lines?: number): Promise<string> => getServiceLogs(id, lines),
@@ -80,15 +79,15 @@ export const managedServices = {
 } as const;
 
 /**
- * 1.0-rc.2 canonical: list deployable services for a group.
+ * 1.0-rc.2 canonical: list Application/Compose workloads for a Project.
  *
  * `/api/projects/:p/services` is the canonical deployable list endpoint
  * (P2 returns Project-level rows and keeps compose-child rows internal to the
  * Compose detail/topology surface). Used by the new `useGroupServices(groupId)`
  * hook that powers ProjectView's Services tab.
  *
- * The `ConnectedService` shape from `lib/api/projects.ts` (managed-services
- * via `service_connections`) is preserved unchanged at
+ * The `ConnectedService` shape from `lib/api/projects.ts`
+ * (Database/Cache/Storage resources via `service_connections`) is preserved unchanged at
  * `/api/projects/:p/managed-services` and accessed via
  * `managedServices.listForGroup(groupId)` above.
  */

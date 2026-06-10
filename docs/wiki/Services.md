@@ -55,7 +55,7 @@ attached to the same isolated Docker network as the app that will use it.
 
 ---
 
-## Service Naming
+## Resource Container Naming
 
 Container names follow the pattern: `ol-svc-{name}`
 
@@ -81,7 +81,7 @@ Returns: host, port, username, password, connection string.
 
 ## Database Operations
 
-For PostgreSQL and MySQL services:
+For PostgreSQL and MySQL resources:
 
 ### Create Database
 
@@ -222,9 +222,10 @@ set_env_vars(
 )
 ```
 
-MCP env changes target Applications and save only by default. Prefer `service_id` from
-`list_projects().projects[].deployable_service.service_id`; `project_name` works only for groups
-with exactly one Application. Update the app with `update_app`, or pass
+MCP env changes target Applications and save only by default. Prefer the Application
+`service_id` returned by `list_projects()` (`projects[].deployable_service.service_id`
+in v0.1.x compatibility output); `project_name` works only for Projects with exactly
+one Application. Update the app with `update_app`, or pass
 `defer_redeploy=false` to `set_env_vars`, for the new value to reach a running container.
 
 Typical agent flow:

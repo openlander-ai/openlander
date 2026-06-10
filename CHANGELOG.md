@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.17-rc.3] - 2026-06-10
+
+### Changed
+
+- Clarified user-facing MCP, web prompt, and launch documentation vocabulary
+  around the Project resource model: Projects contain Applications, Compose
+  stacks, and Database/Cache/Storage resources. Compatibility action names and
+  wire fields such as `openlander_managed_service`, `service_id`, and
+  `deployable_service` remain unchanged.
+
+### Fixed
+
+- Extended the public vocabulary audit to reject `managed DB` wording in
+  user-facing docs, MCP/runtime strings, and web prompt copy.
+
 ## [0.1.17-rc.2] - 2026-06-10
 
 ### Fixed

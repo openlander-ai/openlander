@@ -45,11 +45,11 @@ export interface Project {
   /** Active services shown by default in cards/topology. Excludes archived rows. */
   activeServiceCount?: number;
   active_service_count?: number;
-  /** Deployable app/worker service count. Excludes managed infrastructure services. */
+  /** Application/worker count. Excludes Database/Cache/Storage resources. */
   deployableServiceCount?: number;
   /**
    * Legacy total service count kept for wire compatibility.
-   * Includes deployable app/worker services plus connected managed services.
+   * Includes Application/worker rows plus connected Database/Cache/Storage resources.
    */
   serviceCount?: number;
   /** Explicit total service count. Same value as serviceCount on current API responses. */

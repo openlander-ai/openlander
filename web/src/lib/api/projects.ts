@@ -370,7 +370,7 @@ export interface RecentDeployment extends DeployLogSummary {
   serviceName: string;
 }
 
-/** Fetches env vars for a single deployable service. Wraps
+/** Fetches env vars for a single Application/Compose workload. Wraps
  *  /api/projects/:p/services/:s/env. The wire shape matches the
  *  legacy /projects/:id/env (project, envVars). */
 export async function getServiceEnvVars(

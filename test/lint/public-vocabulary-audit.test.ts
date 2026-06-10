@@ -35,6 +35,7 @@ const FORBIDDEN_PUBLIC_NOUNS = [
   /\bproject groups?\b/i,
   /\bdeployable services?\b/i,
   /\bmanaged services?\b/i,
+  /\bmanaged DBs?\b/i,
   /\bcreate services?\b/i,
   /\badd services?\b/i,
 ] as const;

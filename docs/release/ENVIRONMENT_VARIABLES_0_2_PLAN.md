@@ -33,15 +33,15 @@ target variables without a clear inherited/effective view.
 
 0.2 should support these scopes as the canonical model:
 
-| Scope                   | Owner                             | Purpose                                                                                                                                       |
-| ----------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Global secret           | Instance                          | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                              |
-| Project shared          | Project group                     | Values reused by every service in the project.                                                                                                |
-| Project target          | Project group + target key        | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is reserved for later — not accepted by the current `environments.type` schema, and not a default 0.2 target). |
-| Service shared          | Deployable service                | Values specific to one app/worker, regardless of target.                                                                                      |
-| Service target          | Deployable service + target key   | Final per-service override for a specific target.                                                                                             |
-| Inline deploy override  | Deploy request or plan            | One-shot values supplied by a deploy plan or API call.                                                                                        |
-| System/runtime reserved | OpenLander                        | Protected runtime values such as platform-managed connection/runtime metadata.                                                               |
+| Scope                   | Owner                           | Purpose                                                                                                                                                                                                            |
+| ----------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Global secret           | Instance                        | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                                                                                                   |
+| Project shared          | Project group                   | Values reused by every service in the project.                                                                                                                                                                     |
+| Project target          | Project group + target key      | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is reserved for later — not accepted by the current `environments.type` schema, and not a default 0.2 target). |
+| Service shared          | Deployable service              | Values specific to one app/worker, regardless of target.                                                                                                                                                           |
+| Service target          | Deployable service + target key | Final per-service override for a specific target.                                                                                                                                                                  |
+| Inline deploy override  | Deploy request or plan          | One-shot values supplied by a deploy plan or API call.                                                                                                                                                             |
+| System/runtime reserved | OpenLander                      | Protected runtime values such as platform-managed connection/runtime metadata.                                                                                                                                     |
 
 Effective runtime precedence should be:
 
@@ -77,7 +77,7 @@ dedicated logical project-target table later, but UI/API/MCP callers should
 not need to know service-runtime row ids just to edit shared target
 variables.
 
-This keeps the model compatible with multi-service project groups and leaves a
+This keeps the model compatible with multi-workload Projects and leaves a
 clean path for custom environment names after 0.2.
 
 ## Reference Syntax

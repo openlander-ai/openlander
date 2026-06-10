@@ -43,7 +43,7 @@ export interface ServiceNode {
   mem: string;
   /** Public URL or null */
   url: string | null;
-  /** Non-null when this deployable service is archived */
+  /** Non-null when this Application/Compose workload is archived */
   archivedAt?: string | null;
   /** Service IDs within the same project this service depends on (e.g. ['postgres', 'redis']) */
   dependsOn: string[];
