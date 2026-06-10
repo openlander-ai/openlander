@@ -22,6 +22,9 @@ import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { getAgentGuideContent, type AgentGuideKind } from './prompt-sets';
 
+const MCP_SETUP_CHECK =
+  'Before acting, call openlander_project({ action: "help" }) to confirm OpenLander MCP tools are available. If openlander_* tools are not available, stop and ask me to connect MCP; do not call OpenLander /api endpoints with the MCP token.';
+
 export interface AgentGuideDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -203,8 +206,9 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
 
   const handleCopy = () => {
     if (disabled) return;
+    const copyText = `${MCP_SETUP_CHECK}\n\n${text}`;
     void navigator.clipboard
-      .writeText(text)
+      .writeText(copyText)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);

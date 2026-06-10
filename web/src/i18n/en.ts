@@ -93,7 +93,7 @@ export const translations = {
     },
     connectBanner: {
       title: 'First, connect your agent',
-      body: 'Point Claude — or any MCP-capable agent — at your OpenLander instance. About a minute.',
+      body: 'Point Claude — or any MCP-capable agent — at your OpenLander /mcp endpoint. This token is for MCP tools, not direct /api calls.',
       setupAgent: 'Set up agent',
     },
     copy: {
@@ -485,7 +485,8 @@ export const translations = {
       save: 'Save environment',
       saving: 'Saving…',
       saved: 'Environment variables saved.',
-      savedNeedsRedeploy: 'Environment variables saved. Redeploy this Application to apply changes.',
+      savedNeedsRedeploy:
+        'Environment variables saved. Redeploy this Application to apply changes.',
       unsavedChanges: 'Unsaved changes. Save to apply, or refresh to discard.',
       loadError: 'Failed to load env vars',
       saveError: 'Failed to save environment variables',
@@ -535,8 +536,7 @@ export const translations = {
       confirmDescription:
         'This stops/removes the running container and deletes Application-owned env vars, domains, and resource settings. Project volumes are preserved by default.',
       confirmLabel: 'Type',
-      deleteVolumes:
-        'Also delete project-owned Docker volumes when this is the last Application.',
+      deleteVolumes: 'Also delete project-owned Docker volumes when this is the last Application.',
       deleting: 'Deleting…',
       confirmButton: 'Delete Application',
       error: 'Failed to delete Application',

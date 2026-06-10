@@ -27,7 +27,15 @@ describe('auth middleware', () => {
 
     expect(res.status).toBe(401);
     await expect(res.json()).resolves.toMatchObject({
-      error: 'MCP_PAT_NOT_ACCEPTED_FOR_REST',
+      error: 'MCP_TOKEN_USED_ON_REST_API',
+      code: 'MCP_TOKEN_USED_ON_REST_API',
+      message:
+        'This bearer token is an MCP Agent Token. It only works with the /mcp endpoint; do not use it for direct /api requests.',
+      mcp_endpoint: 'http://localhost/mcp',
+      suggested_next_step:
+        'Register OpenLander as an MCP server, then verify openlander_project({ action: "help" }) works.',
+      example:
+        'claude mcp add --transport http --header "Authorization: Bearer <MCP_TOKEN>" openlander http://localhost/mcp',
     });
   });
 });

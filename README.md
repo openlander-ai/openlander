@@ -312,14 +312,14 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - **Recovery loop hardening** — expand high-confidence diagnostics and verified
   hot paths before turning on built-in automation. External agents still decide
   and call each remediation step explicitly.
-- **Environment contract** — first-class project / environment / service /
-  generated runtime variable scopes, with clear redeploy guidance.
+- **Environment contract** — first-class project, deployment-target, service,
+  and generated runtime variable scopes, with clear redeploy guidance.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
   any OCI registry behind cloud-provider auth.
 - **Service templates** — beyond Postgres / Redis. Object storage, message
   queues, search, vector DBs.
-- **Environments** — first-class `prod` / `staging` / `dev` per project,
-  with environment-scoped env vars and approvals.
+- **Deployment targets** — production/development target policy first, designed
+  so staging can be added later without a rewrite.
 - **Notifications** — Slack and Discord webhooks for deploy / health /
   approval events.
 - **Internal AI Ops** — optional incident response inside a policy you set,

@@ -110,7 +110,7 @@ export const translations = {
       // Content — banner title + body. setupAgent is Chrome (verb-noun
       // CTA, parallel with 'New Project').
       title: '먼저 에이전트를 연결하세요',
-      body: 'Claude나 다른 MCP 지원 에이전트를 OpenLander 인스턴스에 연결하세요. 약 1분 소요됩니다.',
+      body: 'Claude나 다른 MCP 지원 에이전트를 OpenLander /mcp 엔드포인트에 연결하세요. 이 토큰은 MCP 도구용이며 /api 직접 호출용이 아닙니다.',
       setupAgent: 'Set up agent',
     },
     copy: {
@@ -612,7 +612,8 @@ export const translations = {
       imageReferenceHint:
         'Docker Hub, GHCR 또는 OCI 레지스트리. 태그를 고정하세요 — :latest는 배포마다 달라질 수 있습니다.',
       success: '{name} Application을 배포 중입니다.',
-      errorName: 'Application 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
+      errorName:
+        'Application 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
       errorRepo: 'GitHub 레포지토리 URL을 입력하세요.',
       errorImage: '이미지 레퍼런스를 입력하세요.',
       errorPort: '포트는 양의 정수여야 합니다.',

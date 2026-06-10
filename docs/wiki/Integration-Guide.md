@@ -32,9 +32,15 @@ page (`/mcp-server`) in the dashboard, or from the MCP step of the setup wizard.
 endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp`);
 `:10114` appears only when you reach OpenLander directly without a reverse proxy.
 
+The OpenLander token shown here is an MCP token. Use it with the `/mcp` endpoint only,
+not as a REST `/api` bearer token. If the agent cannot see `openlander_*` tools, stop
+and fix MCP registration instead of falling back to raw HTTP API calls.
+If this token is accidentally sent to `/api`, OpenLander returns
+`MCP_TOKEN_USED_ON_REST_API` with the correct `/mcp` endpoint and a registration example.
+
 ### Test
 
-> "List all projects on OpenLander"
+> "Call `openlander_project({ action: \"help\" })`, then list all projects on OpenLander."
 
 ---
 
@@ -63,6 +69,10 @@ the instance name.
 Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
 setup wizard's MCP step. It mints an org-scoped token, shown once. The `url` is your
 dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
+
+After registration, verify that the client lists the `openlander_*` tools and that
+`openlander_project({ action: "help" })` returns the Project action catalog. If not,
+the MCP server is not connected; do not substitute direct `/api` requests.
 
 ### Test
 
