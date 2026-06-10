@@ -35,6 +35,8 @@ endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp
 The OpenLander token shown here is an MCP token. Use it with the `/mcp` endpoint only,
 not as a REST `/api` bearer token. If the agent cannot see `openlander_*` tools, stop
 and fix MCP registration instead of falling back to raw HTTP API calls.
+If this token is accidentally sent to `/api`, OpenLander returns
+`MCP_TOKEN_USED_ON_REST_API` with the correct `/mcp` endpoint and a registration example.
 
 ### Test
 

@@ -47,6 +47,8 @@ This Bearer token is for MCP, not for raw REST `/api` calls. A correctly registe
 see the five `openlander_*` composite tools and should be able to call
 `openlander_project({ action: "help" })`. If those tools are missing, fix MCP registration
 instead of asking the model to call OpenLander's HTTP API directly.
+If the same token is sent to `/api`, OpenLander returns `MCP_TOKEN_USED_ON_REST_API`
+with the correct `/mcp` endpoint and a registration example.
 
 Destructive MCP operations are intentionally gated. Some real ToolDefs appear in the action catalog
 but are blocked at the MCP boundary because they delete Database/Cache/Storage resources or perform

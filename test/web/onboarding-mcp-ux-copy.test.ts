@@ -46,7 +46,9 @@ describe('onboarding MCP UX copy', () => {
     expect(agentGuideDialog).toContain('openlander_project({ action: "help" })');
     expect(agentGuideDialog).toContain('do not call OpenLander /api endpoints with the MCP token');
     expect(integrationGuide).toContain('Use it with the `/mcp` endpoint only');
+    expect(integrationGuide).toContain('MCP_TOKEN_USED_ON_REST_API');
     expect(integrationGuide).toContain('do not substitute direct `/api` requests');
     expect(mcpReference).toContain('This Bearer token is for MCP, not for raw REST `/api` calls');
+    expect(mcpReference).toContain('MCP_TOKEN_USED_ON_REST_API');
   });
 });

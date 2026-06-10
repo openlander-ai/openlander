@@ -121,11 +121,17 @@ export function createAuthMiddleware(authService: AuthService) {
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       if (token.startsWith('olp_')) {
+        const mcpEndpoint = `${new URL(c.req.url).origin}/mcp`;
         return c.json(
           {
-            error: 'MCP_PAT_NOT_ACCEPTED_FOR_REST',
+            error: 'MCP_TOKEN_USED_ON_REST_API',
+            code: 'MCP_TOKEN_USED_ON_REST_API',
             message:
-              'This bearer token is an MCP personal access token. Use it with /mcp, or use a REST API token/session for /api routes.',
+              'This bearer token is an MCP Agent Token. It only works with the /mcp endpoint; do not use it for direct /api requests.',
+            mcp_endpoint: mcpEndpoint,
+            suggested_next_step:
+              'Register OpenLander as an MCP server, then verify openlander_project({ action: "help" }) works.',
+            example: `claude mcp add --transport http --header "Authorization: Bearer <MCP_TOKEN>" openlander ${mcpEndpoint}`,
           },
           401,
         );
