@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.17] - 2026-06-10
+
+### Added
+
+- Expose custom-domain route health and direct managed Traefik Host verification
+  in MCP domain repair surfaces, including `add_domain_route`,
+  `list_domain_routes`, `apply_route_config`, and `list_projects`.
+
+### Changed
+
+- Clarified user-facing MCP, web prompt, and launch documentation vocabulary
+  around the Project resource model: Projects contain Applications, Compose
+  stacks, and Database/Cache/Storage resources. Compatibility action names and
+  wire fields such as `openlander_managed_service`, `service_id`, and
+  `deployable_service` remain unchanged.
+- Clarified the agent surface policy in the Agent Guide and MCP docs: AI agents
+  should use the `/mcp` endpoint and `openlander_*` tools, not direct REST
+  `/api` fallback calls.
+- Prepended copied Agent Guide prompts with a quick
+  `openlander_project({ action: "help" })` setup check so agents stop and ask
+  for MCP registration when the tools are unavailable.
+
+### Fixed
+
+- Wait past the managed Traefik HTTP provider poll window before accepting
+  direct custom-domain route probe success for live domain/route mutations, so
+  `apply_route_config` can no longer treat a stale old-route 2xx as proof that a
+  newly broken `container_port` route is healthy.
+- Group service-scoped incidents by their owning Project in agent context.
+- Return a structured `MCP_TOKEN_USED_ON_REST_API` response when an MCP Agent
+  Token is sent to REST `/api` routes, including the correct `/mcp` endpoint and
+  a registration example.
+- Extended the public vocabulary audit to reject `managed DB` wording in
+  user-facing docs, MCP/runtime strings, and web prompt copy.
+
 ## [0.1.17-rc.4] - 2026-06-10
 
 ### Changed
