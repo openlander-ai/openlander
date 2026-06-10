@@ -8,7 +8,10 @@ function read(path: string): string {
 describe('onboarding MCP UX copy', () => {
   const projectView = read('web/src/pages/ProjectView.tsx');
   const serviceDetail = read('web/src/pages/ServiceDetailV2.tsx');
+  const agentGuideDialog = read('web/src/components/agent-guide/AgentGuideDialog.tsx');
   const promptSets = read('web/src/components/agent-guide/prompt-sets.ts');
+  const integrationGuide = read('docs/wiki/Integration-Guide.md');
+  const mcpReference = read('docs/wiki/MCP-Tools-Reference.md');
 
   it('surfaces service_id as the preferred MCP target in service UI', () => {
     expect(projectView).toContain("t('projectDetail.servicesGuide.banner')");
@@ -37,5 +40,13 @@ describe('onboarding MCP UX copy', () => {
     expect(promptSets).not.toContain('TLS issuance');
     expect(promptSets).not.toContain('Move the existing domain off');
     expect(promptSets).not.toContain('over to staging');
+  });
+
+  it('guards against MCP token and REST API confusion', () => {
+    expect(agentGuideDialog).toContain('openlander_project({ action: "help" })');
+    expect(agentGuideDialog).toContain('do not call OpenLander /api endpoints with the MCP token');
+    expect(integrationGuide).toContain('Use it with the `/mcp` endpoint only');
+    expect(integrationGuide).toContain('do not substitute direct `/api` requests');
+    expect(mcpReference).toContain('This Bearer token is for MCP, not for raw REST `/api` calls');
   });
 });

@@ -43,6 +43,11 @@ already exists. Project-scoped tokens exist via the API (`POST /api/tokens` with
 `scope_kind: "project"`) but are not part of the 0.1 onboarding UI. The MCP endpoint is your
 dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
+This Bearer token is for MCP, not for raw REST `/api` calls. A correctly registered agent should
+see the five `openlander_*` composite tools and should be able to call
+`openlander_project({ action: "help" })`. If those tools are missing, fix MCP registration
+instead of asking the model to call OpenLander's HTTP API directly.
+
 Destructive MCP operations are intentionally gated. Some real ToolDefs appear in the action catalog
 but are blocked at the MCP boundary because they delete Database/Cache/Storage resources or perform
 host-wide cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
