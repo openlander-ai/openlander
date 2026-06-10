@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.17-rc.4] - 2026-06-10
+
+### Changed
+
+- Clarified the agent surface policy in the Agent Guide and MCP docs: AI agents
+  should use the `/mcp` endpoint and `openlander_*` tools, not direct REST
+  `/api` fallback calls.
+- Prepended copied Agent Guide prompts with a quick
+  `openlander_project({ action: "help" })` setup check so agents stop and ask
+  for MCP registration when the tools are unavailable.
+
+### Fixed
+
+- Return a structured `MCP_TOKEN_USED_ON_REST_API` response when an MCP Agent
+  Token is sent to REST `/api` routes, including the correct `/mcp` endpoint and
+  a registration example.
+
 ## [0.1.17-rc.3] - 2026-06-10
 
 ### Changed
