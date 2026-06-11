@@ -257,6 +257,7 @@ describe('Postgres migration sanity gate', () => {
       '0002_representative_traffic',
       '0003_ai_ops_usage_foundation',
       '0004_ai_ops_policy_dedupe',
+      '0005_ai_ops_briefings',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -264,6 +265,7 @@ describe('Postgres migration sanity gate', () => {
       '0002_representative_traffic.sql',
       '0003_ai_ops_usage_foundation.sql',
       '0004_ai_ops_policy_dedupe.sql',
+      '0005_ai_ops_briefings.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -283,6 +285,10 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('"mode" text DEFAULT \'inherit\' NOT NULL');
     expect(sql).toContain('CREATE TABLE "ai_ops_dedupe"');
     expect(sql).toContain('CREATE UNIQUE INDEX "ai_ops_dedupe_key_unique"');
+    expect(sql).toContain('CREATE TABLE "ai_ops_briefings"');
+    expect(sql).toContain('"deterministic_summary" text NOT NULL');
+    expect(sql).toContain('"llm_summary" text');
+    expect(sql).toContain('CREATE INDEX "idx_ai_ops_briefings_project"');
   });
 
   it('allows a fresh database or already-applied public migration rows', async () => {
@@ -324,6 +330,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 6 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -344,7 +357,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 6 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 7 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
@@ -368,7 +381,7 @@ describeWithDatabase('Postgres baseline guard integration', () => {
         const rows = (await sql.unsafe(
           'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
         )) as ReadonlyArray<{ count: number }>;
-        expect(rows[0]?.count).toBe(3);
+        expect(rows[0]?.count).toBe(readMigrationJournal().entries.length);
         await expect(sql.unsafe('SELECT 1 FROM domain_mappings LIMIT 1')).resolves.toBeDefined();
       } finally {
         await sql.end({ timeout: 5 });

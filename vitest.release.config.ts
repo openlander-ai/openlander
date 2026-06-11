@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       'test/db/postgres-migration-sanity.test.ts',
       'test/db/schema-parity.test.ts',
+      'test/db/ai-ops-briefing-postgres.test.ts',
       'test/db/domain-mapping-schema.test.ts',
       'test/db/env-var-scope-schema.test.ts',
       'test/db/env-var-scope-postgres.test.ts',
@@ -74,6 +75,7 @@ export default defineConfig({
       'test/mcp/tool-registry-snapshot.test.ts',
       'test/monitor/ops-agent.test.ts',
       'test/monitor/ai-ops-cold-storage.test.ts',
+      'test/monitor/ai-ops-briefing-core.test.ts',
       'test/monitor/ai-ops-policy.test.ts',
       'test/monitor/ops-alerting.test.ts',
       'test/monitor/ops-config-resolver.test.ts',

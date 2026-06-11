@@ -435,6 +435,28 @@ export interface AiOpsDedupeRow {
   server_id: string;
 }
 
+export type AiOpsBriefingSeverity = 'info' | 'warning' | 'high' | 'critical';
+export type AiOpsBriefingStatus = 'open' | 'acknowledged' | 'resolved';
+
+export interface AiOpsBriefingRow {
+  id: string;
+  project_id: string;
+  service_id: string | null;
+  dedupe_key: string | null;
+  fingerprint: string;
+  classification: string;
+  severity: AiOpsBriefingSeverity;
+  title: string;
+  deterministic_summary: string;
+  llm_summary: string | null;
+  suggested_call_json: string | null;
+  evidence_json: string;
+  status: AiOpsBriefingStatus;
+  created_at: string;
+  updated_at: string;
+  server_id: string;
+}
+
 export interface ActionRunRow {
   id: string;
   project_id: string;

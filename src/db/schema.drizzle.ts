@@ -725,6 +725,50 @@ export const aiOpsDedupe = pgTable(
   ],
 );
 
+export const aiOpsBriefings = pgTable(
+  'ai_ops_briefings',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id').references(() => services.id, { onDelete: 'set null' }),
+    dedupe_key: text('dedupe_key'),
+    fingerprint: text('fingerprint').notNull(),
+    classification: text('classification').notNull(),
+    severity: text('severity', { enum: ['info', 'warning', 'high', 'critical'] }).notNull(),
+    title: text('title').notNull(),
+    deterministic_summary: text('deterministic_summary').notNull(),
+    llm_summary: text('llm_summary'),
+    suggested_call_json: text('suggested_call_json'),
+    evidence_json: text('evidence_json').notNull(),
+    status: text('status', { enum: ['open', 'acknowledged', 'resolved'] })
+      .notNull()
+      .default('open'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+    server_id: text('server_id').notNull().default('local'),
+  },
+  (table) => [
+    check(
+      'ai_ops_briefings_severity_check',
+      sql`${table.severity} IN ('info', 'warning', 'high', 'critical')`,
+    ),
+    check(
+      'ai_ops_briefings_status_check',
+      sql`${table.status} IN ('open', 'acknowledged', 'resolved')`,
+    ),
+    index('idx_ai_ops_briefings_project').on(table.project_id, table.created_at),
+    index('idx_ai_ops_briefings_service').on(table.service_id, table.created_at),
+    index('idx_ai_ops_briefings_status').on(table.status, table.created_at),
+    index('idx_ai_ops_briefings_dedupe').on(table.dedupe_key),
+  ],
+);
+
 export const actionRuns = pgTable(
   'action_runs',
   {
@@ -907,6 +951,8 @@ export type AiOpsServiceOverrideRow = typeof aiOpsServiceOverrides.$inferSelect;
 export type NewAiOpsServiceOverride = typeof aiOpsServiceOverrides.$inferInsert;
 export type AiOpsDedupeRow = typeof aiOpsDedupe.$inferSelect;
 export type NewAiOpsDedupe = typeof aiOpsDedupe.$inferInsert;
+export type AiOpsBriefingRow = typeof aiOpsBriefings.$inferSelect;
+export type NewAiOpsBriefing = typeof aiOpsBriefings.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
 export type NewActionRun = typeof actionRuns.$inferInsert;
 export type DeploymentPatternRow = typeof deploymentPatterns.$inferSelect;
@@ -1046,6 +1092,7 @@ export const drizzleSchema = {
   aiOpsProjectPolicies,
   aiOpsServiceOverrides,
   aiOpsDedupe,
+  aiOpsBriefings,
   actionRuns,
   deploymentPatterns,
   opsIncidents,

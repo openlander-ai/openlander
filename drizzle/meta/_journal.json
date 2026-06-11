@@ -36,6 +36,13 @@
       "when": 1781179200000,
       "tag": "0004_ai_ops_policy_dedupe",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781182800000,
+      "tag": "0005_ai_ops_briefings",
+      "breakpoints": true
     }
   ]
 }
