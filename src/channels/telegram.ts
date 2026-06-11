@@ -58,6 +58,15 @@ interface TelegramChannelOptions {
   questionBridge?: QuestionBridge;
 }
 
+interface TelegramWebhookHandlerOptions {
+  /**
+   * Telegram is send-only for the v0.2 AI Ops Briefing surface. Keep inbound
+   * message handling behind an explicit opt-in so a webhook update cannot
+   * accidentally drive agent/tool mutations.
+   */
+  allowIncoming?: boolean;
+}
+
 /**
  * Compare webhook secrets with constant-time semantics.
  */
@@ -268,6 +277,7 @@ export class TelegramChannel implements Channel {
  */
 export function createTelegramWebhookHandler(
   channel: TelegramChannel,
+  options: TelegramWebhookHandlerOptions = {},
 ): (c: Context) => Promise<Response> {
   return async (c: Context): Promise<Response> => {
     const expectedSecret = channel.getWebhookSecret();
@@ -284,6 +294,9 @@ export function createTelegramWebhookHandler(
     } catch (err) {
       log.debug({ err }, 'Failed to parse Telegram update JSON — returning ok');
       return c.json({ ok: true }, 200);
+    }
+
+    if (options.allowIncoming !== true) {
       return c.json({ ok: true }, 200);
     }
 
