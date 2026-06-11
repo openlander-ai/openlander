@@ -38,6 +38,7 @@ import type { PostmortemGenerator } from './monitor/postmortem.js';
 import { getPostmortemInstance } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { ActivityLogger } from './monitor/activity-logger.js';
+import { AiUsageListener } from './monitor/ai-usage-listener.js';
 import { ProjectStateManager } from './monitor/project-state-manager.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
@@ -56,6 +57,7 @@ const log = createModuleLogger('app');
 
 let activeIncidentReporter: IncidentReporter | null = null;
 let activeActivityLogger: ActivityLogger | null = null;
+let activeAiUsageListener: AiUsageListener | null = null;
 let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
@@ -597,6 +599,13 @@ export async function createAppContext(
   activityLogger.start();
   activeActivityLogger = activityLogger;
 
+  // AI usage persistence subscriber. This only records emitted usage events; it
+  // does not invoke models or enable any automatic AI Ops workflow.
+  activeAiUsageListener?.stop();
+  const aiUsageListener = new AiUsageListener(db, eventBus);
+  aiUsageListener.start();
+  activeAiUsageListener = aiUsageListener;
+
   return ctx;
 }
 
@@ -604,12 +613,14 @@ export async function createAppContext(
 export async function shutdownAppContext(ctx: AppContext): Promise<void> {
   activeIncidentReporter?.stop();
   activeActivityLogger?.stop();
+  activeAiUsageListener?.stop();
   if (activeActivityLogCleanupInterval) {
     clearInterval(activeActivityLogCleanupInterval);
     activeActivityLogCleanupInterval = null;
   }
   activeIncidentReporter = null;
   activeActivityLogger = null;
+  activeAiUsageListener = null;
   getPostmortemInstance()?.stop();
   ctx.providerHealth.stop();
   ctx.rollbackWatcher.stop();

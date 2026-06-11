@@ -77,6 +77,7 @@ export default defineConfig({
       'test/monitor/ops-agent.test.ts',
       'test/monitor/ai-ops-cold-storage.test.ts',
       'test/monitor/ai-ops-briefing-core.test.ts',
+      'test/monitor/ai-ops-llm-summary.test.ts',
       'test/monitor/ai-ops-policy.test.ts',
       'test/monitor/ops-alerting.test.ts',
       'test/monitor/ops-config-resolver.test.ts',
