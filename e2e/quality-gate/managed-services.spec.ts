@@ -172,6 +172,7 @@ test.describe('Quality Gate — RC managed service smoke', () => {
     const beforeRedeploy = await getDeployments(projectId as string);
     const redeploy = await callTool<{ status: string }>('openlander_service', 'redeploy_app', {
       service_id: serviceId,
+      strategy: 'force',
     });
     expect(redeploy.status).toBe('deploying');
 

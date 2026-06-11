@@ -324,9 +324,12 @@ async function getFirstDeployableServiceId(projectId: string): Promise<string> {
 export async function redeployService(projectId: string): Promise<any> {
   const serviceId = await getFirstDeployableServiceId(projectId);
 
-  const res = await apiFetch(`/api/projects/${projectId}/services/${serviceId}/deploy`, {
-    method: 'POST',
-  });
+  const res = await apiFetch(
+    `/api/projects/${projectId}/services/${serviceId}/deploy?strategy=force`,
+    {
+      method: 'POST',
+    },
+  );
 
   if (!res.ok) {
     const text = await res.text();
