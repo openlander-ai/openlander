@@ -74,6 +74,7 @@ export default defineConfig({
       'test/mcp/tool-registry-snapshot.test.ts',
       'test/monitor/ops-agent.test.ts',
       'test/monitor/ai-ops-cold-storage.test.ts',
+      'test/monitor/ai-ops-policy.test.ts',
       'test/monitor/ops-alerting.test.ts',
       'test/monitor/ops-config-resolver.test.ts',
       'test/monitor/ops-recovery.test.ts',

@@ -620,6 +620,111 @@ export const aiUsageLog = pgTable(
   ],
 );
 
+export const aiOpsInstancePolicy = pgTable(
+  'ai_ops_instance_policy',
+  {
+    id: integer('id').primaryKey().default(1),
+    daily_briefing_limit: integer('daily_briefing_limit').notNull().default(200),
+    fingerprint_cooldown_minutes: integer('fingerprint_cooldown_minutes').notNull().default(30),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('ai_ops_instance_policy_singleton_check', sql`${table.id} = 1`),
+    check('ai_ops_instance_policy_daily_limit_check', sql`${table.daily_briefing_limit} >= 0`),
+    check('ai_ops_instance_policy_cooldown_check', sql`${table.fingerprint_cooldown_minutes} >= 0`),
+  ],
+);
+
+export const aiOpsProjectPolicies = pgTable(
+  'ai_ops_project_policies',
+  {
+    project_id: text('project_id')
+      .primaryKey()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: ['off', 'briefing'] })
+      .notNull()
+      .default('off'),
+    daily_briefing_limit: integer('daily_briefing_limit').notNull().default(20),
+    fingerprint_cooldown_minutes: integer('fingerprint_cooldown_minutes').notNull().default(30),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('ai_ops_project_policies_mode_check', sql`${table.mode} IN ('off', 'briefing')`),
+    check('ai_ops_project_policies_daily_limit_check', sql`${table.daily_briefing_limit} >= 0`),
+    check(
+      'ai_ops_project_policies_cooldown_check',
+      sql`${table.fingerprint_cooldown_minutes} >= 0`,
+    ),
+    index('idx_ai_ops_project_policies_mode').on(table.mode),
+  ],
+);
+
+export const aiOpsServiceOverrides = pgTable(
+  'ai_ops_service_overrides',
+  {
+    service_id: text('service_id')
+      .primaryKey()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: ['inherit', 'off', 'briefing'] })
+      .notNull()
+      .default('inherit'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'ai_ops_service_overrides_mode_check',
+      sql`${table.mode} IN ('inherit', 'off', 'briefing')`,
+    ),
+    index('idx_ai_ops_service_overrides_mode').on(table.mode),
+  ],
+);
+
+export const aiOpsDedupe = pgTable(
+  'ai_ops_dedupe',
+  {
+    id: text('id').primaryKey(),
+    dedupe_key: text('dedupe_key').notNull(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id').references(() => services.id, { onDelete: 'cascade' }),
+    resource_kind: text('resource_kind'),
+    resource_id: text('resource_id'),
+    fingerprint: text('fingerprint').notNull(),
+    first_seen_at: text('first_seen_at')
+      .notNull()
+      .default(sql`now()::text`),
+    last_seen_at: text('last_seen_at')
+      .notNull()
+      .default(sql`now()::text`),
+    cooldown_until: text('cooldown_until').notNull(),
+    occurrences: integer('occurrences').notNull().default(1),
+    last_briefing_id: text('last_briefing_id'),
+    server_id: text('server_id').notNull().default('local'),
+  },
+  (table) => [
+    uniqueIndex('ai_ops_dedupe_key_unique').on(table.dedupe_key),
+    index('idx_ai_ops_dedupe_project').on(table.project_id),
+    index('idx_ai_ops_dedupe_service').on(table.service_id),
+    index('idx_ai_ops_dedupe_cooldown').on(table.cooldown_until),
+  ],
+);
+
 export const actionRuns = pgTable(
   'action_runs',
   {
@@ -794,6 +899,14 @@ export type PatTokenRow = typeof patTokens.$inferSelect;
 export type NewPatToken = typeof patTokens.$inferInsert;
 export type AiUsageLogRow = typeof aiUsageLog.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
+export type AiOpsInstancePolicyRow = typeof aiOpsInstancePolicy.$inferSelect;
+export type NewAiOpsInstancePolicy = typeof aiOpsInstancePolicy.$inferInsert;
+export type AiOpsProjectPolicyRow = typeof aiOpsProjectPolicies.$inferSelect;
+export type NewAiOpsProjectPolicy = typeof aiOpsProjectPolicies.$inferInsert;
+export type AiOpsServiceOverrideRow = typeof aiOpsServiceOverrides.$inferSelect;
+export type NewAiOpsServiceOverride = typeof aiOpsServiceOverrides.$inferInsert;
+export type AiOpsDedupeRow = typeof aiOpsDedupe.$inferSelect;
+export type NewAiOpsDedupe = typeof aiOpsDedupe.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
 export type NewActionRun = typeof actionRuns.$inferInsert;
 export type DeploymentPatternRow = typeof deploymentPatterns.$inferSelect;
@@ -929,6 +1042,10 @@ export const drizzleSchema = {
   auth,
   patTokens,
   aiUsageLog,
+  aiOpsInstancePolicy,
+  aiOpsProjectPolicies,
+  aiOpsServiceOverrides,
+  aiOpsDedupe,
   actionRuns,
   deploymentPatterns,
   opsIncidents,

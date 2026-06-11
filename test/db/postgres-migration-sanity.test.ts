@@ -256,12 +256,14 @@ describe('Postgres migration sanity gate', () => {
       '0001_env_var_scope',
       '0002_representative_traffic',
       '0003_ai_ops_usage_foundation',
+      '0004_ai_ops_policy_dedupe',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
       '0001_env_var_scope.sql',
       '0002_representative_traffic.sql',
       '0003_ai_ops_usage_foundation.sql',
+      '0004_ai_ops_policy_dedupe.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -275,6 +277,12 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('"service_id" text');
     expect(sql).toContain('"feature" text');
     expect(sql).toContain('"briefing_id" text');
+    expect(sql).toContain('CREATE TABLE "ai_ops_project_policies"');
+    expect(sql).toContain('"mode" text DEFAULT \'off\' NOT NULL');
+    expect(sql).toContain('CREATE TABLE "ai_ops_service_overrides"');
+    expect(sql).toContain('"mode" text DEFAULT \'inherit\' NOT NULL');
+    expect(sql).toContain('CREATE TABLE "ai_ops_dedupe"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "ai_ops_dedupe_key_unique"');
   });
 
   it('allows a fresh database or already-applied public migration rows', async () => {
@@ -309,6 +317,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 5 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -329,7 +344,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 5 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 6 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
