@@ -362,6 +362,9 @@ export interface PatTokenRow {
 export interface AiUsageLogRow {
   id: string;
   project_id: string | null;
+  service_id: string | null;
+  feature: string | null;
+  briefing_id: string | null;
   session_id: string | null;
   action_type:
     | 'web_agent'
@@ -370,7 +373,8 @@ export interface AiUsageLogRow {
     | 'monitor_alert'
     | 'system'
     | 'auto_detect'
-    | 'history_compaction';
+    | 'history_compaction'
+    | 'ai_ops_briefing';
   model_name: string;
   provider: string;
   input_tokens: number;

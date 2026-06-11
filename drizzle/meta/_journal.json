@@ -22,6 +22,13 @@
       "when": 1780715227000,
       "tag": "0002_representative_traffic",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781169600000,
+      "tag": "0003_ai_ops_usage_foundation",
+      "breakpoints": true
     }
   ]
 }

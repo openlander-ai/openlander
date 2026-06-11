@@ -35,11 +35,19 @@ describe('withTracking', () => {
       'claude-sonnet-4-6',
     );
 
-    await withTracking(
-      { projectId: 'proj-nested', sessionId: 'sess-1', actionType: 'web_agent', source: 'web' },
-      async () => {
-        const wrapGenerate = middleware.wrapGenerate as unknown as WrapGenerateFn;
-        await wrapGenerate({
+      await withTracking(
+        {
+          projectId: 'proj-nested',
+          serviceId: 'svc-nested',
+          feature: 'ai_ops_briefing',
+          briefingId: 'brief-1',
+          sessionId: 'sess-1',
+          actionType: 'ai_ops_briefing',
+          source: 'monitor',
+        },
+        async () => {
+          const wrapGenerate = middleware.wrapGenerate as unknown as WrapGenerateFn;
+          await wrapGenerate({
           doGenerate: async () => ({
             usage: { promptTokens: 10, completionTokens: 5 },
           }),
@@ -48,11 +56,14 @@ describe('withTracking', () => {
     );
 
     expect(eventBus.emit).toHaveBeenCalledOnce();
-    const payload = eventBus.emit.mock.calls[0]![1];
-    expect(payload.projectId).toBe('proj-nested');
-    expect(payload.sessionId).toBe('sess-1');
-    expect(payload.actionType).toBe('web_agent');
-    expect(payload.source).toBe('web');
+      const payload = eventBus.emit.mock.calls[0]![1];
+      expect(payload.projectId).toBe('proj-nested');
+      expect(payload.serviceId).toBe('svc-nested');
+      expect(payload.feature).toBe('ai_ops_briefing');
+      expect(payload.briefingId).toBe('brief-1');
+      expect(payload.sessionId).toBe('sess-1');
+      expect(payload.actionType).toBe('ai_ops_briefing');
+      expect(payload.source).toBe('monitor');
   });
 
   it('propagates errors from the wrapped function', async () => {

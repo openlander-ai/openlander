@@ -255,11 +255,13 @@ describe('Postgres migration sanity gate', () => {
       '0000_v0_1_initial',
       '0001_env_var_scope',
       '0002_representative_traffic',
+      '0003_ai_ops_usage_foundation',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
       '0001_env_var_scope.sql',
       '0002_representative_traffic.sql',
+      '0003_ai_ops_usage_foundation.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -270,6 +272,9 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_service_environment_key_unique"');
     expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_project_environment_key_unique"');
     expect(sql).toContain('"representative_traffic_json" text');
+    expect(sql).toContain('"service_id" text');
+    expect(sql).toContain('"feature" text');
+    expect(sql).toContain('"briefing_id" text');
   });
 
   it('allows a fresh database or already-applied public migration rows', async () => {
@@ -297,6 +302,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 4 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -317,7 +329,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 4 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 5 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

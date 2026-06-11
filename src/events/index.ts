@@ -339,6 +339,9 @@ export interface EventPayload {
     durationMs: number;
     result: 'success' | 'failure' | 'partial';
     projectId?: string;
+    serviceId?: string;
+    feature?: string;
+    briefingId?: string;
     sessionId?: string;
     actionType?: string;
     source?: string;

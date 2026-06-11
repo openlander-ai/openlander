@@ -135,6 +135,8 @@ export interface LLMProviderConfig {
   provider: LLMProviderType;
   apiKey: string;
   model: string;
+  /** OpenAI-compatible endpoint override. Only used with provider=openai. */
+  baseURL?: string;
   /** v0.2: OAuth access token (used instead of apiKey when OAuth is active) */
   authToken: string;
   /** v1.1: Multi-provider registry. If present, used for feature-based routing. */
@@ -527,6 +529,7 @@ export function normalizeLlmConfig(llm: LLMProviderConfig): NormalizedLlmConfig 
         apiKey: llm.apiKey,
         authToken: llm.authToken,
         defaultModel: llm.model,
+        ...(llm.baseURL ? { baseURL: llm.baseURL } : {}),
       },
     },
     defaultRoute: { providerId: 'default' },

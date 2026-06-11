@@ -14,14 +14,20 @@ import { withTrackingMiddleware } from './tracking-middleware.js';
 import type { EventBus } from '../events/index.js';
 import { LlmCircuitBreaker, type LlmCircuitBreakerStatus } from './llm-circuit-breaker.js';
 import { classifyLlmError } from './llm-error-types.js';
+import { decrypt } from '../env/crypto.js';
 
 const log = createModuleLogger('model-registry');
 
 export interface LLMProviderEntry {
   provider: LLMProviderType;
+  /** Legacy/plain runtime value. New saved provider configs should prefer encryptedApiKey. */
   apiKey?: string;
+  encryptedApiKey?: string;
+  apiKeyIv?: string;
   authToken?: string;
   defaultModel: string;
+  /** OpenAI-compatible endpoint override. Only used by the OpenAI provider. */
+  baseURL?: string;
   createdAt?: string;
 }
 
@@ -38,7 +44,8 @@ export type AIModelFeature =
   | 'operationalMonitoring'
   | 'codingPlan'
   | 'secretScan'
-  | 'rollbackSuggestion';
+  | 'rollbackSuggestion'
+  | 'aiOpsBriefing';
 
 export interface ModelRoutingConfig {
   providers: Record<string, LLMProviderEntry>;
@@ -55,6 +62,7 @@ const AI_MODEL_FEATURES: AIModelFeature[] = [
   'codingPlan',
   'secretScan',
   'rollbackSuggestion',
+  'aiOpsBriefing',
 ];
 
 export function isValidAIModelFeature(feature: string): feature is AIModelFeature {
@@ -64,14 +72,17 @@ export function isValidAIModelFeature(feature: string): feature is AIModelFeatur
 export function createModelRoutingConfigFromLegacy(
   legacyLlm: LLMProviderConfig,
 ): ModelRoutingConfig {
+  const providerEntry: LLMProviderEntry = {
+    provider: legacyLlm.provider,
+    apiKey: legacyLlm.apiKey,
+    authToken: legacyLlm.authToken,
+    defaultModel: legacyLlm.model,
+    ...(legacyLlm.baseURL ? { baseURL: legacyLlm.baseURL } : {}),
+  };
+
   return {
     providers: {
-      default: {
-        provider: legacyLlm.provider,
-        apiKey: legacyLlm.apiKey,
-        authToken: legacyLlm.authToken,
-        defaultModel: legacyLlm.model,
-      },
+      default: providerEntry,
     },
     defaultRoute: { providerId: 'default' },
   };
@@ -126,12 +137,14 @@ export class ModelRegistry {
       return cached;
     }
 
-    const rawModel = createModel({
+    const modelConfig = {
       provider: providerEntry.provider,
-      apiKey: providerEntry.apiKey ?? '',
+      apiKey: resolveProviderApiKey(providerEntry),
       authToken: providerEntry.authToken,
       model: modelName,
-    });
+      ...(providerEntry.baseURL ? { baseURL: providerEntry.baseURL } : {}),
+    };
+    const rawModel = createModel(modelConfig);
 
     if (!rawModel) {
       return null;
@@ -177,6 +190,14 @@ export class ModelRegistry {
   getVersion(): number {
     return this.version;
   }
+}
+
+export function resolveProviderApiKey(providerEntry: LLMProviderEntry): string {
+  if (providerEntry.encryptedApiKey && providerEntry.apiKeyIv) {
+    return decrypt(providerEntry.encryptedApiKey, providerEntry.apiKeyIv);
+  }
+
+  return providerEntry.apiKey ?? '';
 }
 
 function createCircuitBreakerMiddleware(

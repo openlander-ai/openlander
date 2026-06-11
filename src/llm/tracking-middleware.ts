@@ -14,6 +14,9 @@ import type { LlmErrorType } from './llm-error-types.js';
 
 export interface TrackingContext {
   projectId?: string;
+  serviceId?: string;
+  feature?: string;
+  briefingId?: string;
   sessionId?: string;
   actionType?: string;
   source?: string;
@@ -30,6 +33,9 @@ interface AiUsagePayload {
   durationMs: number;
   result: 'success' | 'failure';
   projectId?: string;
+  serviceId?: string;
+  feature?: string;
+  briefingId?: string;
   sessionId?: string;
   actionType?: string;
   source?: string;
@@ -76,6 +82,9 @@ export function createTrackingMiddleware(
           durationMs: Date.now() - startedAt,
           result: 'success',
           projectId: ctx?.projectId,
+          serviceId: ctx?.serviceId,
+          feature: ctx?.feature,
+          briefingId: ctx?.briefingId,
           sessionId: ctx?.sessionId,
           actionType: ctx?.actionType ?? 'system',
           source: ctx?.source ?? 'auto',
@@ -100,6 +109,9 @@ export function createTrackingMiddleware(
           durationMs: Date.now() - startedAt,
           result: 'failure',
           projectId: ctx?.projectId,
+          serviceId: ctx?.serviceId,
+          feature: ctx?.feature,
+          briefingId: ctx?.briefingId,
           sessionId: ctx?.sessionId,
           actionType: ctx?.actionType ?? 'system',
           source: ctx?.source ?? 'auto',
@@ -143,6 +155,9 @@ export function createTrackingMiddleware(
           durationMs: Date.now() - startedAt,
           result,
           projectId: ctx?.projectId,
+          serviceId: ctx?.serviceId,
+          feature: ctx?.feature,
+          briefingId: ctx?.briefingId,
           sessionId: ctx?.sessionId,
           actionType: ctx?.actionType ?? 'system',
           source: ctx?.source ?? 'auto',

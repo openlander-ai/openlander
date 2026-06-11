@@ -3,6 +3,7 @@ import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { EventBus } from '../../src/events/index.js';
 import { AiUsageListener } from '../../src/monitor/ai-usage-listener.js';
 import { ModelRegistry } from '../../src/llm/model-registry.js';
+import { withTracking } from '../../src/llm/tracking-middleware.js';
 import type { Database } from '../../src/db/index.js';
 
 vi.mock('../../src/llm/index.js', () => ({
@@ -48,9 +49,20 @@ describe('tracking-middleware integration', () => {
 
     // Call doGenerate directly on the wrapped model to trigger middleware
     const wrappedModel = model as unknown as LanguageModelV3;
-    await wrappedModel.doGenerate({
-      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-    });
+    await withTracking(
+      {
+        projectId: 'project-1',
+        serviceId: 'service-1',
+        feature: 'ai_ops_briefing',
+        briefingId: 'briefing-1',
+        actionType: 'ai_ops_briefing',
+        source: 'monitor',
+      },
+      async () =>
+        wrappedModel.doGenerate({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        }),
+    );
 
     // Drain pending microtasks (AiUsageListener uses queueMicrotask for persistence)
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -59,6 +71,12 @@ describe('tracking-middleware integration', () => {
     const logEntry = createAiUsageLog.mock.calls[0]![0] as Record<string, unknown>;
     expect(logEntry.model_name).toBe('gpt-4o');
     expect(logEntry.provider).toBe('openai');
+    expect(logEntry.project_id).toBe('project-1');
+    expect(logEntry.service_id).toBe('service-1');
+    expect(logEntry.feature).toBe('ai_ops_briefing');
+    expect(logEntry.briefing_id).toBe('briefing-1');
+    expect(logEntry.action_type).toBe('ai_ops_briefing');
+    expect(logEntry.source).toBe('monitor');
     expect(logEntry.input_tokens).toBe(10);
     expect(logEntry.output_tokens).toBe(5);
     expect(logEntry.total_tokens).toBe(15);
