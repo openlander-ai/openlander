@@ -23,8 +23,7 @@ export interface AiOpsServiceOverride {
 
 export interface AiOpsResolvedPolicy {
   mode: AiOpsProjectMode;
-  projectMode: AiOpsProjectMode;
-  serviceOverrideMode: AiOpsServiceOverrideMode;
+  source: 'project' | 'service_override';
 }
 
 export interface AiOpsBudget {
@@ -32,7 +31,11 @@ export interface AiOpsBudget {
   projectLimit: number;
   instanceUsed: number;
   instanceLimit: number;
-  decision: { allowed: boolean; reason: string };
+  decision: {
+    llmSummaryAllowed: boolean;
+    deterministicBriefingAllowed: true;
+    reason: 'allowed' | 'project_daily_limit_exceeded' | 'instance_daily_limit_exceeded';
+  };
 }
 
 export interface AiOpsUsageSummary {

@@ -143,6 +143,9 @@ opt-in policy / budget / durable dedupe를 통과한 경우에만 briefing row�
 이 트리거는 `RecoveryCoordinator`, `OpsAgent`, chat route, deploy/redeploy,
 rollback, env edit을 호출하지 않는다.
 
+Beta 한계: runtime trigger 귀속은 canonical service 우선이다. multi-Application
+Project와 compose-child 단위 귀속은 첫 AI Ops Beta smoke 이후 별도 개선한다.
+
 ## 0.2.0에서 분리하는 작업
 
 `Variables / Deployment Target / env-scope M1`은 AI Ops 0.2.0 rc 사슬에서
@@ -223,6 +226,28 @@ git diff --check
 8. Telegram send-only notification 확인.
 9. 동일 fingerprint 재발 시 cooldown 확인.
 10. 자동 mutation이 발생하지 않았는지 확인.
+
+### AWS Web UI Smoke
+
+AI Ops Web UI는 rc smoke에서 브라우저로도 확인한다.
+
+1. Project detail/settings 화면에서 AI Ops 카드가 보이고 기본값이 `Off`인지
+   확인한다.
+2. Provider만 설정한 상태에서는 Project AI Ops가 자동으로 켜지지 않는지
+   확인한다.
+3. Project mode를 `Briefing`으로 바꾸고 새로고침 후에도 저장되는지
+   확인한다.
+4. Service detail에서 `inherit / off / briefing` override가 보이고,
+   Service `off`가 Project `Briefing`보다 우선하는지 확인한다.
+5. route failure 또는 restart-loop 유발 후 Project/Service 화면에 briefing
+   card가 생성되는지 확인한다.
+6. briefing detail drawer에서 severity, classification, summary, token/cost,
+   suggested MCP call, evidence가 보이는지 확인한다.
+7. evidence와 summary에 token, API key, database password 같은 secret이
+   노출되지 않는지 확인한다.
+8. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
+9. Web UI 조작만으로 restart, redeploy, rollback, env edit이 실행되지
+   않는지 확인한다.
 
 ## Weak-Model QA
 

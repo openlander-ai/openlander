@@ -23,6 +23,7 @@ interface NotifyAiOpsBriefingTelegramOptions {
   channelManager: Pick<ChannelManager, 'getChannel'>;
   config: Pick<OpenLanderConfig, 'channels'>;
   briefing: AiOpsBriefingRow;
+  dedupeAlreadyClaimed?: boolean;
   now?: Date;
 }
 
@@ -79,17 +80,19 @@ export async function notifyAiOpsBriefingTelegram(
     return { status: 'skipped', reason: 'ai_ops_off' };
   }
 
-  const projectPolicy = await options.db.getAiOpsProjectPolicy(options.briefing.project_id);
-  const dedupe = await options.db.claimAiOpsDedupeWindow({
-    projectId: options.briefing.project_id,
-    serviceId: options.briefing.service_id,
-    fingerprint: options.briefing.fingerprint,
-    cooldownMinutes: projectPolicy.fingerprint_cooldown_minutes,
-    briefingId: options.briefing.id,
-    now: options.now,
-  });
-  if (dedupe.status === 'suppressed') {
-    return { status: 'skipped', reason: 'dedupe_suppressed' };
+  if (options.dedupeAlreadyClaimed !== true) {
+    const projectPolicy = await options.db.getAiOpsProjectPolicy(options.briefing.project_id);
+    const dedupe = await options.db.claimAiOpsDedupeWindow({
+      projectId: options.briefing.project_id,
+      serviceId: options.briefing.service_id,
+      fingerprint: options.briefing.fingerprint,
+      cooldownMinutes: projectPolicy.fingerprint_cooldown_minutes,
+      briefingId: options.briefing.id,
+      now: options.now,
+    });
+    if (dedupe.status === 'suppressed') {
+      return { status: 'skipped', reason: 'dedupe_suppressed' };
+    }
   }
 
   const channelId = getTelegramChannelId(options.config);

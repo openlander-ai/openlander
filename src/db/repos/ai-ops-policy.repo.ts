@@ -283,6 +283,51 @@ export class AiOpsPolicyRepo {
     return row;
   }
 
+  private async updateCoolingDedupe(
+    existing: AiOpsDedupeRow,
+    input: ClaimDedupeWindowInput,
+    nowIso: string,
+  ): Promise<ClaimDedupeWindowResult> {
+    const [updated] = await this.db
+      .update(aiOpsDedupe)
+      .set({
+        last_seen_at: nowIso,
+        occurrences: existing.occurrences + 1,
+        last_briefing_id: input.briefingId ?? existing.last_briefing_id,
+      })
+      .where(eq(aiOpsDedupe.dedupe_key, existing.dedupe_key))
+      .returning();
+
+    return { status: 'suppressed', dedupe: updated ?? existing };
+  }
+
+  private async refreshExpiredDedupe(
+    existing: AiOpsDedupeRow,
+    input: ClaimDedupeWindowInput,
+    nowIso: string,
+    cooldownUntil: string,
+  ): Promise<ClaimDedupeWindowResult> {
+    const [updated] = await this.db
+      .update(aiOpsDedupe)
+      .set({
+        last_seen_at: nowIso,
+        cooldown_until: cooldownUntil,
+        occurrences: existing.occurrences + 1,
+        last_briefing_id: input.briefingId ?? existing.last_briefing_id,
+      })
+      .where(eq(aiOpsDedupe.dedupe_key, existing.dedupe_key))
+      .returning();
+
+    return { status: 'refreshed', dedupe: updated ?? existing };
+  }
+
+  async attachDedupeBriefing(dedupeKey: string, briefingId: string): Promise<void> {
+    await this.db
+      .update(aiOpsDedupe)
+      .set({ last_briefing_id: briefingId })
+      .where(eq(aiOpsDedupe.dedupe_key, dedupeKey));
+  }
+
   async claimDedupeWindow(input: ClaimDedupeWindowInput): Promise<ClaimDedupeWindowResult> {
     const now = input.now ?? new Date();
     const nowIso = now.toISOString();
@@ -292,32 +337,11 @@ export class AiOpsPolicyRepo {
     const existing = await this.getDedupeByKey(dedupeKey);
 
     if (existing && Date.parse(existing.cooldown_until) > now.getTime()) {
-      const [updated] = await this.db
-        .update(aiOpsDedupe)
-        .set({
-          last_seen_at: nowIso,
-          occurrences: existing.occurrences + 1,
-          last_briefing_id: input.briefingId ?? existing.last_briefing_id,
-        })
-        .where(eq(aiOpsDedupe.dedupe_key, dedupeKey))
-        .returning();
-
-      return { status: 'suppressed', dedupe: updated ?? existing };
+      return this.updateCoolingDedupe(existing, input, nowIso);
     }
 
     if (existing) {
-      const [updated] = await this.db
-        .update(aiOpsDedupe)
-        .set({
-          last_seen_at: nowIso,
-          cooldown_until: cooldownUntil,
-          occurrences: existing.occurrences + 1,
-          last_briefing_id: input.briefingId ?? existing.last_briefing_id,
-        })
-        .where(eq(aiOpsDedupe.dedupe_key, dedupeKey))
-        .returning();
-
-      return { status: 'refreshed', dedupe: updated ?? existing };
+      return this.refreshExpiredDedupe(existing, input, nowIso, cooldownUntil);
     }
 
     const [created] = await this.db
@@ -336,11 +360,17 @@ export class AiOpsPolicyRepo {
         occurrences: 1,
         last_briefing_id: input.briefingId ?? null,
       })
+      .onConflictDoNothing({ target: aiOpsDedupe.dedupe_key })
       .returning();
 
     if (!created) {
       const row = await this.getDedupeByKey(dedupeKey);
-      if (row) return { status: 'suppressed', dedupe: row };
+      if (row && Date.parse(row.cooldown_until) > now.getTime()) {
+        return this.updateCoolingDedupe(row, input, nowIso);
+      }
+      if (row) {
+        return this.refreshExpiredDedupe(row, input, nowIso, cooldownUntil);
+      }
       throw new RepoPersistenceError('ai ops dedupe', dedupeKey);
     }
 

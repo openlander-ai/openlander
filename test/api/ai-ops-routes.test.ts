@@ -150,7 +150,11 @@ describe('AI Ops routes', () => {
         projectLimit: 20,
         instanceUsed: 0,
         instanceLimit: 200,
-        decision: { allowed: true, reason: 'within_budget' },
+        decision: {
+          llmSummaryAllowed: true,
+          deterministicBriefingAllowed: true,
+          reason: 'allowed',
+        },
       })),
       listAiOpsBriefingsByProject: vi.fn(async () => [makeBriefing()]),
     };
@@ -185,7 +189,11 @@ describe('AI Ops routes', () => {
         projectLimit: 12,
         instanceUsed: 1,
         instanceLimit: 200,
-        decision: { allowed: true, reason: 'within_budget' },
+        decision: {
+          llmSummaryAllowed: true,
+          deterministicBriefingAllowed: true,
+          reason: 'allowed',
+        },
       })),
     };
     const app = createApp({ db });
@@ -224,8 +232,7 @@ describe('AI Ops routes', () => {
       })),
       resolveAiOpsServicePolicy: vi.fn(async () => ({
         mode: 'off',
-        projectMode: 'briefing',
-        serviceOverrideMode: 'off',
+        source: 'service_override',
       })),
     };
     const app = createApp({ db });
@@ -244,7 +251,15 @@ describe('AI Ops routes', () => {
 
   it('returns full briefing evidence and LLM usage summary', async () => {
     const db = {
-      getAiOpsBriefing: vi.fn(async () => makeBriefing()),
+      getAiOpsBriefing: vi.fn(async () =>
+        makeBriefing({
+          evidence_json: JSON.stringify({
+            restart_count: 7,
+            runtime_log: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz',
+            env: { STRIPE_API_KEY: 'sk_live_abcdefghijklmnopqrstuvwxyz' },
+          }),
+        }),
+      ),
       getAiUsageLogsByBriefing: vi.fn(async () => [makeUsage()]),
     };
     const app = createApp({ db });
@@ -253,7 +268,11 @@ describe('AI Ops routes', () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { briefing: Record<string, unknown> };
-    expect(body.briefing.evidence).toEqual({ restart_count: 7 });
+    expect(body.briefing.evidence).toEqual({
+      restart_count: 7,
+      runtime_log: 'Authorization: Bearer [REDACTED]',
+      env: { STRIPE_API_KEY: '[REDACTED]' },
+    });
     expect(body.briefing.usage).toEqual({
       total_tokens: 150,
       input_tokens: 100,

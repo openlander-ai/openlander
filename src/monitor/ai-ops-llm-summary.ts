@@ -6,6 +6,7 @@ import type { ModelRegistry } from '../llm/model-registry.js';
 import { AI_OPS_BRIEFING_FEATURE } from '../llm/provider-config.js';
 import { withTracking } from '../llm/tracking-middleware.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { redactAiOpsEvidence } from './ai-ops-evidence-redaction.js';
 import {
   buildDeterministicAiOpsBriefing,
   type BuildAiOpsBriefingInput,
@@ -88,7 +89,7 @@ function fallbackSummary(briefing: AiOpsBriefingRow): string {
 }
 
 function buildPrompt(briefing: AiOpsBriefingRow): string {
-  const evidence = parseJson(briefing.evidence_json);
+  const evidence = redactAiOpsEvidence(parseJson(briefing.evidence_json));
   const suggestedCall = parseJson(briefing.suggested_call_json);
 
   return `Briefing:

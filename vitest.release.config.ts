@@ -80,6 +80,7 @@ export default defineConfig({
       'test/monitor/ai-ops-llm-summary.test.ts',
       'test/monitor/ai-ops-policy.test.ts',
       'test/monitor/ai-ops-telegram-notification.test.ts',
+      'test/monitor/ai-ops-trigger.test.ts',
       'test/monitor/ops-alerting.test.ts',
       'test/monitor/ops-config-resolver.test.ts',
       'test/monitor/ops-recovery.test.ts',
