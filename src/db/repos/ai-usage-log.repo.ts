@@ -84,6 +84,14 @@ export class AiUsageLogRepo {
       .orderBy(desc(aiUsageLog.created_at));
   }
 
+  async findByBriefingId(briefingId: string): Promise<AiUsageLogRow[]> {
+    return await this.db
+      .select()
+      .from(aiUsageLog)
+      .where(eq(aiUsageLog.briefing_id, briefingId))
+      .orderBy(desc(aiUsageLog.created_at));
+  }
+
   async findRecent(opts: { limit: number } & AiUsageLogFilterOptions): Promise<AiUsageLogRow[]> {
     const whereClause = this.buildWhereClause(opts);
 

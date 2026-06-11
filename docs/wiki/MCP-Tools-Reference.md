@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **78 unique default operations** surfaced through those composites
+- **80 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -27,6 +27,7 @@ Agent routing rule of thumb:
 | "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
 | "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
 | "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
+| "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
 | "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
@@ -85,9 +86,9 @@ Composite catalog:
 | ---------------------------- | ------------ | ------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                         |
 | `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
-| `openlander_service`         | 24           | Application lifecycle, config, domain routes, and env vocabulary                      |
+| `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                      |
 | `openlander_managed_service` | 21           | Database/Cache/Storage resources, credentials, backups, volumes, disk usage           |
-| `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes           |
+| `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes        |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
@@ -102,7 +103,7 @@ Composite catalog:
 | [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources     |
 | [Domains](#domains)                                      | 2     | Register Host/path domain routes                      |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                         |
-| [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis                   |
+| [Monitoring](#monitoring--logs)                          | 12    | Logs, stats, alerts, AI Ops briefings, host diagnosis |
 | [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis                |
 | [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                          |
 | [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                             |
@@ -878,6 +879,29 @@ of embedding tokens in URLs.
 No parameters. Returns the current OpenLander MCP instance identity:
 `id`, `name`, `endpoint`, `host`, `suggestedName`, and whether the name is still a default.
 Use this first when multiple OpenLander servers are connected to the same AI client.
+
+### `list_ai_ops_briefings` / `get_ai_ops_briefing`
+
+AI Ops Briefing Beta read surface. These actions are read-only and do not restart,
+redeploy, roll back, edit env vars, or acknowledge incidents.
+
+`list_ai_ops_briefings` lists persisted briefings for either a Project or an
+Application/Compose service.
+
+| Parameter    | Type   | Required | Description                           |
+| ------------ | ------ | -------- | ------------------------------------- |
+| `project_id` | string | No       | Project id                            |
+| `service_id` | string | No       | Application/Compose service_id        |
+| `status`     | string | No       | `open`, `acknowledged`, or `resolved` |
+| `limit`      | number | No       | Max rows, 1-100                       |
+
+Provide `project_id` or `service_id`. The response includes deterministic
+`classification`, `severity`, `summary`, and `suggested_call`; full evidence is
+kept out of the list response.
+
+`get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
+The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
+when present, is explanatory only.
 
 ### `get_logs`
 

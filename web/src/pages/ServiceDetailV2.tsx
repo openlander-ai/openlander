@@ -48,6 +48,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
+import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer as ConsoleLogViewer } from '@/components/logs/LogViewer';
 import { ServiceResourceLimitsPanel } from '@/components/service/ServiceResourceLimitsPanel';
@@ -492,6 +493,13 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         >
           <div className="flex flex-col gap-5">
             <GeneralTab service={resolvedService} />
+            {project?.id && (
+              <AiOpsBriefingPanel
+                scope="service"
+                projectId={project.id}
+                serviceId={resolvedService.id}
+              />
+            )}
             <ServiceResourceLimitsPanel
               projectId={project.id}
               serviceId={resolvedService.id}

@@ -3,6 +3,32 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.2.0
+
+- **AI Ops Briefing Beta Web/MCP surface:** `openlander_monitor` gains
+  read-only `list_ai_ops_briefings` and `get_ai_ops_briefing` actions. The web
+  API adds Project/Service AI Ops policy endpoints and briefing list/detail
+  endpoints under `/api/projects/:id/ai-ops`,
+  `/api/projects/:p/services/:s/ai-ops`, and `/api/ai-ops/briefings/:id`.
+- **Why accepted:** v0.2.0 exposes AI Ops as opt-in Briefing Beta, not
+  automation. Agents and humans need a stable way to read deterministic
+  briefing records and their suggested diagnostic calls after a Project or
+  service explicitly enables briefing mode.
+- **Vocab review:** AI Ops Briefing is a read-only operational summary.
+  `service_id`, `project_id`, and `briefing_id` are wire identifiers; no
+  Project/Application/Compose/Database/Cache/Storage vocabulary is renamed.
+  The MCP response uses only the existing response contract fields
+  (`status`, identifiers, `suggested_call`, `_agent_guidance`).
+- **Endpoint collision check:** `rg` for `list_ai_ops_briefings`,
+  `get_ai_ops_briefing`, and `/ai-ops` over `src`, `web`, `test`, and `docs`
+  found no pre-existing MCP action, composite slot, REST route, or database
+  field collision before this slice. The new MCP actions remain under
+  `openlander_monitor`; no deploy/service mutation action is added.
+- **Follow-up:** PR5 may attach LLM summaries to existing briefing rows, but it
+  must keep deterministic classification/severity/suggested calls owned by
+  rules. PR6 may add Telegram send-only notification, but inbound Telegram
+  updates must remain non-mutating.
+
 ## v0.1.17
 
 - **Domain route visibility response expansion:** existing

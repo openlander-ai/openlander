@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useLanguage } from '@/i18n/context';
@@ -539,71 +540,78 @@ function ProjectGeneralPanel({
   };
 
   return (
-    <form onSubmit={submit} className="flex max-w-2xl flex-col gap-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">{t('settings.general.title')}</h3>
-        <p className="mt-1 text-xs text-foreground/70">{t('settings.general.description')}</p>
-      </div>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-foreground/80">
-          {t('settings.general.displayName')}
-        </span>
-        <input
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-          className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-foreground/80">{t('settings.general.slug')}</span>
-        <input
-          value={project?.name ?? ''}
-          readOnly
-          className="ol-mono cursor-not-allowed rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 py-2 text-xs text-foreground/70"
-        />
-        <span className="text-[11px] text-foreground/60">{t('settings.general.slugHelp')}</span>
-      </label>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-foreground/80">
-          {t('settings.general.projectDescription')}
-        </span>
-        <textarea
-          value={description ?? ''}
-          onChange={(event) => setDescription(event.target.value)}
-          rows={3}
-          className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-foreground/80">{t('settings.general.tags')}</span>
-        <input
-          value={tags}
-          onChange={(event) => setTags(event.target.value)}
-          placeholder={t('settings.general.tagsPlaceholder')}
-          className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
-        />
-      </label>
-
-      {error && (
-        <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
-          {error}
+    <div className="flex max-w-2xl flex-col gap-4">
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{t('settings.general.title')}</h3>
+          <p className="mt-1 text-xs text-foreground/70">{t('settings.general.description')}</p>
         </div>
-      )}
-      {message && (
-        <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
-          {message}
-        </div>
-      )}
 
-      <div>
-        <Button type="submit" size="sm" disabled={saving || !project}>
-          {saving ? t('settings.general.saving') : t('settings.general.save')}
-        </Button>
-      </div>
-    </form>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground/80">
+            {t('settings.general.displayName')}
+          </span>
+          <input
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground/80">
+            {t('settings.general.slug')}
+          </span>
+          <input
+            value={project?.name ?? ''}
+            readOnly
+            className="ol-mono cursor-not-allowed rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 py-2 text-xs text-foreground/70"
+          />
+          <span className="text-[11px] text-foreground/60">{t('settings.general.slugHelp')}</span>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground/80">
+            {t('settings.general.projectDescription')}
+          </span>
+          <textarea
+            value={description ?? ''}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={3}
+            className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground/80">
+            {t('settings.general.tags')}
+          </span>
+          <input
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder={t('settings.general.tagsPlaceholder')}
+            className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-foreground outline-none focus:border-agent"
+          />
+        </label>
+
+        {error && (
+          <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+            {error}
+          </div>
+        )}
+        {message && (
+          <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+            {message}
+          </div>
+        )}
+
+        <div>
+          <Button type="submit" size="sm" disabled={saving || !project}>
+            {saving ? t('settings.general.saving') : t('settings.general.save')}
+          </Button>
+        </div>
+      </form>
+      {project && <AiOpsBriefingPanel scope="project" projectId={project.id} />}
+    </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
+import { formatAiOpsBriefingRow } from '../../monitor/ai-ops-briefing-format.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import {
@@ -28,8 +29,10 @@ import {
   diagnoseServiceSchema,
   diagnoseHostResourcesSchema,
   dismissAlertSchema,
+  getAiOpsBriefingSchema,
   getAlertsSchema,
   getInstanceInfoSchema,
+  listAiOpsBriefingsSchema,
   getLogsSchema,
   getProjectStatsSchema,
   getTopologySchema,
@@ -277,6 +280,68 @@ export const monitoringToolDefs: ToolDef[] = [
       'Return this OpenLander instance identity so agents can choose the right connected server.',
     inputSchema: getInstanceInfoSchema,
     execute: (_args, context) => Promise.resolve(getMcpInstancePublicInfo(context.appCtx.config)),
+  },
+  {
+    name: 'list_ai_ops_briefings',
+    riskLevel: 'low',
+    description:
+      'List AI Ops Briefing Beta records for a Project or Application/Compose service. Read-only. Returns deterministic classification, severity, summary, and suggested_call. AI Ops must be explicitly enabled to create new briefings; this action only reads persisted briefings.',
+    mcpDescription: 'List persisted AI Ops briefings for a Project or Application/Compose service.',
+    inputSchema: listAiOpsBriefingsSchema,
+    execute: async (args, context) => {
+      const appCtx = context.appCtx;
+      const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+      const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
+      const status = args['status'] as 'open' | 'acknowledged' | 'resolved' | undefined;
+      const limit = (args['limit'] as number | undefined) ?? 20;
+      const briefings = serviceId
+        ? await appCtx.db.listAiOpsBriefingsByService(serviceId, { limit, status })
+        : await appCtx.db.listAiOpsBriefingsByProject(projectId, { limit, status });
+
+      return {
+        status: 'ok',
+        count: briefings.length,
+        project_id: projectId || undefined,
+        service_id: serviceId || undefined,
+        briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+        _agent_guidance: {
+          message:
+            'Briefings are read-only summaries. Use suggested_call to inspect evidence before making any change.',
+        },
+      };
+    },
+  },
+  {
+    name: 'get_ai_ops_briefing',
+    riskLevel: 'low',
+    description:
+      'Get one AI Ops Briefing Beta record with full evidence. Read-only. The deterministic classification, severity, and suggested_call are owned by OpenLander rules; LLM summary is explanatory only when present.',
+    mcpDescription: 'Get one AI Ops briefing with full evidence.',
+    inputSchema: getAiOpsBriefingSchema,
+    execute: async (args, context) => {
+      const briefingId = String(args['briefing_id']);
+      const briefing = await context.appCtx.db.getAiOpsBriefing(briefingId);
+      if (!briefing) {
+        return {
+          status: 'not_found',
+          error: 'AI_OPS_BRIEFING_NOT_FOUND',
+          briefing_id: briefingId,
+          _agent_guidance: {
+            message:
+              'No briefing exists with this id. Call list_ai_ops_briefings for the Project or service.',
+          },
+        };
+      }
+
+      return {
+        status: 'ok',
+        briefing: formatAiOpsBriefingRow(briefing, { includeEvidence: true }),
+        _agent_guidance: {
+          message:
+            'Use the suggested_call for the next diagnostic read. Do not assume OpenLander already remediated this issue.',
+        },
+      };
+    },
   },
   {
     name: 'get_logs',

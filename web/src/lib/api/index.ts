@@ -7,3 +7,4 @@ export * from './system.js';
 export * from './topology.js';
 export * from './notifications.js';
 export * from './web-server.js';
+export * from './ai-ops.js';

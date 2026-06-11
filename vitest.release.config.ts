@@ -34,6 +34,7 @@ export default defineConfig({
       'test/auth/token-refresh.test.ts',
       'test/contract/system-routes-services.test.ts',
       'test/api/project-create-group.test.ts',
+      'test/api/ai-ops-routes.test.ts',
       'test/api/project-group-routes.test.ts',
       'test/api/deploy-log-source.test.ts',
       'test/api/deploy-log-stream-routes.test.ts',
@@ -139,6 +140,7 @@ export default defineConfig({
       // them to the release gate closes the project-wide test/web/*
       // gap Codex CCG flagged on every recent v0.1 PR.
       'test/web/auth-screen-v0-1.test.ts',
+      'test/web/ai-ops-briefing-surface.test.ts',
       'test/web/change-password-modal-inline-errors.test.ts',
       'test/web/cloudflare-frontend-cut-v0-1.test.ts',
       'test/web/command-palette-quick-links.test.ts',
