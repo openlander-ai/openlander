@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.5] - 2026-06-11
+
+### Fixed
+
+- Align the RC cold-agent smoke tests with the explicit downtime policy by
+  making lifecycle redeploy checks request `strategy="force"` instead of
+  relying on implicit force fallback.
+
 ## [0.2.0-rc.4] - 2026-06-11
 
 ### Added
