@@ -53,7 +53,7 @@ describe('AI Ops deterministic briefing core', () => {
   });
 
   it('detects restart-loop evidence without proposing automatic remediation', () => {
-    const briefing = buildDeterministicAiOpsBriefing({
+    const first = buildDeterministicAiOpsBriefing({
       projectId: 'proj-1',
       serviceId: 'svc-worker',
       container: {
@@ -61,10 +61,21 @@ describe('AI Ops deterministic briefing core', () => {
         restartCount: 4,
       },
     });
+    const second = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-worker',
+      container: {
+        running: true,
+        restartCount: 9,
+      },
+    });
 
-    expect(briefing.classification).toBe('restart_loop');
-    expect(briefing.suggestedCall?.action).toBe('diagnose_service');
-    expect(JSON.stringify(briefing.suggestedCall)).not.toMatch(/restart|redeploy|rollback|env/i);
+    expect(first.classification).toBe('restart_loop');
+    expect(first.fingerprint).toBe('restart-loop');
+    expect(second.fingerprint).toBe('restart-loop');
+    expect(first.dedupeKey).toBe(second.dedupeKey);
+    expect(first.suggestedCall?.action).toBe('diagnose_service');
+    expect(JSON.stringify(first.suggestedCall)).not.toMatch(/restart|redeploy|rollback|env/i);
   });
 
   it('maps dependency runtime incidents to diagnosis instead of inventing a fix', () => {
@@ -102,5 +113,27 @@ describe('AI Ops deterministic briefing core', () => {
     expect(evidence.recentLogTail?.split('\n')).toHaveLength(40);
     expect(evidence.recentLogTail?.startsWith('line-21')).toBe(true);
     expect(evidence.deployLog?.buildLogTail?.split('\n')).toHaveLength(40);
+  });
+
+  it('redacts secrets before evidence persistence and log fingerprints stay stable', () => {
+    const first = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-api',
+      recentLogTail:
+        'DATABASE_URL=postgres://app:super-secret@db:5432/app\nAuthorization: Bearer abcdefghijklmnopqrstuvwxyz',
+    });
+    const second = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-api',
+      recentLogTail: 'OPENAI_API_KEY=sk_live_abcdefghijklmnopqrstuvwxyz',
+    });
+
+    expect(first.evidence.recentLogTail).toContain('DATABASE_URL=[REDACTED]');
+    expect(first.evidence.recentLogTail).toContain('Bearer [REDACTED]');
+    expect(first.evidence.recentLogTail).not.toContain('super-secret');
+    expect(second.evidence.recentLogTail).toContain('OPENAI_API_KEY=[REDACTED]');
+    expect(first.fingerprint).toBe('logs:runtime');
+    expect(second.fingerprint).toBe('logs:runtime');
+    expect(first.dedupeKey).toBe(second.dedupeKey);
   });
 });

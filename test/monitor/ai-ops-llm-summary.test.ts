@@ -62,7 +62,12 @@ describe('AI Ops LLM summary', () => {
   });
 
   it('writes an LLM summary without changing deterministic classification or suggested call', async () => {
-    const briefing = makeBriefing();
+    const briefing = makeBriefing({
+      evidence_json: JSON.stringify({
+        logs: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz',
+        env: { DATABASE_URL: 'postgres://app:secret-password@db:5432/app' },
+      }),
+    });
     const model = { modelId: 'briefing-model' } as unknown as LanguageModel;
     const db = {
       updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
@@ -101,6 +106,10 @@ describe('AI Ops LLM summary', () => {
         ]),
       }),
     );
+    const prompt = generateTextMock.mock.calls[0]?.[0]?.messages?.[1]?.content as string;
+    expect(prompt).toContain('Bearer [REDACTED]');
+    expect(prompt).toContain('"DATABASE_URL": "[REDACTED]"');
+    expect(prompt).not.toContain('secret-password');
     expect(JSON.parse(briefing.suggested_call_json ?? '{}')).toEqual({
       tool: 'openlander_monitor',
       action: 'diagnose_service',

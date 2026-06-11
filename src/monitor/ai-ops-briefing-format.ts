@@ -1,4 +1,5 @@
 import type { AiOpsBriefingRow } from '../db/types.js';
+import { redactAiOpsEvidence } from './ai-ops-evidence-redaction.js';
 
 function parseJsonRecord(value: string | null): Record<string, unknown> | null {
   if (!value) return null;
@@ -18,7 +19,9 @@ export function formatAiOpsBriefingRow(
   opts: { includeEvidence?: boolean } = {},
 ) {
   const suggestedCall = parseJsonRecord(row.suggested_call_json);
-  const evidence = opts.includeEvidence ? parseJsonRecord(row.evidence_json) : undefined;
+  const evidence = opts.includeEvidence
+    ? redactAiOpsEvidence(parseJsonRecord(row.evidence_json))
+    : undefined;
   return {
     briefing_id: row.id,
     project_id: row.project_id,

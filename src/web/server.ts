@@ -93,6 +93,7 @@ function startMonitoring(ctx: AppContext): void {
   ctx.serviceHealthMonitor.start();
   ctx.systemMaintenanceMonitor.start();
   ctx.alertMonitor.start();
+  ctx.aiOpsBriefingTrigger.start();
 }
 
 function createApp(

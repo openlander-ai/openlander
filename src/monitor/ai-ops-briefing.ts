@@ -1,5 +1,6 @@
 import type { AiOpsBriefingSeverity } from '../db/types.js';
 import type { RepresentativeTrafficObservation } from '../tools/defs/representative-traffic.js';
+import { redactAiOpsEvidencePack } from './ai-ops-evidence-redaction.js';
 import { buildAiOpsDedupeKey } from './ai-ops-policy.js';
 
 export type AiOpsBriefingClassification =
@@ -146,7 +147,7 @@ function isRestartLoop(input: BuildAiOpsBriefingInput): boolean {
 }
 
 export function normalizeAiOpsEvidencePack(input: BuildAiOpsBriefingInput): AiOpsEvidencePack {
-  return {
+  const evidence: AiOpsEvidencePack = {
     projectId: input.projectId,
     serviceId: input.serviceId ?? null,
     serviceName: input.serviceName ?? null,
@@ -164,6 +165,7 @@ export function normalizeAiOpsEvidencePack(input: BuildAiOpsBriefingInput): AiOp
     container: input.container ?? null,
     runtimeIncident: input.runtimeIncident ?? null,
   };
+  return redactAiOpsEvidencePack(evidence);
 }
 
 export function buildDeterministicAiOpsBriefing(
@@ -220,7 +222,7 @@ export function buildDeterministicAiOpsBriefing(
     deterministicSummary = `Container/runtime evidence shows restart count ${String(
       restartCount,
     )}.`;
-    fingerprint = `restart-loop:${String(restartCount)}`;
+    fingerprint = 'restart-loop';
     suggestedCall = diagnoseCall(serviceId);
   } else if (runtimeIncident && isDependencyIncident(runtimeIncident)) {
     classification = 'dependency_failure';
@@ -263,7 +265,7 @@ export function buildDeterministicAiOpsBriefing(
     severity = 'warning';
     title = 'Runtime logs need inspection';
     deterministicSummary = 'Recent runtime logs are available but no stronger rule matched.';
-    fingerprint = `logs:${sanitizeFingerprintPart(evidence.recentLogTail)}`;
+    fingerprint = 'logs:runtime';
     suggestedCall = serviceId
       ? { tool: 'openlander_monitor', action: 'get_logs', params: { service_id: serviceId } }
       : null;

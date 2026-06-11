@@ -39,6 +39,7 @@ import { getPostmortemInstance } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { ActivityLogger } from './monitor/activity-logger.js';
 import { AiUsageListener } from './monitor/ai-usage-listener.js';
+import { AiOpsBriefingTrigger } from './monitor/ai-ops-briefing-trigger.js';
 import { ProjectStateManager } from './monitor/project-state-manager.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
@@ -191,6 +192,7 @@ export interface AppContext {
   autoDetector: AutoDetector;
   // v0.5 modules
   alertMonitor: AlertMonitor;
+  aiOpsBriefingTrigger: AiOpsBriefingTrigger;
   questionBridge: QuestionBridge;
   serviceManager: ServiceManager;
   approvalGate: ApprovalGate;
@@ -541,6 +543,13 @@ export async function createAppContext(
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
   const ctx = { ...partialCtx, channelManager } as AppContext;
+  ctx.aiOpsBriefingTrigger = new AiOpsBriefingTrigger({
+    eventBus,
+    db,
+    modelRegistry,
+    channelManager,
+    config,
+  });
   ctx.stateManager = new ProjectStateManager(ctx);
   composePipeline.setStateManager(ctx.stateManager);
   pipelineCtx = ctx;
@@ -624,6 +633,7 @@ export async function shutdownAppContext(ctx: AppContext): Promise<void> {
   getPostmortemInstance()?.stop();
   ctx.providerHealth.stop();
   ctx.rollbackWatcher.stop();
+  ctx.aiOpsBriefingTrigger.stop();
   ctx.alertMonitor.stop();
   ctx.systemMaintenanceMonitor.stop();
   ctx.serviceHealthMonitor.stop();
