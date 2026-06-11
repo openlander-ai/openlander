@@ -1,4 +1,35 @@
 export const translations = {
+  aiOps: {
+    title: 'AI Ops Briefing',
+    beta: 'Beta',
+    projectDescription:
+      '이 Project에서 읽기 전용 운영 브리핑을 켭니다. OpenLander는 증거를 요약하지만 restart, redeploy, rollback, env 수정은 자동으로 하지 않습니다.',
+    serviceDescription:
+      '이 Application/Compose 리소스의 Project AI Ops 모드를 덮어씁니다. 브리핑은 읽기 전용입니다.',
+    noAutomation: '자동 변경 없음',
+    mode: {
+      off: 'Off',
+      briefing: 'Briefing',
+      inherit: 'Inherit',
+    },
+    resolvedMode: 'Resolved',
+    budget: 'Budget',
+    recentBriefings: '최근 브리핑',
+    loading: '불러오는 중...',
+    empty: '아직 브리핑이 없습니다.',
+    detailTitle: 'AI Ops briefing',
+    detailDescription:
+      'severity와 suggested call은 OpenLander 규칙이 결정합니다. LLM 텍스트는 설명 전용입니다.',
+    tokens: 'Tokens',
+    cost: 'Cost',
+    llmCalls: 'LLM calls',
+    suggestedCall: 'Suggested MCP call',
+    evidence: 'Evidence',
+    error: {
+      load: 'AI Ops 브리핑을 불러오지 못했습니다.',
+      save: 'AI Ops 정책 저장에 실패했습니다.',
+    },
+  },
   resources: {
     // Chrome — section title + form labels + dropdown options + buttons + status.
     title: 'Resource Limits',

@@ -40,6 +40,7 @@ const EXPECTED_TOOLS = [
   'execute_deploy_plan',
   'export_env_vars',
   'expose_public',
+  'get_ai_ops_briefing',
   'get_alerts',
   'get_build_log',
   'get_deploy_history',
@@ -55,6 +56,7 @@ const EXPECTED_TOOLS = [
   'get_service_status',
   'get_system_stats',
   'get_topology',
+  'list_ai_ops_briefings',
   'list_archived_services',
   'list_buckets',
   'list_domain_routes',
@@ -136,8 +138,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 78 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(78);
+  it('maintains exactly 80 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(80);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

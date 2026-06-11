@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
+import type { AiOpsBriefingRow } from '../../src/db/types.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
 import type { ToolContext } from '../../src/tools/defs/types.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
@@ -48,6 +49,41 @@ function createMockContext(overrides?: {
   } as unknown as AppContext;
 
   return ctx;
+}
+
+function makeAiOpsBriefingRow(overrides: Partial<AiOpsBriefingRow> = {}): AiOpsBriefingRow {
+  return {
+    id: 'brief-1',
+    project_id: 'p1',
+    service_id: 'svc-1',
+    dedupe_key: 'p1:svc-1:route_failure',
+    fingerprint: 'route_failure',
+    classification: 'route_failure',
+    severity: 'high',
+    title: 'Public route is failing',
+    deterministic_summary: 'The public route returned HTTP 502 while the container is running.',
+    llm_summary: null,
+    suggested_call_json: JSON.stringify({
+      tool: 'openlander_monitor',
+      action: 'diagnose_service',
+      params: { service_id: 'svc-1' },
+    }),
+    evidence_json: JSON.stringify({
+      route_health: { reachable: false, status_code: 502 },
+      container_state: { running: true },
+    }),
+    status: 'open',
+    created_at: '2026-06-11T00:00:00.000Z',
+    updated_at: '2026-06-11T00:00:00.000Z',
+    server_id: 'local',
+    ...overrides,
+  };
+}
+
+function getDirectMonitoringTool(name: string) {
+  const tool = monitoringToolDefs.find((entry) => entry.name === name);
+  expect(tool).toBeDefined();
+  return tool!;
 }
 
 describe('probe_host tool', () => {
@@ -405,6 +441,105 @@ describe('probe_host tool', () => {
       const tool = monitoringToolDefs.find((t) => t.name === 'probe_host')!;
       const result = tool.inputSchema.safeParse({ target: 'localhost', port: 70000 });
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('AI Ops briefing monitor actions', () => {
+  it('lists persisted briefings without full evidence', async () => {
+    const row = makeAiOpsBriefingRow();
+    const db = {
+      listAiOpsBriefingsByProject: vi.fn(async () => [row]),
+      listAiOpsBriefingsByService: vi.fn(async () => []),
+    };
+    const ctx = { db } as unknown as AppContext;
+    const tool = getDirectMonitoringTool('list_ai_ops_briefings');
+
+    const result = (await tool.execute(
+      { project_id: 'p1', limit: 5, status: 'open' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(db.listAiOpsBriefingsByProject).toHaveBeenCalledWith('p1', {
+      limit: 5,
+      status: 'open',
+    });
+    expect(result.status).toBe('ok');
+    expect(result.count).toBe(1);
+    const briefings = result.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-1');
+    expect(briefings[0]?.summary).toContain('HTTP 502');
+    expect(briefings[0]?.suggested_call).toEqual({
+      tool: 'openlander_monitor',
+      action: 'diagnose_service',
+      params: { service_id: 'svc-1' },
+    });
+    expect(briefings[0]).not.toHaveProperty('evidence');
+  });
+
+  it('lists service-scoped briefings when service_id is supplied', async () => {
+    const row = makeAiOpsBriefingRow({ id: 'brief-service' });
+    const db = {
+      listAiOpsBriefingsByProject: vi.fn(async () => []),
+      listAiOpsBriefingsByService: vi.fn(async () => [row]),
+    };
+    const ctx = { db } as unknown as AppContext;
+    const tool = getDirectMonitoringTool('list_ai_ops_briefings');
+
+    const result = (await tool.execute(
+      { service_id: 'svc-1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(db.listAiOpsBriefingsByService).toHaveBeenCalledWith('svc-1', {
+      limit: 20,
+      status: undefined,
+    });
+    expect(db.listAiOpsBriefingsByProject).not.toHaveBeenCalled();
+    const briefings = result.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-service');
+  });
+
+  it('gets one briefing with full evidence', async () => {
+    const row = makeAiOpsBriefingRow({ llm_summary: 'LLM explanation from evidence.' });
+    const db = {
+      getAiOpsBriefing: vi.fn(async () => row),
+    };
+    const ctx = { db } as unknown as AppContext;
+    const tool = getDirectMonitoringTool('get_ai_ops_briefing');
+
+    const result = (await tool.execute(
+      { briefing_id: 'brief-1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(db.getAiOpsBriefing).toHaveBeenCalledWith('brief-1');
+    expect(result.status).toBe('ok');
+    const briefing = result.briefing as Record<string, unknown>;
+    expect(briefing.summary).toBe('LLM explanation from evidence.');
+    expect(briefing.deterministic_summary).toContain('HTTP 502');
+    expect(briefing.evidence).toEqual({
+      route_health: { reachable: false, status_code: 502 },
+      container_state: { running: true },
+    });
+  });
+
+  it('returns not_found for missing briefing ids', async () => {
+    const db = {
+      getAiOpsBriefing: vi.fn(async () => null),
+    };
+    const ctx = { db } as unknown as AppContext;
+    const tool = getDirectMonitoringTool('get_ai_ops_briefing');
+
+    const result = (await tool.execute(
+      { briefing_id: 'missing' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'not_found',
+      error: 'AI_OPS_BRIEFING_NOT_FOUND',
+      briefing_id: 'missing',
     });
   });
 });

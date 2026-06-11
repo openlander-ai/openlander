@@ -1,4 +1,35 @@
 export const translations = {
+  aiOps: {
+    title: 'AI Ops Briefing',
+    beta: 'Beta',
+    projectDescription:
+      'Opt in to read-only operational briefings for this Project. OpenLander will summarize evidence, but will not restart, redeploy, roll back, or edit env vars.',
+    serviceDescription:
+      'Override the Project AI Ops mode for this Application/Compose resource. Briefings stay read-only.',
+    noAutomation: 'No automatic changes',
+    mode: {
+      off: 'Off',
+      briefing: 'Briefing',
+      inherit: 'Inherit',
+    },
+    resolvedMode: 'Resolved',
+    budget: 'Budget',
+    recentBriefings: 'Recent briefings',
+    loading: 'Loading...',
+    empty: 'No briefings yet.',
+    detailTitle: 'AI Ops briefing',
+    detailDescription:
+      'Deterministic severity and suggested call are owned by OpenLander rules. LLM text is explanatory only.',
+    tokens: 'Tokens',
+    cost: 'Cost',
+    llmCalls: 'LLM calls',
+    suggestedCall: 'Suggested MCP call',
+    evidence: 'Evidence',
+    error: {
+      load: 'Failed to load AI Ops briefings.',
+      save: 'Failed to save AI Ops policy.',
+    },
+  },
   resources: {
     title: 'Resource Limits',
     description:

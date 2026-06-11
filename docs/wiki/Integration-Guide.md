@@ -212,15 +212,15 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **78 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **80 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
-| Composite                    | Actions | Purpose                                                         |
-| ---------------------------- | ------- | --------------------------------------------------------------- |
-| `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build             |
-| `openlander_project`         | 17      | Projects: metadata, secrets, exposure                           |
-| `openlander_service`         | 25      | Application lifecycle, config, domains                          |
-| `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes                |
-| `openlander_monitor`         | 11      | Monitoring & ops: logs, topology, alerts, stats, host diagnosis |
+| Composite                    | Actions | Purpose                                                                           |
+| ---------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build                               |
+| `openlander_project`         | 17      | Projects: metadata, secrets, exposure                                             |
+| `openlander_service`         | 25      | Application lifecycle, config, domains                                            |
+| `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes                                  |
+| `openlander_monitor`         | 13      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, stats, host diagnosis |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 

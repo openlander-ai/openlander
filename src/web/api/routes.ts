@@ -5,6 +5,7 @@ import { OpenLanderError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createActivityRoutes } from './activity-routes.js';
+import { createAiOpsRoutes } from './ai-ops-routes.js';
 import { createDeploymentRoutes } from './deployment-routes.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createDeployableServiceRoutes } from './deployable-service-routes.js';
@@ -520,6 +521,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   });
 
   api.route('/', createActivityRoutes(ctx));
+  api.route('/', createAiOpsRoutes(ctx));
   api.route('/', createMcpStatusRoutes(ctx));
   api.route('/', createMonitoringRoutes(ctx));
   api.route('/', createDeployStreamRoutes(ctx));
