@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.4] - 2026-06-11
+
+### Added
+
+- Add the AI Ops Briefing Beta foundation with Project-level opt-in, Service
+  override policy, durable fingerprint cooldown, and budget-aware LLM summary
+  gating. AI Ops remains OFF by default and provider setup alone does not enable
+  briefing generation.
+- Add deterministic AI Ops briefings with persisted evidence, rule-owned
+  severity/classification, and suggested MCP calls under the existing
+  `openlander_monitor` composite action.
+- Add AI Ops briefing Web/API surfaces for Project toggles, Service overrides,
+  briefing cards, detail drawers, token/cost display, and redacted evidence.
+- Add optional LLM summaries for AI Ops briefings using OpenAI-compatible or
+  Anthropic providers. LLM output is limited to evidence summaries; it cannot
+  change severity, classification, or suggested actions.
+- Add Telegram send-only notification support for AI Ops briefings, gated by
+  opt-in policy and durable fingerprint cooldown.
+
+### Changed
+
+- Align the v0.2 roadmap and MCP documentation around AI Ops Briefing Beta while
+  keeping Variables / Deployment Target / environment-scope work in a separate
+  milestone.
+
+### Fixed
+
+- Redact sensitive evidence before AI Ops briefing persistence, Web/MCP
+  exposure, and LLM prompts.
+- Stabilize AI Ops restart/log fingerprints and harden first-claim dedupe races
+  so repeated incidents do not bypass cooldown.
+- Wire passive runtime signals (`health:degraded`, `container:die`, and
+  `deploy:failed`) into briefing creation, summary generation, and Telegram
+  notification without enabling automatic remediation.
+
 ## [0.1.17] - 2026-06-10
 
 ### Added
