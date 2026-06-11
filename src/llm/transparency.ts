@@ -139,6 +139,9 @@ export async function logAiUsage(
   db: Database,
   params: {
     projectId?: string;
+    serviceId?: string;
+    feature?: string;
+    briefingId?: string;
     sessionId?: string;
     actionType:
       | 'web_agent'
@@ -168,6 +171,9 @@ export async function logAiUsage(
 
   const id = await db.createAiUsageLog({
     project_id: params.projectId ?? null,
+    service_id: params.serviceId ?? null,
+    feature: params.feature ?? null,
+    briefing_id: params.briefingId ?? null,
     session_id: params.sessionId ?? null,
     action_type: params.actionType,
     model_name: params.modelName,

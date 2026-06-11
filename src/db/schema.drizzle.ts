@@ -578,6 +578,9 @@ export const aiUsageLog = pgTable(
   {
     id: text('id').notNull().primaryKey(),
     project_id: text('project_id'),
+    service_id: text('service_id').references(() => services.id, { onDelete: 'set null' }),
+    feature: text('feature'),
+    briefing_id: text('briefing_id'),
     session_id: text('session_id'),
     action_type: text('action_type', {
       enum: [
@@ -588,6 +591,7 @@ export const aiUsageLog = pgTable(
         'system',
         'auto_detect',
         'history_compaction',
+        'ai_ops_briefing',
       ],
     }).notNull(),
     model_name: text('model_name').notNull().default(''),
@@ -609,6 +613,9 @@ export const aiUsageLog = pgTable(
   (table) => [
     check('ai_usage_log_result_check', sql`${table.result} IN ('success', 'failure', 'partial')`),
     index('idx_ai_usage_log_project').on(table.project_id),
+    index('idx_ai_usage_log_service').on(table.service_id),
+    index('idx_ai_usage_log_feature').on(table.feature),
+    index('idx_ai_usage_log_briefing').on(table.briefing_id),
     index('idx_ai_usage_log_created_at').on(table.created_at),
   ],
 );

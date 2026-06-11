@@ -9,6 +9,12 @@ interface AiUsageLogFilterOptions {
   to?: Date;
 }
 
+type NewAiUsageLogData = Omit<
+  AiUsageLogRow,
+  'id' | 'created_at' | 'service_id' | 'feature' | 'briefing_id'
+> &
+  Partial<Pick<AiUsageLogRow, 'service_id' | 'feature' | 'briefing_id'>>;
+
 export class AiUsageLogRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -21,13 +27,16 @@ export class AiUsageLogRepo {
    * Create a new AI usage log entry.
    * Generates UUID and sets created_at timestamp.
    */
-  async create(data: Omit<AiUsageLogRow, 'id' | 'created_at'>): Promise<string> {
+  async create(data: NewAiUsageLogData): Promise<string> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
     await this.db.insert(aiUsageLog).values({
       id,
       project_id: data.project_id ?? null,
+      service_id: data.service_id ?? null,
+      feature: data.feature ?? null,
+      briefing_id: data.briefing_id ?? null,
       session_id: data.session_id ?? null,
       action_type: data.action_type,
       model_name: data.model_name,

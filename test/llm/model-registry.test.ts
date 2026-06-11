@@ -1,13 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ModelRegistry,
   createModelRoutingConfigFromLegacy,
+  isValidAIModelFeature,
   type ModelRoutingConfig,
 } from '../../src/llm/model-registry.js';
 import { createModel } from '../../src/llm/index.js';
 import type { EventBus } from '../../src/events/index.js';
 import { LlmCircuitBreaker } from '../../src/llm/llm-circuit-breaker.js';
 import { LlmErrorType } from '../../src/llm/llm-error-types.js';
+import { buildEncryptedAiOpsProviderEntry } from '../../src/llm/provider-config.js';
+import { _resetCachedKey } from '../../src/env/crypto.js';
 
 vi.mock('../../src/llm/index.js', () => ({
   createModel: vi.fn((config: { model?: string }) => ({
@@ -36,10 +39,22 @@ function createBaseConfig(): ModelRoutingConfig {
 
 describe('ModelRegistry', () => {
   let mockEventBus: EventBus;
+  const previousMasterKey = process.env['OPENLANDER_MASTER_KEY'];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env['OPENLANDER_MASTER_KEY'] = '0'.repeat(64);
+    _resetCachedKey();
     mockEventBus = createMockEventBus();
+  });
+
+  afterEach(() => {
+    if (previousMasterKey === undefined) {
+      delete process.env['OPENLANDER_MASTER_KEY'];
+    } else {
+      process.env['OPENLANDER_MASTER_KEY'] = previousMasterKey;
+    }
+    _resetCachedKey();
   });
 
   it('resolves model from default route', () => {
@@ -76,6 +91,42 @@ describe('ModelRegistry', () => {
       apiKey: 'test-api-key',
       authToken: undefined,
       model: 'gpt-4.1',
+    });
+  });
+
+  it('resolves the AI Ops briefing model profile with encrypted OpenAI-compatible keys', () => {
+    const encryptedProvider = buildEncryptedAiOpsProviderEntry({
+      provider: 'openai',
+      apiKey: 'sk-ai-ops',
+      defaultModel: 'gpt-4.1-mini',
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+    const registry = new ModelRegistry(
+      {
+        providers: {
+          aiops: encryptedProvider,
+        },
+        defaultRoute: { providerId: 'aiops' },
+        routes: {
+          aiOpsBriefing: {
+            providerId: 'aiops',
+            model: 'gpt-4.1-mini',
+          },
+        },
+      },
+      mockEventBus,
+    );
+
+    const model = registry.getModel('aiOpsBriefing');
+
+    expect(model).not.toBeNull();
+    expect(model).toMatchObject({ modelId: 'gpt-4.1-mini' });
+    expect(createModel).toHaveBeenCalledWith({
+      provider: 'openai',
+      apiKey: 'sk-ai-ops',
+      authToken: undefined,
+      model: 'gpt-4.1-mini',
+      baseURL: 'https://openrouter.ai/api/v1',
     });
   });
 
@@ -143,6 +194,12 @@ describe('ModelRegistry', () => {
 
     expect(model).toBeNull();
     expect(createModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('isValidAIModelFeature', () => {
+  it('accepts aiOpsBriefing as the v0.2 briefing model profile', () => {
+    expect(isValidAIModelFeature('aiOpsBriefing')).toBe(true);
   });
 });
 

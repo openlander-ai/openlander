@@ -35,6 +35,8 @@ export interface LLMConfig {
   model?: string;
   /** OAuth access token (used instead of apiKey when OAuth is configured) */
   authToken?: string;
+  /** OpenAI-compatible endpoint override. Only used by the OpenAI provider. */
+  baseURL?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +71,7 @@ export function createModel(config: LLMConfig): LanguageModel {
     case 'anthropic':
       return createAnthropic({ apiKey })(config.model ?? 'claude-sonnet-4-20250514');
     case 'openai':
-      return createOpenAI({ apiKey })(config.model ?? 'gpt-4o');
+      return createOpenAI({ apiKey, baseURL: config.baseURL })(config.model ?? 'gpt-4o');
     case 'xai':
       return createXai({ apiKey })(config.model ?? 'grok-3-mini-fast');
     case 'deepseek':
