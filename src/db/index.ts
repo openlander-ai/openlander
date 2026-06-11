@@ -24,6 +24,7 @@ import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
 import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import { AuthRepo } from './repos/auth.repo.js';
 import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
+import { AiOpsPolicyRepo } from './repos/ai-ops-policy.repo.js';
 import { ActionRunRepo } from './repos/action-run.repo.js';
 import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
 import { OpsIncidentRepo } from './repos/ops-incident.repo.js';
@@ -54,6 +55,10 @@ export type {
   PendingFixRow,
   DeployPlanRow,
   AuthRow,
+  AiOpsDedupeRow,
+  AiOpsInstancePolicyRow,
+  AiOpsProjectPolicyRow,
+  AiOpsServiceOverrideRow,
   OpsIncidentRow,
   OpsIncidentEventRow,
   CircuitBreakerRow,
@@ -254,6 +259,7 @@ export class Database implements AuthDatabase {
   private readonly deployConfigRepo: DeployConfigRepo;
   private readonly authRepo: AuthRepo;
   private readonly aiUsageLogRepo: AiUsageLogRepo;
+  private readonly aiOpsPolicyRepo: AiOpsPolicyRepo;
   private readonly actionRunRepo: ActionRunRepo;
   private readonly deploymentPatternRepo: DeploymentPatternRepo;
   private readonly opsIncidentRepo: OpsIncidentRepo;
@@ -287,6 +293,7 @@ export class Database implements AuthDatabase {
     this.deployConfigRepo = new DeployConfigRepo(this.db, this.client);
     this.authRepo = new AuthRepo(this.db);
     this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.client);
+    this.aiOpsPolicyRepo = new AiOpsPolicyRepo(this.db, this.client);
     this.actionRunRepo = new ActionRunRepo(this.db, this.client);
     this.deploymentPatternRepo = new DeploymentPatternRepo(this.db, this.client);
     this.opsIncidentRepo = new OpsIncidentRepo(this.db, this.client);
@@ -521,6 +528,16 @@ export class Database implements AuthDatabase {
   getAiTokenSummaryFiltered(opts?: { projectId?: string; from?: Date; to?: Date }) { return this.aiUsageLogRepo.getTokenSummaryFiltered(opts); }
   getRecentAiUsageLogs(opts: { limit: number; projectId?: string; from?: Date; to?: Date }) { return this.aiUsageLogRepo.findRecent(opts); }
   countAiUsageLogs(opts?: { projectId?: string; from?: Date; to?: Date }) { return this.aiUsageLogRepo.countAll(opts); }
+  getAiOpsInstancePolicy() { return this.aiOpsPolicyRepo.getInstancePolicy(); }
+  setAiOpsInstancePolicy(input: Parameters<AiOpsPolicyRepo['setInstancePolicy']>[0]) { return this.aiOpsPolicyRepo.setInstancePolicy(input); }
+  getAiOpsProjectPolicy(projectId: string) { return this.aiOpsPolicyRepo.getProjectPolicy(projectId); }
+  setAiOpsProjectPolicy(projectId: string, input: Parameters<AiOpsPolicyRepo['setProjectPolicy']>[1]) { return this.aiOpsPolicyRepo.setProjectPolicy(projectId, input); }
+  getAiOpsServiceOverride(serviceId: string) { return this.aiOpsPolicyRepo.getServiceOverride(serviceId); }
+  setAiOpsServiceOverride(serviceId: string, input: Parameters<AiOpsPolicyRepo['setServiceOverride']>[1]) { return this.aiOpsPolicyRepo.setServiceOverride(serviceId, input); }
+  resolveAiOpsServicePolicy(projectId: string, serviceId?: string | null) { return this.aiOpsPolicyRepo.resolveServicePolicy(projectId, serviceId); }
+  getAiOpsBriefingBudgetStatus(projectId: string, now?: Date) { return this.aiOpsPolicyRepo.getBriefingBudgetStatus(projectId, now); }
+  claimAiOpsDedupeWindow(input: Parameters<AiOpsPolicyRepo['claimDedupeWindow']>[0]) { return this.aiOpsPolicyRepo.claimDedupeWindow(input); }
+  getAiOpsDedupeByKey(dedupeKey: string) { return this.aiOpsPolicyRepo.getDedupeByKey(dedupeKey); }
   createActionRun(data: Parameters<ActionRunRepo['create']>[0]) { return this.actionRunRepo.create(data); }
   createPendingMcpApproval(data: Parameters<ActionRunRepo['createPendingMcpApproval']>[0]) { return this.actionRunRepo.createPendingMcpApproval(data); }
   recordDeployPlanApproval(data: Parameters<ActionRunRepo['recordDeployPlanApproval']>[0]) { return this.actionRunRepo.recordDeployPlanApproval(data); }

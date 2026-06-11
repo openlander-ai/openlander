@@ -392,6 +392,49 @@ export interface AiUsageLogRow {
   created_at: string;
 }
 
+export type AiOpsProjectMode = 'off' | 'briefing';
+export type AiOpsServiceOverrideMode = 'inherit' | 'off' | 'briefing';
+
+export interface AiOpsInstancePolicyRow {
+  id: number;
+  daily_briefing_limit: number;
+  fingerprint_cooldown_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiOpsProjectPolicyRow {
+  project_id: string;
+  mode: AiOpsProjectMode;
+  daily_briefing_limit: number;
+  fingerprint_cooldown_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiOpsServiceOverrideRow {
+  service_id: string;
+  mode: AiOpsServiceOverrideMode;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiOpsDedupeRow {
+  id: string;
+  dedupe_key: string;
+  project_id: string;
+  service_id: string | null;
+  resource_kind: string | null;
+  resource_id: string | null;
+  fingerprint: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  cooldown_until: string;
+  occurrences: number;
+  last_briefing_id: string | null;
+  server_id: string;
+}
+
 export interface ActionRunRow {
   id: string;
   project_id: string;
