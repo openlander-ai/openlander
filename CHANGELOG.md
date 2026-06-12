@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.8] - 2026-06-12
+
+### Added
+
+- Add Gemini API as an AI Ops Briefing provider option, using
+  `gemini-2.5-flash` as the default model while keeping provider setup separate
+  from Project AI Ops opt-in.
+
 ## [0.2.0-rc.7] - 2026-06-12
 
 ### Added
