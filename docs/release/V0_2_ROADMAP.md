@@ -46,6 +46,52 @@ AI Ops briefing 전용 model profile을 추가한다.
   service, briefing id를 기록한다.
 - provider configured 상태와 AI Ops enabled 상태를 분리한다.
 
+#### 2.1 Provider Runtime Policy
+
+0.2.0의 기본 LLM 상태는 **provider 없음**이다. Provider가 없으면 AI Ops는
+deterministic briefing만 생성하고, LLM summary는 `skipped`로 남긴다.
+
+공식 0.2 provider 범위:
+
+| 구분                  | 0.2.0 정책                                     | 비고                                                                                                                                                      |
+| --------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI-compatible     | provider를 연결할 때의 1순위 권장 API provider | OpenAI API, OpenRouter, 사내 OpenAI-compatible endpoint를 같은 경로로 다룬다. 0.2.0은 어떤 provider도 기본 활성화하지 않는다.                             |
+| Anthropic API         | 공식 대안 provider                             | API key 기반만 지원한다.                                                                                                                                  |
+| Gemini / 기타 API     | 0.2.x 후보                                     | 모델 품질과 비용을 별도 QA한 뒤 하나씩 추가한다.                                                                                                          |
+| Local account runtime | 0.2.x 실험 후보, core 기본값 아님              | 사용자가 로컬에서 로그인한 도구는 optional provider package로 연결할 수 있다. 구독 계정 bridge는 provider 약관 검토와 명시적 동의 게이트 전까지 보류한다. |
+
+Local account runtime 정책:
+
+- OpenLander core는 ChatGPT/Claude subscription session token, browser cookie,
+  refresh token을 직접 읽거나 저장하지 않는다.
+- 로컬 계정 연동은 optional npm package가 dependency import 방식으로 담당한다.
+  이 package loader는 0.2.0 release criteria가 아니라 0.2.x 실험 설계 의도다.
+- 0.2.0 core는 API-key provider만 release criteria로 본다. Local runtime은
+  별도 experimental track에서 검증한다.
+- 기본 통합 방식은 HTTP port bridge가 아니라 **optional dependency import**다.
+  필요 시 package 내부에서 CLI/SDK subprocess를 격리할 수 있지만,
+  OpenLander product surface에는 포트를 요구하지 않는다.
+- OpenLander는 provider 약관을 위반하는 구독 계정 자동화를 기본 제공하거나
+  권장하지 않는다. Local runtime 사용은 provider 약관 검토와 사용자 책임
+  확인을 거쳐야 한다.
+- 모든 provider 호출은 local runtime을 포함해 evidence secret redaction 이후에만
+  수행한다.
+- Local runtime은 서버 설치와 팀 운영에는 권장 기본값이 아니다. 같은 host에
+  로그인된 로컬 CLI가 있어야 하며, token/cost 계산이 불완전할 수 있다.
+- Local runtime 실패는 LLM 실패와 동일하게 deterministic briefing fallback으로
+  처리한다. 실패가 briefing 생성이나 notification을 막지 않는다.
+
+즉, 0.2.0은 "API-key provider로 공식 지원, 로컬 계정 provider는 core 밖
+optional runtime"을 기준으로 한다. 사용자가 provider를 연결하지 않아도 AI Ops
+Beta의 deterministic value는 유지되어야 한다.
+
+0.2.0 core release gate:
+
+- provider API key 저장만으로 AI Ops가 켜지지 않는다.
+- provider 미설정, provider 실패, local runtime 실패는 모두 deterministic
+  briefing fallback으로 처리한다.
+- LLM provider 호출 전 redaction이 적용된다.
+
 ### 3. Opt-In / Budget / Durable Dedupe
 
 AI Ops 실행 정책은 명시 opt-in이다.
@@ -203,6 +249,9 @@ git diff --check
 
 - AI Ops default OFF.
 - Provider configured 상태만으로 AI Ops가 켜지지 않음.
+- Provider가 없거나 실패해도 deterministic briefing은 생성됨.
+- Local account runtime은 core가 subscription token/cookie를 읽지 않는 optional
+  package 경계 밖 실험 기능으로 유지.
 - `RecoveryCoordinator` / `OpsAgent` / built-in chat route dormant 유지.
 - 자동 restart / redeploy / rollback / env edit 없음.
 - Telegram inbound webhook은 mutation을 실행하지 않음.
@@ -297,6 +346,8 @@ PR5 이후 weak-model QA를 시작한다.
 - Project ON 상태에서 deterministic briefing이 생성된다.
 - Service override가 동작한다.
 - OpenAI-compatible과 Anthropic provider로 LLM summary가 동작한다.
+- Provider 미설정 또는 provider 실패 상태에서도 deterministic briefing fallback이
+  동작한다.
 - LLM 실패가 clean fallback으로 처리된다.
 - token/cost usage가 기록된다.
 - Telegram send-only notification이 동작한다.

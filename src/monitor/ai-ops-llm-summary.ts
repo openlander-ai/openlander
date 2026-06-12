@@ -5,6 +5,7 @@ import type { AiOpsBriefingRow } from '../db/types.js';
 import type { ModelRegistry } from '../llm/model-registry.js';
 import { AI_OPS_BRIEFING_FEATURE } from '../llm/provider-config.js';
 import { withTracking } from '../llm/tracking-middleware.js';
+import { sanitizeLlmErrorMessage } from '../llm/llm-error-types.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { redactAiOpsEvidence } from './ai-ops-evidence-redaction.js';
 import {
@@ -140,7 +141,7 @@ export async function summarizeAiOpsBriefingWithLlm(
         }),
     );
 
-    const summary = sanitizeSummary(response.text);
+    const summary = redactAiOpsEvidence(sanitizeSummary(response.text));
     if (!summary) {
       return {
         status: 'fallback',
@@ -159,7 +160,7 @@ export async function summarizeAiOpsBriefingWithLlm(
     return {
       status: 'fallback',
       summary: fallback,
-      error: error instanceof Error ? error.message : String(error),
+      error: sanitizeLlmErrorMessage(error instanceof Error ? error.message : String(error)),
     };
   }
 }
