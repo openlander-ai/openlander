@@ -25,6 +25,7 @@ import {
   Server,
   Bot,
   Code2,
+  BrainCircuit,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -119,6 +120,13 @@ const SECTIONS: NavSection[] = [
         icon: Code2,
         to: '/settings/git-providers',
         matches: startsWith('/settings/git-providers'),
+      },
+      {
+        id: 'ai-providers',
+        label: 'AI Providers',
+        icon: BrainCircuit,
+        to: '/settings/ai-providers',
+        matches: startsWith('/settings/ai-providers'),
       },
     ],
   },

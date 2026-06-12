@@ -54,18 +54,22 @@ export function createAuthMiddleware(authService: AuthService) {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = parseCookie(cookieHeader, 'ol_session');
     let authed = false;
+    let authKind: 'session' | 'api_token' | null = null;
     if (sessionToken && (await authService.validateSession(sessionToken))) {
       authed = true;
+      authKind = 'session';
     } else {
       const authHeader = c.req.header('authorization');
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
         if (await authService.validateApiToken(token)) {
           authed = true;
+          authKind = 'api_token';
         }
       }
     }
     c.set('isAuthenticated', authed);
+    c.set('authKind', authKind);
 
     if (path === '/health') {
       return next();

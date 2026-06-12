@@ -1,6 +1,6 @@
 import type { AppContext } from '../app.js';
 import { normalizeLlmConfig } from '../config/index.js';
-import type { LLMProviderEntry } from './model-registry.js';
+import { resolveProviderApiKey, type LLMProviderEntry } from './model-registry.js';
 import { createModel } from './index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -17,6 +17,121 @@ export interface ProviderHealthStatus {
 const HEALTH_CHECK_TIMEOUT_MS = 10_000;
 const MIN_INTERVAL_MS = 300_000;
 const INITIAL_DELAY_MS = 15_000;
+
+const BLOCKED_AI_PROVIDER_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::',
+  '::1',
+  '0:0:0:0:0:0:0:0',
+  '0:0:0:0:0:0:0:1',
+  '169.254.169.254',
+  'metadata.google.internal',
+  'metadata.goog',
+]);
+
+export function checkLlmProviderBaseUrlSafety(baseURL: string | undefined): {
+  ok: boolean;
+  reason?: string;
+} {
+  if (!baseURL) {
+    return { ok: true };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(baseURL);
+  } catch {
+    return { ok: false, reason: 'base_url must be a valid URL' };
+  }
+
+  const scheme = parsed.protocol.toLowerCase();
+  if (scheme !== 'https:' && scheme !== 'http:') {
+    return { ok: false, reason: `scheme ${scheme} is not allowed` };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { ok: false, reason: 'embedded credentials are not allowed' };
+  }
+
+  const host = parsed.hostname
+    .toLowerCase()
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .replace(/\.+$/, '');
+  if (!host) {
+    return { ok: false, reason: 'empty host' };
+  }
+
+  if (BLOCKED_AI_PROVIDER_HOSTS.has(host)) {
+    return { ok: false, reason: `host ${host} is not a safe provider target` };
+  }
+
+  if (host.endsWith('.local') || host.endsWith('.localhost')) {
+    return { ok: false, reason: `host ${host} resolves on the local network` };
+  }
+
+  if (/^127\./.test(host) || /^0\./.test(host) || /^169\.254\./.test(host)) {
+    return { ok: false, reason: `host ${host} is not a safe provider target` };
+  }
+
+  if (host.includes(':')) {
+    if (
+      host === '::1' ||
+      host === '0:0:0:0:0:0:0:1' ||
+      host.startsWith('fc') ||
+      host.startsWith('fd') ||
+      host.startsWith('fe8') ||
+      host.startsWith('fe9') ||
+      host.startsWith('fea') ||
+      host.startsWith('feb') ||
+      host.startsWith('::ffff:')
+    ) {
+      return { ok: false, reason: `host ${host} is not a safe provider target` };
+    }
+  }
+
+  return { ok: true };
+}
+
+export async function testLlmProviderEntry(
+  entry: LLMProviderEntry,
+  timeoutMs = HEALTH_CHECK_TIMEOUT_MS,
+): Promise<ProviderHealthStatus> {
+  const start = Date.now();
+  try {
+    const baseUrlSafety = checkLlmProviderBaseUrlSafety(entry.baseURL);
+    if (!baseUrlSafety.ok) {
+      throw new Error(`Unsafe AI provider base_url: ${baseUrlSafety.reason ?? 'unsafe URL'}`);
+    }
+
+    const model = createModel({
+      provider: entry.provider,
+      apiKey: resolveProviderApiKey(entry),
+      authToken: entry.authToken,
+      model: entry.defaultModel,
+      ...(entry.baseURL ? { baseURL: entry.baseURL } : {}),
+    });
+
+    const { generateText } = await import('ai');
+    await generateText({
+      model,
+      prompt: 'Respond with exactly: ok',
+      maxOutputTokens: 5,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+    });
+
+    return { ok: true, latencyMs: Date.now() - start, checkedAt: new Date() };
+  } catch (error) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      error: error instanceof Error ? error.message : String(error),
+      checkedAt: new Date(),
+    };
+  }
+}
 
 /**
  * Background monitor that periodically tests LLM provider connectivity.
@@ -76,7 +191,7 @@ export class ProviderHealthMonitor {
 
       await Promise.allSettled(
         entries.map(async ([id, entry]) => {
-          const status = await this.testProvider(entry);
+          const status = await testLlmProviderEntry(entry);
           this.healthState.set(id, status);
 
           if (!status.ok) {
@@ -97,34 +212,5 @@ export class ProviderHealthMonitor {
 
   getAllHealth(): Map<string, ProviderHealthStatus> {
     return this.healthState;
-  }
-
-  private async testProvider(entry: LLMProviderEntry): Promise<ProviderHealthStatus> {
-    const start = Date.now();
-    try {
-      const model = createModel({
-        provider: entry.provider,
-        apiKey: entry.apiKey ?? '',
-        authToken: entry.authToken,
-        model: entry.defaultModel,
-      });
-
-      const { generateText } = await import('ai');
-      await generateText({
-        model,
-        prompt: 'Respond with exactly: ok',
-        maxOutputTokens: 5,
-        abortSignal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
-      });
-
-      return { ok: true, latencyMs: Date.now() - start, checkedAt: new Date() };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: Date.now() - start,
-        error: error instanceof Error ? error.message : String(error),
-        checkedAt: new Date(),
-      };
-    }
   }
 }

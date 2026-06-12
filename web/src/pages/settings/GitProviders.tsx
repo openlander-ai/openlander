@@ -11,7 +11,7 @@
  *      - stat block: Repos linked / Last sync / Connected on / OAuth scope chips
  *   2. Empty-state card (only when no token configured)
  *      - single CTA "Connect GitHub" pointing to the legacy connection flow
- *   3. Other providers — compressed rows for GitLab / Bitbucket marked v0.2
+ *   3. Other providers — compressed rows for GitLab / Bitbucket marked Later
  *
  * v0.1 honest gaps:
  *   - `connectedAt` / `lastSyncAt` come from lightweight backend config
@@ -495,10 +495,10 @@ function OtherProvidersCard() {
             <span className="text-[13px] text-[color:var(--ol-fg-muted)]">{row.label}</span>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-                {t('gitProviders.others.comingInV02')}
+                {t('gitProviders.others.comingLater')}
               </span>
               <span className="rounded-full border border-[color:var(--ol-border-subtle)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)]">
-                {t('gitProviders.others.v02Badge')}
+                {t('gitProviders.others.laterBadge')}
               </span>
             </div>
           </li>

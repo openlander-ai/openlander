@@ -55,14 +55,14 @@ Create a Project first, then add Applications inside it.
 
 In the 0.1 data model:
 
-| Noun            | Meaning                                                  |
-| --------------- | -------------------------------------------------------- |
-| **Project**     | Workspace: settings and related resources                |
-| **Application** | Git repo app, worker, or Docker image workload           |
-| **Compose**     | Compose stack represented as one Project-level resource  |
-| **Database**    | PostgreSQL, MySQL, or MongoDB resource                   |
-| **Cache**       | Redis resource                                           |
-| **Storage**     | MinIO resource                                           |
+| Noun            | Meaning                                                 |
+| --------------- | ------------------------------------------------------- |
+| **Project**     | Workspace: settings and related resources               |
+| **Application** | Git repo app, worker, or Docker image workload          |
+| **Compose**     | Compose stack represented as one Project-level resource |
+| **Database**    | PostgreSQL, MySQL, or MongoDB resource                  |
+| **Cache**       | Redis resource                                          |
+| **Storage**     | MinIO resource                                          |
 
 **Flow**:
 
@@ -137,13 +137,13 @@ operations on resources already connected to a Project.
 
 **Tabs (observability-first per the v0.1 spec)**:
 
-| Tab             | Features                                                                      |
-| --------------- | ----------------------------------------------------------------------------- |
-| **Overview**    | General details, resource limits, health, danger zone (typed-confirm delete). |
-| **Logs**        | Live runtime container logs.                                                  |
-| **Deployments** | Per-Application deployment history with deploy-in-place log streaming.         |
-| **Monitoring**  | CPU / memory time-series and request-side health.                             |
-| **Environment** | Application env vars (read/write).                                            |
+| Tab             | Features                                                                          |
+| --------------- | --------------------------------------------------------------------------------- |
+| **Overview**    | General details, resource limits, health, danger zone (typed-confirm delete).     |
+| **Logs**        | Live runtime container logs.                                                      |
+| **Deployments** | Per-Application deployment history with deploy-in-place log streaming.            |
+| **Monitoring**  | CPU / memory time-series and request-side health.                                 |
+| **Environment** | Application env vars (read/write).                                                |
 | **Domains**     | Host/path routes registered for the Application. DNS/TLS remain external in v0.1. |
 
 Applications use the full detail surface. Database/Cache/Storage resources
@@ -161,7 +161,7 @@ Read-only observability page for the routing layer. Shows the proxy detection re
 
 ### Git Providers (`/settings/git-providers`)
 
-GitHub identity card (octocat + `@login` + tri-state status pip), action menu (Manage on GitHub / Re-authorize / Refresh / Disconnect), and a stat block (Repos linked / Last sync / Connected on / OAuth scopes). GitLab and Bitbucket rows are reserved as v0.2 placeholders.
+GitHub identity card (octocat + `@login` + tri-state status pip), action menu (Manage on GitHub / Re-authorize / Refresh / Disconnect), and a stat block (Repos linked / Last sync / Connected on / OAuth scopes). GitLab and Bitbucket rows are future placeholders; 0.2.0 keeps GitHub as the only live Git provider surface.
 
 The legacy multi-tab `/settings` host (System / Security / Proxy / GitHub / MCP) was retired for v0.1: Global Secrets are backend-only, Security folded into the AccountPopover, Proxy moved to Web Server, MCP moved to Your Agent (`/mcp-server`), and `/settings` itself is now a narrow GitHub device-flow handoff that the Git Providers Re-authorize and Connect buttons land on.
 

@@ -19,6 +19,7 @@ import { MCPServer } from '@/pages/MCPServer';
 import { MonitoringPage } from '@/pages/MonitoringPage';
 import { WebServerSettings } from '@/pages/settings/WebServer';
 import { GitProvidersSettings } from '@/pages/settings/GitProviders';
+import { AiProvidersSettings } from '@/pages/settings/AiProviders';
 import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
 import { NotificationsSettings } from '@/pages/settings/Notifications';
 import { LoginPage } from '@/pages/LoginPage';
@@ -286,6 +287,7 @@ function App() {
                   />
                   <Route path="/settings/web-server" element={<WebServerSettings />} />
                   <Route path="/settings/git-providers" element={<GitProvidersSettings />} />
+                  <Route path="/settings/ai-providers" element={<AiProvidersSettings />} />
                   {/* SSH Keys + Notifications are hidden in the v0.1
                       sidebar but the routes stay mounted: the SSH Keys
                       page is a deliberate "lands in v0.2" stub (the file

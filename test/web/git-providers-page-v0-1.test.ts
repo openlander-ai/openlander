@@ -25,7 +25,7 @@ describe('Git Providers page v0.1', () => {
   });
 
   it('renders the GitHub identity card with status pip + auth-method badge', () => {
-    expect(pageSource).toContain("data-testid=\"github-pip\"");
+    expect(pageSource).toContain('data-testid="github-pip"');
     expect(pageSource).toMatch(/pipKindFor\(/);
     expect(pageSource).toContain("t('gitProviders.github.cardTitle')");
     expect(pageSource).toMatch(/authMethodLabel\(/);
@@ -51,7 +51,7 @@ describe('Git Providers page v0.1', () => {
     expect(pageSource).toContain("t('gitProviders.github.pendingFirstSync')");
     // The old "available from v0.1.x" hint should be gone — the
     // capability is no longer deferred.
-    expect(pageSource).not.toContain("timestampDeferred");
+    expect(pageSource).not.toContain('timestampDeferred');
   });
 
   it('renders the absolute datetime as a tooltip on the relative lastSync tile', () => {
@@ -75,7 +75,7 @@ describe('Git Providers page v0.1', () => {
   });
 
   it('renders OAuth scope chips when scopes are reported, with PAT-aware fallback', () => {
-    expect(pageSource).toContain("data-testid=\"github-scope-chip\"");
+    expect(pageSource).toContain('data-testid="github-scope-chip"');
     expect(pageSource).toMatch(/data\.scopes\.length > 0/);
     expect(pageSource).toContain("t('gitProviders.github.scopesUnavailableForPat')");
     expect(pageSource).toContain("t('gitProviders.github.scopesEmpty')");
@@ -98,18 +98,20 @@ describe('Git Providers page v0.1', () => {
   });
 
   it('renders the spec empty state with a single Connect GitHub CTA', () => {
-    expect(pageSource).toContain("data-testid=\"github-empty-state\"");
+    expect(pageSource).toContain('data-testid="github-empty-state"');
     expect(pageSource).toContain("t('gitProviders.github.empty.title')");
     expect(pageSource).toContain("t('gitProviders.github.empty.cta')");
   });
 
-  it('renders compressed GitLab / Bitbucket rows marked v0.2', () => {
-    expect(pageSource).toContain("data-testid=\"git-providers-other-list\"");
-    expect(pageSource).toContain("data-testid={`git-providers-other-${row.key}`}");
+  it('renders compressed GitLab / Bitbucket rows as future placeholders', () => {
+    expect(pageSource).toContain('data-testid="git-providers-other-list"');
+    expect(pageSource).toContain('data-testid={`git-providers-other-${row.key}`}');
     expect(pageSource).toContain("t('gitProviders.others.gitlab')");
     expect(pageSource).toContain("t('gitProviders.others.bitbucket')");
-    expect(pageSource).toContain("t('gitProviders.others.v02Badge')");
-    expect(pageSource).toContain("t('gitProviders.others.comingInV02')");
+    expect(pageSource).toContain("t('gitProviders.others.laterBadge')");
+    expect(pageSource).toContain("t('gitProviders.others.comingLater')");
+    expect(enSource).toContain("laterBadge: 'Later'");
+    expect(koSource).toContain("laterBadge: 'Later'");
   });
 
   it('keeps tokenValid ternary state separate from connected (no fake green pip)', () => {
@@ -121,7 +123,7 @@ describe('Git Providers page v0.1', () => {
   });
 
   it('exports the typed API client targeting the backend aggregator', () => {
-    expect(apiSource).toContain("export async function getGitHubProviderStatus");
+    expect(apiSource).toContain('export async function getGitHubProviderStatus');
     expect(apiSource).toContain("'/api/git-providers/github'");
     // tokenValid is explicitly tri-state; null must be valid.
     expect(apiSource).toMatch(/tokenValid:\s*boolean\s*\|\s*null/);
@@ -172,8 +174,12 @@ describe('Git Providers page v0.1', () => {
 
   it('persists connectedAt + lastSyncAt on successful GitHub validation', () => {
     expect(backendRouteSource).toContain('persistGitHubSuccessfulSync');
-    expect(backendRouteSource).toMatch(/connectedAt:\s*ctx\.config\.gitProviders\.github\.connectedAt \?\? null/);
-    expect(backendRouteSource).toMatch(/lastSyncAt:\s*ctx\.config\.gitProviders\.github\.lastSyncAt \?\? null/);
+    expect(backendRouteSource).toMatch(
+      /connectedAt:\s*ctx\.config\.gitProviders\.github\.connectedAt \?\? null/,
+    );
+    expect(backendRouteSource).toMatch(
+      /lastSyncAt:\s*ctx\.config\.gitProviders\.github\.lastSyncAt \?\? null/,
+    );
   });
 
   it('defines gitProviders.* keys in both languages', () => {
@@ -192,7 +198,8 @@ describe('Git Providers page v0.1', () => {
       expect(dict).toMatch(/pendingFirstSync:/);
       expect(dict).toMatch(/empty:\s*\{/);
       expect(dict).toMatch(/others:\s*\{/);
-      expect(dict).toMatch(/v02Badge:/);
+      expect(dict).toMatch(/laterBadge:/);
+      expect(dict).toMatch(/comingLater:/);
     }
   });
 });

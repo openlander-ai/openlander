@@ -30,6 +30,59 @@ export const translations = {
       save: 'Failed to save AI Ops policy.',
     },
   },
+  aiProviders: {
+    title: 'AI Providers',
+    subtitle:
+      'Connect the model used for AI Ops briefing summaries. Provider setup does not enable AI Ops by itself.',
+    connected: 'Connected',
+    loading: 'Loading AI provider settings...',
+    policyTitle: 'Provider connection is separate from Project opt-in',
+    policyBody:
+      'Saving a provider only allows LLM summaries when a Project has AI Ops Briefing enabled. OpenLander still uses deterministic rules for severity and suggested calls.',
+    currentProvider: 'Selected provider: {provider}',
+    form: {
+      provider: 'Provider',
+      model: 'Model',
+      apiKey: 'API key',
+      apiKeyPlaceholder: 'Paste an API key',
+      apiKeyPlaceholderConfigured: 'Leave blank to keep the saved key',
+      apiKeyHint: 'Stored encrypted. Never returned by the API or shown in the UI.',
+      baseUrl: 'Base URL',
+      baseUrlHint: 'Use this for OpenAI-compatible providers such as OpenRouter.',
+    },
+    actions: {
+      save: 'Save provider',
+      test: 'Test connection',
+      disconnect: 'Disconnect',
+    },
+    status: {
+      saved: 'AI provider saved. Project AI Ops remains off until you enable Briefing.',
+      deleted: 'AI provider disconnected.',
+      testPassed: 'Connection test passed.',
+    },
+    error: {
+      load: 'Failed to load AI provider settings.',
+      save: 'Failed to save AI provider.',
+      test: 'Connection test failed.',
+      delete: 'Failed to disconnect AI provider.',
+    },
+    scope: {
+      title: 'How this connects to AI Ops',
+      subtitle: 'OpenLander separates provider setup from where briefings run.',
+      provider: {
+        title: 'AI Providers',
+        body: 'Connects an OpenAI-compatible or Anthropic API key for summaries.',
+      },
+      project: {
+        title: 'Project AI Ops',
+        body: 'Opt in per Project. Default remains Off even after provider setup.',
+      },
+      service: {
+        title: 'Service override',
+        body: 'Let one Application inherit, turn off, or request briefings explicitly.',
+      },
+    },
+  },
   resources: {
     title: 'Resource Limits',
     description:
@@ -1468,10 +1521,10 @@ export const translations = {
     },
     others: {
       title: 'Other providers',
-      v02Badge: 'v0.2',
+      laterBadge: 'Later',
       gitlab: 'GitLab',
       bitbucket: 'Bitbucket',
-      comingInV02: 'Coming in v0.2',
+      comingLater: 'Planned after 0.2',
     },
   },
   // Canonical OpenLander vocabulary. Kept in English across locales by

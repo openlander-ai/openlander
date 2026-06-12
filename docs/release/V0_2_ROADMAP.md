@@ -141,6 +141,43 @@ Web:
 - Briefing detail drawer
 - token/cost 표시
 
+#### 5.1 AI Providers IA
+
+LLM provider 설정은 Project 운영 화면이 아니라 instance-level 설정이다.
+따라서 top-level Workspace 항목으로 두지 않고, sidebar의 Settings 섹션에
+`AI Providers`를 추가한다.
+
+권장 IA:
+
+```text
+Workspace
+- Home
+- Your Agent
+- Projects
+- Activity
+- Monitoring
+- Web Server
+
+Settings
+- Git Providers
+- AI Providers
+```
+
+`AI Providers`는 OpenAI-compatible / Anthropic API key, model, baseURL
+(OpenAI-compatible only), connection test를 관리한다. 이 화면에서 provider를
+저장해도 Project AI Ops는 자동으로 켜지지 않는다.
+
+책임 경계:
+
+- `AI Providers`: instance에 LLM provider를 연결한다.
+- Project `AI Ops Briefing`: 특정 Project에서 브리핑 생성을 opt in한다.
+- Service override: 특정 Application/Compose 리소스만 `inherit | off |
+briefing`으로 조정한다.
+
+Provider 미설정 상태에서 Project/Service AI Ops 패널은 deterministic briefing만
+동작하며, LLM summary가 필요한 경우 `Settings -> AI Providers`로 이동하는
+명확한 링크를 제공한다.
+
 Web/API endpoint와 MCP action 추가는 freeze gate 대상이다. i18n은
 `web/src/i18n/en.ts`와 `web/src/i18n/ko.ts`를 같은 PR에서 갱신한다.
 
@@ -250,6 +287,8 @@ git diff --check
 - AI Ops default OFF.
 - Provider configured 상태만으로 AI Ops가 켜지지 않음.
 - Provider가 없거나 실패해도 deterministic briefing은 생성됨.
+- LLM provider 설정 UI는 `Settings -> AI Providers`에 있고, Project/Service
+  AI Ops opt-in과 분리됨.
 - Local account runtime은 core가 subscription token/cookie를 읽지 않는 optional
   package 경계 밖 실험 기능으로 유지.
 - `RecoveryCoordinator` / `OpsAgent` / built-in chat route dormant 유지.
@@ -268,13 +307,14 @@ git diff --check
 1. exact rc 설치/업그레이드.
 2. MCP connection 확인.
 3. Provider만 설정했을 때 AI Ops OFF 확인.
-4. Project AI Ops ON.
-5. route failure 또는 restart-loop 유발.
-6. Web briefing 생성 확인.
-7. MCP briefing 조회 확인.
-8. Telegram send-only notification 확인.
-9. 동일 fingerprint 재발 시 cooldown 확인.
-10. 자동 mutation이 발생하지 않았는지 확인.
+4. `Settings -> AI Providers`에서 provider 연결/connection test 확인.
+5. Project AI Ops ON.
+6. route failure 또는 restart-loop 유발.
+7. Web briefing 생성 확인.
+8. MCP briefing 조회 확인.
+9. Telegram send-only notification 확인.
+10. 동일 fingerprint 재발 시 cooldown 확인.
+11. 자동 mutation이 발생하지 않았는지 확인.
 
 ### AWS Web UI Smoke
 
@@ -282,21 +322,23 @@ AI Ops Web UI는 rc smoke에서 브라우저로도 확인한다.
 
 1. Project detail/settings 화면에서 AI Ops 카드가 보이고 기본값이 `Off`인지
    확인한다.
-2. Provider만 설정한 상태에서는 Project AI Ops가 자동으로 켜지지 않는지
+2. Sidebar Settings 섹션에 `AI Providers`가 있고, provider 저장과 connection
+   test가 가능한지 확인한다.
+3. Provider만 설정한 상태에서는 Project AI Ops가 자동으로 켜지지 않는지
    확인한다.
-3. Project mode를 `Briefing`으로 바꾸고 새로고침 후에도 저장되는지
+4. Project mode를 `Briefing`으로 바꾸고 새로고침 후에도 저장되는지
    확인한다.
-4. Service detail에서 `inherit / off / briefing` override가 보이고,
+5. Service detail에서 `inherit / off / briefing` override가 보이고,
    Service `off`가 Project `Briefing`보다 우선하는지 확인한다.
-5. route failure 또는 restart-loop 유발 후 Project/Service 화면에 briefing
+6. route failure 또는 restart-loop 유발 후 Project/Service 화면에 briefing
    card가 생성되는지 확인한다.
-6. briefing detail drawer에서 severity, classification, summary, token/cost,
+7. briefing detail drawer에서 severity, classification, summary, token/cost,
    suggested MCP call, evidence가 보이는지 확인한다.
-7. evidence와 summary에 token, API key, database password 같은 secret이
+8. evidence와 summary에 token, API key, database password 같은 secret이
    노출되지 않는지 확인한다.
-8. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
-9. Web UI 조작만으로 restart, redeploy, rollback, env edit이 실행되지
-   않는지 확인한다.
+9. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
+10. Web UI 조작만으로 restart, redeploy, rollback, env edit이 실행되지
+    않는지 확인한다.
 
 ## Weak-Model QA
 
