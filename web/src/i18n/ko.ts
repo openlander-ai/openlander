@@ -30,6 +30,59 @@ export const translations = {
       save: 'AI Ops 정책 저장에 실패했습니다.',
     },
   },
+  aiProviders: {
+    title: 'AI Providers',
+    subtitle:
+      'AI Ops briefing summary에 사용할 모델 provider를 연결합니다. Provider 설정만으로 AI Ops가 켜지지는 않습니다.',
+    connected: 'Connected',
+    loading: 'AI provider 설정을 불러오는 중...',
+    policyTitle: 'Provider 연결과 Project opt-in은 분리됩니다',
+    policyBody:
+      'Provider를 저장해도 Project에서 AI Ops Briefing을 켜기 전까지 LLM summary는 실행되지 않습니다. severity와 suggested call은 계속 OpenLander 규칙이 결정합니다.',
+    currentProvider: '선택한 provider: {provider}',
+    form: {
+      provider: 'Provider',
+      model: 'Model',
+      apiKey: 'API key',
+      apiKeyPlaceholder: 'API key를 붙여넣으세요',
+      apiKeyPlaceholderConfigured: '저장된 key를 유지하려면 비워두세요',
+      apiKeyHint: '암호화되어 저장되며 API 응답이나 UI에 다시 표시되지 않습니다.',
+      baseUrl: 'Base URL',
+      baseUrlHint: 'OpenRouter 같은 OpenAI-compatible provider에 사용합니다.',
+    },
+    actions: {
+      save: 'Save provider',
+      test: 'Test connection',
+      disconnect: 'Disconnect',
+    },
+    status: {
+      saved: 'AI provider가 저장되었습니다. Project AI Ops는 Briefing을 켜기 전까지 Off입니다.',
+      deleted: 'AI provider 연결이 해제되었습니다.',
+      testPassed: 'Connection test passed.',
+    },
+    error: {
+      load: 'AI provider 설정을 불러오지 못했습니다.',
+      save: 'AI provider 저장에 실패했습니다.',
+      test: 'Connection test failed.',
+      delete: 'AI provider 연결 해제에 실패했습니다.',
+    },
+    scope: {
+      title: 'AI Ops와 연결되는 방식',
+      subtitle: 'OpenLander는 provider 설정과 briefing 실행 위치를 분리합니다.',
+      provider: {
+        title: 'AI Providers',
+        body: 'Summary 생성을 위한 OpenAI-compatible 또는 Anthropic API key를 연결합니다.',
+      },
+      project: {
+        title: 'Project AI Ops',
+        body: 'Project 단위로 명시적으로 켭니다. Provider를 설정해도 기본값은 Off입니다.',
+      },
+      service: {
+        title: 'Service override',
+        body: 'Application별로 inherit, off, briefing을 별도로 선택합니다.',
+      },
+    },
+  },
   resources: {
     // Chrome — section title + form labels + dropdown options + buttons + status.
     title: 'Resource Limits',
@@ -1700,11 +1753,11 @@ export const translations = {
     others: {
       // Chrome — section title + provider names + version badge.
       title: 'Other providers',
-      v02Badge: 'v0.2',
+      laterBadge: 'Later',
       gitlab: 'GitLab',
       bitbucket: 'Bitbucket',
       // Chrome — badge label.
-      comingInV02: 'Coming in v0.2',
+      comingLater: 'Planned after 0.2',
     },
   },
   // Canonical OpenLander 용어. 프로젝트 정책상 모든 로케일에서 영어 표기를

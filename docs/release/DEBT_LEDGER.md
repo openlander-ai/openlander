@@ -5,6 +5,24 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **AI Providers settings surface:** the web API adds
+  `/api/settings/ai-providers`,
+  `/api/settings/ai-providers/ai-ops-briefing`, and
+  `/api/settings/ai-providers/ai-ops-briefing/test` so operators can connect
+  the OpenAI-compatible or Anthropic model used for AI Ops Briefing summaries.
+- **Why accepted:** AI Ops Briefing Beta needs a first-class BYOK path before
+  release QA can exercise LLM summaries, redaction, token/cost logging, and
+  provider failure fallback. Provider setup remains separate from Project/Service
+  AI Ops opt-in.
+- **Vocab review:** `AI Providers` is instance-level configuration. It does not
+  introduce a new Project/Application/Compose resource type. `provider_id`,
+  `service_id`, `project_id`, and `briefing_id` remain wire identifiers.
+- **Endpoint collision check:** `rg "/settings/ai-providers|ai-providers"`
+  showed no existing REST route, MCP action, or composite slot before this
+  slice. No MCP action or database table is added.
+- **Follow-up:** local account runtime remains a separate optional-package
+  experiment and is not part of the 0.2.0 release criteria.
+
 - **AI Ops Briefing Beta Web/MCP surface:** `openlander_monitor` gains
   read-only `list_ai_ops_briefings` and `get_ai_ops_briefing` actions. The web
   API adds Project/Service AI Ops policy endpoints and briefing list/detail
