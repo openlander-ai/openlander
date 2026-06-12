@@ -40,7 +40,6 @@ interface WebRouteIssue {
   code:
     | 'service_not_running'
     | 'container_not_running'
-    | 'missing_assigned_port'
     | 'missing_container_port'
     | 'domain_pending'
     | 'domain_error';
@@ -69,6 +68,7 @@ interface WebServerRoute {
   projectName: string;
   port: number | null;
   containerPort: number | null;
+  targetPort: number | null;
   containerName: string | null;
   tls: {
     enabled: boolean;
@@ -78,18 +78,30 @@ interface WebServerRoute {
   issues: WebRouteIssue[];
 }
 
+interface CustomDomainCoverage {
+  routeTargetServiceIds: string[];
+  customDomainServiceIds: string[];
+}
+
 function isContainerizedRuntime(): boolean {
   const raw = process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
-function buildConfigurationSummary(): WebServerConfigurationSummary {
+function hasFullCustomDomainCoverage(coverage?: CustomDomainCoverage): boolean {
+  if (!coverage || coverage.routeTargetServiceIds.length === 0) return false;
+  const customDomainServiceIds = new Set(coverage.customDomainServiceIds);
+  return coverage.routeTargetServiceIds.every((serviceId) => customDomainServiceIds.has(serviceId));
+}
+
+function buildConfigurationSummary(coverage?: CustomDomainCoverage): WebServerConfigurationSummary {
   const advertisedHost = getConfiguredPublicHost();
   const containerized = isContainerizedRuntime();
   const hasDetectedHost = getAllIps().length > 0;
+  const hasCustomDomainFallback = hasFullCustomDomainCoverage(coverage);
   const issues: WebServerConfigurationIssue[] = [];
 
-  if (containerized && !advertisedHost && !hasDetectedHost) {
+  if (containerized && !advertisedHost && !hasDetectedHost && !hasCustomDomainFallback) {
     issues.push({
       code: 'advertised_host_missing',
       message:
@@ -155,6 +167,22 @@ function findContainerForService(
   return null;
 }
 
+function isUsablePort(port: number | null | undefined): port is number {
+  return typeof port === 'number' && Number.isInteger(port) && port >= 1 && port <= 65_535;
+}
+
+function routeTargetPort(
+  service: ServiceRow,
+  domainTargetPort?: DomainMappingRow['target_port'],
+): number | null {
+  if (domainTargetPort !== undefined && domainTargetPort !== null) {
+    return isUsablePort(domainTargetPort) ? domainTargetPort : null;
+  }
+  if (isUsablePort(service.container_port)) return service.container_port;
+  if (isUsablePort(service.assigned_port)) return service.assigned_port;
+  return null;
+}
+
 function routeStatusFor(
   service: ServiceRow,
   container: AllContainerInfo | null,
@@ -175,21 +203,15 @@ function buildIssues(
   service: ServiceRow,
   container: AllContainerInfo | null,
   domainStatus?: DomainMappingRow['status'],
+  domainTargetPort?: DomainMappingRow['target_port'],
 ): WebRouteIssue[] {
   const issues: WebRouteIssue[] = [];
   const status: string | null = service.status;
 
-  if (!service.assigned_port) {
-    issues.push({
-      code: 'missing_assigned_port',
-      message: 'Service has no assigned host port.',
-    });
-  }
-
-  if (!service.container_port) {
+  if (!routeTargetPort(service, domainTargetPort)) {
     issues.push({
       code: 'missing_container_port',
-      message: 'Service has no container port configured.',
+      message: 'Service has no route target port configured.',
     });
   }
 
@@ -240,8 +262,15 @@ function createRoute(params: {
   project: ProjectRow;
   container: AllContainerInfo | null;
   domainStatus?: DomainMappingRow['status'];
+  domainTargetPort?: DomainMappingRow['target_port'];
 }): WebServerRoute {
-  const issues = buildIssues(params.service, params.container, params.domainStatus);
+  const targetPort = routeTargetPort(params.service, params.domainTargetPort);
+  const issues = buildIssues(
+    params.service,
+    params.container,
+    params.domainStatus,
+    params.domainTargetPort,
+  );
   return {
     id: params.id,
     source: params.source,
@@ -253,6 +282,7 @@ function createRoute(params: {
     projectName: params.project.name,
     port: params.service.assigned_port,
     containerPort: params.service.container_port,
+    targetPort,
     containerName: params.service.container_name,
     tls: {
       enabled: false,
@@ -321,18 +351,24 @@ async function loadRouteInputs(ctx: AppContext): Promise<{
 async function buildRoutes(ctx: AppContext): Promise<{
   routes: WebServerRoute[];
   dockerUnavailable: boolean;
+  customDomainCoverage: CustomDomainCoverage;
 }> {
   const { projectsById, services, domainMappings, containers, dockerUnavailable, ips } =
     await loadRouteInputs(ctx);
   const { containersById, containersByName } = containerIndexes(containers);
   const servicesById = new Map(services.map((service) => [service.id, service]));
   const routes: WebServerRoute[] = [];
+  const routeTargetServiceIds = new Set<string>();
+  const customDomainServiceIds = new Set<string>();
 
   for (const service of services) {
     const project = projectsById.get(service.project_id);
     if (!project || project.archived_at || service.archived_at) continue;
 
     const container = findContainerForService(service, containersById, containersByName);
+    if (routeTargetPort(service) !== null) {
+      routeTargetServiceIds.add(service.id);
+    }
     // Keep issue rows visible even when a service is misconfigured and Traefik
     // would not currently materialize a route. The Web Server page is a read
     // model for routing health, not only a dump of valid Traefik routers.
@@ -378,6 +414,10 @@ async function buildRoutes(ctx: AppContext): Promise<{
     const project = projectsById.get(service.project_id);
     if (!project || project.archived_at || service.archived_at) continue;
     const container = findContainerForService(service, containersById, containersByName);
+    if (mapping.status === 'active' && routeTargetPort(service, mapping.target_port) !== null) {
+      routeTargetServiceIds.add(service.id);
+      customDomainServiceIds.add(service.id);
+    }
     routes.push(
       createRoute({
         id: `domain:${mapping.id}`,
@@ -387,12 +427,20 @@ async function buildRoutes(ctx: AppContext): Promise<{
         project,
         container,
         domainStatus: mapping.status,
+        domainTargetPort: mapping.target_port,
       }),
     );
   }
 
   routes.sort((a, b) => a.host.localeCompare(b.host));
-  return { routes, dockerUnavailable };
+  return {
+    routes,
+    dockerUnavailable,
+    customDomainCoverage: {
+      routeTargetServiceIds: Array.from(routeTargetServiceIds),
+      customDomainServiceIds: Array.from(customDomainServiceIds),
+    },
+  };
 }
 
 function proxyStatusCode(
@@ -562,11 +610,8 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/web-server/summary', async (c) => {
-    const [{ containers, dockerUnavailable }, proxy, { routes }] = await Promise.all([
-      listDockerContainers(ctx),
-      detectProxySafe(ctx),
-      buildRoutes(ctx),
-    ]);
+    const [{ containers, dockerUnavailable }, proxy, { routes, customDomainCoverage }] =
+      await Promise.all([listDockerContainers(ctx), detectProxySafe(ctx), buildRoutes(ctx)]);
     const managed = containers.filter((container) => container.managedByOpenLander).length;
     const issueCount = routes.filter((route) => route.issues.length > 0).length;
 
@@ -586,7 +631,7 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
         managed,
         external: containers.length - managed,
       },
-      configuration: buildConfigurationSummary(),
+      configuration: buildConfigurationSummary(customDomainCoverage),
       dockerUnavailable,
     });
   });

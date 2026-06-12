@@ -20,7 +20,6 @@ export interface WebRouteIssue {
   code:
     | 'service_not_running'
     | 'container_not_running'
-    | 'missing_assigned_port'
     | 'missing_container_port'
     | 'domain_pending'
     | 'domain_error';
@@ -49,6 +48,7 @@ export interface WebServerRoute {
   projectName: string;
   port: number | null;
   containerPort: number | null;
+  targetPort?: number | null;
   containerName: string | null;
   tls: { enabled: boolean; status: WebRouteTlsStatus };
   status: WebRouteStatus;

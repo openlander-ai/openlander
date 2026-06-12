@@ -57,12 +57,11 @@ describe('Web Server page v0.1', () => {
     // The banner uses translateIssue(...) instead of issue.message verbatim.
     expect(pageSource).toMatch(/translateIssue\(issue, t\)/);
     expect(pageSource).not.toMatch(/—\s*\{issue\.message\}/);
-    // i18n exposes the six known codes the backend emits.
+    // i18n exposes the five known codes the backend emits.
     for (const dict of [enSource, koSource]) {
       for (const code of [
         'service_not_running',
         'container_not_running',
-        'missing_assigned_port',
         'missing_container_port',
         'domain_pending',
         'domain_error',

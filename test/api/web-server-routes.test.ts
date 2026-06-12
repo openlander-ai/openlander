@@ -232,7 +232,7 @@ describe('createWebServerRoutes', () => {
     delete process.env['HOST_VPN_IP'];
     delete process.env['OPENLANDER_PUBLIC_HOST'];
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
-    const app = createApp(createContext({}));
+    const app = createApp(createContext({ domainMappings: [] }));
 
     const res = await app.request('/api/web-server/summary');
 
@@ -241,6 +241,87 @@ describe('createWebServerRoutes', () => {
       configuration: {
         advertisedHost: null,
         containerized: true,
+        issues: [
+          {
+            code: 'advertised_host_missing',
+          },
+        ],
+      },
+    });
+  });
+
+  it('does not flag missing advertised host when custom domains provide public routes', async () => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const app = createApp(createContext({ domainMappings: [makeDomain({ status: 'active' })] }));
+
+    const res = await app.request('/api/web-server/summary');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      configuration: {
+        advertisedHost: null,
+        containerized: true,
+        issues: [],
+      },
+    });
+  });
+
+  it('keeps missing advertised host warning for mixed custom-domain and generated-route setups', async () => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const app = createApp(
+      createContext({
+        services: [
+          makeService(),
+          makeService({
+            id: 'project-1-worker',
+            name: 'worker',
+            assigned_port: null,
+            container_port: 3001,
+            container_id: 'container-worker',
+            container_name: 'ol-worker',
+          }),
+        ],
+        domainMappings: [makeDomain({ status: 'active' })],
+      }),
+    );
+
+    const res = await app.request('/api/web-server/summary');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      configuration: {
+        issues: [
+          {
+            code: 'advertised_host_missing',
+          },
+        ],
+      },
+    });
+  });
+
+  it('keeps missing advertised host warning when custom domains lack a route target port', async () => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const app = createApp(
+      createContext({
+        services: [makeService({ assigned_port: null, container_port: null })],
+        domainMappings: [makeDomain({ status: 'active' })],
+      }),
+    );
+
+    const res = await app.request('/api/web-server/summary');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      configuration: {
         issues: [
           {
             code: 'advertised_host_missing',
@@ -291,6 +372,64 @@ describe('createWebServerRoutes', () => {
         }),
       ]),
     );
+  });
+
+  it('treats container-port-only services as routable through Traefik', async () => {
+    const service = makeService({ assigned_port: null, container_port: 3000 });
+    const app = createApp(
+      createContext({
+        services: [service],
+        containers: [makeContainer({ ports: [{ PrivatePort: 3000, Type: 'tcp' }] })],
+      }),
+    );
+
+    const res = await app.request('/api/web-server/routes');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.issueCount).toBe(0);
+    expect(body.routes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          host: 'demo.example.com',
+          port: null,
+          containerPort: 3000,
+          targetPort: 3000,
+          status: 'healthy',
+          issues: [],
+        }),
+      ]),
+    );
+    expect(
+      body.routes.every(
+        (route: { targetPort: number; status: string }) =>
+          route.targetPort === 3000 && route.status === 'healthy',
+      ),
+    ).toBe(true);
+  });
+
+  it('uses a custom-domain target port when service ports are absent', async () => {
+    const service = makeService({ assigned_port: null, container_port: null });
+    const app = createApp(
+      createContext({
+        services: [service],
+        domainMappings: [makeDomain({ target_port: 8080 })],
+        containers: [makeContainer({ ports: [] })],
+      }),
+    );
+
+    const res = await app.request('/api/web-server/routes');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const domainRoute = body.routes.find(
+      (route: { host: string }) => route.host === 'demo.example.com',
+    );
+    expect(domainRoute).toMatchObject({
+      targetPort: 8080,
+      status: 'healthy',
+      issues: [],
+    });
   });
 
   it('classifies service and Docker port allocations by environment range', async () => {

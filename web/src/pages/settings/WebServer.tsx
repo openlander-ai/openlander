@@ -479,6 +479,7 @@ function RoutesTable({ state, t }: { state: FetchState<WebServerRoutesResponse>;
         <tbody className="divide-y divide-[color:var(--ol-border-subtle)]">
           {list.map((route) => {
             const issue = route.issues.length > 0 || route.status === 'error';
+            const displayPort = route.targetPort ?? route.containerPort ?? route.port;
             return (
               <tr
                 key={route.id}
@@ -503,7 +504,7 @@ function RoutesTable({ state, t }: { state: FetchState<WebServerRoutesResponse>;
                 </td>
                 <td className="px-4 py-2.5 text-[color:var(--ol-fg-muted)]">
                   <span className="ol-mono">
-                    {route.port != null ? `:${String(route.port)}` : '—'}
+                    {displayPort != null ? `:${String(displayPort)}` : '—'}
                   </span>
                 </td>
                 <td className="px-4 py-2.5">
