@@ -71,7 +71,7 @@ export const translations = {
       subtitle: 'OpenLander는 provider 설정과 briefing 실행 위치를 분리합니다.',
       provider: {
         title: 'AI Providers',
-        body: 'Summary 생성을 위한 OpenAI-compatible 또는 Anthropic API key를 연결합니다.',
+        body: 'Summary 생성을 위한 OpenAI-compatible, Anthropic 또는 Gemini API key를 연결합니다.',
       },
       project: {
         title: 'Project AI Ops',

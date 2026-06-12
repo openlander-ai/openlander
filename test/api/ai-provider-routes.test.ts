@@ -145,6 +145,49 @@ describe('AI provider settings routes', () => {
     });
   });
 
+  it('saves encrypted Gemini provider config without enabling AI Ops or baseURL', async () => {
+    const config = makeConfig();
+    vi.mocked(loadConfig).mockReturnValue(config);
+    const updateConfig = vi.fn();
+    const app = createApp({ config, modelRegistry: { updateConfig } });
+
+    const res = await app.request('/api/settings/ai-providers/ai-ops-briefing', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'gemini',
+        api_key: ' google-ai-key ',
+        model: ' gemini-2.5-flash ',
+        base_url: ' https://example.invalid ',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const saved = vi.mocked(saveConfig).mock.calls[0]?.[0] as OpenLanderConfig;
+    const entry = saved.llm.providers?.['aiops'];
+    expect(entry?.provider).toBe('gemini');
+    expect(entry?.defaultModel).toBe('gemini-2.5-flash');
+    expect(entry?.baseURL).toBeUndefined();
+    expect(decrypt(entry!.encryptedApiKey!, entry!.apiKeyIv!)).toBe('google-ai-key');
+    expect(saved.llm.routes?.aiOpsBriefing).toEqual({
+      providerId: 'aiops',
+      model: 'gemini-2.5-flash',
+    });
+    expect(saved.llm.provider).toBe('gemini');
+    expect(saved.llm.model).toBe('gemini-2.5-flash');
+    expect(updateConfig).toHaveBeenCalled();
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      status: 'saved',
+      provider: {
+        provider: 'gemini',
+        provider_label: 'Gemini API',
+        base_url: null,
+      },
+      ai_ops_enabled_by_provider: false,
+    });
+  });
+
   it('blocks unsafe OpenAI-compatible base URLs before testing or saving', async () => {
     const config = makeConfig();
     vi.mocked(loadConfig).mockReturnValue(config);

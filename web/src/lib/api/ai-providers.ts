@@ -1,6 +1,6 @@
 import { apiDelete, apiGet, apiPost, apiPut } from './client';
 
-export type AiProviderKind = 'openai' | 'anthropic';
+export type AiProviderKind = 'openai' | 'anthropic' | 'gemini';
 
 export interface AiProviderStatus {
   configured: boolean;
