@@ -117,6 +117,36 @@ describe('AI Ops LLM summary', () => {
     });
   });
 
+  it('redacts secrets from the LLM summary before persisting it', async () => {
+    const model = { modelId: 'briefing-model' } as unknown as LanguageModel;
+    const db = {
+      updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
+    };
+    generateTextMock.mockResolvedValueOnce({
+      text: [
+        'Traffic is failing.',
+        'Do not store Bearer abcdefghijklmnopqrstuvwxyz0123456789.',
+        'DATABASE_URL=postgres://app:secret-password@db:5432/app',
+        'STRIPE_API_KEY=notarealkeyvalue is present.',
+      ].join('\n'),
+    });
+
+    const result = await summarizeAiOpsBriefingWithLlm({
+      db,
+      modelRegistry: makeRegistry(model),
+      briefing: makeBriefing(),
+    });
+
+    expect(result.status).toBe('llm');
+    expect(result.summary).toContain('Bearer [REDACTED]');
+    expect(result.summary).toContain('DATABASE_URL=[REDACTED]');
+    expect(result.summary).toContain('[REDACTED] is present');
+    expect(result.summary).not.toContain('abcdefghijklmnopqrstuvwxyz0123456789');
+    expect(result.summary).not.toContain('secret-password');
+    expect(result.summary).not.toContain('notarealkeyvalue');
+    expect(db.updateAiOpsBriefingLlmSummary).toHaveBeenCalledWith('brief-1', result.summary);
+  });
+
   it('falls back to the deterministic template when the provider is not configured', async () => {
     const db = {
       updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
@@ -150,6 +180,28 @@ describe('AI Ops LLM summary', () => {
     expect(result.status).toBe('fallback');
     expect(result.error).toContain('provider unavailable');
     expect(result.summary).toContain('Representative traffic probe to / failed with 500.');
+    expect(db.updateAiOpsBriefingLlmSummary).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes provider failure messages before returning fallback metadata', async () => {
+    const db = {
+      updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
+    };
+    generateTextMock.mockRejectedValueOnce(
+      new Error('provider failed Bearer abcdefghijklmnopqrstuvwxyz api_key=notarealkeyvalue'),
+    );
+
+    const result = await summarizeAiOpsBriefingWithLlm({
+      db,
+      modelRegistry: makeRegistry({ modelId: 'briefing-model' } as unknown as LanguageModel),
+      briefing: makeBriefing(),
+    });
+
+    expect(result.status).toBe('fallback');
+    expect(result.error).toContain('Bearer ***');
+    expect(result.error).toContain('api_key=***');
+    expect(result.error).not.toContain('abcdefghijklmnopqrstuvwxyz');
+    expect(result.error).not.toContain('notarealkeyvalue');
     expect(db.updateAiOpsBriefingLlmSummary).not.toHaveBeenCalled();
   });
 
@@ -196,5 +248,78 @@ describe('AI Ops LLM summary', () => {
       }),
     );
     expect(result.briefing.llm_summary).toBe('The public route is failing with HTTP 500.');
+  });
+
+  it('persists redacted evidence before optional LLM summary is attempted', async () => {
+    const created = makeBriefing();
+    const db = {
+      createAiOpsBriefing: vi.fn(async () => created),
+      updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
+    };
+
+    const result = await createAiOpsBriefingWithOptionalLlm({
+      db,
+      enableLlmSummary: false,
+      input: {
+        projectId: 'proj-1',
+        serviceId: 'svc-1',
+        deployLog: {
+          id: 'deploy-1',
+          status: 'failed',
+          buildLogTail: [
+            'Build failed',
+            'Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789',
+            'DATABASE_URL=postgres://app:secret-password@db:5432/app',
+          ].join('\n'),
+        },
+        recentLogTail: 'STRIPE_API_KEY=notarealkeyvalue',
+      },
+    });
+
+    expect(result.summary.status).toBe('skipped');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence: expect.objectContaining({
+          deployLog: expect.objectContaining({
+            buildLogTail: expect.stringContaining('Bearer [REDACTED]'),
+          }),
+          recentLogTail: expect.stringContaining('STRIPE_API_KEY=[REDACTED]'),
+        }),
+      }),
+    );
+    const persisted = db.createAiOpsBriefing.mock.calls[0]?.[0].evidence;
+    expect(JSON.stringify(persisted)).not.toContain('secret-password');
+    expect(JSON.stringify(persisted)).not.toContain('notarealkeyvalue');
+  });
+
+  it('keeps deterministic briefing creation when the configured provider fails', async () => {
+    const created = makeBriefing();
+    const db = {
+      createAiOpsBriefing: vi.fn(async () => created),
+      updateAiOpsBriefingLlmSummary: vi.fn(async () => undefined),
+    };
+    generateTextMock.mockRejectedValueOnce(new Error('provider unavailable'));
+
+    const result = await createAiOpsBriefingWithOptionalLlm({
+      db,
+      modelRegistry: makeRegistry({ modelId: 'briefing-model' } as unknown as LanguageModel),
+      enableLlmSummary: true,
+      input: {
+        projectId: 'proj-1',
+        serviceId: 'svc-1',
+        representativeTraffic: {
+          status: 'failed',
+          severity: 'fail',
+          path: '/',
+          status_code: 500,
+        },
+      },
+    });
+
+    expect(result.deterministic.classification).toBe('traffic_health_mismatch');
+    expect(result.briefing).toBe(created);
+    expect(result.summary.status).toBe('fallback');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledOnce();
+    expect(db.updateAiOpsBriefingLlmSummary).not.toHaveBeenCalled();
   });
 });
