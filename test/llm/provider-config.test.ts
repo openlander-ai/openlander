@@ -53,6 +53,21 @@ describe('AI Ops provider config helpers', () => {
     expect(decrypt(entry.encryptedApiKey!, entry.apiKeyIv!)).toBe('sk-ant-test');
   });
 
+  it('stores Gemini provider keys encrypted without baseURL overrides', () => {
+    const entry = buildEncryptedAiOpsProviderEntry({
+      provider: 'gemini',
+      apiKey: 'google-ai-key',
+      defaultModel: 'gemini-2.5-flash',
+      baseURL: 'https://example.invalid',
+    });
+
+    expect(entry.provider).toBe('gemini');
+    expect(entry.defaultModel).toBe('gemini-2.5-flash');
+    expect(entry.baseURL).toBeUndefined();
+    expect(entry.apiKey).toBeUndefined();
+    expect(decrypt(entry.encryptedApiKey!, entry.apiKeyIv!)).toBe('google-ai-key');
+  });
+
   it('rejects empty provider secrets without enabling AI Ops', () => {
     expect(() =>
       buildEncryptedAiOpsProviderEntry({

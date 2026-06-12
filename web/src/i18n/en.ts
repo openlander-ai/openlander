@@ -71,7 +71,7 @@ export const translations = {
       subtitle: 'OpenLander separates provider setup from where briefings run.',
       provider: {
         title: 'AI Providers',
-        body: 'Connects an OpenAI-compatible or Anthropic API key for summaries.',
+        body: 'Connects an OpenAI-compatible, Anthropic, or Gemini API key for summaries.',
       },
       project: {
         title: 'Project AI Ops',

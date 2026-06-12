@@ -43,9 +43,11 @@ describe('AI Providers settings page', () => {
     expect(backendRouteSource).not.toContain('setAiOpsProjectPolicy');
   });
 
-  it('supports OpenAI-compatible and Anthropic without exposing API keys', () => {
+  it('supports OpenAI-compatible, Anthropic, and Gemini without exposing API keys', () => {
     expect(pageSource).toContain('<SelectItem value="openai">OpenAI-compatible</SelectItem>');
     expect(pageSource).toContain('<SelectItem value="anthropic">Anthropic API</SelectItem>');
+    expect(pageSource).toContain('<SelectItem value="gemini">Gemini API</SelectItem>');
+    expect(pageSource).toContain("gemini: 'gemini-2.5-flash'");
     expect(pageSource).toContain('type="password"');
     expect(apiSource).toContain('api_key_configured: boolean');
     expect(backendRouteSource).toContain('encryptedApiKey');

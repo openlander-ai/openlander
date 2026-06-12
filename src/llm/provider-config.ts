@@ -4,10 +4,10 @@ import type { LLMProviderEntry } from './model-registry.js';
 import type { LLMProviderType } from './providers.js';
 
 export interface AiOpsProviderInput {
-  provider: Extract<LLMProviderType, 'openai' | 'anthropic'>;
+  provider: Extract<LLMProviderType, 'openai' | 'anthropic' | 'gemini'>;
   apiKey: string;
   defaultModel: string;
-  /** OpenAI-compatible endpoint override. Ignored for Anthropic. */
+  /** OpenAI-compatible endpoint override. Ignored for non-OpenAI providers. */
   baseURL?: string;
 }
 

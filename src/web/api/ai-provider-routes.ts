@@ -21,8 +21,9 @@ const log = createModuleLogger('ai-provider-api');
 const AI_OPS_PROVIDER_ID = 'aiops';
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
-type SupportedAiOpsProvider = 'openai' | 'anthropic';
+type SupportedAiOpsProvider = 'openai' | 'anthropic' | 'gemini';
 
 interface ProviderBody {
   provider?: unknown;
@@ -32,11 +33,15 @@ interface ProviderBody {
 }
 
 function defaultModelFor(provider: SupportedAiOpsProvider): string {
-  return provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL;
+  if (provider === 'openai') return DEFAULT_OPENAI_MODEL;
+  if (provider === 'anthropic') return DEFAULT_ANTHROPIC_MODEL;
+  return DEFAULT_GEMINI_MODEL;
 }
 
 function providerLabel(provider: SupportedAiOpsProvider): string {
-  return provider === 'openai' ? 'OpenAI-compatible' : 'Anthropic API';
+  if (provider === 'openai') return 'OpenAI-compatible';
+  if (provider === 'anthropic') return 'Anthropic API';
+  return 'Gemini API';
 }
 
 function getAiOpsEntry(config: OpenLanderConfig): LLMProviderEntry | null {
@@ -59,7 +64,8 @@ function serializeEntry(entry: LLMProviderEntry | null) {
     };
   }
 
-  const provider = entry.provider === 'anthropic' ? 'anthropic' : 'openai';
+  const provider =
+    entry.provider === 'anthropic' || entry.provider === 'gemini' ? entry.provider : 'openai';
   return {
     configured: true,
     provider_id: AI_OPS_PROVIDER_ID,
@@ -74,7 +80,7 @@ function serializeEntry(entry: LLMProviderEntry | null) {
 }
 
 function parseProvider(value: unknown): SupportedAiOpsProvider | null {
-  if (value === 'openai' || value === 'anthropic') {
+  if (value === 'openai' || value === 'anthropic' || value === 'gemini') {
     return value;
   }
   return null;
@@ -116,7 +122,7 @@ function buildEntryFromBody(
   | { error: string; message: string } {
   const provider = parseProvider(body.provider);
   if (!provider) {
-    return { error: 'INVALID_FIELD', message: 'provider must be openai or anthropic' };
+    return { error: 'INVALID_FIELD', message: 'provider must be openai, anthropic, or gemini' };
   }
 
   const apiKey = readString(body.api_key);

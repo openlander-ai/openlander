@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 const DEFAULT_MODELS: Record<AiProviderKind, string> = {
   openai: 'gpt-4.1-mini',
   anthropic: 'claude-haiku-4-5-20251001',
+  gemini: 'gemini-2.5-flash',
 };
 
 interface FormState {
@@ -55,7 +56,9 @@ function payloadFromForm(form: FormState): SaveAiProviderInput {
 }
 
 function providerName(provider: AiProviderKind): string {
-  return provider === 'openai' ? 'OpenAI-compatible' : 'Anthropic API';
+  if (provider === 'openai') return 'OpenAI-compatible';
+  if (provider === 'anthropic') return 'Anthropic API';
+  return 'Gemini API';
 }
 
 export function AiProvidersSettings() {
@@ -219,6 +222,7 @@ export function AiProvidersSettings() {
                   <SelectContent>
                     <SelectItem value="openai">OpenAI-compatible</SelectItem>
                     <SelectItem value="anthropic">Anthropic API</SelectItem>
+                    <SelectItem value="gemini">Gemini API</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
