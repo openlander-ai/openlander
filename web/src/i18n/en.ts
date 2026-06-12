@@ -1351,8 +1351,7 @@ export const translations = {
       codes: {
         service_not_running: 'Service is not running',
         container_not_running: 'Container is not running',
-        missing_assigned_port: 'Service has no assigned port',
-        missing_container_port: 'Container is not exposing the assigned port',
+        missing_container_port: 'Service has no route target port',
         domain_pending: 'Custom domain is not yet provisioned',
         domain_error: 'Custom domain is in an error state',
       },

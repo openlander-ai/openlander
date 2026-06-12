@@ -1559,8 +1559,7 @@ export const translations = {
       codes: {
         service_not_running: '서비스가 실행 중이 아닙니다',
         container_not_running: '컨테이너가 실행 중이 아닙니다',
-        missing_assigned_port: '서비스에 포트가 할당되지 않았습니다',
-        missing_container_port: '컨테이너가 할당된 포트를 노출하지 않습니다',
+        missing_container_port: '서비스에 라우트 대상 포트가 없습니다',
         domain_pending: '커스텀 도메인이 아직 준비되지 않았습니다',
         domain_error: '커스텀 도메인 상태에 문제가 있습니다',
       },
