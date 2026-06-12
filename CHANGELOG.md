@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Redact LLM-generated AI Ops briefing summaries before persisting them,
+  sanitize provider failure messages, and keep deterministic briefing creation
+  intact when the configured provider fails.
+- Stabilize the services wire-contract coverage gate under heavy release-run
+  parallelism.
+
 ## [0.2.0-rc.5] - 2026-06-11
 
 ### Fixed
