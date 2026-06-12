@@ -111,9 +111,18 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
       dailyBriefingLimit: numberFromBody(body['daily_briefing_limit']),
       fingerprintCooldownMinutes: numberFromBody(body['fingerprint_cooldown_minutes']),
     });
-    const budget = await ctx.db.getAiOpsBriefingBudgetStatus(project.id);
+    const [budget, briefings] = await Promise.all([
+      ctx.db.getAiOpsBriefingBudgetStatus(project.id),
+      ctx.db.listAiOpsBriefingsByProject(project.id, { limit: 5, status: 'open' }),
+    ]);
 
-    return c.json({ status: 'saved', project_id: project.id, policy, budget });
+    return c.json({
+      status: 'saved',
+      project_id: project.id,
+      policy,
+      budget,
+      recent_briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+    });
   });
 
   api.get('/projects/:id/ai-ops/briefings', async (c) => {

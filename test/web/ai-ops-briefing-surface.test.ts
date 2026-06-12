@@ -100,6 +100,12 @@ describe('AI Ops briefing web surface', () => {
     expect(panelSource).toContain('formatJson(selectedBriefing.evidence)');
   });
 
+  it('guards missing briefing arrays from partial project policy responses', () => {
+    expect(panelSource).toContain('setBriefings(policy.recent_briefings ?? [])');
+    expect(panelSource).toContain('setBriefings(response.recent_briefings ?? [])');
+    expect(panelSource).toContain('setBriefings(list.briefings ?? [])');
+  });
+
   it('adds AI Ops i18n keys in both locales', () => {
     for (const source of [enSource, koSource]) {
       for (const key of [
