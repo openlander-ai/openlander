@@ -79,13 +79,13 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
         setServiceMode(policy.service_override.mode);
         setResolvedMode(policy.resolved_policy.mode);
         setBudgetText('');
-        setBriefings(list.briefings);
+        setBriefings(list.briefings ?? []);
       } else {
         const policy = await getProjectAiOps(projectId);
         setProjectMode(policy.policy.mode);
         setResolvedMode(policy.policy.mode);
         setBudgetText(`${policy.budget.projectUsed}/${policy.budget.projectLimit}`);
-        setBriefings(policy.recent_briefings);
+        setBriefings(policy.recent_briefings ?? []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiOps.error.load'));
@@ -106,7 +106,7 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
       setProjectMode(response.policy.mode);
       setResolvedMode(response.policy.mode);
       setBudgetText(`${response.budget.projectUsed}/${response.budget.projectLimit}`);
-      setBriefings(response.recent_briefings);
+      setBriefings(response.recent_briefings ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiOps.error.save'));
     } finally {

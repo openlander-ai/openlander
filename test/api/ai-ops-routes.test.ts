@@ -195,6 +195,7 @@ describe('AI Ops routes', () => {
           reason: 'allowed',
         },
       })),
+      listAiOpsBriefingsByProject: vi.fn(async () => [makeBriefing()]),
     };
     const app = createApp({ db });
 
@@ -216,6 +217,12 @@ describe('AI Ops routes', () => {
     });
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ status: 'saved', project_id: 'p1' });
+    expect(db.listAiOpsBriefingsByProject).toHaveBeenCalledWith('p1', {
+      limit: 5,
+      status: 'open',
+    });
+    const briefings = body.recent_briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-1');
   });
 
   it('updates a service-level override and returns resolved policy', async () => {
