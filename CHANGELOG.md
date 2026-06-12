@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.7] - 2026-06-12
+
+### Added
+
+- Add the Settings → AI Providers page and Web API for configuring the AI Ops
+  Briefing provider with OpenAI-compatible or Anthropic API credentials.
+- Add encrypted AI provider key storage, connection testing, and explicit UI
+  guidance that provider setup does not enable AI Ops by itself.
+
+### Changed
+
+- Move GitLab and Bitbucket Git provider placeholders out of the v0.2 launch
+  scope wording and label them as planned after v0.2.
+
+### Security
+
+- Restrict AI provider settings routes to web session authentication, keep API
+  keys out of responses, and block unsafe OpenAI-compatible base URLs that point
+  at metadata, loopback, local, or link-local targets.
+
 ## [0.2.0-rc.6] - 2026-06-12
 
 ### Fixed
