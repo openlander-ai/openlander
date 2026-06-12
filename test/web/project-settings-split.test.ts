@@ -16,8 +16,9 @@ describe('Project Settings split contract', () => {
   const serviceDetailSource = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
 
   it('keeps Project Settings group-owned only', () => {
-    expect(projectSettingsSource).toContain("type SettingsSection = 'general' | 'danger'");
+    expect(projectSettingsSource).toContain("type SettingsSection = 'general' | 'ai' | 'danger'");
     expect(projectSettingsSource).toContain("id: 'general'");
+    expect(projectSettingsSource).toContain("id: 'ai'");
     expect(projectSettingsSource).toContain("id: 'danger'");
 
     expect(projectSettingsSource).not.toMatch(
@@ -29,9 +30,9 @@ describe('Project Settings split contract', () => {
     );
   });
 
-  it('keeps deployable ownership on Service Detail (v0.1 6-tab IA)', () => {
+  it('keeps deployable ownership on Service Detail (v0.1 service IA)', () => {
     // v0.1 service detail tabs: Overview / Logs / Deployments / Monitoring /
-    // Environment / Domains. Resources is folded into Overview; Advanced and
+    // AI / Environment / Domains. Resources is folded into Overview; Advanced and
     // Settings tabs are cut (PR #198). SourceSettingsPanel was removed
     // alongside the Advanced tab —
     // source/build edits route through MCP for v0.1.
@@ -41,6 +42,7 @@ describe('Project Settings split contract', () => {
     expect(serviceDetailSource).toContain("'deployments'");
     expect(serviceDetailSource).toContain("'logs'");
     expect(serviceDetailSource).toContain("'monitoring'");
+    expect(serviceDetailSource).toContain("'ai'");
     expect(serviceDetailSource).not.toMatch(/\|\s*'resources'/);
     expect(serviceDetailSource).not.toMatch(/\|\s*'advanced'/);
     expect(serviceDetailSource).not.toMatch(/\|\s*'general'/);

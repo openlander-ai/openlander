@@ -17,7 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
-type SettingsSection = 'general' | 'danger';
+type SettingsSection = 'general' | 'ai' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
 
 interface SettingsTabProps {
@@ -44,6 +44,7 @@ export function SettingsTab({
 
   const navItems: { id: SettingsSection; label: string }[] = [
     { id: 'general', label: t('settings.nav.general') },
+    { id: 'ai', label: t('settings.nav.ai') },
     { id: 'danger', label: t('projectDetail.danger.nav') },
   ];
 
@@ -146,6 +147,7 @@ export function SettingsTab({
         {activeSection === 'general' && (
           <ProjectGeneralPanel project={project} onProjectChanged={onProjectChanged} />
         )}
+        {activeSection === 'ai' && <ProjectAiOpsPanel projectId={projectId} />}
         {activeSection === 'danger' && (
           <div className="flex max-w-2xl flex-col gap-4">
             <div>
@@ -485,6 +487,14 @@ function ArchivedServicesDangerPanel({
   );
 }
 
+function ProjectAiOpsPanel({ projectId }: { projectId: string }) {
+  return (
+    <div className="flex max-w-2xl flex-col gap-4">
+      <AiOpsBriefingPanel scope="project" projectId={projectId} />
+    </div>
+  );
+}
+
 function ProjectGeneralPanel({
   project,
   onProjectChanged,
@@ -611,7 +621,6 @@ function ProjectGeneralPanel({
           </Button>
         </div>
       </form>
-      {project && <AiOpsBriefingPanel scope="project" projectId={project.id} />}
     </div>
   );
 }

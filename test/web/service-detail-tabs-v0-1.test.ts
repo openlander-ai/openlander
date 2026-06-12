@@ -25,7 +25,7 @@ function extractDeployableTabsBlock(source: string): string {
 describe('Service detail v0.1 tabs', () => {
   const source = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
 
-  it('exposes the v0.1 6-tab set (Overview/Logs/Deployments/Monitoring/Environment/Domains)', () => {
+  it('exposes the v0.1 service tab set with AI separated from Overview', () => {
     // Accept both single-line and multi-line union formatting — prettier
     // chooses based on width, so we shouldn't lock the test to either.
     const serviceTabUnion = extractServiceTabUnion(source);
@@ -35,6 +35,7 @@ describe('Service detail v0.1 tabs', () => {
     expect(serviceTabUnion).toMatch(/['"]deployments['"]/);
     expect(serviceTabUnion).toMatch(/['"]logs['"]/);
     expect(serviceTabUnion).toMatch(/['"]monitoring['"]/);
+    expect(serviceTabUnion).toMatch(/['"]ai['"]/);
     expect(serviceTabUnion).not.toMatch(/\|\s*'resources'/);
     expect(serviceTabUnion).not.toMatch(/\|\s*'advanced'/);
     expect(serviceTabUnion).not.toMatch(/\|\s*'general'/);
@@ -53,7 +54,7 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain("label: 'Advanced'");
   });
 
-  it('orders tabs observability-first per the v0.1 spec (Overview/Logs/Deployments/Monitoring/Environment/Domains)', () => {
+  it('orders tabs observability-first per the v0.1 spec (Overview/Logs/Deployments/Monitoring/AI/Environment/Domains)', () => {
     // Pre-sweep order was config-first (Overview/Environment/Domains/
     // Deployments/Logs/Monitoring); v0.1 spec mandates observability-
     // first because OpenLander is agent-first — humans hit Service
@@ -71,6 +72,7 @@ describe('Service detail v0.1 tabs', () => {
       'logs',
       'deployments',
       'monitoring',
+      'ai',
       'environment',
       'domains',
     ]);
@@ -107,6 +109,18 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).toContain('<ServiceResourceLimitsPanel');
     expect(source).toContain('<ServiceDangerZone');
     expect(source).toContain('panelId="servicepanel-overview"');
+  });
+
+  it('renders service AI Ops in the dedicated AI tab instead of Overview', () => {
+    const overviewStart = source.indexOf('panelId="servicepanel-overview"');
+    const overviewEnd = source.indexOf('panelId="servicepanel-environment"');
+    const overviewSource = source.slice(overviewStart, overviewEnd);
+
+    expect(source).toContain("{ id: 'ai', label: t('services.detail.tabs.ai'), icon: Bot }");
+    expect(source).toContain('panelId="servicepanel-ai"');
+    expect(source).toContain('labelledBy="service-ai"');
+    expect(source).toContain('scope="service"');
+    expect(overviewSource).not.toContain('AiOpsBriefingPanel');
   });
 
   it('uses measured metrics for Monitoring headlines without fake traffic values', () => {

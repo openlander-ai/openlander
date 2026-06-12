@@ -913,6 +913,7 @@ export const translations = {
     nav: {
       // Chrome — sub-nav label.
       general: 'General',
+      ai: 'AI',
     },
     general: {
       // Chrome — section title + form labels + buttons.
@@ -1080,6 +1081,7 @@ export const translations = {
         logs: 'Logs',
         deployments: 'Deployments',
         monitoring: 'Monitoring',
+        ai: 'AI',
         environment: 'Environment',
         domains: 'Domains',
         // Legacy keys retained for Database/Cache/Storage tabs that have not
