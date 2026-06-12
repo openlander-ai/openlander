@@ -32,9 +32,9 @@ describe('Broader orphan i18n stays pruned (PR-B+ follow-up)', () => {
   //   - `settings.llm.*` — Google Gemini OAuth UI for the legacy
   //     /settings page. Cut surface (built-in AI ops disabled in v0.1).
   //   - `settings.nav.{source,env,domains}` — three sections of the
-  //     project SettingsTab nav that PR #196 removed. The fourth nav
-  //     entry, `settings.nav.general`, is the one live consumer left
-  //     and is preserved.
+  //     project SettingsTab nav that PR #196 removed. The live nav
+  //     entries, `settings.nav.general` and `settings.nav.ai`, are
+  //     preserved.
   //   - top-level `domains:` block — pre-cut Cloudflare/sslip.io
   //     copy, distinct from the live `projectDetail.domains.*` block.
   //   - `command.configureGithubMcp` — string the CommandPalette
@@ -77,10 +77,11 @@ describe('Broader orphan i18n stays pruned (PR-B+ follow-up)', () => {
       expect(dict).not.toMatch(/googleGemini:/);
     });
 
-    it(`trims settings.nav to just the live "general" entry in ${locale}.ts`, () => {
+    it(`trims settings.nav to just the live Project Settings entries in ${locale}.ts`, () => {
       const navBlock = dict.match(/\n {4}nav: \{\n([\s\S]*?)\n {4}\},\n/);
       expect(navBlock?.[1]).toBeDefined();
       expect(navBlock![1]).toMatch(/general:/);
+      expect(navBlock![1]).toMatch(/ai:/);
       expect(navBlock![1]).not.toMatch(/source:/);
       expect(navBlock![1]).not.toMatch(/env:/);
       expect(navBlock![1]).not.toMatch(/domains:/);
@@ -97,11 +98,12 @@ describe('Broader orphan i18n stays pruned (PR-B+ follow-up)', () => {
       expect(dict).not.toMatch(/configureGithubMcp:/);
     });
 
-    it(`keeps the live consumers (settings.nav.general / settings.general.* / settings.github.*) intact in ${locale}.ts`, () => {
+    it(`keeps the live consumers (settings.nav.* / settings.general.* / settings.github.*) intact in ${locale}.ts`, () => {
       // Project SettingsTab.tsx reads these every render; protecting
       // them at the test layer prevents an over-aggressive future
       // sweep from collapsing the whole `settings:` namespace.
       expect(dict).toMatch(/^ {6}general:/m);
+      expect(dict).toMatch(/^ {6}ai:/m);
       expect(dict).toMatch(/^ {4}general: \{/m);
       expect(dict).toMatch(/^ {4}github: \{/m);
     });

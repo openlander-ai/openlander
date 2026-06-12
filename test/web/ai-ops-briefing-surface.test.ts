@@ -16,12 +16,35 @@ describe('AI Ops briefing web surface', () => {
 
   it('mounts the same read-only briefing panel on Project and Service detail surfaces', () => {
     expect(projectSettingsSource).toContain(
-      '<AiOpsBriefingPanel scope="project" projectId={project.id} />',
+      '<AiOpsBriefingPanel scope="project" projectId={projectId} />',
     );
     expect(serviceDetailSource).toContain('<AiOpsBriefingPanel');
     expect(serviceDetailSource).toContain('scope="service"');
     expect(panelSource).toContain("t('aiOps.noAutomation')");
     expect(panelSource).not.toMatch(/restartService|redeployService|rollback|updateServiceEnvVars/);
+  });
+
+  it('keeps Project AI Ops under a dedicated Project Settings section', () => {
+    const generalPanelSource = projectSettingsSource.slice(
+      projectSettingsSource.indexOf('function ProjectGeneralPanel'),
+    );
+    expect(projectSettingsSource).toContain("{ id: 'ai', label: t('settings.nav.ai') }");
+    expect(projectSettingsSource).toContain("activeSection === 'ai'");
+    expect(projectSettingsSource).toContain('function ProjectAiOpsPanel');
+    expect(generalPanelSource).not.toContain('AiOpsBriefingPanel');
+    expect(enSource).toContain("ai: 'AI'");
+    expect(koSource).toContain("ai: 'AI'");
+  });
+
+  it('keeps Service AI Ops under a dedicated Service AI tab', () => {
+    const overviewStart = serviceDetailSource.indexOf('panelId="servicepanel-overview"');
+    const overviewEnd = serviceDetailSource.indexOf('panelId="servicepanel-environment"');
+    const overviewSource = serviceDetailSource.slice(overviewStart, overviewEnd);
+
+    expect(serviceDetailSource).toContain("{ id: 'ai', label: t('services.detail.tabs.ai')");
+    expect(serviceDetailSource).toContain('panelId="servicepanel-ai"');
+    expect(serviceDetailSource).toContain('labelledBy="service-ai"');
+    expect(overviewSource).not.toContain('AiOpsBriefingPanel');
   });
 
   it('keeps Project and Service policy controls explicit and default-off friendly', () => {
