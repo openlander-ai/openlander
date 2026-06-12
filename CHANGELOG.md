@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.9] - 2026-06-12
+
+### Changed
+
+- Move Project AI Ops into `Project Settings > AI` and Service AI Ops into the
+  Service `AI` tab so AI briefing controls are no longer mixed into General or
+  Overview panels.
+
+### Fixed
+
+- Fix a Project AI Ops toggle crash by keeping the Project AI Ops update
+  response aligned with the briefing-list contract and guarding the briefing
+  list state against partial responses.
+
 ## [0.2.0-rc.8] - 2026-06-12
 
 ### Added
