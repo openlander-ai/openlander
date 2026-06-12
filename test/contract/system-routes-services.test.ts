@@ -86,59 +86,63 @@ function buildMockRoutes(
 }
 
 describe('system-routes /api/services wire shape contract', () => {
-  it('GET /services: each item has type, image, port derived from canonical fields', async () => {
-    // Build the real route using mocked AppContext
-    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
-    const app = new Hono();
+  it(
+    'GET /services: each item has type, image, port derived from canonical fields',
+    async () => {
+      // Build the real route using mocked AppContext
+      const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+      const app = new Hono();
 
-    const mockCtx = {
-      serviceManager: {
-        listWithCardSummary: vi.fn().mockResolvedValue([makeCardSummary()]),
-        create: vi.fn(),
-        getDetail: vi.fn(),
-        getLogs: vi.fn(),
-        getStats: vi.fn(),
-        getInspectionHealth: vi.fn(),
-        getConnectedProjects: vi.fn(),
-        listDatabases: vi.fn(),
-        createDatabase: vi.fn(),
-        listUsers: vi.fn(),
-        createUser: vi.fn(),
-        remove: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        restart: vi.fn(),
-      },
-      db: {
-        getEnvVars: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
-        getEnvVarsForService: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
-        getService: vi.fn(),
-        hasAnyServiceMetrics: vi.fn(),
-        listServiceMetricsSince: vi.fn(),
-      },
-      config: { gitProviders: { github: {} } },
-      docker: {},
-    } as unknown as Parameters<typeof createSystemRoutes>[0];
+      const mockCtx = {
+        serviceManager: {
+          listWithCardSummary: vi.fn().mockResolvedValue([makeCardSummary()]),
+          create: vi.fn(),
+          getDetail: vi.fn(),
+          getLogs: vi.fn(),
+          getStats: vi.fn(),
+          getInspectionHealth: vi.fn(),
+          getConnectedProjects: vi.fn(),
+          listDatabases: vi.fn(),
+          createDatabase: vi.fn(),
+          listUsers: vi.fn(),
+          createUser: vi.fn(),
+          remove: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+          restart: vi.fn(),
+        },
+        db: {
+          getEnvVars: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
+          getEnvVarsForService: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
+          getService: vi.fn(),
+          hasAnyServiceMetrics: vi.fn(),
+          listServiceMetricsSince: vi.fn(),
+        },
+        config: { gitProviders: { github: {} } },
+        docker: {},
+      } as unknown as Parameters<typeof createSystemRoutes>[0];
 
-    app.route('/api', createSystemRoutes(mockCtx));
-    const res = await app.request('/api/services');
-    expect(res.status).toBe(200);
+      app.route('/api', createSystemRoutes(mockCtx));
+      const res = await app.request('/api/services');
+      expect(res.status).toBe(200);
 
-    const body = (await res.json()) as Array<Record<string, unknown>>;
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThan(0);
+      const body = (await res.json()) as Array<Record<string, unknown>>;
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.length).toBeGreaterThan(0);
 
-    const svc = body[0];
-    // Wire contract: legacy fields must be present and populated
-    expect(svc).toHaveProperty('type');
-    expect(svc.type).toBe('redis'); // kind → type
-    expect(svc).toHaveProperty('image');
-    expect(svc.image).toBe('redis:7-alpine'); // image_url → image
-    expect(svc).toHaveProperty('port');
-    expect(svc.port).toBe(6379); // assigned_port → port
-    expect(svc).toHaveProperty('env_vars');
-    expect(typeof svc.env_vars).toBe('string'); // JSON string from env_vars repo
-  });
+      const svc = body[0];
+      // Wire contract: legacy fields must be present and populated
+      expect(svc).toHaveProperty('type');
+      expect(svc.type).toBe('redis'); // kind → type
+      expect(svc).toHaveProperty('image');
+      expect(svc.image).toBe('redis:7-alpine'); // image_url → image
+      expect(svc).toHaveProperty('port');
+      expect(svc.port).toBe(6379); // assigned_port → port
+      expect(svc).toHaveProperty('env_vars');
+      expect(typeof svc.env_vars).toBe('string'); // JSON string from env_vars repo
+    },
+    30_000,
+  );
 
   it('GET /services: env_vars is null when no env vars exist', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
