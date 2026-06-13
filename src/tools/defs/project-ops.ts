@@ -21,6 +21,7 @@ import {
 import { emptySchema } from './schemas.js';
 import { summarizeRouteHealth, type DomainRouteHealth } from '../route-health.js';
 import type { ToolDef } from './types.js';
+import { filterDeployablesForMcpScope, projectVisibleToMcpScope } from '../../mcp/scope-policy.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
 const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
@@ -314,16 +315,40 @@ export const projectOpsToolDefs: ToolDef[] = [
           deployableGroups.set(p.id, groupDeployables);
         }
       }
-      for (const p of projects) {
-        const primary = serviceRecords.get(p.id)?.service ?? undefined;
-        const groupDeployables = deployableGroups.get(p.id) ?? [];
+
+      const projectsForResponse =
+        context.target === 'mcp'
+          ? projects.filter((project) =>
+              projectVisibleToMcpScope(
+                project,
+                deployableGroups.get(project.id) ?? [],
+                context.identity,
+              ),
+            )
+          : projects;
+      const deployableGroupsForResponse = new Map(deployableGroups);
+      if (context.target === 'mcp') {
+        for (const project of projectsForResponse) {
+          deployableGroupsForResponse.set(
+            project.id,
+            filterDeployablesForMcpScope(deployableGroups.get(project.id) ?? [], context.identity),
+          );
+        }
+      }
+
+      for (const p of projectsForResponse) {
+        const groupDeployables = deployableGroupsForResponse.get(p.id) ?? [];
+        const primary =
+          context.target === 'mcp' && context.identity?.mcpScopeKind === 'service'
+            ? (groupDeployables[0] ?? serviceRecords.get(p.id)?.service ?? undefined)
+            : (serviceRecords.get(p.id)?.service ?? undefined);
         deployables.set(p.id, primary ?? groupDeployables[0]);
       }
 
       if (context.target === 'mcp') {
         return {
-          count: projects.length,
-          projects: projects.map((project) => {
+          count: projectsForResponse.length,
+          projects: projectsForResponse.map((project) => {
             const deployable = deployables.get(project.id);
             const view = serviceViewFromRows(project, deployable);
             // S3.2: read via ServiceView, but restore each field's historic
@@ -374,18 +399,20 @@ export const projectOpsToolDefs: ToolDef[] = [
                   route_health: routeHealthFor(deployable),
                 }
               : null;
-            const deployableServices = (deployableGroups.get(project.id) ?? []).map((service) => ({
-              service_id: service.id,
-              service_name: service.name,
-              kind: service.kind,
-              source: service.source,
-              status: service.status,
-              port: service.assigned_port,
-              container_name:
-                service.container_name ??
-                (deployable?.id === service.id ? deployableContainerName : null),
-              route_health: routeHealthFor(service),
-            }));
+            const deployableServices = (deployableGroupsForResponse.get(project.id) ?? []).map(
+              (service) => ({
+                service_id: service.id,
+                service_name: service.name,
+                kind: service.kind,
+                source: service.source,
+                status: service.status,
+                port: service.assigned_port,
+                container_name:
+                  service.container_name ??
+                  (deployable?.id === service.id ? deployableContainerName : null),
+                route_health: routeHealthFor(service),
+              }),
+            );
             const deployableServiceCount = deployableServices.length;
             return {
               id: project.id,
@@ -418,8 +445,8 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       return {
-        count: projects.length,
-        projects: projects.map((project) => {
+        count: projectsForResponse.length,
+        projects: projectsForResponse.map((project) => {
           const deployable = deployables.get(project.id);
           const view = serviceViewFromRows(project, deployable);
           // Same boundary restoration as the MCP branch (see the note

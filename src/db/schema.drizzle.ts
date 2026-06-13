@@ -537,8 +537,11 @@ export const patTokens = pgTable(
     name: text('name').notNull(),
     token_hash: text('token_hash').notNull().unique(),
     token_suffix: text('token_suffix').notNull(),
-    scope_kind: text('scope_kind', { enum: ['org', 'project'] }).notNull(),
+    scope_kind: text('scope_kind', { enum: ['org', 'project', 'service'] }).notNull(),
     scope_project_id: text('scope_project_id').references(() => projects.id, {
+      onDelete: 'cascade',
+    }),
+    scope_service_id: text('scope_service_id').references(() => services.id, {
       onDelete: 'cascade',
     }),
     token_type: text('token_type', { enum: ['pat', 'service', 'legacy-default'] })
@@ -554,14 +557,14 @@ export const patTokens = pgTable(
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
-    check('pat_tokens_scope_kind_check', sql`${table.scope_kind} IN ('org', 'project')`),
+    check('pat_tokens_scope_kind_check', sql`${table.scope_kind} IN ('org', 'project', 'service')`),
     check(
       'pat_tokens_type_check',
       sql`${table.token_type} IN ('pat', 'service', 'legacy-default')`,
     ),
     check(
       'pat_tokens_scope_project_check',
-      sql`(${table.scope_kind} = 'org' AND ${table.scope_project_id} IS NULL) OR (${table.scope_kind} = 'project' AND ${table.scope_project_id} IS NOT NULL)`,
+      sql`(${table.scope_kind} = 'org' AND ${table.scope_project_id} IS NULL AND ${table.scope_service_id} IS NULL) OR (${table.scope_kind} = 'project' AND ${table.scope_project_id} IS NOT NULL AND ${table.scope_service_id} IS NULL) OR (${table.scope_kind} = 'service' AND ${table.scope_project_id} IS NULL AND ${table.scope_service_id} IS NOT NULL)`,
     ),
     check(
       'pat_tokens_expiry_check',
@@ -569,6 +572,7 @@ export const patTokens = pgTable(
     ),
     index('idx_pat_tokens_hash').on(table.token_hash),
     index('idx_pat_tokens_scope').on(table.scope_kind, table.scope_project_id),
+    index('idx_pat_tokens_scope_service').on(table.scope_kind, table.scope_service_id),
     index('idx_pat_tokens_expires').on(table.expires_at),
   ],
 );

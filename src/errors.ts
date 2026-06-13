@@ -435,6 +435,13 @@ export class ScopeMismatchError extends OpenLanderError {
   }
 }
 
+export class ScopeViolationError extends OpenLanderError {
+  constructor(message: string, details: Record<string, unknown>, atExecute = false) {
+    super(message, atExecute ? 'SCOPE_MISMATCH_AT_EXECUTE' : 'SCOPE_VIOLATION', 403, details);
+    this.name = 'ScopeViolationError';
+  }
+}
+
 export class ServiceHasConsumersError extends OpenLanderError {
   constructor(
     serviceId: string,

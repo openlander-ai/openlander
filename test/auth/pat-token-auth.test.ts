@@ -64,8 +64,9 @@ class PatAuthDb implements AuthDatabase {
     name: string;
     tokenHash: string;
     tokenSuffix: string;
-    scopeKind: 'org' | 'project';
+    scopeKind: 'org' | 'project' | 'service';
     scopeProjectId?: string | null;
+    scopeServiceId?: string | null;
     tokenType?: 'pat' | 'service' | 'legacy-default';
     capabilities?: Record<string, unknown> | null;
     expiresAt?: string | null;
@@ -76,7 +77,8 @@ class PatAuthDb implements AuthDatabase {
       token_hash: input.tokenHash,
       token_suffix: input.tokenSuffix,
       scope_kind: input.scopeKind,
-      scope_project_id: input.scopeProjectId ?? null,
+      scope_project_id: input.scopeKind === 'project' ? (input.scopeProjectId ?? null) : null,
+      scope_service_id: input.scopeKind === 'service' ? (input.scopeServiceId ?? null) : null,
       token_type: input.tokenType ?? 'pat',
       capabilities: input.capabilities ?? null,
       last_used_at: null,
@@ -128,11 +130,14 @@ class PatAuthDb implements AuthDatabase {
     });
   }
 
-  async listPatTokens(options: {
-    scopeKind?: 'org' | 'project';
-    scopeProjectId?: string | null;
-    includeRevoked?: boolean;
-  } = {}): Promise<PatTokenRow[]> {
+  async listPatTokens(
+    options: {
+      scopeKind?: 'org' | 'project' | 'service';
+      scopeProjectId?: string | null;
+      scopeServiceId?: string | null;
+      includeRevoked?: boolean;
+    } = {},
+  ): Promise<PatTokenRow[]> {
     return [...this.rows.values()]
       .filter((row) => options.includeRevoked || !row.revoked_at)
       .filter((row) => !options.scopeKind || row.scope_kind === options.scopeKind)
@@ -142,7 +147,17 @@ class PatAuthDb implements AuthDatabase {
           !options.scopeProjectId ||
           row.scope_project_id === options.scopeProjectId,
       )
-      .filter((row) => options.scopeKind !== 'org' || row.scope_project_id === null);
+      .filter(
+        (row) =>
+          options.scopeKind !== 'service' ||
+          !options.scopeServiceId ||
+          row.scope_service_id === options.scopeServiceId,
+      )
+      .filter(
+        (row) =>
+          options.scopeKind !== 'org' ||
+          (row.scope_project_id === null && row.scope_service_id === null),
+      );
   }
 
   async touchPatToken(id: string): Promise<void> {
@@ -183,6 +198,37 @@ describe('PAT token auth', () => {
       scopeKind: 'project',
       scopeProjectId: 'proj-1',
       name: 'Cursor',
+    });
+  });
+
+  it('issues hashed service-scoped MCP service tokens and validates their identity', async () => {
+    const db = new PatAuthDb();
+    const service = new AuthService(db);
+
+    const issued = await service.issuePatToken({
+      name: 'Open in Agent handoff',
+      scopeKind: 'service',
+      scopeServiceId: 'service-1',
+      tokenType: 'service',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    expect(issued.token).toMatch(/^olp_/);
+    expect(issued.row).toMatchObject({
+      scope_kind: 'service',
+      scope_project_id: null,
+      scope_service_id: 'service-1',
+      token_type: 'service',
+    });
+
+    const identity = await service.validateMcpBearerToken(issued.token);
+    expect(identity).toMatchObject({
+      tokenId: issued.row.id,
+      tokenType: 'service',
+      scopeKind: 'service',
+      scopeProjectId: null,
+      scopeServiceId: 'service-1',
+      name: 'Open in Agent handoff',
     });
   });
 
@@ -259,11 +305,43 @@ describe('PAT token auth', () => {
       tokenType: 'pat',
       scopeKind: 'project',
       scopeProjectId: 'proj-1',
+      scopeServiceId: null,
       name: 'Project One',
     });
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ scope_project_id: 'proj-1' });
+  });
+
+  it('narrows service-scoped callers to their own PAT metadata', async () => {
+    const db = new PatAuthDb();
+    const service = new AuthService(db);
+    const first = await service.issuePatToken({
+      name: 'Service One',
+      scopeKind: 'service',
+      scopeServiceId: 'service-1',
+      tokenType: 'service',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    await service.issuePatToken({
+      name: 'Service Two',
+      scopeKind: 'service',
+      scopeServiceId: 'service-2',
+      tokenType: 'service',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    const rows = await service.listPatTokens(undefined, {
+      tokenId: first.row.id,
+      tokenType: 'service',
+      scopeKind: 'service',
+      scopeProjectId: null,
+      scopeServiceId: 'service-1',
+      name: 'Service One',
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ scope_service_id: 'service-1' });
   });
 
   it('blocks project-scoped callers from revoking tokens outside their project', async () => {
@@ -288,6 +366,7 @@ describe('PAT token auth', () => {
         tokenType: 'pat',
         scopeKind: 'project',
         scopeProjectId: 'proj-1',
+        scopeServiceId: null,
         name: 'Project One',
       }),
     ).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
@@ -315,6 +394,7 @@ describe('PAT token auth', () => {
       tokenType: 'pat',
       scopeKind: 'project',
       scopeProjectId: 'proj-1',
+      scopeServiceId: null,
       name: 'Cursor',
     });
 

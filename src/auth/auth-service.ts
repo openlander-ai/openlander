@@ -10,6 +10,7 @@ const SESSION_TTL_MS = Number(process.env['OPENLANDER_SESSION_TTL_HOURS'] || 168
 const PAT_LAST_USED_TOUCH_INTERVAL_MS = 60_000;
 const log = createModuleLogger('auth-service');
 export const MIN_PASSWORD_LENGTH = 8;
+type McpScopeKind = 'org' | 'project' | 'service';
 
 export interface AuthDatabase {
   isPasswordSet(): Promise<boolean>;
@@ -24,9 +25,11 @@ export interface AuthDatabase {
 
 export interface IssuePatTokenInput {
   name: string;
-  scopeKind: 'org' | 'project';
+  scopeKind: McpScopeKind;
   scopeProjectId?: string | null;
+  scopeServiceId?: string | null;
   expiresAt: string | null;
+  tokenType?: 'pat' | 'service';
 }
 
 export interface OrgMcpPatTokenResult {
@@ -40,8 +43,9 @@ export interface OrgMcpPatTokenResult {
 export interface McpTokenIdentity {
   tokenId: string | null;
   tokenType: 'legacy-default' | 'pat' | 'service';
-  scopeKind: 'org' | 'project';
+  scopeKind: McpScopeKind;
   scopeProjectId: string | null;
+  scopeServiceId: string | null;
   name: string;
 }
 
@@ -51,8 +55,9 @@ interface PatTokenDatabase {
     name: string;
     tokenHash: string;
     tokenSuffix: string;
-    scopeKind: 'org' | 'project';
+    scopeKind: McpScopeKind;
     scopeProjectId?: string | null;
+    scopeServiceId?: string | null;
     tokenType?: 'pat' | 'service' | 'legacy-default';
     capabilities?: Record<string, unknown> | null;
     expiresAt?: string | null;
@@ -65,8 +70,9 @@ interface PatTokenDatabase {
     tokenSuffix: string;
   }): Promise<PatTokenRow>;
   listPatTokens(options?: {
-    scopeKind?: 'org' | 'project';
+    scopeKind?: McpScopeKind;
     scopeProjectId?: string | null;
+    scopeServiceId?: string | null;
     includeRevoked?: boolean;
   }): Promise<PatTokenRow[]>;
   touchPatToken(id: string): Promise<void>;
@@ -156,6 +162,7 @@ function logPatAuthFailed(
     suffix?: string | null;
     scopeKind?: string | null;
     scopeProjectId?: string | null;
+    scopeServiceId?: string | null;
   },
 ): void {
   log.warn(
@@ -167,6 +174,7 @@ function logPatAuthFailed(
       suffix: fields.suffix ?? null,
       scope_kind: fields.scopeKind ?? null,
       scope_project_id: fields.scopeProjectId ?? null,
+      scope_service_id: fields.scopeServiceId ?? null,
     },
     'pat.auth.failed',
   );
@@ -188,10 +196,12 @@ function logPatRevoked(
       suffix: target?.token_suffix,
       scope_kind: target?.scope_kind,
       scope_project_id: target?.scope_project_id,
+      scope_service_id: target?.scope_service_id,
       actor_token_id: fields.caller?.tokenId ?? null,
       actor_token_type: fields.caller?.tokenType ?? 'web-session',
       actor_scope_kind: fields.caller?.scopeKind ?? null,
       actor_scope_project_id: fields.caller?.scopeProjectId ?? null,
+      actor_scope_service_id: fields.caller?.scopeServiceId ?? null,
       reason: fields.reason ?? null,
     },
     'pat.revoked',
@@ -215,8 +225,15 @@ function narrowPatTokenListOptionsForCaller(
   options: Parameters<PatTokenDatabase['listPatTokens']>[0] | undefined,
   caller?: McpTokenIdentity,
 ): Parameters<PatTokenDatabase['listPatTokens']>[0] | undefined {
-  if (!caller || caller.tokenType === 'legacy-default' || caller.scopeKind !== 'project') {
+  if (!caller || caller.tokenType === 'legacy-default' || caller.scopeKind === 'org') {
     return options;
+  }
+  if (caller.scopeKind === 'service') {
+    return {
+      ...options,
+      scopeKind: 'service',
+      scopeServiceId: caller.scopeServiceId,
+    };
   }
   return {
     ...options,
@@ -230,7 +247,7 @@ async function assertPatTokenRevokeAllowed(
   id: string,
   caller?: McpTokenIdentity,
 ): Promise<PatTokenRow | null> {
-  if (!caller || caller.tokenType === 'legacy-default' || caller.scopeKind !== 'project') {
+  if (!caller || caller.tokenType === 'legacy-default' || caller.scopeKind === 'org') {
     return null;
   }
 
@@ -238,9 +255,15 @@ async function assertPatTokenRevokeAllowed(
   if (!target) return null;
 
   const sameToken = target.id === caller.tokenId;
+  const sameService =
+    caller.scopeKind === 'service' &&
+    target.scope_kind === 'service' &&
+    target.scope_service_id === caller.scopeServiceId;
   const sameProject =
-    target.scope_kind === 'project' && target.scope_project_id === caller.scopeProjectId;
-  if (sameToken || sameProject) return target;
+    caller.scopeKind === 'project' &&
+    target.scope_kind === 'project' &&
+    target.scope_project_id === caller.scopeProjectId;
+  if (sameToken || sameService || sameProject) return target;
 
   log.warn(
     {
@@ -250,16 +273,20 @@ async function assertPatTokenRevokeAllowed(
       token_type: caller.tokenType,
       scope_kind: caller.scopeKind,
       scope_project_id: caller.scopeProjectId,
+      scope_service_id: caller.scopeServiceId,
       target_token_id: target.id,
       target_scope_kind: target.scope_kind,
       target_scope_project_id: target.scope_project_id,
+      target_scope_service_id: target.scope_service_id,
       target_suffix: target.token_suffix,
     },
     'pat.auth.failed',
   );
   throw new OpenLanderError('PAT token is outside the caller scope.', 'SCOPE_MISMATCH', 403, {
     expectedProjectId: caller.scopeProjectId,
+    expectedServiceId: caller.scopeServiceId,
     actualProjectId: target.scope_project_id,
+    actualServiceId: target.scope_service_id,
   });
 }
 
@@ -397,6 +424,7 @@ export async function validateMcpBearerToken(
         tokenType: row.token_type,
         scopeKind: row.scope_kind,
         scopeProjectId: row.scope_project_id,
+        scopeServiceId: row.scope_service_id,
         name: row.name,
       };
     }
@@ -407,6 +435,7 @@ export async function validateMcpBearerToken(
         suffix: row.token_suffix,
         scopeKind: row.scope_kind,
         scopeProjectId: row.scope_project_id,
+        scopeServiceId: row.scope_service_id,
       });
       patFailureLogged = true;
     }
@@ -421,6 +450,7 @@ export async function validateMcpBearerToken(
       tokenType: 'legacy-default',
       scopeKind: 'org',
       scopeProjectId: null,
+      scopeServiceId: null,
       name: 'legacy-default',
     };
   }
@@ -554,6 +584,13 @@ export class AuthService {
         400,
       );
     }
+    if (input.scopeKind === 'service' && !input.scopeServiceId) {
+      throw new OpenLanderError(
+        'scopeServiceId is required for service-scoped PAT tokens.',
+        'SERVICE_REQUIRED',
+        400,
+      );
+    }
     if (input.expiresAt && Number.isNaN(Date.parse(input.expiresAt))) {
       throw new OpenLanderError('expiresAt must be a valid ISO timestamp.', 'INVALID_FIELD', 400, {
         field: 'expiresAt',
@@ -567,7 +604,8 @@ export class AuthService {
       tokenSuffix: tokenSuffix(token),
       scopeKind: input.scopeKind,
       scopeProjectId: input.scopeProjectId ?? null,
-      tokenType: 'pat',
+      scopeServiceId: input.scopeServiceId ?? null,
+      tokenType: input.tokenType ?? 'pat',
       expiresAt: input.expiresAt,
     });
     log.info(
@@ -578,6 +616,7 @@ export class AuthService {
         suffix: row.token_suffix,
         scope_kind: row.scope_kind,
         scope_project_id: row.scope_project_id,
+        scope_service_id: row.scope_service_id,
         expires_at: row.expires_at,
       },
       'pat.issued',
@@ -600,11 +639,16 @@ export class AuthService {
 
       const rows = await this.db.listPatTokens({ scopeKind: 'org' });
       const activeOrgPats = rows.filter(
-        (row) => row.token_type === 'pat' && row.scope_project_id === null && isTokenUsable(row),
+        (row) =>
+          row.token_type === 'pat' &&
+          row.scope_kind === 'org' &&
+          row.scope_project_id === null &&
+          isTokenUsable(row),
       );
       const activeLegacyDefaults = rows.filter(
         (row) =>
           row.token_type === 'legacy-default' &&
+          row.scope_kind === 'org' &&
           row.scope_project_id === null &&
           isTokenUsable(row),
       );
@@ -679,7 +723,9 @@ export class AuthService {
       }
 
       const rows = await this.db.listPatTokens({ scopeKind: 'org' });
-      const activeRows = rows.filter((row) => row.scope_project_id === null && isTokenUsable(row));
+      const activeRows = rows.filter(
+        (row) => row.scope_kind === 'org' && row.scope_project_id === null && isTokenUsable(row),
+      );
       const revokedTokenIds: string[] = [];
       for (const row of activeRows) {
         if (await this.db.revokePatToken(row.id)) {
@@ -713,8 +759,9 @@ export class AuthService {
 
   async listPatTokens(
     options?: {
-      scopeKind?: 'org' | 'project';
+      scopeKind?: McpScopeKind;
       scopeProjectId?: string | null;
+      scopeServiceId?: string | null;
       includeRevoked?: boolean;
     },
     caller?: McpTokenIdentity,

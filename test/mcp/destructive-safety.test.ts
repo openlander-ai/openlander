@@ -214,8 +214,11 @@ describe('MCP destructive safety', () => {
     ).rejects.toMatchObject({
       code: 'SCOPE_MISMATCH_AT_EXECUTE',
       details: {
-        activeScopeProjectId: 'project-locked',
+        tokenScopeKind: 'project',
+        tokenScopeProjectId: 'project-locked',
+        tokenScopeServiceId: null,
         targetProjectId: 'project-1',
+        reason: 'project_mismatch',
       },
     });
   });
@@ -348,10 +351,10 @@ describe('MCP destructive safety', () => {
     expect(result).toMatchObject({
       status: 'succeeded',
       lifecycle_effect: { kind: 'unarchive', runtime: 'no_auto_start' },
-	      _agent_guidance: {
-	        message: expect.stringContaining('no container was started automatically'),
-	        next_steps: expect.arrayContaining([expect.stringContaining('Call update_app only if')]),
-	      },
+      _agent_guidance: {
+        message: expect.stringContaining('no container was started automatically'),
+        next_steps: expect.arrayContaining([expect.stringContaining('Call update_app only if')]),
+      },
     });
   });
 

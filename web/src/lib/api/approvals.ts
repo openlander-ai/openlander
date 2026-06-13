@@ -18,6 +18,7 @@ export interface PendingApprovalMetadata {
     tokenType?: string | null;
     scopeKind?: string | null;
     scopeProjectId?: string | null;
+    scopeServiceId?: string | null;
   };
 }
 

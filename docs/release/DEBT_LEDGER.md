@@ -89,6 +89,28 @@ a release should be recorded here so follow-up work is explicit.
   additive migration; after agent clients adopt `evidence_metadata`, evaluate
   whether duplicated flat fields should be deprecated or gated.
 
+- **Scoped MCP token enforcement:** existing PAT metadata and MCP composite
+  routing now support and enforce service-scoped tokens. `pat_tokens` gains an
+  additive nullable `scope_service_id` column and `scope_kind="service"`; MCP
+  composite calls with project/service-scoped tokens return `SCOPE_VIOLATION`
+  before tool execution when any supplied target selector is outside scope or
+  the target is missing.
+- **Why accepted:** Open-in-agent and handoff flows need least-privilege tokens
+  before any generated agent payload can safely carry operational context. The
+  schema already carried project/instance-wide scope and service token type;
+  this slice finishes the authorization enforcement instead of adding a new
+  action. The stored/API value for instance-wide scope remains `org` for
+  compatibility; OpenLander does not expose an organization product model.
+- **Vocab review:** `scope_kind`, `scope_project_id`, `scope_service_id`,
+  `service_id`, and `project_id` reuse existing target vocabulary. The response
+  contract adds the machine-readable `SCOPE_VIOLATION` error code, not a helper
+  call field or new resource term.
+- **Endpoint collision check:** no MCP action, composite slot, or REST path is
+  added. The API change extends existing `/api/tokens` creation/list filters,
+  and MCP enforcement runs inside the existing five composite tools.
+- **Follow-up:** short-lived handoff token issuance for Open in Agent remains
+  deferred until this enforcement contract is released and reviewed.
+
 ## v0.1.17
 
 - **Domain route visibility response expansion:** existing

@@ -11,16 +11,18 @@ export interface CreatePatTokenInput {
   name: string;
   tokenHash: string;
   tokenSuffix: string;
-  scopeKind: 'org' | 'project';
+  scopeKind: 'org' | 'project' | 'service';
   scopeProjectId?: string | null;
+  scopeServiceId?: string | null;
   tokenType?: 'pat' | 'service' | 'legacy-default';
   capabilities?: Record<string, unknown> | null;
   expiresAt?: string | null;
 }
 
 export interface ListPatTokensOptions {
-  scopeKind?: 'org' | 'project';
+  scopeKind?: 'org' | 'project' | 'service';
   scopeProjectId?: string | null;
+  scopeServiceId?: string | null;
   includeRevoked?: boolean;
 }
 
@@ -42,6 +44,7 @@ export class PatTokenRepo {
         token_suffix: input.tokenSuffix,
         scope_kind: input.scopeKind,
         scope_project_id: input.scopeKind === 'project' ? (input.scopeProjectId ?? null) : null,
+        scope_service_id: input.scopeKind === 'service' ? (input.scopeServiceId ?? null) : null,
         token_type: input.tokenType ?? 'pat',
         capabilities: input.capabilities ?? null,
         expires_at: input.expiresAt ?? null,
@@ -110,6 +113,7 @@ export class PatTokenRepo {
         token_suffix: input.tokenSuffix,
         scope_kind: 'org',
         scope_project_id: null,
+        scope_service_id: null,
         token_type: 'legacy-default',
         expires_at: null,
       })
@@ -143,8 +147,12 @@ export class PatTokenRepo {
     if (options.scopeKind === 'project' && options.scopeProjectId) {
       conditions.push(eq(patTokens.scope_project_id, options.scopeProjectId));
     }
+    if (options.scopeKind === 'service' && options.scopeServiceId) {
+      conditions.push(eq(patTokens.scope_service_id, options.scopeServiceId));
+    }
     if (options.scopeKind === 'org') {
       conditions.push(isNull(patTokens.scope_project_id));
+      conditions.push(isNull(patTokens.scope_service_id));
     }
 
     const query = this.db.select().from(patTokens);

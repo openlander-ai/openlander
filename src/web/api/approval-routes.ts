@@ -40,6 +40,7 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
               tokenType: readString(identity as Record<string, unknown>, 'mcpTokenType'),
               scopeKind: readString(identity as Record<string, unknown>, 'mcpScopeKind'),
               scopeProjectId: readString(identity as Record<string, unknown>, 'mcpScopeProjectId'),
+              scopeServiceId: readString(identity as Record<string, unknown>, 'mcpScopeServiceId'),
             }
           : undefined;
       const args = plan['args'];

@@ -67,8 +67,8 @@ the instance name.
 ```
 
 Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
-setup wizard's MCP step. It mints an org-scoped token, shown once. The `url` is your
-dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
+setup wizard's MCP step. It mints an instance-wide token, shown once. The `url` is your dashboard
+origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
 After registration, verify that the client lists the `openlander_*` tools and that
 `openlander_project({ action: "help" })` returns the Project action catalog. If not,
@@ -193,13 +193,17 @@ Authorization: Bearer YOUR_TOKEN
 ```
 
 Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
-MCP step of the setup wizard. Both mint an org-scoped token, **shown only once**. If you
-didn't copy it (or need a fresh one), use **Regenerate** on the Your Agent page — there is
-no "reveal again". Regenerating **revokes the previous token**, so update your agent's
-config with the new value. (Programmatic: `POST /api/mcp/token/regenerate` reliably returns
-the plaintext; `POST /api/mcp/token` may omit it once a token already exists.) Project-scoped
-tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"`) but are not
-surfaced in the 0.1 onboarding UI.
+MCP step of the setup wizard. Both mint an instance-wide token, **shown only once**. The current API
+value for this instance-wide scope is `scope_kind: "org"` for compatibility; this is not an
+organization feature. If you didn't copy it (or need a fresh one), use **Regenerate** on the Your
+Agent page — there is no "reveal again". Regenerating **revokes the previous token**, so update your
+agent's config with the new value. (Programmatic: `POST /api/mcp/token/regenerate` reliably returns
+the plaintext; `POST /api/mcp/token` may omit it once a token already exists.) Project- and
+service-scoped tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"` +
+`scope_project_id`, or `scope_kind: "service"` + `scope_service_id`) but are not surfaced in the
+0.1 onboarding UI. Scoped MCP tokens return `SCOPE_VIOLATION` for cross-project, sibling-service, or
+targetless host-level operations; `list_projects` is filtered to the token's visible Project or
+service.
 
 The endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp`).
 `:10114` appears only when reaching OpenLander directly without a reverse proxy.

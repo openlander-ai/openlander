@@ -37,12 +37,25 @@ field for Application/worker count in the Project; it does not include Database
 resources, caches, buckets, or the Compose parent metadata row.
 
 Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
-dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, **shown only
-once**. To get the value again, use **Regenerate** (or `POST /api/mcp/token/regenerate`), which
-revokes the previous token; `POST /api/mcp/token` may not return the plaintext once a token
-already exists. Project-scoped tokens exist via the API (`POST /api/tokens` with
-`scope_kind: "project"`) but are not part of the 0.1 onboarding UI. The MCP endpoint is your
-dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
+dashboard, or from the setup wizard's MCP step — both issue an instance-wide token, **shown only
+once**. The current API value for this instance-wide scope is `scope_kind: "org"` for compatibility;
+this is not an organization feature. To get the value again, use **Regenerate** (or
+`POST /api/mcp/token/regenerate`), which revokes the previous token; `POST /api/mcp/token` may not
+return the plaintext once a token already exists. Project- and service-scoped tokens exist via the
+API (`POST /api/tokens` with `scope_kind: "project"` + `scope_project_id`, or
+`scope_kind: "service"` + `scope_service_id`) but are not part of the 0.1 onboarding UI. The MCP
+endpoint is your dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a
+reverse proxy).
+
+Scoped tokens are enforced at the MCP composite boundary. A project-scoped token can target only
+that Project; a service-scoped token can target only that exact Application/Compose `service_id`,
+even when sibling services share the same Project. Cross-scope, sibling, and targetless host-level
+calls return `{ code: "SCOPE_VIOLATION" }` with `details.reason` such as `project_mismatch`,
+`service_mismatch`, or `target_required`. `list_projects` is the scoped discovery exception: it
+returns only Projects and Application/Compose `service_id` values visible to the token.
+When an action supplies more than one target selector, every supplied selector must be inside the
+token scope; agents should not mix `service_id`, `project_id`, `deploy_id`, or `action_run_id`
+values from different targets in one call.
 
 This Bearer token is for MCP, not for raw REST `/api` calls. A correctly registered agent should
 see the five `openlander_*` composite tools and should be able to call
@@ -353,6 +366,12 @@ project.
 ### `list_projects`
 
 List all projects with status, ports, URLs. No parameters.
+
+When called with a scoped MCP token, the response is filtered before it reaches the agent:
+project-scoped tokens see only the scoped Project, and service-scoped tokens see only Projects that
+contain the scoped service. For service-scoped tokens, `deployable_service`,
+`deployable_services`, and `deployable_service_count` are also reduced to the scoped service so
+agents do not receive sibling service identifiers.
 
 ### `archive_project`
 

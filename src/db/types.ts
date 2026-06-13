@@ -348,8 +348,9 @@ export interface PatTokenRow {
   name: string;
   token_hash: string;
   token_suffix: string;
-  scope_kind: 'org' | 'project';
+  scope_kind: 'org' | 'project' | 'service';
   scope_project_id: string | null;
+  scope_service_id: string | null;
   token_type: 'pat' | 'service' | 'legacy-default';
   capabilities: Record<string, unknown> | null;
   last_used_at: string | null;
