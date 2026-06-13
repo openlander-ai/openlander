@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
 import {
+  createOpenLanderDeployCompositeTool,
   createOpenLanderMonitorCompositeTool,
   createOpenLanderProjectCompositeTool,
 } from '../../src/mcp/composite-tools.js';
@@ -80,7 +81,9 @@ function createScopedContext(identity: RequestIdentity) {
     getDeployablesByGroup: vi.fn(async (projectId: string) =>
       services.filter((service) => service.project_id === projectId),
     ),
-    getDeployLog: vi.fn(async () => null),
+    getDeployLog: vi.fn(async (deployId: string) =>
+      deployId === 'deploy-service-1' ? { id: deployId, service_id: 'service-1' } : null,
+    ),
     getAiOpsBriefing: vi.fn(async () => null),
     getActionRun: vi.fn(async () => null),
     listDomainMappings: vi.fn(async () => []),
@@ -138,6 +141,26 @@ function createMonitorComposite(execute = vi.fn(async () => ({ status: 'ok' })))
   ];
   return {
     tool: createOpenLanderMonitorCompositeTool(toolDefs),
+    execute,
+  };
+}
+
+function createDeployComposite(execute = vi.fn(async () => ({ status: 'ok' }))) {
+  const toolDefs: ToolDef[] = [
+    {
+      name: 'get_deploy_status',
+      description: 'Get deploy status',
+      inputSchema: z.object({
+        deploy_id: z.string().min(1).optional(),
+        service_id: z.string().min(1).optional(),
+        service_name: z.string().min(1).optional(),
+        project_id: z.string().min(1).optional(),
+      }),
+      execute,
+    },
+  ];
+  return {
+    tool: createOpenLanderDeployCompositeTool(toolDefs),
     execute,
   };
 }
@@ -227,6 +250,68 @@ describe('MCP scoped token enforcement', () => {
         tokenScopeServiceId: 'service-1',
         targetProjectId: 'project-1',
         targetServiceId: null,
+        reason: 'service_mismatch',
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixed deploy_id and service_id when any target is outside a service-scoped token', async () => {
+    const { tool, execute } = createDeployComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'get_deploy_status',
+        params: { deploy_id: 'deploy-service-1', service_id: 'service-sibling' },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeKind: 'service',
+        tokenScopeServiceId: 'service-1',
+        targetProjectId: 'project-1',
+        targetServiceId: 'service-sibling',
+        reason: 'service_mismatch',
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixed service_id and service_name when any target is outside a service-scoped token', async () => {
+    const { tool, execute } = createDeployComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'get_deploy_status',
+        params: { service_id: 'service-1', service_name: 'api' },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeKind: 'service',
+        tokenScopeServiceId: 'service-1',
+        targetProjectId: 'project-2',
+        targetServiceId: 'service-2',
         reason: 'service_mismatch',
       },
     });
@@ -363,6 +448,62 @@ describe('MCP scoped token enforcement', () => {
 
     expect(result).toEqual({ status: 'ok' });
     expect(execute).toHaveBeenCalledWith({ action_run_id: 'action-run-1' }, context);
+  });
+
+  it('lets a service-scoped token poll project-level held MCP action status in its project', async () => {
+    const { tool, execute } = createMonitorComposite();
+    const { context, db } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+    db.getActionRun.mockResolvedValueOnce({
+      id: 'action-run-1',
+      project_id: 'project-1',
+      plan: JSON.stringify({
+        type: 'destructive_mcp',
+        tool: 'archive_project',
+        args: { project_id: 'project-1' },
+        targetProjectId: 'project-1',
+      }),
+    });
+
+    const result = await tool.execute(
+      { action: 'mcp_action_status', params: { action_run_id: 'action-run-1' } },
+      context,
+    );
+
+    expect(result).toEqual({ status: 'ok' });
+    expect(execute).toHaveBeenCalledWith({ action_run_id: 'action-run-1' }, context);
+  });
+
+  it('normalizes missing service targets to SCOPE_VIOLATION for scoped tokens', async () => {
+    const { tool, execute } = createMonitorComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const result = (await tool.execute(
+      { action: 'get_logs', params: { service_id: 'missing-service', lines: 10 } },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeKind: 'project',
+        tokenScopeProjectId: 'project-1',
+        targetProjectId: null,
+        targetServiceId: null,
+        reason: 'target_not_found_or_out_of_scope',
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('lets a service-scoped token read project-level briefings for its service project', async () => {

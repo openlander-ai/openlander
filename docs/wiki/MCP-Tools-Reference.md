@@ -51,11 +51,14 @@ Scoped tokens are enforced at the MCP composite boundary. A project-scoped token
 that Project; a service-scoped token can target only that exact Application/Compose `service_id`,
 even when sibling services share the same Project. Cross-scope, sibling, and targetless host-level
 calls return `{ code: "SCOPE_VIOLATION" }` with `details.reason` such as `project_mismatch`,
-`service_mismatch`, or `target_required`. `list_projects` is the scoped discovery exception: it
-returns only Projects and Application/Compose `service_id` values visible to the token.
+`service_mismatch`, `target_required`, or `target_not_found_or_out_of_scope`; scoped tokens do not
+distinguish a missing target from an out-of-scope target. `list_projects` is the scoped discovery
+exception: it returns only Projects and Application/Compose `service_id` values visible to the token.
 When an action supplies more than one target selector, every supplied selector must be inside the
 token scope; agents should not mix `service_id`, `project_id`, `deploy_id`, or `action_run_id`
-values from different targets in one call.
+values from different targets in one call. `mcp_action_status` may be polled with a service-scoped
+token for held actions in the scoped service's Project, so handoff flows can follow their own
+approval/status lifecycle without broadening the token.
 
 This Bearer token is for MCP, not for raw REST `/api` calls. A correctly registered agent should
 see the five `openlander_*` composite tools and should be able to call
