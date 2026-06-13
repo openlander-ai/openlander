@@ -47,7 +47,7 @@ import { RecoveryCoordinator } from './_ai-ops/recovery-coordinator.js';
 import { handleDestructiveMcpApproval } from './mcp/destructive-executor.js';
 import { eventBus } from './events/index.js';
 import type { EventBus } from './events/index.js';
-import type { OpenLanderConfig } from './config/index.js';
+import { normalizeLlmConfig, type OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { createModuleLogger } from './lib/logger.js';
 import type { AgentPool } from './_ai-ops/agent-pool.js';
@@ -314,7 +314,7 @@ export async function createAppContext(
   const llmCircuitBreaker = new LlmCircuitBreaker();
 
   const modelRegistry = new ModelRegistry(
-    { providers: {}, defaultRoute: { providerId: '__none__' } },
+    normalizeLlmConfig(config.llm),
     eventBus,
     llmCircuitBreaker,
   );
