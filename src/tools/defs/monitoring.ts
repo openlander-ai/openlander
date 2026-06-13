@@ -8,13 +8,17 @@ import {
   ServiceOperationUnsupportedError,
 } from '../../errors.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import type { AiOpsBriefingRow } from '../../db/types.js';
 import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatAiOpsBriefingRow } from '../../monitor/ai-ops-briefing-format.js';
-import { normalizeAiOpsEvidenceForRead } from '../../monitor/ai-ops-evidence-normalizer.js';
+import {
+  normalizeAiOpsEvidenceForRead,
+  type AiOpsEvidenceMetadata,
+} from '../../monitor/ai-ops-evidence-normalizer.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import {
@@ -618,6 +622,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const internal = (args['internal'] as boolean | undefined) ?? false;
       const pathArg = (args['path'] as string | undefined)?.trim();
       const healthCheckPathArg = (args['health_check_path'] as string | undefined)?.trim();
+      const briefingId = (args['briefing_id'] as string | undefined)?.trim();
 
       const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
@@ -721,6 +726,16 @@ export const monitoringToolDefs: ToolDef[] = [
           observedAt,
         },
       );
+      const recoveryReceipt = briefingId
+        ? buildAiOpsRecoveryReceipt({
+            briefing: await appCtx.db.getAiOpsBriefing(briefingId),
+            briefingId,
+            liveEvidence: evidenceContext.evidence,
+            liveEvidenceMetadata: evidenceContext.metadata,
+            project,
+            service,
+          })
+        : null;
 
       return {
         project: {
@@ -754,6 +769,7 @@ export const monitoringToolDefs: ToolDef[] = [
         dependencies,
         evidence: evidenceContext.evidence,
         evidence_metadata: evidenceContext.metadata,
+        ...(recoveryReceipt ? { recovery_receipt: recoveryReceipt } : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
         ...(diagnosis ? { diagnosis } : {}),
         ...(diagnosis?.suggested_call ? { suggested_call: diagnosis.suggested_call } : {}),
@@ -2427,6 +2443,236 @@ function buildDiagnoseServiceEvidence(input: {
     dependencies: input.dependencies,
     ...(input.warnings.length > 0 ? { warnings: input.warnings } : {}),
     ...(input.diagnosis ? { diagnosis: input.diagnosis } : {}),
+  };
+}
+
+type RecoveryCheckStatus = 'pass' | 'fail' | 'unknown';
+type RecoveryReceiptStatus = 'verified' | 'needs_attention' | 'unknown' | 'unavailable';
+
+function parseJsonRecord(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return asRecord(parsed) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function evidenceRecordAt(
+  evidence: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): Record<string, unknown> {
+  return asRecord(evidence[camelKey]) ?? asRecord(snakeKey ? evidence[snakeKey] : undefined) ?? {};
+}
+
+function readEvidenceStatusCode(record: Record<string, unknown>): number | null {
+  return getNumber(record, 'statusCode') ?? getNumber(record, 'status_code');
+}
+
+function readEvidenceString(record: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = getString(record, key);
+    if (value) return value;
+  }
+  return null;
+}
+
+function routeSnapshot(record: Record<string, unknown>): Record<string, unknown> {
+  const route = evidenceRecordAt(record, 'routeHealth', 'route_health');
+  const statusCode = readEvidenceStatusCode(route);
+  return {
+    status: readEvidenceString(route, 'status') ?? 'unknown',
+    ...(statusCode !== null ? { status_code: statusCode } : {}),
+  };
+}
+
+function containerSnapshot(record: Record<string, unknown>): Record<string, unknown> {
+  const container = evidenceRecordAt(record, 'container', 'container_state');
+  return {
+    running: container['running'] === true,
+    status: readEvidenceString(container, 'status'),
+    exit_code: getNumber(container, 'exitCode') ?? getNumber(container, 'exit_code'),
+    restart_count: getNumber(container, 'restartCount') ?? getNumber(container, 'restart_count'),
+  };
+}
+
+function deploySnapshot(record: Record<string, unknown>): Record<string, unknown> {
+  const deployLog = evidenceRecordAt(record, 'deployLog', 'deploy_log');
+  return {
+    id: readEvidenceString(deployLog, 'id'),
+    status: readEvidenceString(deployLog, 'effectiveStatus', 'effective_status', 'status'),
+    commit_sha: readEvidenceString(deployLog, 'commitSha', 'commit_sha'),
+  };
+}
+
+function routeCheck(
+  beforeEvidence: Record<string, unknown>,
+  liveEvidence: Record<string, unknown>,
+): Record<string, unknown> {
+  const before = routeSnapshot(beforeEvidence);
+  const after = routeSnapshot(liveEvidence);
+  const afterStatus = readEvidenceString(after, 'status');
+  const status: RecoveryCheckStatus =
+    afterStatus === 'healthy'
+      ? 'pass'
+      : afterStatus === 'unhealthy' || afterStatus === 'degraded'
+        ? 'fail'
+        : 'unknown';
+  return {
+    name: 'route_health',
+    status,
+    before,
+    after,
+  };
+}
+
+function containerCheck(liveEvidence: Record<string, unknown>): Record<string, unknown> {
+  const after = containerSnapshot(liveEvidence);
+  const afterStatus = readEvidenceString(after, 'status');
+  const status: RecoveryCheckStatus =
+    after['running'] === true && afterStatus !== 'restarting'
+      ? 'pass'
+      : after['running'] === false || afterStatus === 'restarting'
+        ? 'fail'
+        : 'unknown';
+  return {
+    name: 'container_status',
+    status,
+    after,
+  };
+}
+
+function restartCheck(
+  beforeEvidence: Record<string, unknown>,
+  liveEvidence: Record<string, unknown>,
+): Record<string, unknown> {
+  const before = containerSnapshot(beforeEvidence);
+  const after = containerSnapshot(liveEvidence);
+  const beforeCount = getNumber(before, 'restart_count');
+  const afterCount = getNumber(after, 'restart_count');
+  const afterStatus = readEvidenceString(after, 'status');
+  const status: RecoveryCheckStatus =
+    afterStatus === 'restarting'
+      ? 'fail'
+      : beforeCount === null || afterCount === null
+        ? 'unknown'
+        : afterCount <= beforeCount
+          ? 'pass'
+          : 'fail';
+  return {
+    name: 'restart_stability',
+    status,
+    before: { restart_count: beforeCount },
+    after: { restart_count: afterCount, status: afterStatus },
+  };
+}
+
+function deployCheck(
+  beforeEvidence: Record<string, unknown>,
+  liveEvidence: Record<string, unknown>,
+): Record<string, unknown> {
+  const before = deploySnapshot(beforeEvidence);
+  const after = deploySnapshot(liveEvidence);
+  const afterStatus = readEvidenceString(after, 'status');
+  const status: RecoveryCheckStatus =
+    afterStatus === 'success'
+      ? 'pass'
+      : afterStatus === 'failed' || afterStatus === 'unhealthy'
+        ? 'fail'
+        : 'unknown';
+  return {
+    name: 'latest_deploy',
+    status,
+    before,
+    after,
+    changed: before['id'] !== null && after['id'] !== null && before['id'] !== after['id'],
+  };
+}
+
+function receiptStatus(checks: Record<string, unknown>[]): RecoveryReceiptStatus {
+  if (checks.some((check) => check['status'] === 'fail')) return 'needs_attention';
+  if (checks.every((check) => check['status'] === 'pass')) return 'verified';
+  return 'unknown';
+}
+
+function receiptGuidance(status: RecoveryReceiptStatus): Record<string, unknown> {
+  if (status === 'verified') {
+    return {
+      message:
+        'OpenLander live diagnostics look recovered relative to the AI Ops briefing snapshot.',
+      next_steps: [
+        'Report the recovery_receipt.status and checks to the user.',
+        'If the user still sees symptoms, inspect application-level logs or external dependencies.',
+      ],
+    };
+  }
+  if (status === 'needs_attention') {
+    return {
+      message:
+        'OpenLander still sees at least one failing live diagnostic after the attempted fix.',
+      next_steps: [
+        'Inspect recovery_receipt.checks for failed checks.',
+        'Use the top-level diagnosis or suggested_call before claiming the incident is fixed.',
+      ],
+    };
+  }
+  return {
+    message:
+      'OpenLander could not fully verify recovery because one or more before/after signals are missing.',
+    next_steps: [
+      'Inspect recovery_receipt.checks with unknown status.',
+      'Run get_logs or get_build_log if omitted_evidence lists follow-up calls.',
+    ],
+  };
+}
+
+function unavailableRecoveryReceipt(briefingId: string, reason: string): Record<string, unknown> {
+  return {
+    briefing_id: briefingId,
+    status: 'unavailable',
+    reason,
+    _agent_guidance: {
+      message: 'OpenLander could not build a recovery receipt for this briefing.',
+      next_steps: ['Call list_ai_ops_briefings and retry with a briefing for this service.'],
+    },
+  };
+}
+
+function buildAiOpsRecoveryReceipt(input: {
+  briefing: AiOpsBriefingRow | null;
+  briefingId: string;
+  liveEvidence: Record<string, unknown>;
+  liveEvidenceMetadata: AiOpsEvidenceMetadata;
+  project: ProjectRow;
+  service: ServiceRow;
+}): Record<string, unknown> {
+  if (!input.briefing) return unavailableRecoveryReceipt(input.briefingId, 'briefing_not_found');
+  if (input.briefing.project_id !== input.project.id) {
+    return unavailableRecoveryReceipt(input.briefingId, 'briefing_project_mismatch');
+  }
+  if (input.briefing.service_id && input.briefing.service_id !== input.service.id) {
+    return unavailableRecoveryReceipt(input.briefingId, 'briefing_service_mismatch');
+  }
+
+  const beforeEvidence = parseJsonRecord(input.briefing.evidence_json);
+  const checks = [
+    routeCheck(beforeEvidence, input.liveEvidence),
+    containerCheck(input.liveEvidence),
+    restartCheck(beforeEvidence, input.liveEvidence),
+    deployCheck(beforeEvidence, input.liveEvidence),
+  ];
+  const status = receiptStatus(checks);
+  return {
+    briefing_id: input.briefing.id,
+    project_id: input.project.id,
+    service_id: input.service.id,
+    status,
+    baseline_observed_at: input.briefing.created_at,
+    live_observed_at: input.liveEvidenceMetadata.observed_at,
+    checks,
+    _agent_guidance: receiptGuidance(status),
   };
 }
 

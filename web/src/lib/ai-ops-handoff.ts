@@ -16,6 +16,18 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
   const freshness = briefing.evidence_metadata
     ? `${briefing.evidence_metadata.source}, live=${String(briefing.evidence_metadata.live)}, observed_at=${briefing.evidence_metadata.observed_at}`
     : 'briefing detail not loaded';
+  const verificationCall = {
+    tool: 'openlander_monitor',
+    arguments: {
+      action: 'diagnose_service',
+      params: {
+        ...(briefing.service_id
+          ? { service_id: briefing.service_id }
+          : { project_id: briefing.project_id }),
+        briefing_id: briefing.briefing_id,
+      },
+    },
+  };
 
   return [
     'OpenLander AI Ops handoff',
@@ -38,8 +50,11 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
     'Suggested MCP call from OpenLander rules',
     formatJson(briefing.suggested_call ?? null),
     '',
+    'Verification MCP call after any change',
+    formatJson(verificationCall),
+    '',
     'Verification checklist before saying fixed',
-    '- Re-read the briefing or run diagnose_service after any change.',
+    '- Run the verification MCP call and read recovery_receipt.status.',
     '- Confirm route health is healthy when route evidence exists.',
     '- Confirm container state and restart count are stable.',
     '- Confirm the latest deploy/status evidence matches the version you expect.',

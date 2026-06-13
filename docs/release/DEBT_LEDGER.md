@@ -89,6 +89,24 @@ a release should be recorded here so follow-up work is explicit.
   additive migration; after agent clients adopt `evidence_metadata`, evaluate
   whether duplicated flat fields should be deprecated or gated.
 
+- **AI Ops recovery receipt response expansion:** existing
+  `openlander_monitor.diagnose_service` now accepts optional `briefing_id` and,
+  when supplied, returns additive `recovery_receipt` comparing the AI Ops
+  briefing snapshot with the current live diagnosis.
+- **Why accepted:** Open-in-Agent handoff needs a deterministic way for agents
+  to verify after a fix before telling the user an incident is resolved. Reusing
+  `diagnose_service` keeps this as a read-only live probe instead of adding a new
+  MCP action or enabling auto-remediation.
+- **Vocab review:** `briefing_id`, `service_id`, `project_id`, `route_health`,
+  `container_status`, `restart_stability`, and `latest_deploy` reuse existing AI
+  Ops/runtime vocabulary. `recovery_receipt` is a diagnostic read result, not a
+  new resource type or mutation.
+- **Endpoint collision check:** no MCP action, composite slot, REST path, or
+  table is added. The change extends the existing `diagnose_service` schema and
+  response body under `openlander_monitor`.
+- **Follow-up:** if operators need durable audit history, add a persisted
+  receipt table or event after the read-only receipt proves useful in live QA.
+
 - **Scoped MCP token enforcement:** existing PAT metadata and MCP composite
   routing now support and enforce service-scoped tokens. `pat_tokens` gains an
   additive nullable `scope_service_id` column and `scope_kind="service"`; MCP
