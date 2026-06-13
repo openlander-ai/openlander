@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.12] - 2026-06-14
+
+### Added
+
+- Add AI Ops recovery receipts to `diagnose_service` when `briefing_id` is
+  supplied, comparing incident-time briefing evidence with live route health,
+  container status, restart stability, and latest deploy status.
+- Add a verification MCP call to AI Ops Agent handoff prompts so agents can call
+  `diagnose_service` with the original `briefing_id` after a fix and read
+  `recovery_receipt.status`.
+
 ## [0.2.0-rc.11] - 2026-06-13
 
 ### Fixed
