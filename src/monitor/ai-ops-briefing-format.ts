@@ -22,6 +22,10 @@ export function formatAiOpsBriefingRow(
   const evidence = opts.includeEvidence
     ? redactAiOpsEvidence(parseJsonRecord(row.evidence_json))
     : undefined;
+  const usage = parseJsonRecord(row.llm_summary_usage_json);
+  const summarySource = row.llm_summary ? 'llm' : 'deterministic';
+  const summaryStatus = row.llm_summary_status ?? summarySource;
+
   return {
     briefing_id: row.id,
     project_id: row.project_id,
@@ -31,6 +35,14 @@ export function formatAiOpsBriefingRow(
     classification: row.classification,
     title: row.title,
     summary: row.llm_summary ?? row.deterministic_summary,
+    summary_source: summarySource,
+    summary_status: summaryStatus,
+    summary_truncated: row.llm_summary_truncated === true,
+    ...(row.llm_summary_finish_reason
+      ? { summary_finish_reason: row.llm_summary_finish_reason }
+      : {}),
+    ...(row.llm_summary_error ? { summary_error: row.llm_summary_error } : {}),
+    ...(usage ? { summary_usage: usage } : {}),
     deterministic_summary: row.deterministic_summary,
     ...(row.llm_summary ? { llm_summary: row.llm_summary } : {}),
     fingerprint: row.fingerprint,

@@ -538,7 +538,7 @@ export class Database implements AuthDatabase {
   getAiOpsBriefing(id: string) { return this.aiOpsBriefingRepo.findById(id); }
   listAiOpsBriefingsByProject(projectId: string, opts?: Parameters<AiOpsBriefingRepo['listByProject']>[1]) { return this.aiOpsBriefingRepo.listByProject(projectId, opts); }
   listAiOpsBriefingsByService(serviceId: string, opts?: Parameters<AiOpsBriefingRepo['listByService']>[1]) { return this.aiOpsBriefingRepo.listByService(serviceId, opts); }
-  updateAiOpsBriefingLlmSummary(id: string, summary: string | null) { return this.aiOpsBriefingRepo.updateLlmSummary(id, summary); }
+  updateAiOpsBriefingLlmSummary(...args: Parameters<AiOpsBriefingRepo['updateLlmSummary']>) { return this.aiOpsBriefingRepo.updateLlmSummary(...args); }
   getAiOpsInstancePolicy() { return this.aiOpsPolicyRepo.getInstancePolicy(); }
   setAiOpsInstancePolicy(input: Parameters<AiOpsPolicyRepo['setInstancePolicy']>[0]) { return this.aiOpsPolicyRepo.setInstancePolicy(input); }
   getAiOpsProjectPolicy(projectId: string) { return this.aiOpsPolicyRepo.getProjectPolicy(projectId); }

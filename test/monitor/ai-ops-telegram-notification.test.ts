@@ -19,6 +19,11 @@ function makeBriefing(overrides: Partial<AiOpsBriefingRow> = {}): AiOpsBriefingR
     title: 'Public traffic is failing',
     deterministic_summary: 'Representative traffic probe to / failed with 500.',
     llm_summary: 'The public route is returning 500 while health still passes.',
+    llm_summary_status: 'llm',
+    llm_summary_finish_reason: 'stop',
+    llm_summary_truncated: false,
+    llm_summary_error: null,
+    llm_summary_usage_json: null,
     suggested_call_json: JSON.stringify({
       tool: 'openlander_monitor',
       action: 'diagnose_service',

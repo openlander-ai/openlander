@@ -740,6 +740,11 @@ export const aiOpsBriefings = pgTable(
     title: text('title').notNull(),
     deterministic_summary: text('deterministic_summary').notNull(),
     llm_summary: text('llm_summary'),
+    llm_summary_status: text('llm_summary_status', { enum: ['llm', 'fallback', 'skipped'] }),
+    llm_summary_finish_reason: text('llm_summary_finish_reason'),
+    llm_summary_truncated: boolean('llm_summary_truncated'),
+    llm_summary_error: text('llm_summary_error'),
+    llm_summary_usage_json: text('llm_summary_usage_json'),
     suggested_call_json: text('suggested_call_json'),
     evidence_json: text('evidence_json').notNull(),
     status: text('status', { enum: ['open', 'acknowledged', 'resolved'] })
@@ -761,6 +766,10 @@ export const aiOpsBriefings = pgTable(
     check(
       'ai_ops_briefings_status_check',
       sql`${table.status} IN ('open', 'acknowledged', 'resolved')`,
+    ),
+    check(
+      'ai_ops_briefings_llm_summary_status_check',
+      sql`${table.llm_summary_status} IS NULL OR ${table.llm_summary_status} IN ('llm', 'fallback', 'skipped')`,
     ),
     index('idx_ai_ops_briefings_project').on(table.project_id, table.created_at),
     index('idx_ai_ops_briefings_service').on(table.service_id, table.created_at),

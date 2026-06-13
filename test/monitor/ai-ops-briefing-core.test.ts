@@ -71,11 +71,44 @@ describe('AI Ops deterministic briefing core', () => {
     });
 
     expect(first.classification).toBe('restart_loop');
+    expect(first.deterministicSummary).toContain('service svc-worker');
+    expect(first.deterministicSummary).toContain('restart count 4');
+    expect(first.deterministicSummary).not.toContain('unknown');
     expect(first.fingerprint).toBe('restart-loop');
     expect(second.fingerprint).toBe('restart-loop');
     expect(first.dedupeKey).toBe(second.dedupeKey);
     expect(first.suggestedCall?.action).toBe('diagnose_service');
     expect(JSON.stringify(first.suggestedCall)).not.toMatch(/restart|redeploy|rollback|env/i);
+  });
+
+  it('keeps container exit details in restart-loop fallback summaries', () => {
+    const briefing = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-api',
+      serviceName: 'api__svc',
+      container: {
+        name: 'ol-api',
+        running: false,
+        status: 'exited',
+        exitCode: 137,
+        restartCount: null,
+      },
+      runtimeIncident: {
+        category: 'container_restart',
+        errorSnippet: 'Container ol-api exited with code 137.',
+      },
+    });
+
+    expect(briefing.classification).toBe('restart_loop');
+    expect(briefing.deterministicSummary).toContain('service api__svc');
+    expect(briefing.deterministicSummary).toContain('container ol-api');
+    expect(briefing.deterministicSummary).toContain('exit code 137');
+    expect(briefing.deterministicSummary).not.toContain('unknown');
+    expect(briefing.evidence.container).toMatchObject({
+      name: 'ol-api',
+      exitCode: 137,
+    });
+    expect(briefing.suggestedCall?.action).toBe('diagnose_service');
   });
 
   it('maps dependency runtime incidents to diagnosis instead of inventing a fix', () => {

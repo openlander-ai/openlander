@@ -158,8 +158,10 @@ export class AiOpsBriefingTrigger {
       serviceName: serviceName(service),
       observedAt: this.options.now?.() ?? new Date(),
       container: {
+        name: payload.containerName,
         running: false,
         status: 'exited',
+        exitCode: payload.exitCode,
         restartCount: null,
       },
       runtimeIncident: {

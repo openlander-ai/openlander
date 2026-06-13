@@ -47,6 +47,26 @@ a release should be recorded here so follow-up work is explicit.
   rules. PR6 may add Telegram send-only notification, but inbound Telegram
   updates must remain non-mutating.
 
+- **AI Ops summary metadata response expansion:** existing AI Ops briefing
+  rows and read-only briefing responses now include additive summary metadata:
+  `summary_source`, `summary_status`, `summary_truncated`,
+  `summary_finish_reason`, `summary_error`, and `summary_usage`.
+- **Why accepted:** live QA showed that a length-truncated LLM output can look
+  like a successful summary unless the output finish reason and fallback state
+  are persisted and exposed. The deterministic briefing remains the durable
+  source of classification, severity, and suggested call.
+- **Vocab review:** no action name, endpoint, response helper-call field, or
+  target vocabulary is introduced. `summary_status="deterministic"` is a
+  presentation value derived when no LLM summary exists; persisted LLM summary
+  status remains `llm | fallback | skipped`.
+- **Endpoint collision check:** no MCP action, composite slot, or REST route is
+  added. The schema change is limited to nullable `ai_ops_briefings`
+  summary-metadata columns, and the read path extends existing
+  `list_ai_ops_briefings` / `get_ai_ops_briefing` responses.
+- **Follow-up:** run one live provider smoke before the next RC release gate so
+  provider-specific `finishReason="length"` behavior is confirmed outside the
+  mocked unit tests.
+
 ## v0.1.17
 
 - **Domain route visibility response expansion:** existing

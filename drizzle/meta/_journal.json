@@ -43,6 +43,13 @@
       "when": 1781182800000,
       "tag": "0005_ai_ops_briefings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781319401000,
+      "tag": "0006_ai_ops_summary_metadata",
+      "breakpoints": true
     }
   ]
 }

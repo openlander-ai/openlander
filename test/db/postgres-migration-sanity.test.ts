@@ -258,6 +258,7 @@ describe('Postgres migration sanity gate', () => {
       '0003_ai_ops_usage_foundation',
       '0004_ai_ops_policy_dedupe',
       '0005_ai_ops_briefings',
+      '0006_ai_ops_summary_metadata',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -266,6 +267,7 @@ describe('Postgres migration sanity gate', () => {
       '0003_ai_ops_usage_foundation.sql',
       '0004_ai_ops_policy_dedupe.sql',
       '0005_ai_ops_briefings.sql',
+      '0006_ai_ops_summary_metadata.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -288,6 +290,11 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "ai_ops_briefings"');
     expect(sql).toContain('"deterministic_summary" text NOT NULL');
     expect(sql).toContain('"llm_summary" text');
+    expect(sql).toContain('"llm_summary_status" text');
+    expect(sql).toContain('"llm_summary_finish_reason" text');
+    expect(sql).toContain('"llm_summary_truncated" boolean');
+    expect(sql).toContain('"llm_summary_error" text');
+    expect(sql).toContain('"llm_summary_usage_json" text');
     expect(sql).toContain('CREATE INDEX "idx_ai_ops_briefings_project"');
   });
 
@@ -337,6 +344,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 7 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -357,7 +371,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 7 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 8 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

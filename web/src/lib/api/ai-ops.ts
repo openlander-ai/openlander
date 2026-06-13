@@ -4,6 +4,8 @@ export type AiOpsProjectMode = 'off' | 'briefing';
 export type AiOpsServiceOverrideMode = 'inherit' | 'off' | 'briefing';
 export type AiOpsBriefingStatus = 'open' | 'acknowledged' | 'resolved';
 export type AiOpsBriefingSeverity = 'info' | 'warning' | 'high' | 'critical';
+export type AiOpsBriefingSummarySource = 'llm' | 'deterministic';
+export type AiOpsBriefingSummaryStatus = 'llm' | 'fallback' | 'skipped' | 'deterministic';
 
 export interface AiOpsPolicy {
   project_id: string;
@@ -55,6 +57,12 @@ export interface AiOpsBriefing {
   classification: string;
   title: string;
   summary: string;
+  summary_source: AiOpsBriefingSummarySource;
+  summary_status: AiOpsBriefingSummaryStatus;
+  summary_truncated: boolean;
+  summary_finish_reason?: string;
+  summary_error?: string;
+  summary_usage?: Record<string, unknown>;
   deterministic_summary: string;
   llm_summary?: string;
   fingerprint: string;
