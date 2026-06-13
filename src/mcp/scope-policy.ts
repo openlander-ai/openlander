@@ -129,20 +129,35 @@ async function targetFromBriefingId(
 ): Promise<ScopeTarget | null> {
   const briefing = await appCtx.db.getAiOpsBriefing(briefingId);
   if (!briefing) return null;
-  if (!briefing.service_id && identity?.mcpScopeKind === 'service' && identity.mcpScopeServiceId) {
-    const service = await appCtx.db.getService(identity.mcpScopeServiceId);
-    if (service?.project_id === briefing.project_id) {
-      return {
-        projectId: briefing.project_id,
-        serviceId: service.id,
-        resolvedFrom: 'briefing_project_scope',
-      };
-    }
+  if (!briefing.service_id) {
+    const serviceScopedTarget = await projectTargetForServiceIdentity(
+      appCtx,
+      briefing.project_id,
+      identity,
+      'briefing_project_scope',
+    );
+    if (serviceScopedTarget) return serviceScopedTarget;
   }
   return {
     projectId: briefing.project_id,
     serviceId: briefing.service_id,
     resolvedFrom: 'briefing_id',
+  };
+}
+
+async function projectTargetForServiceIdentity(
+  appCtx: AppContext,
+  projectId: string,
+  identity: RequestIdentity | undefined,
+  resolvedFrom: string,
+): Promise<ScopeTarget | null> {
+  if (identity?.mcpScopeKind !== 'service' || !identity.mcpScopeServiceId) return null;
+  const service = await appCtx.db.getService(identity.mcpScopeServiceId);
+  if (service?.project_id !== projectId) return null;
+  return {
+    projectId,
+    serviceId: service.id,
+    resolvedFrom,
   };
 }
 
@@ -169,6 +184,7 @@ function parseJsonRecord(value: string | null): Record<string, unknown> | null {
 async function targetFromActionRunId(
   appCtx: AppContext,
   actionRunId: string,
+  identity?: RequestIdentity,
 ): Promise<ScopeTarget | null> {
   const run = await appCtx.db.getActionRun(actionRunId);
   if (!run) return null;
@@ -183,8 +199,24 @@ async function targetFromActionRunId(
 
     const targetProjectId = readRecordString(plan, 'targetProjectId');
     if (targetProjectId) {
+      const serviceScopedTarget = await projectTargetForServiceIdentity(
+        appCtx,
+        targetProjectId,
+        identity,
+        'action_run_project_scope',
+      );
+      if (serviceScopedTarget) return serviceScopedTarget;
       return { projectId: targetProjectId, serviceId: null, resolvedFrom: 'action_run_id' };
     }
+  }
+  if (run.project_id) {
+    const serviceScopedTarget = await projectTargetForServiceIdentity(
+      appCtx,
+      run.project_id,
+      identity,
+      'action_run_project_scope',
+    );
+    if (serviceScopedTarget) return serviceScopedTarget;
   }
   return { projectId: run.project_id || null, serviceId: null, resolvedFrom: 'action_run_id' };
 }
@@ -224,7 +256,7 @@ async function resolveMcpScopeTargets(
   if (briefingId) push(await targetFromBriefingId(appCtx, briefingId, identity));
 
   const actionRunId = readString(args, 'action_run_id', 'action_id', 'actionRunId');
-  if (actionRunId) push(await targetFromActionRunId(appCtx, actionRunId));
+  if (actionRunId) push(await targetFromActionRunId(appCtx, actionRunId, identity));
 
   const serviceId = readString(args, 'service_id', 'serviceId');
   if (serviceId) push(await targetFromService(appCtx, serviceId));
@@ -292,7 +324,15 @@ export async function maybeRejectMcpScope(
 
   if (TARGETLESS_SCOPED_ACTION_ALLOWLIST.has(def.name)) return undefined;
 
-  const targets = await resolveMcpScopeTargets(context.appCtx, args, identity);
+  let targets: ScopeTarget[];
+  try {
+    targets = await resolveMcpScopeTargets(context.appCtx, args, identity);
+  } catch (err) {
+    if (err instanceof ProjectNotFoundError || err instanceof ServiceNotFoundError) {
+      return buildScopeViolationResponse(identity, null, 'target_not_found_or_out_of_scope');
+    }
+    throw err;
+  }
   if (targets.length === 0) {
     return buildScopeViolationResponse(identity, null, 'target_required');
   }

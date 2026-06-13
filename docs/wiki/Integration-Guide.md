@@ -202,8 +202,10 @@ the plaintext; `POST /api/mcp/token` may omit it once a token already exists.) P
 service-scoped tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"` +
 `scope_project_id`, or `scope_kind: "service"` + `scope_service_id`) but are not surfaced in the
 0.1 onboarding UI. Scoped MCP tokens return `SCOPE_VIOLATION` for cross-project, sibling-service, or
-targetless host-level operations; `list_projects` is filtered to the token's visible Project or
-service.
+targetless host-level operations, and missing scoped targets are normalized to the same error to
+avoid target enumeration. `list_projects` is filtered to the token's visible Project or service.
+`mcp_action_status` remains pollable for held actions in the scoped service's Project so
+least-privilege handoff flows can track their own approval/status lifecycle.
 
 The endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp`).
 `:10114` appears only when reaching OpenLander directly without a reverse proxy.
