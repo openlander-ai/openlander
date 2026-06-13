@@ -25,6 +25,12 @@ export const translations = {
     llmCalls: 'LLM calls',
     suggestedCall: 'Suggested MCP call',
     evidence: 'Evidence',
+    agentHandoff: {
+      title: 'Agent handoff',
+      description: 'Copy an evidence-scoped prompt. No token or credential is included.',
+      copy: 'Copy handoff',
+      copied: 'Copied',
+    },
     error: {
       load: 'Failed to load AI Ops briefings.',
       save: 'Failed to save AI Ops policy.',

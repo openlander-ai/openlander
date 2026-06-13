@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, ShieldCheck, Sparkles } from 'lucide-react';
+import { Bell, Check, Copy, ShieldCheck, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,9 @@ import {
   type AiOpsProjectMode,
   type AiOpsServiceOverrideMode,
 } from '@/lib/api/ai-ops';
+import { buildAiOpsAgentHandoffPrompt } from '@/lib/ai-ops-handoff';
 import { cn } from '@/lib/utils';
+import { useCopy } from '@/hooks/use-copy';
 
 type AiOpsScope = 'project' | 'service';
 
@@ -65,6 +68,7 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
   const [briefings, setBriefings] = useState<AiOpsBriefing[]>([]);
   const [selectedBriefing, setSelectedBriefing] = useState<AiOpsBriefing | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const { copy, isCopied } = useCopy();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,6 +145,10 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const copyAgentHandoff = (briefing: AiOpsBriefing) => {
+    void copy(buildAiOpsAgentHandoffPrompt(briefing), `ai-ops-handoff-${briefing.briefing_id}`);
   };
 
   const projectModeButtons: Array<{ value: AiOpsProjectMode; label: string }> = [
@@ -308,6 +316,37 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
                 label={t('aiOps.suggestedCall')}
                 value={formatJson(selectedBriefing.suggested_call)}
               />
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-medium text-foreground/80">
+                      {t('aiOps.agentHandoff.title')}
+                    </div>
+                    <p className="mt-1 text-[11px] text-foreground/60">
+                      {t('aiOps.agentHandoff.description')}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyAgentHandoff(selectedBriefing)}
+                    className="h-8 shrink-0 gap-1.5 text-xs"
+                  >
+                    {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`) ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                    {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`)
+                      ? t('aiOps.agentHandoff.copied')
+                      : t('aiOps.agentHandoff.copy')}
+                  </Button>
+                </div>
+                <pre className="max-h-48 overflow-auto rounded-md border border-agent/20 bg-agent/5 p-3 text-[11px] text-foreground/80">
+                  {buildAiOpsAgentHandoffPrompt(selectedBriefing)}
+                </pre>
+              </div>
               <CodeBlock
                 label={t('aiOps.evidence')}
                 value={formatJson(selectedBriefing.evidence)}
