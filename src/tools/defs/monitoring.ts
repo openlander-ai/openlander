@@ -14,6 +14,7 @@ import {
 } from '../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatAiOpsBriefingRow } from '../../monitor/ai-ops-briefing-format.js';
+import { normalizeAiOpsEvidenceForRead } from '../../monitor/ai-ops-evidence-normalizer.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import {
@@ -696,6 +697,30 @@ export const monitoringToolDefs: ToolDef[] = [
         recentDeployment,
         warnings,
       });
+      const observedAt = new Date().toISOString();
+      const evidenceContext = normalizeAiOpsEvidenceForRead(
+        buildDiagnoseServiceEvidence({
+          project,
+          service,
+          observedAt,
+          recentDeployment,
+          container,
+          logs: runtimeLogs,
+          httpCheck,
+          trafficCheck,
+          internalHttpCheck,
+          route,
+          dependencies,
+          warnings,
+          diagnosis,
+        }),
+        {
+          source: 'diagnose_service',
+          live: true,
+          serviceId: service.id,
+          observedAt,
+        },
+      );
 
       return {
         project: {
@@ -727,6 +752,8 @@ export const monitoringToolDefs: ToolDef[] = [
         ...(internalHttpCheck ? { internalHttpCheck } : {}),
         route,
         dependencies,
+        evidence: evidenceContext.evidence,
+        evidence_metadata: evidenceContext.metadata,
         ...(warnings.length > 0 ? { warnings } : {}),
         ...(diagnosis ? { diagnosis } : {}),
         ...(diagnosis?.suggested_call ? { suggested_call: diagnosis.suggested_call } : {}),
@@ -2292,6 +2319,114 @@ function summarizeRouteState(input: {
     internal_probe_reachable: input.internalHttpCheck?.['reachable'] ?? null,
     issues,
     consistent: issues.length === 0,
+  };
+}
+
+function routeHealthStatusFromCheck(
+  check: Record<string, unknown>,
+): 'healthy' | 'degraded' | 'unhealthy' | 'unknown' {
+  if (check['skipped'] === true) return 'unknown';
+  const statusCode = probeStatusCode(check);
+  if (check['reachable'] === false) return 'unhealthy';
+  if (statusCode === null) return check['reachable'] === true ? 'healthy' : 'unknown';
+  if (statusCode >= 500) return 'unhealthy';
+  if (statusCode >= 400) return 'degraded';
+  return 'healthy';
+}
+
+function routeHealthEvidenceFromCheck(check: Record<string, unknown>): Record<string, unknown> {
+  const statusCode = probeStatusCode(check);
+  return {
+    status: routeHealthStatusFromCheck(check),
+    ...(statusCode !== null ? { statusCode } : {}),
+    ...(typeof check['target_resolved'] === 'string' ? { target: check['target_resolved'] } : {}),
+    ...(typeof check['error'] === 'string' ? { message: check['error'] } : {}),
+  };
+}
+
+function representativeTrafficEvidenceFromDiagnosis(input: {
+  recentDeployment: Record<string, unknown>;
+  trafficCheck: Record<string, unknown> | null;
+}): Record<string, unknown> | null {
+  if (input.trafficCheck) {
+    const statusCode = probeStatusCode(input.trafficCheck);
+    return {
+      status: input.trafficCheck['reachable'] === true ? 'passed' : 'failed',
+      severity: statusCode !== null && statusCode >= 500 ? 'fail' : 'warning',
+      ...(statusCode !== null ? { status_code: statusCode } : {}),
+      ...(typeof input.trafficCheck['target_resolved'] === 'string'
+        ? { target: input.trafficCheck['target_resolved'] }
+        : {}),
+    };
+  }
+
+  const latest = asRecord(input.recentDeployment['latest']) ?? {};
+  const persisted = asRecord(latest['representativeTraffic']) ?? {};
+  return Object.keys(persisted).length > 0 ? persisted : null;
+}
+
+function deployLogEvidenceFromRecentDeployment(
+  recentDeployment: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const latest = asRecord(recentDeployment['latest']);
+  if (!latest) return null;
+  return {
+    id: latest['id'] ?? null,
+    status: latest['effectiveStatus'] ?? latest['status'] ?? null,
+    commitSha: latest['commitSha'] ?? null,
+    createdAt: latest['createdAt'] ?? null,
+    buildLogTail: latest['buildLogTail'] ?? null,
+  };
+}
+
+function containerEvidenceFromDiagnosis(
+  container: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    name: container['name'] ?? null,
+    running: container['running'] === true,
+    status: container['status'] ?? null,
+    exitCode: container['exitCode'] ?? null,
+    restartCount: container['restartCount'] ?? null,
+    startedAt: container['startedAt'] ?? null,
+  };
+}
+
+function buildDiagnoseServiceEvidence(input: {
+  project: ProjectRow;
+  service: ServiceRow;
+  observedAt: string;
+  recentDeployment: Record<string, unknown>;
+  container: Record<string, unknown>;
+  logs: Record<string, unknown>;
+  httpCheck: Record<string, unknown>;
+  trafficCheck: Record<string, unknown> | null;
+  internalHttpCheck: Record<string, unknown> | null;
+  route: Record<string, unknown>;
+  dependencies: Record<string, unknown>;
+  warnings: DiagnosticWarning[];
+  diagnosis: SynthesizedServiceDiagnosis | null;
+}): Record<string, unknown> {
+  return {
+    projectId: input.project.id,
+    serviceId: input.service.id,
+    serviceName: input.service.name,
+    observedAt: input.observedAt,
+    routeHealth: routeHealthEvidenceFromCheck(input.httpCheck),
+    representativeTraffic: representativeTrafficEvidenceFromDiagnosis({
+      recentDeployment: input.recentDeployment,
+      trafficCheck: input.trafficCheck,
+    }),
+    deployLog: deployLogEvidenceFromRecentDeployment(input.recentDeployment),
+    recentDeployment: input.recentDeployment,
+    recentLogTail: typeof input.logs['tail'] === 'string' ? input.logs['tail'] : null,
+    container: containerEvidenceFromDiagnosis(input.container),
+    httpCheck: input.httpCheck,
+    ...(input.internalHttpCheck ? { internalHttpCheck: input.internalHttpCheck } : {}),
+    route: input.route,
+    dependencies: input.dependencies,
+    ...(input.warnings.length > 0 ? { warnings: input.warnings } : {}),
+    ...(input.diagnosis ? { diagnosis: input.diagnosis } : {}),
   };
 }
 

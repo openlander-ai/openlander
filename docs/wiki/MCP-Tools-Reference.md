@@ -901,7 +901,11 @@ kept out of the list response.
 
 `get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
 The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
-when present, is explanatory only.
+when present, is explanatory only. Full briefing responses include
+`evidence_metadata` with `observed_at`, `live: false`, `input_token_estimate`,
+`input_cap_applied`, and `omitted_evidence` so agents know the evidence is an
+incident-time snapshot and whether any capped source should be fetched through a
+follow-up call. The token estimate is derived from the capped evidence payload.
 
 ### `get_logs`
 
@@ -976,6 +980,13 @@ confidence, evidence }` and, when a safe next operation exists, top-level
 `NO_RUNTIME_IMAGE`. Ambiguous cases omit `diagnosis` and keep raw `env`,
 `buildTimeEnv`, `container`, `logs`, `httpCheck`, `route`, and `dependencies`
 fields for agent review.
+
+`diagnose_service` also returns a normalized `evidence` block plus
+`evidence_metadata`. This metadata uses `live: true` because the action probes
+current host/container state, unlike AI Ops briefing evidence which is a
+snapshot from the incident time. If normalized evidence is input-capped,
+`omitted_evidence` names the capped field and includes a follow-up MCP call such
+as `get_logs` or `get_build_log` when OpenLander can derive one.
 
 Day-2 recovery loop: call `diagnose_service`, execute its top-level
 `suggested_call` when present, then read the action result's verification detail
