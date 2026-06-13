@@ -145,6 +145,7 @@ function toRequestIdentity(token: McpTokenIdentity | null): RequestIdentity | un
     mcpTokenType: token.tokenType,
     mcpScopeKind: token.scopeKind,
     mcpScopeProjectId: token.scopeProjectId,
+    mcpScopeServiceId: token.scopeServiceId,
   };
 }
 

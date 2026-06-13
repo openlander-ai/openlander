@@ -150,7 +150,7 @@ describe('CLI lifecycle commands (1.0 GA: foreground-only)', () => {
     );
 
     it(
-      'requires explicit confirmation before rotating org MCP tokens',
+      'requires explicit confirmation before rotating instance-wide MCP tokens',
       () => {
         const result = runCli(['mcp', 'token', 'rotate', '--json'], tmpHome);
 

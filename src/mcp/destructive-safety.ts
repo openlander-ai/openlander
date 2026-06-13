@@ -1,14 +1,7 @@
-import type { AppContext } from '../app.js';
-import type { RequestIdentity } from '../types/identity.js';
-import {
-  OperationRequiresHumanUiError,
-  ProjectNotFoundError,
-  ScopeMismatchError,
-  ServiceNotFoundError,
-} from '../errors.js';
-import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
+import { OperationRequiresHumanUiError } from '../errors.js';
 import { HUMAN_UI_ONLY_TOOL_SET, APPROVAL_HOLD_TOOL_SET } from './mcp-restricted-actions.js';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
+import { assertMcpActiveScope, resolveMcpScopeTarget } from './scope-policy.js';
 import {
   afterApprovalGuidanceForTool,
   buildMcpActionStatusCall,
@@ -16,6 +9,8 @@ import {
   type LifecycleEffect,
   type McpCompositeCall,
 } from './agent-lifecycle-contract.js';
+
+export { assertMcpActiveScope, resolveMcpTargetProjectId } from './scope-policy.js';
 
 // Derived from the single policy source (mcp-restricted-actions.ts). Only real
 // tool defs land here; deployable/project lifecycle aliases live in that module's
@@ -41,90 +36,6 @@ interface SafetyResult {
   safe_alternatives?: Record<string, unknown>[];
   do_not_substitute?: string[];
   _agent_guidance?: Record<string, unknown>;
-}
-
-function readString(args: Record<string, unknown>, ...keys: string[]): string {
-  for (const key of keys) {
-    const value = args[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return '';
-}
-
-async function resolveProjectIdByName(appCtx: AppContext, name: string): Promise<string | null> {
-  if (!name) return null;
-  const project = (await appCtx.db.getProject(name)) ?? (await appCtx.db.getProjectByName(name));
-  if (!project) throw new ProjectNotFoundError(name);
-  return project.id;
-}
-
-function isManagedKind(kind: string): boolean {
-  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
-}
-
-export async function resolveMcpTargetProjectId(
-  appCtx: AppContext,
-  args: Record<string, unknown>,
-  identity?: RequestIdentity,
-): Promise<string | null> {
-  const explicitProjectId = readString(args, 'project_id', 'target_project_id', 'projectId');
-  if (explicitProjectId) return explicitProjectId;
-
-  const projectName = readString(args, 'project_name', 'projectName');
-  const serviceId = readString(args, 'service_id', 'serviceId');
-  if (serviceId) {
-    const service = await appCtx.db.getService(serviceId);
-    if (!service) throw new ServiceNotFoundError(serviceId);
-    return service.project_id;
-  }
-
-  const serviceName = readString(args, 'service_name', 'serviceName');
-  if (serviceName) {
-    const services = await appCtx.db.listServices();
-    const projectScopeId = projectName ? await resolveProjectIdByName(appCtx, projectName) : null;
-    const identityScopeProjectId =
-      identity?.mcpScopeKind === 'project' ? (identity.mcpScopeProjectId ?? null) : null;
-    const scoped = services
-      .filter((service) => service.name === serviceName)
-      .filter((service) => !projectScopeId || service.project_id === projectScopeId)
-      .filter(
-        (service) =>
-          !identityScopeProjectId ||
-          projectScopeId ||
-          service.project_id === identityScopeProjectId,
-      )
-      .filter((service) => !isManagedKind(service.kind));
-
-    if (scoped.length === 1) return scoped[0]?.project_id ?? null;
-    if (projectScopeId) return projectScopeId;
-    return null;
-  }
-
-  if (projectName) return await resolveProjectIdByName(appCtx, projectName);
-  return null;
-}
-
-export function assertMcpActiveScope(
-  _appCtx: AppContext,
-  targetProjectId: string | null,
-  atExecute = false,
-  identity?: RequestIdentity,
-): Promise<void> {
-  // Scope only: this intentionally does not reject archived lifecycle state.
-  // ToolDefs/pipeline own lifecycle mutability so restore actions can target archived services.
-  if (!targetProjectId) return Promise.resolve();
-
-  if (identity?.mcpScopeKind === 'project') {
-    const tokenScopeProjectId = identity.mcpScopeProjectId ?? null;
-    if (!tokenScopeProjectId || tokenScopeProjectId === targetProjectId) {
-      return Promise.resolve();
-    }
-    return Promise.reject(new ScopeMismatchError(tokenScopeProjectId, targetProjectId, atExecute));
-  }
-
-  // v0.1 retracted the Active Project chip. Keep the DB column cold for v0.2,
-  // but do not let stale upgraded rows pin org-scoped tokens invisibly.
-  return Promise.resolve();
 }
 
 function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
@@ -163,8 +74,16 @@ export async function maybeHandleMcpSafety(
 ): Promise<SafetyResult | undefined> {
   if (context.target !== 'mcp') return undefined;
 
-  const targetProjectId = await resolveMcpTargetProjectId(context.appCtx, args, context.identity);
-  await assertMcpActiveScope(context.appCtx, targetProjectId, false, context.identity);
+  const target = await resolveMcpScopeTarget(context.appCtx, args, context.identity);
+  const targetProjectId = target?.projectId ?? null;
+  const targetServiceId = target?.serviceId ?? null;
+  await assertMcpActiveScope(
+    context.appCtx,
+    targetProjectId,
+    false,
+    context.identity,
+    targetServiceId,
+  );
 
   if (GROUP_A_HUMAN_UI_ONLY.has(def.name) && !isAllowedMcpPreview(def, args)) {
     return buildHumanUiOnlyResponse(def.name);
@@ -184,6 +103,7 @@ export async function maybeHandleMcpSafety(
     tool: def.name,
     args,
     targetProjectId,
+    targetServiceId,
     identity: context.identity
       ? {
           source: context.identity.source,
@@ -192,6 +112,7 @@ export async function maybeHandleMcpSafety(
           mcpTokenType: context.identity.mcpTokenType,
           mcpScopeKind: context.identity.mcpScopeKind,
           mcpScopeProjectId: context.identity.mcpScopeProjectId,
+          mcpScopeServiceId: context.identity.mcpScopeServiceId,
         }
       : undefined,
     requestedAt: new Date().toISOString(),

@@ -50,6 +50,13 @@
       "when": 1781319401000,
       "tag": "0006_ai_ops_summary_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781331941000,
+      "tag": "0007_pat_service_scope",
+      "breakpoints": true
     }
   ]
 }

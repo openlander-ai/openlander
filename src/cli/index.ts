@@ -86,12 +86,12 @@ function printMcpTokenResult(
   }
 
   if (result.token) {
-    console.log(pc.green(`MCP org token ${status}. Store this plaintext securely:`));
+    console.log(pc.green(`Instance-wide MCP token ${status}. Store this plaintext securely:`));
     console.log(result.token);
     return;
   }
 
-  console.log(pc.yellow('An active MCP org token already exists.'));
+  console.log(pc.yellow('An active instance-wide MCP token already exists.'));
   console.log(`Token: mcp_...${result.row.token_suffix}`);
   if (result.row.expires_at) console.log(`Expires: ${result.row.expires_at}`);
   console.log(
@@ -120,7 +120,7 @@ async function runMcpTokenEnsure(options: McpTokenCommandOptions): Promise<void>
 async function runMcpTokenRotate(options: McpTokenCommandOptions): Promise<void> {
   if (!options.yes) {
     printCommandError(
-      'Rotating the MCP org token revokes existing agent tokens. Re-run with --yes to continue.',
+      'Rotating the instance-wide MCP token revokes existing agent tokens. Re-run with --yes to continue.',
       options.json,
     );
     return;
@@ -761,11 +761,13 @@ const mcpCommand = program
     await startMcpServer(ctx);
   });
 
-const mcpTokenCommand = mcpCommand.command('token').description('Manage local MCP org tokens');
+const mcpTokenCommand = mcpCommand
+  .command('token')
+  .description('Manage local instance-wide MCP tokens');
 
 mcpTokenCommand
   .command('ensure')
-  .description('Create an MCP org token if one is missing')
+  .description('Create an instance-wide MCP token if one is missing')
   .option('--name <name>', 'Token name', 'OpenLander local CLI')
   .option('--expires-in-days <days>', 'Token expiry in days', String(DEFAULT_MCP_TOKEN_EXPIRY_DAYS))
   .option('--json', 'Print machine-readable JSON')
@@ -773,11 +775,11 @@ mcpTokenCommand
 
 mcpTokenCommand
   .command('rotate')
-  .description('Rotate the MCP org token, revoking existing org tokens')
+  .description('Rotate the instance-wide MCP token, revoking existing instance-wide tokens')
   .option('--name <name>', 'Token name', 'OpenLander local CLI')
   .option('--expires-in-days <days>', 'Token expiry in days', String(DEFAULT_MCP_TOKEN_EXPIRY_DAYS))
   .option('--json', 'Print machine-readable JSON')
-  .option('--yes', 'Confirm revoking existing org MCP tokens')
+  .option('--yes', 'Confirm revoking existing instance-wide MCP tokens')
   .action(runMcpTokenRotate);
 
 program.parse();

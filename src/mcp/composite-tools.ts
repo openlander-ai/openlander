@@ -6,6 +6,7 @@ import {
   HUMAN_UI_ONLY_ALIAS_SET,
   PROJECT_LIFECYCLE_ALIAS_SET,
 } from './mcp-restricted-actions.js';
+import { maybeRejectMcpScope } from './scope-policy.js';
 import {
   buildActionContract,
   suggestedParamsForRetry,
@@ -492,6 +493,11 @@ function createCompositeTool(
           parsed.error.message,
           params ?? {},
         );
+      }
+
+      const scopeResult = await maybeRejectMcpScope(def, parsed.data, context);
+      if (scopeResult !== undefined) {
+        return scopeResult;
       }
 
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);

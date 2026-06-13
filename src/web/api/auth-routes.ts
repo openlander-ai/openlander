@@ -47,14 +47,16 @@ interface PatTokenRequestBody {
   expires_in_days?: unknown;
   scope_kind?: unknown;
   scope_project_id?: unknown;
+  scope_service_id?: unknown;
 }
 
 function tokenMetadata(token: {
   id: string;
   name: string;
   token_suffix: string;
-  scope_kind: 'org' | 'project';
+  scope_kind: 'org' | 'project' | 'service';
   scope_project_id: string | null;
+  scope_service_id: string | null;
   token_type: 'pat' | 'service' | 'legacy-default';
   last_used_at: string | null;
   expires_at: string | null;
@@ -68,6 +70,7 @@ function tokenMetadata(token: {
     scope: {
       kind: token.scope_kind,
       projectId: token.scope_project_id,
+      serviceId: token.scope_service_id,
     },
     tokenType: token.token_type,
     lastUsedAt: token.last_used_at,
@@ -355,7 +358,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     const scope = c.req.query('scope');
     let options:
-      | { scopeKind?: 'org' | 'project'; scopeProjectId?: string | null; includeRevoked?: boolean }
+      | {
+          scopeKind?: 'org' | 'project' | 'service';
+          scopeProjectId?: string | null;
+          scopeServiceId?: string | null;
+          includeRevoked?: boolean;
+        }
       | undefined;
     if (scope === 'org') {
       options = { scopeKind: 'org' };
@@ -368,12 +376,21 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
         );
       }
       options = { scopeKind: 'project', scopeProjectId: projectId };
+    } else if (scope?.startsWith('service:')) {
+      const serviceId = scope.slice('service:'.length);
+      if (!serviceId) {
+        return c.json(
+          { error: 'INVALID_FIELD', code: 'INVALID_FIELD', message: 'scope service id is empty.' },
+          400,
+        );
+      }
+      options = { scopeKind: 'service', scopeServiceId: serviceId };
     } else if (scope !== undefined) {
       return c.json(
         {
           error: 'INVALID_FIELD',
           code: 'INVALID_FIELD',
-          message: 'scope must be "org" or "project:<id>".',
+          message: 'scope must be "org", "project:<id>", or "service:<id>".',
         },
         400,
       );
@@ -462,7 +479,9 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     const scopeKind =
       body.scope_kind === undefined || body.scope_kind === null
         ? 'org'
-        : body.scope_kind === 'org' || body.scope_kind === 'project'
+        : body.scope_kind === 'org' ||
+            body.scope_kind === 'project' ||
+            body.scope_kind === 'service'
           ? body.scope_kind
           : null;
     if (!scopeKind) {
@@ -470,7 +489,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
         {
           error: 'INVALID_FIELD',
           code: 'INVALID_FIELD',
-          message: 'scope_kind must be "org" or "project".',
+          message: 'scope_kind must be "org", "project", or "service".',
         },
         400,
       );
@@ -480,8 +499,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       scopeKind === 'project' && typeof body.scope_project_id === 'string'
         ? body.scope_project_id.trim()
         : null;
+    const scopeServiceId =
+      scopeKind === 'service' && typeof body.scope_service_id === 'string'
+        ? body.scope_service_id.trim()
+        : null;
     if (
-      scopeKind === 'org' &&
+      scopeKind !== 'project' &&
       typeof body.scope_project_id === 'string' &&
       body.scope_project_id.trim()
     ) {
@@ -490,6 +513,20 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
           error: 'INVALID_FIELD',
           code: 'INVALID_FIELD',
           message: 'scope_project_id is only valid for project-scoped tokens.',
+        },
+        400,
+      );
+    }
+    if (
+      scopeKind !== 'service' &&
+      typeof body.scope_service_id === 'string' &&
+      body.scope_service_id.trim()
+    ) {
+      return c.json(
+        {
+          error: 'INVALID_FIELD',
+          code: 'INVALID_FIELD',
+          message: 'scope_service_id is only valid for service-scoped tokens.',
         },
         400,
       );
@@ -517,6 +554,29 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
         );
       }
     }
+    if (scopeKind === 'service') {
+      if (!ctx || !scopeServiceId) {
+        return c.json(
+          {
+            error: 'SERVICE_REQUIRED',
+            code: 'SERVICE_REQUIRED',
+            message: 'scope_service_id is required for service-scoped tokens.',
+          },
+          400,
+        );
+      }
+      const service = await ctx.db.getService(scopeServiceId);
+      if (!service) {
+        return c.json(
+          {
+            error: 'SERVICE_NOT_FOUND',
+            code: 'SERVICE_NOT_FOUND',
+            message: `Service ${scopeServiceId} not found.`,
+          },
+          404,
+        );
+      }
+    }
 
     const expiresInDays = parsePatExpiryDays(body.expires_in_days);
     if (expiresInDays === null) {
@@ -535,6 +595,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       name,
       scopeKind,
       scopeProjectId,
+      scopeServiceId,
       expiresAt,
     });
     return c.json({
@@ -545,6 +606,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       scope: {
         kind: issued.row.scope_kind,
         projectId: issued.row.scope_project_id,
+        serviceId: issued.row.scope_service_id,
       },
     });
   });

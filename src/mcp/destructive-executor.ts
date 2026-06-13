@@ -13,6 +13,7 @@ interface DestructiveMcpPlan {
   tool: string;
   args: Record<string, unknown>;
   targetProjectId: string | null;
+  targetServiceId?: string | null;
   identity?: RequestIdentity;
   requestedAt: string;
 }
@@ -46,6 +47,8 @@ function parsePlan(plan: string | null): DestructiveMcpPlan {
     args: candidate.args,
     targetProjectId:
       typeof candidate.targetProjectId === 'string' ? candidate.targetProjectId : null,
+    targetServiceId:
+      typeof candidate.targetServiceId === 'string' ? candidate.targetServiceId : null,
     identity:
       candidate.identity && typeof candidate.identity === 'object' ? candidate.identity : undefined,
     requestedAt: typeof candidate.requestedAt === 'string' ? candidate.requestedAt : '',
@@ -83,7 +86,13 @@ export async function handleDestructiveMcpApproval(
       return;
     }
 
-    await assertMcpActiveScope(ctx, plan.targetProjectId, true, plan.identity);
+    await assertMcpActiveScope(
+      ctx,
+      plan.targetProjectId,
+      true,
+      plan.identity,
+      plan.targetServiceId,
+    );
     await ctx.db.updateActionRunStatus(actionRun.id, 'running');
     const result = await def.execute(plan.args, {
       target: 'mcp',

@@ -11,6 +11,7 @@ function createHarness() {
     token_suffix: 'abcd',
     scope_kind: 'project' as const,
     scope_project_id: 'proj-1',
+    scope_service_id: null,
     token_type: 'pat' as const,
     capabilities: null,
     last_used_at: null,
@@ -26,6 +27,16 @@ function createHarness() {
     token_suffix: 'org1',
     scope_kind: 'org' as const,
     scope_project_id: null,
+  };
+  const serviceRow = {
+    ...issuedRow,
+    id: 'pat-service',
+    name: 'Open in Agent handoff',
+    token_suffix: 'svc1',
+    scope_kind: 'service' as const,
+    scope_project_id: null,
+    scope_service_id: 'service-1',
+    token_type: 'service' as const,
   };
   const authService = {
     validateSession: vi.fn(async (token: string) => token === 'session-ok'),
@@ -52,10 +63,15 @@ function createHarness() {
       getProject: vi.fn(async (projectId: string) =>
         projectId === 'proj-1' ? { id: 'proj-1', name: 'demo' } : null,
       ),
+      getService: vi.fn(async (serviceId: string) =>
+        serviceId === 'service-1'
+          ? { id: 'service-1', name: 'web', project_id: 'proj-1', kind: 'git' }
+          : null,
+      ),
     },
   } as unknown as AppContext;
   const app = createAuthRoutes(authService, ctx);
-  return { app, authService };
+  return { app, authService, ctx, serviceRow };
 }
 
 describe('PAT token routes', () => {
@@ -117,6 +133,60 @@ describe('PAT token routes', () => {
     );
   });
 
+  it('issues service-scoped PATs after validating the service target', async () => {
+    const { app, authService, ctx, serviceRow } = createHarness();
+    vi.mocked(authService.issuePatToken).mockResolvedValueOnce({
+      token: 'olp_service_plaintext',
+      row: serviceRow,
+    });
+
+    const res = await app.request('/tokens', {
+      method: 'POST',
+      headers: { Cookie: 'ol_session=session-ok', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Open in Agent handoff',
+        scope_kind: 'service',
+        scope_service_id: 'service-1',
+        expires_in_days: 1,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      id: 'pat-service',
+      token: 'olp_service_plaintext',
+      suffix: 'svc1',
+      scope: { kind: 'service', projectId: null, serviceId: 'service-1' },
+    });
+    expect(ctx.db.getService).toHaveBeenCalledWith('service-1');
+    expect(authService.issuePatToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Open in Agent handoff',
+        scopeKind: 'service',
+        scopeProjectId: null,
+        scopeServiceId: 'service-1',
+      }),
+    );
+  });
+
+  it('rejects service-scoped PATs when the service target does not exist', async () => {
+    const { app, authService } = createHarness();
+
+    const res = await app.request('/tokens', {
+      method: 'POST',
+      headers: { Cookie: 'ol_session=session-ok', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Missing service',
+        scope_kind: 'service',
+        scope_service_id: 'missing-service',
+      }),
+    });
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toMatchObject({ code: 'SERVICE_NOT_FOUND' });
+    expect(authService.issuePatToken).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid token scope instead of silently issuing org-wide tokens', async () => {
     const { app, authService } = createHarness();
 
@@ -154,6 +224,29 @@ describe('PAT token routes', () => {
     expect(body.tokens[0]).not.toHaveProperty('token_hash');
   });
 
+  it('lists service-scoped token metadata by service scope filter', async () => {
+    const { app, authService, serviceRow } = createHarness();
+    vi.mocked(authService.listPatTokens).mockResolvedValueOnce([serviceRow]);
+
+    const res = await app.request('/tokens?scope=service:service-1', {
+      headers: { Cookie: 'ol_session=session-ok' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { tokens: Array<Record<string, unknown>> };
+    expect(body.tokens[0]).toMatchObject({
+      id: 'pat-service',
+      name: 'Open in Agent handoff',
+      suffix: 'svc1',
+      scope: { kind: 'service', projectId: null, serviceId: 'service-1' },
+      tokenType: 'service',
+    });
+    expect(authService.listPatTokens).toHaveBeenCalledWith({
+      scopeKind: 'service',
+      scopeServiceId: 'service-1',
+    });
+  });
+
   it('returns the active v0.1 MCP org token metadata without plaintext', async () => {
     const { app, authService } = createHarness();
     vi.mocked(authService.listPatTokens).mockResolvedValueOnce([
@@ -164,6 +257,7 @@ describe('PAT token routes', () => {
         token_suffix: 'l3g',
         scope_kind: 'org',
         scope_project_id: null,
+        scope_service_id: null,
         token_type: 'legacy-default',
         capabilities: null,
         last_used_at: null,
@@ -179,6 +273,7 @@ describe('PAT token routes', () => {
         token_suffix: 'org1',
         scope_kind: 'org',
         scope_project_id: null,
+        scope_service_id: null,
         token_type: 'pat',
         capabilities: null,
         last_used_at: null,

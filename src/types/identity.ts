@@ -18,6 +18,7 @@ export interface RequestIdentity {
   /** v5.1 MCP PAT metadata. Legacy single-token auth is represented as org scope. */
   mcpTokenId?: string | null;
   mcpTokenType?: 'legacy-default' | 'pat' | 'service';
-  mcpScopeKind?: 'org' | 'project';
+  mcpScopeKind?: 'org' | 'project' | 'service';
   mcpScopeProjectId?: string | null;
+  mcpScopeServiceId?: string | null;
 }

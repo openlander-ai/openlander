@@ -57,7 +57,11 @@ export interface McpPatTokenMetadata {
   id: string;
   name: string;
   suffix: string;
-  scope: { kind: 'org' | 'project'; projectId: string | null };
+  scope: {
+    kind: 'org' | 'project' | 'service';
+    projectId: string | null;
+    serviceId: string | null;
+  };
   tokenType: 'pat' | 'service' | 'legacy-default';
   lastUsedAt: string | null;
   expiresAt: string | null;
