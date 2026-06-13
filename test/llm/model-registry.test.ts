@@ -11,6 +11,7 @@ import { LlmCircuitBreaker } from '../../src/llm/llm-circuit-breaker.js';
 import { LlmErrorType } from '../../src/llm/llm-error-types.js';
 import { buildEncryptedAiOpsProviderEntry } from '../../src/llm/provider-config.js';
 import { _resetCachedKey } from '../../src/env/crypto.js';
+import { normalizeLlmConfig, type LLMProviderConfig } from '../../src/config/index.js';
 
 vi.mock('../../src/llm/index.js', () => ({
   createModel: vi.fn((config: { model?: string }) => ({
@@ -127,6 +128,56 @@ describe('ModelRegistry', () => {
       authToken: undefined,
       model: 'gpt-4.1-mini',
       baseURL: 'https://openrouter.ai/api/v1',
+    });
+  });
+
+  it('does not synthesize an active AI Ops model for a fresh install without credentials', () => {
+    const freshInstall: LLMProviderConfig = {
+      provider: 'gemini',
+      apiKey: '',
+      authToken: '',
+      model: 'gemini-2.5-flash',
+    };
+    const registry = new ModelRegistry(normalizeLlmConfig(freshInstall), mockEventBus);
+
+    const model = registry.getModel('aiOpsBriefing');
+
+    expect(model).toBeNull();
+    expect(createModel).not.toHaveBeenCalled();
+  });
+
+  it('resolves a persisted AI Ops route even when the default route is disabled', () => {
+    const persisted: LLMProviderConfig = {
+      provider: 'gemini',
+      apiKey: '',
+      authToken: '',
+      model: 'gemini-2.5-flash',
+      providers: {
+        aiops: {
+          provider: 'gemini',
+          apiKey: 'gemini-key',
+          defaultModel: 'gemini-2.5-flash',
+        },
+      },
+      defaultRoute: { providerId: '__none__' },
+      routes: {
+        aiOpsBriefing: {
+          providerId: 'aiops',
+          model: 'gemini-2.5-flash',
+        },
+      },
+    };
+    const registry = new ModelRegistry(normalizeLlmConfig(persisted), mockEventBus);
+
+    const model = registry.getModel('aiOpsBriefing');
+
+    expect(model).not.toBeNull();
+    expect(model).toMatchObject({ modelId: 'gemini-2.5-flash' });
+    expect(createModel).toHaveBeenCalledWith({
+      provider: 'gemini',
+      apiKey: 'gemini-key',
+      authToken: undefined,
+      model: 'gemini-2.5-flash',
     });
   });
 

@@ -511,6 +511,10 @@ export type NormalizedLlmConfig = LLMProviderConfig & {
   defaultRoute: NonNullable<LLMProviderConfig['defaultRoute']>;
 };
 
+function hasLegacyLlmCredential(llm: LLMProviderConfig): boolean {
+  return Boolean(llm.authToken.trim() || llm.apiKey.trim());
+}
+
 /**
  * Normalizes LLM config for use with ModelRegistry.
  * If the new `providers` field is absent, synthesizes it from legacy single-provider fields.
@@ -519,6 +523,23 @@ export type NormalizedLlmConfig = LLMProviderConfig & {
 export function normalizeLlmConfig(llm: LLMProviderConfig): NormalizedLlmConfig {
   if (llm.providers && llm.defaultRoute) {
     return llm as NormalizedLlmConfig;
+  }
+
+  if (llm.providers) {
+    const providerIds = Object.keys(llm.providers);
+    return {
+      ...llm,
+      providers: llm.providers,
+      defaultRoute: { providerId: providerIds[0] ?? '__none__' },
+    };
+  }
+
+  if (!hasLegacyLlmCredential(llm)) {
+    return {
+      ...llm,
+      providers: {},
+      defaultRoute: { providerId: '__none__' },
+    };
   }
 
   return {

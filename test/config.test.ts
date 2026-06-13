@@ -195,6 +195,35 @@ describeConfig('normalizeLlmConfig', () => {
     expect(normalized.routes).toEqual({ buildDebugger: { providerId: 'smart' } });
   });
 
+  it('preserves a saved AI Ops briefing route when the default route is disabled', () => {
+    const persisted: LLMProviderConfig = {
+      ...legacyConfig,
+      providers: {
+        aiops: {
+          provider: 'gemini',
+          apiKey: 'aiops-key',
+          defaultModel: 'gemini-2.5-flash',
+        },
+      },
+      defaultRoute: { providerId: '__none__' },
+      routes: {
+        aiOpsBriefing: {
+          providerId: 'aiops',
+          model: 'gemini-2.5-flash',
+        },
+      },
+    };
+
+    const normalized = normalizeLlmConfig(persisted);
+
+    expect(normalized.providers).toBe(persisted.providers);
+    expect(normalized.defaultRoute).toBe(persisted.defaultRoute);
+    expect(normalized.routes?.aiOpsBriefing).toEqual({
+      providerId: 'aiops',
+      model: 'gemini-2.5-flash',
+    });
+  });
+
   it('does not mutate the original config object', () => {
     const original = { ...legacyConfig };
     normalizeLlmConfig(original);
@@ -202,6 +231,20 @@ describeConfig('normalizeLlmConfig', () => {
     expect(original).toEqual(legacyConfig);
     expect(original).not.toHaveProperty('providers');
     expect(original).not.toHaveProperty('defaultRoute');
+  });
+
+  it('keeps fresh installs disabled when no legacy credential is configured', () => {
+    const freshInstall: LLMProviderConfig = {
+      provider: 'gemini',
+      apiKey: '',
+      model: 'gemini-2.5-flash',
+      authToken: '',
+    };
+
+    const normalized = normalizeLlmConfig(freshInstall);
+
+    expect(normalized.providers).toEqual({});
+    expect(normalized.defaultRoute).toEqual({ providerId: '__none__' });
   });
 
   it('synthesizes when providers is present but defaultRoute is missing', () => {
@@ -214,8 +257,8 @@ describeConfig('normalizeLlmConfig', () => {
 
     const normalized = normalizeLlmConfig(partial);
 
-    expect(normalized.defaultRoute).toEqual({ providerId: 'default' });
-    expect(normalized.providers.default).toBeDefined();
+    expect(normalized.defaultRoute).toEqual({ providerId: 'custom' });
+    expect(normalized.providers).toBe(partial.providers);
   });
 });
 

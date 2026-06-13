@@ -23,6 +23,7 @@ export default defineConfig({
       'test/env-requirements.test.ts',
       'test/env-manager-scope.test.ts',
       'test/env-roundtrip.test.ts',
+      'test/app-model-registry-boot.test.ts',
       'test/channels-telegram-webhook.test.ts',
       'test/github-oauth.test.ts',
       'test/mcp-service-tools.test.ts',
