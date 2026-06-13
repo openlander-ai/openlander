@@ -293,6 +293,15 @@ describe('AI Ops routes', () => {
       runtime_log: 'Authorization: Bearer [REDACTED]',
       env: { STRIPE_API_KEY: '[REDACTED]' },
     });
+    const evidenceMetadata = body.briefing.evidence_metadata as Record<string, unknown>;
+    expect(evidenceMetadata).toMatchObject({
+      observed_at: '2026-06-11T00:00:00.000Z',
+      live: false,
+      source: 'briefing_snapshot',
+      input_cap_applied: false,
+      omitted_evidence: [],
+    });
+    expect(evidenceMetadata.input_token_estimate).toBeGreaterThan(0);
     expect(body.briefing).toMatchObject({
       summary_source: 'deterministic',
       summary_status: 'fallback',

@@ -1,5 +1,5 @@
 import type { AiOpsBriefingRow } from '../db/types.js';
-import { redactAiOpsEvidence } from './ai-ops-evidence-redaction.js';
+import { normalizeAiOpsEvidenceForRead } from './ai-ops-evidence-normalizer.js';
 
 function parseJsonRecord(value: string | null): Record<string, unknown> | null {
   if (!value) return null;
@@ -19,8 +19,13 @@ export function formatAiOpsBriefingRow(
   opts: { includeEvidence?: boolean } = {},
 ) {
   const suggestedCall = parseJsonRecord(row.suggested_call_json);
-  const evidence = opts.includeEvidence
-    ? redactAiOpsEvidence(parseJsonRecord(row.evidence_json))
+  const evidenceContext = opts.includeEvidence
+    ? normalizeAiOpsEvidenceForRead(parseJsonRecord(row.evidence_json), {
+        source: 'briefing_snapshot',
+        live: false,
+        serviceId: row.service_id,
+        observedAt: row.created_at,
+      })
     : undefined;
   const usage = parseJsonRecord(row.llm_summary_usage_json);
   const summarySource = row.llm_summary ? 'llm' : 'deterministic';
@@ -48,7 +53,9 @@ export function formatAiOpsBriefingRow(
     fingerprint: row.fingerprint,
     dedupe_key: row.dedupe_key,
     suggested_call: suggestedCall,
-    ...(evidence ? { evidence } : {}),
+    ...(evidenceContext
+      ? { evidence: evidenceContext.evidence, evidence_metadata: evidenceContext.metadata }
+      : {}),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

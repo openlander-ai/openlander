@@ -48,6 +48,20 @@ export interface AiOpsUsageSummary {
   count: number;
 }
 
+export interface AiOpsEvidenceMetadata {
+  observed_at: string;
+  live: boolean;
+  source: 'briefing_snapshot' | 'diagnose_service';
+  input_token_estimate: number;
+  input_cap_applied: boolean;
+  omitted_evidence: Array<{
+    path: string;
+    reason: 'input_cap';
+    omitted_chars: number;
+    follow_up_call?: Record<string, unknown>;
+  }>;
+}
+
 export interface AiOpsBriefing {
   briefing_id: string;
   project_id: string;
@@ -69,6 +83,7 @@ export interface AiOpsBriefing {
   dedupe_key: string | null;
   suggested_call: Record<string, unknown> | null;
   evidence?: Record<string, unknown>;
+  evidence_metadata?: AiOpsEvidenceMetadata;
   usage?: AiOpsUsageSummary;
   created_at: string;
   updated_at: string;

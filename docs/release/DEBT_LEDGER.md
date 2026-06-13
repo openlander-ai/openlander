@@ -67,6 +67,28 @@ a release should be recorded here so follow-up work is explicit.
   provider-specific `finishReason="length"` behavior is confirmed outside the
   mocked unit tests.
 
+- **AI Ops evidence normalizer response expansion:** existing
+  `get_ai_ops_briefing` and `diagnose_service` read responses now expose
+  normalized evidence freshness and input-budget metadata through
+  `evidence_metadata`; `diagnose_service` also adds a normalized `evidence`
+  block derived from the same live diagnostic data it already returned.
+- **Why accepted:** AI Ops briefing evidence is an incident-time snapshot while
+  `diagnose_service` is a live probe. Agents need explicit `observed_at`,
+  `live`, `input_token_estimate`, `input_cap_applied`, and `omitted_evidence`
+  fields so they do not confuse freshness or miss capped log/build evidence.
+- **Vocab review:** no action name, endpoint, response helper-call field, or
+  target vocabulary is introduced. The new fields are read-only diagnostic
+  details under existing briefing and monitor responses.
+- **Endpoint collision check:** no MCP action, composite slot, REST route, or
+  table is added. The change extends existing `openlander_monitor`
+  `get_ai_ops_briefing` / `diagnose_service` response bodies and the existing
+  AI Ops web briefing detail response.
+- **Follow-up:** keep any future on-demand context work inside
+  `diagnose_service` or the briefing read model unless a separate action clears
+  the freeze gate. The legacy flat `diagnose_service` fields remain during the
+  additive migration; after agent clients adopt `evidence_metadata`, evaluate
+  whether duplicated flat fields should be deprecated or gated.
+
 ## v0.1.17
 
 - **Domain route visibility response expansion:** existing

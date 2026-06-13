@@ -545,6 +545,13 @@ describe('AI Ops briefing monitor actions', () => {
       route_health: { reachable: false, status_code: 502 },
       container_state: { running: true },
     });
+    expect(briefing.evidence_metadata).toMatchObject({
+      observed_at: '2026-06-11T00:00:00.000Z',
+      live: false,
+      source: 'briefing_snapshot',
+      input_cap_applied: false,
+      omitted_evidence: [],
+    });
   });
 
   it('returns not_found for missing briefing ids', async () => {
@@ -967,6 +974,29 @@ describe('diagnose_service tool', () => {
         target_resolved: 'http://ol-app:3000/admin',
       });
       expect(JSON.stringify(result.httpCheck)).not.toContain('127.0.0.1');
+      expect(result.evidence).toMatchObject({
+        projectId: 'app',
+        serviceId: 'app__svc',
+        serviceName: 'web',
+        routeHealth: {
+          status: 'unhealthy',
+        },
+        container: {
+          name: 'ol-app',
+          running: false,
+          status: 'exited',
+          exitCode: 1,
+        },
+      });
+      const evidenceMetadata = result.evidence_metadata as Record<string, unknown>;
+      expect(evidenceMetadata).toMatchObject({
+        live: true,
+        source: 'diagnose_service',
+        input_cap_applied: false,
+        omitted_evidence: [],
+      });
+      expect(typeof evidenceMetadata['observed_at']).toBe('string');
+      expect(evidenceMetadata['input_token_estimate']).toEqual(expect.any(Number));
       const deployment = result.recentDeployment as {
         latest?: { buildLogTailSanitized?: boolean; fullBuildLogHint?: string };
       };
@@ -1501,6 +1531,43 @@ describe('service-targeted monitoring tools', () => {
         'service_id, service_name, project_id, project_name, or container_name is required',
       );
     }
+  });
+
+  it('diagnose_service caps normalized evidence and records omitted follow-up calls', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const longLog = Array.from({ length: 900 }, (_, index) => `runtime line ${String(index)}`).join(
+      '\n',
+    );
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce(longLog);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: service.id, lines: 900 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    const evidence = result.evidence as Record<string, unknown>;
+    expect(evidence.recentLogTail).toContain('truncated by OpenLander evidence cap');
+    expect(evidence.recentLogTail).not.toContain('runtime line 899');
+    const metadata = result.evidence_metadata as {
+      input_cap_applied: boolean;
+      omitted_evidence: Array<{
+        path: string;
+        follow_up_call?: { tool?: string; action?: string; params?: Record<string, unknown> };
+      }>;
+    };
+    expect(metadata.input_cap_applied).toBe(true);
+    expect(metadata.omitted_evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'recentLogTail',
+          follow_up_call: {
+            tool: 'openlander_monitor',
+            action: 'get_logs',
+            params: { service_id: service.id, lines: 500 },
+          },
+        }),
+      ]),
+    );
   });
 
   it('diagnose_service accepts project_id targets', async () => {
