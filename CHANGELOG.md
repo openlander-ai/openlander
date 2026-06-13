@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.10] - 2026-06-13
+
+### Added
+
+- Add service-scoped MCP token metadata and enforcement so project- and
+  service-scoped tokens only see and act on their allowed targets.
+
+### Changed
+
+- Normalize AI Ops briefing evidence and `diagnose_service` evidence through a
+  shared read model with freshness metadata, token estimates, and omitted
+  evidence follow-up calls.
+- Improve deterministic AI Ops summaries so fallback briefing text includes the
+  service, container, exit code, restart signal, and route status when available.
+
+### Fixed
+
+- Treat length-truncated AI Ops LLM summaries as fallback cases instead of
+  persisting partial provider output, and expose summary status, finish reason,
+  truncation, and token usage metadata to API/MCP readers.
+- Harden scoped MCP action-status authorization for `action_id` aliases and
+  held project-level actions.
+
+### Security
+
+- Return explicit `SCOPE_VIOLATION` rejections for out-of-scope MCP targets,
+  re-check scoped destructive approvals before execution, and narrow
+  `list_projects` visibility for scoped tokens.
+- Wrap AI Ops LLM evidence as untrusted data in the summary prompt so incident
+  logs cannot become model instructions.
+
 ## [0.2.0-rc.9] - 2026-06-12
 
 ### Changed
