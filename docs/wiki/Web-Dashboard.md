@@ -102,7 +102,10 @@ summarize deterministic evidence and show a suggested MCP diagnostic call, but i
 redeploy, roll back, or edit env vars automatically. The briefing detail dialog includes an
 **Agent handoff** prompt with the `briefing_id`, a deterministic first MCP call
 (`openlander_monitor.get_ai_ops_briefing`), the suggested call, and an after-fix verification
-checklist. The handoff prompt intentionally contains no token or credential.
+checklist. The handoff prompt also includes a verification call that passes the same `briefing_id`
+to `openlander_monitor.diagnose_service`, which returns a machine-readable `recovery_receipt`
+comparing the incident snapshot with current live route/container/deploy evidence. The handoff
+prompt intentionally contains no token or credential.
 
 > **Note**: OpenLander's model is resource-first for runtime configuration. Activity,
 > deployments, domains, env vars, and resource limits belong to Application detail pages rather

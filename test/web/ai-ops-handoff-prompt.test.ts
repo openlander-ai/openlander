@@ -52,6 +52,15 @@ describe('AI Ops agent handoff prompt', () => {
     expect(prompt).toContain('"action": "diagnose_service"');
   });
 
+  it('adds a verification call that carries the briefing id', () => {
+    const prompt = buildAiOpsAgentHandoffPrompt(createBriefing());
+
+    expect(prompt).toContain('Verification MCP call after any change');
+    expect(prompt).toContain('"service_id": "service-1"');
+    expect(prompt).toContain('"briefing_id": "briefing-1"');
+    expect(prompt).toContain('Run the verification MCP call and read recovery_receipt.status.');
+  });
+
   it('does not include tokens and treats evidence as untrusted data', () => {
     const prompt = buildAiOpsAgentHandoffPrompt(createBriefing());
 
@@ -66,7 +75,7 @@ describe('AI Ops agent handoff prompt', () => {
 
     expect(prompt).toContain('- service_id: project-level');
     expect(prompt).toContain('Verification checklist before saying fixed');
-    expect(prompt).toContain('Re-read the briefing or run diagnose_service after any change.');
+    expect(prompt).toContain('"project_id": "project-1"');
     expect(prompt).toContain('Confirm route health is healthy when route evidence exists.');
     expect(prompt).toContain('Confirm container state and restart count are stable.');
   });

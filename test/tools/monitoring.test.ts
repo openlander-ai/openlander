@@ -1162,6 +1162,7 @@ describe('service-targeted monitoring tools', () => {
         getEnvVars: vi.fn(async () => ({})),
         getEnvVarsForService: vi.fn(async () => ({ NODE_ENV: 'production' })),
         getDeployLogs: vi.fn(async () => []),
+        getAiOpsBriefing: vi.fn(async () => null),
       },
       pipeline: {
         getLogs: vi.fn(async () => 'service logs'),
@@ -1565,6 +1566,92 @@ describe('service-targeted monitoring tools', () => {
             action: 'get_logs',
             params: { service_id: service.id, lines: 500 },
           },
+        }),
+      ]),
+    );
+  });
+
+  it('diagnose_service returns a recovery receipt when a briefing_id is supplied', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    vi.mocked(ctx.db.getAiOpsBriefing).mockResolvedValueOnce(
+      makeAiOpsBriefingRow({
+        id: 'brief-restart',
+        project_id: 'app',
+        service_id: service.id,
+        created_at: '2026-06-13T12:00:00.000Z',
+        evidence_json: JSON.stringify({
+          routeHealth: { status: 'unhealthy', statusCode: 502 },
+          container: {
+            running: false,
+            status: 'exited',
+            exitCode: 137,
+            restartCount: 4,
+          },
+          deployLog: {
+            id: 'deploy-before',
+            status: 'failed',
+            commitSha: 'badcafe',
+          },
+        }),
+      }),
+    );
+    vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
+      {
+        id: 'deploy-after',
+        service_id: service.id,
+        environment_id: null,
+        status: 'success',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: 'goodcafe',
+        commit_message: 'fix startup',
+        build_log: 'Build completed',
+        runtime_log: null,
+        duration_ms: 5000,
+        created_at: '2026-06-13T12:05:00.000Z',
+        representative_traffic_json: null,
+      },
+    ]);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: service.id, briefing_id: 'brief-restart', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.getAiOpsBriefing).toHaveBeenCalledWith('brief-restart');
+    const receipt = result.recovery_receipt as Record<string, unknown>;
+    expect(receipt).toMatchObject({
+      briefing_id: 'brief-restart',
+      project_id: 'app',
+      service_id: service.id,
+      status: 'verified',
+      baseline_observed_at: '2026-06-13T12:00:00.000Z',
+    });
+    expect(receipt.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'route_health',
+          status: 'pass',
+          before: { status: 'unhealthy', status_code: 502 },
+          after: { status: 'healthy' },
+        }),
+        expect.objectContaining({
+          name: 'container_status',
+          status: 'pass',
+          after: expect.objectContaining({ running: true, status: 'running' }),
+        }),
+        expect.objectContaining({
+          name: 'restart_stability',
+          status: 'pass',
+          before: { restart_count: 4 },
+          after: expect.objectContaining({ restart_count: 2, status: 'running' }),
+        }),
+        expect.objectContaining({
+          name: 'latest_deploy',
+          status: 'pass',
+          before: { id: 'deploy-before', status: 'failed', commit_sha: 'badcafe' },
+          after: { id: 'deploy-after', status: 'success', commit_sha: 'goodcafe' },
+          changed: true,
         }),
       ]),
     );

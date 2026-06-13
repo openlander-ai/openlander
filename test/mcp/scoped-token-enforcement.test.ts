@@ -138,6 +138,15 @@ function createMonitorComposite(execute = vi.fn(async () => ({ status: 'ok' })))
       }),
       execute,
     },
+    {
+      name: 'diagnose_service',
+      description: 'Diagnose service',
+      inputSchema: z.object({
+        service_id: z.string().min(1).optional(),
+        briefing_id: z.string().min(1).optional(),
+      }),
+      execute,
+    },
   ];
   return {
     tool: createOpenLanderMonitorCompositeTool(toolDefs),
@@ -312,6 +321,42 @@ describe('MCP scoped token enforcement', () => {
         tokenScopeServiceId: 'service-1',
         targetProjectId: 'project-2',
         targetServiceId: 'service-2',
+        reason: 'service_mismatch',
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixed briefing_id and service_id when any target is outside a service-scoped token', async () => {
+    const { tool, execute } = createMonitorComposite();
+    const { context, db } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+    db.getAiOpsBriefing.mockResolvedValueOnce({
+      id: 'brief-service-1',
+      project_id: 'project-1',
+      service_id: 'service-1',
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'diagnose_service',
+        params: { briefing_id: 'brief-service-1', service_id: 'service-sibling' },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeKind: 'service',
+        tokenScopeServiceId: 'service-1',
+        targetProjectId: 'project-1',
+        targetServiceId: 'service-sibling',
         reason: 'service_mismatch',
       },
     });

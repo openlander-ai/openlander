@@ -155,6 +155,13 @@ export const diagnoseServiceSchema = z
       .describe(
         'Project name. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
       ),
+    briefing_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Optional AI Ops briefing id to compare the incident-time snapshot with this live diagnosis and return a recovery_receipt.',
+      ),
     lines: z
       .number()
       .int()

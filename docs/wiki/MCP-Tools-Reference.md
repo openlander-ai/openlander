@@ -989,15 +989,16 @@ apps depend on which databases/caches over MCP.
 
 ### `diagnose_service`
 
-| Parameter           | Type   | Required | Description                                        |
-| ------------------- | ------ | -------- | -------------------------------------------------- |
-| `service_id`        | string | No       | Application id; preferred                          |
-| `service_name`      | string | No       | Application name                                   |
-| `project_id`        | string | No       | Convenience target for single-Application Projects |
-| `project_name`      | string | No       | Convenience target for single-Application Projects |
-| `path`              | string | No       | HTTP path to probe                                 |
-| `health_check_path` | string | No       | Alias for `path`                                   |
-| `lines`             | number | No       | Log lines to include                               |
+| Parameter           | Type   | Required | Description                                                                        |
+| ------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
+| `service_id`        | string | No       | Application id; preferred                                                          |
+| `service_name`      | string | No       | Application name                                                                   |
+| `project_id`        | string | No       | Convenience target for single-Application Projects                                 |
+| `project_name`      | string | No       | Convenience target for single-Application Projects                                 |
+| `briefing_id`       | string | No       | AI Ops briefing id to compare snapshot vs live state and return `recovery_receipt` |
+| `path`              | string | No       | HTTP path to probe                                                                 |
+| `health_check_path` | string | No       | Alias for `path`                                                                   |
+| `lines`             | number | No       | Log lines to include                                                               |
 
 If `path` is omitted, OpenLander uses a configured base path env such as
 `NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.
@@ -1016,6 +1017,14 @@ current host/container state, unlike AI Ops briefing evidence which is a
 snapshot from the incident time. If normalized evidence is input-capped,
 `omitted_evidence` names the capped field and includes a follow-up MCP call such
 as `get_logs` or `get_build_log` when OpenLander can derive one.
+
+When called with `briefing_id`, `diagnose_service` also returns
+`recovery_receipt`: a machine-readable before/after comparison between the AI Ops
+briefing snapshot and current live diagnostics. The receipt includes
+`status: "verified" | "needs_attention" | "unknown" | "unavailable"` plus checks
+for `route_health`, `container_status`, `restart_stability`, and `latest_deploy`.
+Agents should read this receipt before telling the user that an incident is
+fixed.
 
 Day-2 recovery loop: call `diagnose_service`, execute its top-level
 `suggested_call` when present, then read the action result's verification detail
