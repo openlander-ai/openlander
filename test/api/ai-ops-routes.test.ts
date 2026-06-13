@@ -83,6 +83,11 @@ function makeBriefing(overrides: Partial<AiOpsBriefingRow> = {}): AiOpsBriefingR
     title: 'Service is restarting',
     deterministic_summary: 'Container restarted repeatedly in the last few minutes.',
     llm_summary: null,
+    llm_summary_status: null,
+    llm_summary_finish_reason: null,
+    llm_summary_truncated: null,
+    llm_summary_error: null,
+    llm_summary_usage_json: null,
     suggested_call_json: JSON.stringify({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -260,6 +265,14 @@ describe('AI Ops routes', () => {
     const db = {
       getAiOpsBriefing: vi.fn(async () =>
         makeBriefing({
+          llm_summary_status: 'fallback',
+          llm_summary_finish_reason: 'length',
+          llm_summary_truncated: true,
+          llm_summary_error: 'AI Ops briefing model output was truncated by the output budget.',
+          llm_summary_usage_json: JSON.stringify({
+            output_tokens: 260,
+            reasoning_tokens: 240,
+          }),
           evidence_json: JSON.stringify({
             restart_count: 7,
             runtime_log: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz',
@@ -279,6 +292,17 @@ describe('AI Ops routes', () => {
       restart_count: 7,
       runtime_log: 'Authorization: Bearer [REDACTED]',
       env: { STRIPE_API_KEY: '[REDACTED]' },
+    });
+    expect(body.briefing).toMatchObject({
+      summary_source: 'deterministic',
+      summary_status: 'fallback',
+      summary_truncated: true,
+      summary_finish_reason: 'length',
+      summary_error: 'AI Ops briefing model output was truncated by the output budget.',
+      summary_usage: {
+        output_tokens: 260,
+        reasoning_tokens: 240,
+      },
     });
     expect(body.briefing.usage).toEqual({
       total_tokens: 150,

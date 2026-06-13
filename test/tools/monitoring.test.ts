@@ -63,6 +63,11 @@ function makeAiOpsBriefingRow(overrides: Partial<AiOpsBriefingRow> = {}): AiOpsB
     title: 'Public route is failing',
     deterministic_summary: 'The public route returned HTTP 502 while the container is running.',
     llm_summary: null,
+    llm_summary_status: null,
+    llm_summary_finish_reason: null,
+    llm_summary_truncated: null,
+    llm_summary_error: null,
+    llm_summary_usage_json: null,
     suggested_call_json: JSON.stringify({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -469,6 +474,11 @@ describe('AI Ops briefing monitor actions', () => {
     const briefings = result.briefings as Array<Record<string, unknown>>;
     expect(briefings[0]?.briefing_id).toBe('brief-1');
     expect(briefings[0]?.summary).toContain('HTTP 502');
+    expect(briefings[0]).toMatchObject({
+      summary_source: 'deterministic',
+      summary_status: 'deterministic',
+      summary_truncated: false,
+    });
     expect(briefings[0]?.suggested_call).toEqual({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
@@ -501,7 +511,13 @@ describe('AI Ops briefing monitor actions', () => {
   });
 
   it('gets one briefing with full evidence', async () => {
-    const row = makeAiOpsBriefingRow({ llm_summary: 'LLM explanation from evidence.' });
+    const row = makeAiOpsBriefingRow({
+      llm_summary: 'LLM explanation from evidence.',
+      llm_summary_status: 'llm',
+      llm_summary_finish_reason: 'stop',
+      llm_summary_truncated: false,
+      llm_summary_usage_json: JSON.stringify({ output_tokens: 42 }),
+    });
     const db = {
       getAiOpsBriefing: vi.fn(async () => row),
     };
@@ -517,6 +533,13 @@ describe('AI Ops briefing monitor actions', () => {
     expect(result.status).toBe('ok');
     const briefing = result.briefing as Record<string, unknown>;
     expect(briefing.summary).toBe('LLM explanation from evidence.');
+    expect(briefing).toMatchObject({
+      summary_source: 'llm',
+      summary_status: 'llm',
+      summary_truncated: false,
+      summary_finish_reason: 'stop',
+      summary_usage: { output_tokens: 42 },
+    });
     expect(briefing.deterministic_summary).toContain('HTTP 502');
     expect(briefing.evidence).toEqual({
       route_health: { reachable: false, status_code: 502 },

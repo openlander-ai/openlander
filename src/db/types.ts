@@ -437,6 +437,7 @@ export interface AiOpsDedupeRow {
 
 export type AiOpsBriefingSeverity = 'info' | 'warning' | 'high' | 'critical';
 export type AiOpsBriefingStatus = 'open' | 'acknowledged' | 'resolved';
+export type AiOpsLlmSummaryStatus = 'llm' | 'fallback' | 'skipped';
 
 export interface AiOpsBriefingRow {
   id: string;
@@ -449,6 +450,11 @@ export interface AiOpsBriefingRow {
   title: string;
   deterministic_summary: string;
   llm_summary: string | null;
+  llm_summary_status: AiOpsLlmSummaryStatus | null;
+  llm_summary_finish_reason: string | null;
+  llm_summary_truncated: boolean | null;
+  llm_summary_error: string | null;
+  llm_summary_usage_json: string | null;
   suggested_call_json: string | null;
   evidence_json: string;
   status: AiOpsBriefingStatus;

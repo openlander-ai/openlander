@@ -110,6 +110,11 @@ function makeBriefing(input: {
     title: input.title,
     deterministic_summary: input.deterministicSummary,
     llm_summary: null,
+    llm_summary_status: null,
+    llm_summary_finish_reason: null,
+    llm_summary_truncated: null,
+    llm_summary_error: null,
+    llm_summary_usage_json: null,
     suggested_call_json: input.suggestedCall ? JSON.stringify(input.suggestedCall) : null,
     evidence_json: JSON.stringify(input.evidence),
     status: 'open',
@@ -330,6 +335,35 @@ describe('AI Ops briefing runtime trigger', () => {
             status: 'failed',
             severity: 'fail',
             status_code: 500,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('persists container die name and exit code as structured AI Ops evidence', async () => {
+    const db = makeDb();
+    const { trigger } = makeTrigger({ db });
+
+    const result = await trigger.handleContainerDie({
+      projectId: 'proj-1',
+      containerId: 'container-1',
+      containerName: 'ol-api',
+      exitCode: 137,
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.deterministic?.classification).toBe('restart_loop');
+    expect(result.deterministic?.deterministicSummary).toContain('container ol-api');
+    expect(result.deterministic?.deterministicSummary).toContain('exit code 137');
+    expect(result.deterministic?.deterministicSummary).not.toContain('unknown');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'restart_loop',
+        evidence: expect.objectContaining({
+          container: expect.objectContaining({
+            name: 'ol-api',
+            exitCode: 137,
           }),
         }),
       }),

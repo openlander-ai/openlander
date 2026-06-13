@@ -42,9 +42,11 @@ export interface AiOpsDeployLogEvidence {
 }
 
 export interface AiOpsContainerEvidence {
+  name?: string | null;
   running?: boolean;
   status?: string | null;
   health?: string | null;
+  exitCode?: number | null;
   restartCount?: number | null;
   startedAt?: string | null;
 }
@@ -146,6 +148,27 @@ function isRestartLoop(input: BuildAiOpsBriefingInput): boolean {
   return containerRestarts >= 3 || incidentRestarts >= 3 || category.includes('restart');
 }
 
+function buildRestartSummary(evidence: AiOpsEvidencePack): string {
+  const details: string[] = [];
+  const serviceLabel = evidence.serviceName ?? evidence.serviceId ?? null;
+  if (serviceLabel) details.push(`service ${serviceLabel}`);
+  if (evidence.container?.name) details.push(`container ${evidence.container.name}`);
+  if (typeof evidence.container?.exitCode === 'number') {
+    details.push(`exit code ${String(evidence.container.exitCode)}`);
+  }
+  const restartCount = evidence.container?.restartCount ?? evidence.runtimeIncident?.restartCount;
+  if (typeof restartCount === 'number') details.push(`restart count ${String(restartCount)}`);
+  if (evidence.routeHealth?.status && evidence.routeHealth.status !== 'unknown') {
+    details.push(`route ${evidence.routeHealth.status}`);
+  }
+
+  if (details.length > 0) {
+    return `Runtime evidence shows ${details.join(', ')}.`;
+  }
+
+  return 'Runtime evidence indicates a container restart or crash loop.';
+}
+
 export function normalizeAiOpsEvidencePack(input: BuildAiOpsBriefingInput): AiOpsEvidencePack {
   const evidence: AiOpsEvidencePack = {
     projectId: input.projectId,
@@ -214,14 +237,10 @@ export function buildDeterministicAiOpsBriefing(
     )}`;
     suggestedCall = diagnoseCall(serviceId);
   } else if (isRestartLoop(input)) {
-    const restartCount =
-      input.container?.restartCount ?? input.runtimeIncident?.restartCount ?? 'unknown';
     classification = 'restart_loop';
     severity = 'high';
     title = 'Service appears to be restart-looping';
-    deterministicSummary = `Container/runtime evidence shows restart count ${String(
-      restartCount,
-    )}.`;
+    deterministicSummary = buildRestartSummary(evidence);
     fingerprint = 'restart-loop';
     suggestedCall = diagnoseCall(serviceId);
   } else if (runtimeIncident && isDependencyIncident(runtimeIncident)) {
