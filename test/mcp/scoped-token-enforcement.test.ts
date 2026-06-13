@@ -117,9 +117,14 @@ function createMonitorComposite(execute = vi.fn(async () => ({ status: 'ok' })))
     {
       name: 'mcp_action_status',
       description: 'Get action status',
-      inputSchema: z.object({
-        action_run_id: z.string().min(1),
-      }),
+      inputSchema: z
+        .object({
+          action_run_id: z.string().min(1).optional(),
+          action_id: z.string().min(1).optional(),
+        })
+        .refine((value) => Boolean(value.action_run_id || value.action_id), {
+          message: 'action_run_id or action_id is required',
+        }),
       execute,
     },
     {
@@ -291,6 +296,63 @@ describe('MCP scoped token enforcement', () => {
         args: { service_id: 'service-1' },
         targetProjectId: 'project-1',
         targetServiceId: 'service-1',
+      }),
+    });
+
+    const result = await tool.execute(
+      { action: 'mcp_action_status', params: { action_run_id: 'action-run-1' } },
+      context,
+    );
+
+    expect(result).toEqual({ status: 'ok' });
+    expect(execute).toHaveBeenCalledWith({ action_run_id: 'action-run-1' }, context);
+  });
+
+  it('lets a service-scoped token poll its own held MCP action status by action_id alias', async () => {
+    const { tool, execute } = createMonitorComposite();
+    const { context, db } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+    db.getActionRun.mockResolvedValueOnce({
+      id: 'action-run-1',
+      project_id: 'project-1',
+      plan: JSON.stringify({
+        type: 'destructive_mcp',
+        tool: 'archive_service',
+        args: { service_id: 'service-1' },
+        targetProjectId: 'project-1',
+        targetServiceId: 'service-1',
+      }),
+    });
+
+    const result = await tool.execute(
+      { action: 'mcp_action_status', params: { action_id: 'action-run-1' } },
+      context,
+    );
+
+    expect(result).toEqual({ status: 'ok' });
+    expect(execute).toHaveBeenCalledWith({ action_id: 'action-run-1' }, context);
+  });
+
+  it('lets a project-scoped token poll a project-level held MCP action from plan targetProjectId', async () => {
+    const { tool, execute } = createMonitorComposite();
+    const { context, db } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+    db.getActionRun.mockResolvedValueOnce({
+      id: 'action-run-1',
+      project_id: '',
+      plan: JSON.stringify({
+        type: 'destructive_mcp',
+        tool: 'archive_project',
+        args: { project_id: 'project-1' },
+        targetProjectId: 'project-1',
       }),
     });
 

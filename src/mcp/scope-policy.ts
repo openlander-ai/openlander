@@ -180,6 +180,11 @@ async function targetFromActionRunId(
     const args = asRecord(plan['args']);
     const serviceId = args ? readString(args, 'service_id', 'serviceId') : '';
     if (serviceId) return targetFromService(appCtx, serviceId, 'action_run_id');
+
+    const targetProjectId = readRecordString(plan, 'targetProjectId');
+    if (targetProjectId) {
+      return { projectId: targetProjectId, serviceId: null, resolvedFrom: 'action_run_id' };
+    }
   }
   return { projectId: run.project_id || null, serviceId: null, resolvedFrom: 'action_run_id' };
 }
@@ -218,7 +223,7 @@ async function resolveMcpScopeTargets(
   const briefingId = readString(args, 'briefing_id');
   if (briefingId) push(await targetFromBriefingId(appCtx, briefingId, identity));
 
-  const actionRunId = readString(args, 'action_run_id', 'actionRunId');
+  const actionRunId = readString(args, 'action_run_id', 'action_id', 'actionRunId');
   if (actionRunId) push(await targetFromActionRunId(appCtx, actionRunId));
 
   const serviceId = readString(args, 'service_id', 'serviceId');
