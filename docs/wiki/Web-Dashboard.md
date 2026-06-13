@@ -97,6 +97,13 @@ Detailed view for a Project and its resources.
 | **Runtime**     | Service logs + web terminal (xterm.js), ANSI colors, runtime state                           |
 | **Settings**    | Project metadata and danger actions. Application config lives on detail pages.               |
 
+Project Settings includes **AI Ops Briefing** controls. Briefings are read-only: OpenLander can
+summarize deterministic evidence and show a suggested MCP diagnostic call, but it does not restart,
+redeploy, roll back, or edit env vars automatically. The briefing detail dialog includes an
+**Agent handoff** prompt with the `briefing_id`, a deterministic first MCP call
+(`openlander_monitor.get_ai_ops_briefing`), the suggested call, and an after-fix verification
+checklist. The handoff prompt intentionally contains no token or credential.
+
 > **Note**: OpenLander's model is resource-first for runtime configuration. Activity,
 > deployments, domains, env vars, and resource limits belong to Application detail pages rather
 > than Project Settings.
@@ -145,6 +152,7 @@ operations on resources already connected to a Project.
 | **Monitoring**  | CPU / memory time-series and request-side health.                                 |
 | **Environment** | Application env vars (read/write).                                                |
 | **Domains**     | Host/path routes registered for the Application. DNS/TLS remain external in v0.1. |
+| **AI**          | Per-Application AI Ops Briefing override plus recent briefing handoff prompts.    |
 
 Applications use the full detail surface. Database/Cache/Storage resources
 use a narrower project-scoped detail surface with Overview, Logs, and

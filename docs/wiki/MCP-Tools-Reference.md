@@ -929,6 +929,13 @@ when present, is explanatory only. Full briefing responses include
 incident-time snapshot and whether any capped source should be fetched through a
 follow-up call. The token estimate is derived from the capped evidence payload.
 
+The web dashboard's AI Ops detail dialog can copy an Agent handoff prompt. That
+prompt does not include a token or credential; it tells the agent to use its
+already-configured OpenLander MCP server, start with
+`openlander_monitor({ action: "get_ai_ops_briefing", params: { briefing_id } })`,
+then inspect the deterministic `suggested_call` and verify route/container/deploy
+state before reporting that the incident is fixed.
+
 ### `get_logs`
 
 | Parameter      | Type   | Required | Description                                        |

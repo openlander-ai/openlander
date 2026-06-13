@@ -25,6 +25,13 @@ export const translations = {
     llmCalls: 'LLM calls',
     suggestedCall: 'Suggested MCP call',
     evidence: 'Evidence',
+    agentHandoff: {
+      title: 'Agent handoff',
+      description:
+        '증거 범위에 묶인 prompt를 복사합니다. Token이나 credential은 포함하지 않습니다.',
+      copy: 'Handoff 복사',
+      copied: '복사됨',
+    },
     error: {
       load: 'AI Ops 브리핑을 불러오지 못했습니다.',
       save: 'AI Ops 정책 저장에 실패했습니다.',
