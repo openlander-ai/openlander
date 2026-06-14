@@ -244,6 +244,46 @@ Project와 compose-child 단위 귀속은 첫 AI Ops Beta smoke 이후 별도 �
 
 AI Ops PR에서는 env-scope resolver/policy 변경을 하지 않는다.
 
+## 0.2.x Agent Handoff Scope Model
+
+Open-in-Agent MVP는 토큰 없이 동작한다. #477 handoff prompt는 briefing id,
+deterministic first call, suggested call, verification checklist를 제공하지만
+plaintext token이나 short-lived token을 포함하지 않는다. 따라서 v0.2 출시에
+새 token 권한 모델은 필요하지 않다.
+
+현재 상태:
+
+- Scope boundary는 #476에서 닫혔다. Multi-selector all-in-boundary와 적대 테스트가
+  들어갔고, 새 selector를 추가할 때는 `AGENTS.md`의 MCP scope invariant를 따른다.
+- Service-scoped token은 이미 있고, restricted/contractor mode로 보존한다.
+- Environment는 0.2 표면에 없다. 0.2는 flat Deployment Target을 유지한다.
+- Token-free handoff + verify-after-fix는 v0.2 AI Ops Beta 출시에 충분하다.
+
+후속 token 모델은 세 축을 분리한다.
+
+- **scope:** 토큰이 볼 수 있는 Project와 향후 Environment 경계.
+- **capability:** 토큰이 할 수 있는 행위 종류. 처음에는 `read-only`와 `full` 두
+  단계만 고려한다.
+- **target:** action 실행 시 선택되는 실제 Service. Service는 기본 token scope가
+  아니라 런타임 대상이다.
+
+Capability 세분화는 필요해질 때 추가한다. 초기 목표는 "read-only 장애조사 토큰"이다.
+`redeploy`, `rollback`, `env-edit`을 각각 세분화하는 4티어 모델은 지금 구현하지 않는다.
+특히 `env-edit`은 `DATABASE_URL`, auth secret, feature flag, runtime behavior를 바꿀 수
+있으므로 나중에도 별도 경고와 approval이 필요한 sensitive 권한으로 취급한다.
+
+Environment가 나중에 제품 표면에 추가되면 기존 token의 권한이 조용히 all-env로 넓어지면
+안 된다. Environment 도입 시 기존 Project token은 재발급을 요구하거나 explicit all-env로
+명시 migration한다. `null` environment는 자동 all-env가 아니다.
+
+Mutation auto-target 규칙은 보수적으로 둔다. Read-only 조회는 후보가 하나면
+auto-resolve할 수 있지만, mutation은 후보가 하나여도 명시 확인을 요구한다. Production
+redeploy, rollback, env edit은 "서비스가 하나니까 그냥 실행"하지 않는다.
+
+Capability 컬럼, environment 필드, scope vocab 재정의는 vocab + data-model 변경이다.
+구현할 때는 freeze gate(vocab review, endpoint-collision grep, debt-ledger entry)를
+통과해야 한다. #480 자체는 docs-only라 freeze gate 대상이 아니다.
+
 ## 역할 분리
 
 릴리즈 체인은 구현과 검증을 분리한다.
