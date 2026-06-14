@@ -363,6 +363,25 @@ MCP exposes 5 composite tools, each accepting an `action` parameter (`action="he
 - `openlander_managed_service` — infrastructure services, databases, volumes
 - `openlander_monitor` — monitoring, host diagnostics, alerts, automation
 
+### MCP Scope Boundary Invariant
+
+Scoped MCP tokens are a product trust boundary, not just a filtering convenience. When adding or
+changing any MCP action that accepts a target-like parameter, keep the scope resolver and the tool's
+actual target resolution in lockstep.
+
+- Target-like parameters include `project_id`, `project_name`, `service_id`, `service_name`,
+  `deploy_id`, `briefing_id`, `action_run_id`, future environment selectors, and any new alias that
+  can resolve to a Project, Application/Compose service, deployment, briefing, or held action.
+- Update `src/mcp/scope-policy.ts` so `resolveMcpScopeTargets` recognizes every supplied selector.
+  The invariant is: if a scoped-token call supplies multiple selectors, every recognized selector
+  must be inside the token boundary before the action can execute.
+- Add adversarial scoped-token tests when adding a selector. At minimum, test an in-scope primary
+  selector mixed with an out-of-scope sibling selector and expect `SCOPE_VIOLATION`, not silent
+  filtering or a generic not-found response.
+- Do not add an action-local target path that bypasses `resolveMcpScopeTargets`. If a target cannot
+  be resolved for a scoped identity, normalize it to `SCOPE_VIOLATION` with
+  `target_not_found_or_out_of_scope` where possible to avoid existence oracles.
+
 ### MCP Response Contract
 
 Keep MCP responses small and action-oriented. The stable envelope is:
