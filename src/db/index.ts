@@ -536,6 +536,7 @@ export class Database implements AuthDatabase {
   countAiUsageLogs(opts?: { projectId?: string; from?: Date; to?: Date }) { return this.aiUsageLogRepo.countAll(opts); }
   createAiOpsBriefing(data: Parameters<AiOpsBriefingRepo['create']>[0]) { return this.aiOpsBriefingRepo.create(data); }
   getAiOpsBriefing(id: string) { return this.aiOpsBriefingRepo.findById(id); }
+  listRecentAiOpsBriefings(opts?: Parameters<AiOpsBriefingRepo['listRecent']>[0]) { return this.aiOpsBriefingRepo.listRecent(opts); }
   listAiOpsBriefingsByProject(projectId: string, opts?: Parameters<AiOpsBriefingRepo['listByProject']>[1]) { return this.aiOpsBriefingRepo.listByProject(projectId, opts); }
   listAiOpsBriefingsByService(serviceId: string, opts?: Parameters<AiOpsBriefingRepo['listByService']>[1]) { return this.aiOpsBriefingRepo.listByService(serviceId, opts); }
   updateAiOpsBriefingLlmSummary(...args: Parameters<AiOpsBriefingRepo['updateLlmSummary']>) { return this.aiOpsBriefingRepo.updateLlmSummary(...args); }

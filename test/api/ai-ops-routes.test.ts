@@ -276,6 +276,27 @@ describe('AI Ops routes', () => {
     });
   });
 
+  it('lists recent AI Ops briefings across projects for the dashboard inbox', async () => {
+    const db = {
+      listRecentAiOpsBriefings: vi.fn(async () => [
+        makeBriefing({ id: 'brief-2', project_id: 'p2', service_id: 'svc-2', severity: 'high' }),
+        makeBriefing(),
+      ]),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/ai-ops/briefings?status=open&limit=7');
+
+    expect(res.status).toBe(200);
+    expect(db.listRecentAiOpsBriefings).toHaveBeenCalledWith({ limit: 7, status: 'open' });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.count).toBe(2);
+    const briefings = body.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-2');
+    expect(briefings[0]?.project_id).toBe('p2');
+    expect(briefings[0]).not.toHaveProperty('evidence');
+  });
+
   it('returns full briefing evidence and LLM usage summary', async () => {
     const db = {
       getAiOpsBriefing: vi.fn(async () =>
