@@ -182,15 +182,16 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
     const serviceOverride = await ctx.db.setAiOpsServiceOverride(resolved.service.id, {
       mode: isServiceMode(rawMode) ? rawMode : undefined,
     });
-    const resolvedPolicy = await ctx.db.resolveAiOpsServicePolicy(
-      resolved.project.id,
-      resolved.service.id,
-    );
+    const [projectPolicy, resolvedPolicy] = await Promise.all([
+      ctx.db.getAiOpsProjectPolicy(resolved.project.id),
+      ctx.db.resolveAiOpsServicePolicy(resolved.project.id, resolved.service.id),
+    ]);
 
     return c.json({
       status: 'saved',
       project_id: resolved.project.id,
       service_id: resolved.service.id,
+      project_policy: projectPolicy,
       service_override: serviceOverride,
       resolved_policy: resolvedPolicy,
     });

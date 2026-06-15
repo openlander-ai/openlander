@@ -235,6 +235,15 @@ describe('AI Ops routes', () => {
       getProject: vi.fn(async () => makeProject()),
       getProjectByName: vi.fn(async () => null),
       getService: vi.fn(async () => makeService()),
+      getAiOpsProjectPolicy: vi.fn(async () => ({
+        project_id: 'p1',
+        mode: 'briefing',
+        daily_briefing_limit: 20,
+        fingerprint_cooldown_minutes: 30,
+        created_at: '2026-06-11T00:00:00.000Z',
+        updated_at: '2026-06-11T00:00:00.000Z',
+        server_id: 'local',
+      })),
       setAiOpsServiceOverride: vi.fn(async () => ({
         service_id: 'svc-1',
         mode: 'off',
@@ -258,7 +267,13 @@ describe('AI Ops routes', () => {
     expect(res.status).toBe(200);
     expect(db.setAiOpsServiceOverride).toHaveBeenCalledWith('svc-1', { mode: 'off' });
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ status: 'saved', service_id: 'svc-1' });
+    expect(body).toMatchObject({
+      status: 'saved',
+      service_id: 'svc-1',
+      project_policy: { mode: 'briefing' },
+      service_override: { mode: 'off' },
+      resolved_policy: { mode: 'off', source: 'service_override' },
+    });
   });
 
   it('returns full briefing evidence and LLM usage summary', async () => {
