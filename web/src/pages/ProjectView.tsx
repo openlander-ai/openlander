@@ -4,6 +4,7 @@
  * The project page. InfraMap topology strip above an OuterCard.
  * Tabs:
  *   - Resources → flat list of project resources with health pill + image + url
+ *   - AI Ops    → project-level briefing feed and handoff prompts
  *   - Settings  → group metadata and danger actions
  *
  * MCP tab was removed for v0.1 (project-scoped MCP tokens deferred to v0.2).
@@ -17,12 +18,20 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Box, Database, ExternalLink, Plus, Settings as SettingsIcon } from 'lucide-react';
+import {
+  Box,
+  Database,
+  ExternalLink,
+  Plus,
+  Settings as SettingsIcon,
+  Sparkles,
+} from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
+import { ProjectAiOpsTab } from '@/components/project/ProjectAiOpsTab';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
@@ -41,7 +50,7 @@ import {
 } from '@/lib/api/services';
 import { cn } from '@/lib/utils';
 
-type ProjectTabId = 'services' | 'settings';
+type ProjectTabId = 'services' | 'ai' | 'settings';
 
 function hasRuntimeMetricValue(value: string): boolean {
   const normalized = value.trim();
@@ -56,6 +65,7 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
   return {
     id: service.id,
     name: service.name,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns
     kind: managedResourceKind(service.type),
     // `service` is the connected managed-service API shape, not a DB service row.
     // eslint-disable-next-line openlander-internal/no-dropped-columns
@@ -113,7 +123,9 @@ function isManagedServiceNode(service: ServiceNode): boolean {
 }
 
 function workloadResourceKind(service: GroupService): ServiceNode['kind'] {
-  return service.kind === 'compose' || service.buildMethod === 'compose' ? 'Compose' : 'Application';
+  return service.kind === 'compose' || service.buildMethod === 'compose'
+    ? 'Compose'
+    : 'Application';
 }
 
 function managedResourceKind(type: string): ServiceNode['kind'] {
@@ -138,12 +150,13 @@ export function ProjectView() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { t } = useLanguage();
-  // Honor `?tab=services|settings` deep-links.
+  // Honor `?tab=services|ai|settings` deep-links.
   // - Legacy `?tab=activity` redirects to the global Activity page filtered to this project.
   // - Legacy `?tab=mcp` falls through to `services` (MCP tab removed in v0.1; project-scoped
   //   tokens deferred to v0.2).
   const tabParam = searchParams.get('tab');
-  const initialTab: ProjectTabId = tabParam === 'settings' ? 'settings' : 'services';
+  const initialTab: ProjectTabId =
+    tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
 
   const projectId = id ?? '';
@@ -303,7 +316,9 @@ export function ProjectView() {
 
   const projectServiceRows = useMemo(() => {
     const resourceServiceNodes = groupServiceNodes ?? services;
-    const deployableServices = showArchivedServiceList ? archivedServiceNodes : resourceServiceNodes;
+    const deployableServices = showArchivedServiceList
+      ? archivedServiceNodes
+      : resourceServiceNodes;
     const serviceIds = new Set(deployableServices.map((service) => service.id));
     const connectedManagedServices = managedServiceNodes.filter(
       (service) => !serviceIds.has(service.id),
@@ -401,6 +416,7 @@ export function ProjectView() {
       icon: Box,
       count: projectServiceRows.length,
     },
+    { id: 'ai', label: t('projectDetail.tabs.aiOps'), icon: Sparkles },
     { id: 'settings', label: t('projectDetail.tabs.settings'), icon: SettingsIcon },
   ];
 
@@ -532,6 +548,14 @@ export function ProjectView() {
             onShowArchivedChange={setShowArchivedServices}
             archiveForced={isProjectArchived}
           />
+        </TabPanel>
+        <TabPanel
+          active={activeTab === 'ai'}
+          panelId="projectpanel-ai"
+          labelledBy="project-ai"
+          className="p-0"
+        >
+          {projectId && <ProjectAiOpsTab projectId={projectId} />}
         </TabPanel>
         <TabPanel
           active={activeTab === 'settings'}
@@ -793,12 +817,9 @@ function ServiceRoleBadge({ service }: { service: ServiceNode }) {
   );
 }
 
-function resourceLabelKey(service: ServiceNode):
-  | 'vocab.application'
-  | 'vocab.compose'
-  | 'vocab.database'
-  | 'vocab.cache'
-  | 'vocab.storage' {
+function resourceLabelKey(
+  service: ServiceNode,
+): 'vocab.application' | 'vocab.compose' | 'vocab.database' | 'vocab.cache' | 'vocab.storage' {
   switch (service.kind) {
     case 'Compose':
       return 'vocab.compose';

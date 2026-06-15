@@ -136,6 +136,8 @@ MCP:
 Web:
 
 - Project AI Ops toggle
+- Project AI Ops briefing feed
+- Home AI Ops Inbox
 - Service override
 - Briefing card
 - Briefing detail drawer
@@ -372,12 +374,14 @@ AI Ops Web UI는 rc smoke에서 브라우저로도 확인한다.
    Service `off`가 Project `Briefing`보다 우선하는지 확인한다.
 6. route failure 또는 restart-loop 유발 후 Project/Service 화면에 briefing
    card가 생성되는지 확인한다.
-7. briefing detail drawer에서 severity, classification, summary, token/cost,
+7. Home AI Ops Inbox와 Project AI Ops tab에 같은 briefing이 보이고 status
+   filter가 동작하는지 확인한다.
+8. briefing detail drawer에서 severity, classification, summary, token/cost,
    suggested MCP call, evidence가 보이는지 확인한다.
-8. evidence와 summary에 token, API key, database password 같은 secret이
+9. evidence와 summary에 token, API key, database password 같은 secret이
    노출되지 않는지 확인한다.
-9. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
-10. Web UI 조작만으로 restart, redeploy, rollback, env edit이 실행되지
+10. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
+11. Web UI 조작만으로 restart, redeploy, rollback, env edit이 실행되지
     않는지 확인한다.
 
 ## Weak-Model QA

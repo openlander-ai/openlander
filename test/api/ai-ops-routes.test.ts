@@ -235,6 +235,15 @@ describe('AI Ops routes', () => {
       getProject: vi.fn(async () => makeProject()),
       getProjectByName: vi.fn(async () => null),
       getService: vi.fn(async () => makeService()),
+      getAiOpsProjectPolicy: vi.fn(async () => ({
+        project_id: 'p1',
+        mode: 'briefing',
+        daily_briefing_limit: 20,
+        fingerprint_cooldown_minutes: 30,
+        created_at: '2026-06-11T00:00:00.000Z',
+        updated_at: '2026-06-11T00:00:00.000Z',
+        server_id: 'local',
+      })),
       setAiOpsServiceOverride: vi.fn(async () => ({
         service_id: 'svc-1',
         mode: 'off',
@@ -258,7 +267,34 @@ describe('AI Ops routes', () => {
     expect(res.status).toBe(200);
     expect(db.setAiOpsServiceOverride).toHaveBeenCalledWith('svc-1', { mode: 'off' });
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ status: 'saved', service_id: 'svc-1' });
+    expect(body).toMatchObject({
+      status: 'saved',
+      service_id: 'svc-1',
+      project_policy: { mode: 'briefing' },
+      service_override: { mode: 'off' },
+      resolved_policy: { mode: 'off', source: 'service_override' },
+    });
+  });
+
+  it('lists recent AI Ops briefings across projects for the dashboard inbox', async () => {
+    const db = {
+      listRecentAiOpsBriefings: vi.fn(async () => [
+        makeBriefing({ id: 'brief-2', project_id: 'p2', service_id: 'svc-2', severity: 'high' }),
+        makeBriefing(),
+      ]),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/ai-ops/briefings?status=open&limit=7');
+
+    expect(res.status).toBe(200);
+    expect(db.listRecentAiOpsBriefings).toHaveBeenCalledWith({ limit: 7, status: 'open' });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.count).toBe(2);
+    const briefings = body.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-2');
+    expect(briefings[0]?.project_id).toBe('p2');
+    expect(briefings[0]).not.toHaveProperty('evidence');
   });
 
   it('returns full briefing evidence and LLM usage summary', async () => {

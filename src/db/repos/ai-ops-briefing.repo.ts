@@ -134,6 +134,27 @@ export class AiOpsBriefingRepo {
       .limit(limit);
   }
 
+  async listRecent(opts?: {
+    limit?: number;
+    status?: AiOpsBriefingStatus;
+  }): Promise<AiOpsBriefingRow[]> {
+    const limit = opts?.limit ?? 20;
+    if (opts?.status) {
+      return await this.db
+        .select()
+        .from(aiOpsBriefings)
+        .where(eq(aiOpsBriefings.status, opts.status))
+        .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+        .limit(limit);
+    }
+
+    return await this.db
+      .select()
+      .from(aiOpsBriefings)
+      .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+      .limit(limit);
+  }
+
   async updateLlmSummary(
     id: string,
     summary: string | null,

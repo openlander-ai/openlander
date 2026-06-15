@@ -17,6 +17,9 @@ export const translations = {
     recentBriefings: '최근 브리핑',
     loading: '불러오는 중...',
     empty: '아직 브리핑이 없습니다.',
+    emptyTitle: '아직 incident briefing이 없습니다',
+    emptyDescription:
+      'AI Ops Briefing을 켜면 crash, deploy 실패, route-health 증거가 여기에 표시됩니다.',
     detailTitle: 'AI Ops briefing',
     detailDescription:
       'severity와 suggested call은 OpenLander 규칙이 결정합니다. LLM 텍스트는 설명 전용입니다.',
@@ -31,6 +34,30 @@ export const translations = {
         '증거 범위에 묶인 prompt를 복사합니다. Token이나 credential은 포함하지 않습니다.',
       copy: 'Handoff 복사',
       copied: '복사됨',
+    },
+    actions: {
+      viewEvidence: 'Evidence 보기',
+      openInAgent: 'Agent에서 열기',
+    },
+    status: {
+      open: 'Open',
+      acknowledged: 'Acknowledged',
+      resolved: 'Resolved',
+      all: 'All',
+    },
+    inbox: {
+      title: 'AI Ops Inbox',
+      subtitle: 'Project 전체의 열린 incident briefing입니다.',
+      emptyTitle: '열린 AI Ops briefing이 없습니다',
+      emptyDescription:
+        'AI Ops가 켜진 Project에서 crash, deploy 실패, route-health briefing이 생기면 여기에 표시됩니다.',
+    },
+    projectInbox: {
+      title: 'AI Ops briefings',
+      description: '각 리소스를 열지 않고 이 Project의 운영 브리핑을 한 곳에서 봅니다.',
+      emptyTitle: '조건에 맞는 briefing이 없습니다',
+      emptyDescription:
+        '이 Project에 incident가 생기면 deterministic evidence와 agent handoff prompt가 여기에 표시됩니다.',
     },
     error: {
       load: 'AI Ops 브리핑을 불러오지 못했습니다.',
@@ -593,6 +620,7 @@ export const translations = {
     tabs: {
       // Chrome — nav tabs.
       services: 'Resources',
+      aiOps: 'AI Ops',
       settings: 'Settings',
     },
     diagnosis: {

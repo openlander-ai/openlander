@@ -111,6 +111,19 @@ export interface AiOpsBriefingsResponse {
   briefings: AiOpsBriefing[];
 }
 
+interface AiOpsBriefingListOptions {
+  limit?: number;
+  status?: AiOpsBriefingStatus;
+}
+
+function briefingListQuery(options?: AiOpsBriefingListOptions): string {
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.status) params.set('status', options.status);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 export async function getProjectAiOps(projectId: string): Promise<ProjectAiOpsResponse> {
   return apiGet<ProjectAiOpsResponse>(`/api/projects/${projectId}/ai-ops`);
 }
@@ -146,17 +159,27 @@ export async function updateServiceAiOps(
 
 export async function listProjectAiOpsBriefings(
   projectId: string,
+  options?: AiOpsBriefingListOptions,
 ): Promise<AiOpsBriefingsResponse> {
-  return apiGet<AiOpsBriefingsResponse>(`/api/projects/${projectId}/ai-ops/briefings`);
+  return apiGet<AiOpsBriefingsResponse>(
+    `/api/projects/${projectId}/ai-ops/briefings${briefingListQuery(options)}`,
+  );
 }
 
 export async function listServiceAiOpsBriefings(
   projectId: string,
   serviceId: string,
+  options?: AiOpsBriefingListOptions,
 ): Promise<AiOpsBriefingsResponse> {
   return apiGet<AiOpsBriefingsResponse>(
-    `/api/projects/${projectId}/services/${serviceId}/ai-ops/briefings`,
+    `/api/projects/${projectId}/services/${serviceId}/ai-ops/briefings${briefingListQuery(options)}`,
   );
+}
+
+export async function listRecentAiOpsBriefings(
+  options?: AiOpsBriefingListOptions,
+): Promise<AiOpsBriefingsResponse> {
+  return apiGet<AiOpsBriefingsResponse>(`/api/ai-ops/briefings${briefingListQuery(options)}`);
 }
 
 export async function getAiOpsBriefing(briefingId: string): Promise<{ briefing: AiOpsBriefing }> {
