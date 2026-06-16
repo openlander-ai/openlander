@@ -47,6 +47,47 @@ a release should be recorded here so follow-up work is explicit.
   rules. PR6 may add Telegram send-only notification, but inbound Telegram
   updates must remain non-mutating.
 
+- **AI Ops Dashboard Inbox read route:** the web API adds read-only
+  `/api/ai-ops/briefings` with existing `status` and `limit` query semantics so
+  Home can show a cross-project AI Ops Inbox without fanout over every Project.
+- **Why accepted:** AI Ops Briefing is operational work, not a settings-only
+  surface. Operators need a severity-first entry point before drilling into a
+  Project or service; Project AI Ops uses the existing Project list route while
+  Home needs one bounded aggregate read model.
+- **Vocab review:** `AI Ops Inbox` is dashboard chrome over existing AI Ops
+  Briefing rows. It does not add a new resource type, MCP action, mutation
+  state, or response helper-call field.
+- **Endpoint collision check:** `rg` for `/api/ai-ops/briefings` and
+  `ai-ops/briefings` over `src`, `web`, `test`, and `docs` shows existing
+  Project/Service list routes plus detail `/api/ai-ops/briefings/:id`. The new
+  aggregate route is ordered before `/:id` and returns the same briefing row
+  shape without evidence.
+- **Follow-up:** acknowledge/resolve controls remain a separate UX/API slice.
+  `recovery_receipt.status="verified"` is a verification signal, not an
+  automatic briefing status transition.
+
+- **AI Ops briefing manual status route:** the web API adds
+  `PATCH /api/ai-ops/briefings/:id/status` for explicit operator-driven
+  `open | acknowledged | resolved` transitions. List endpoints also accept the
+  derived read filter `status=unresolved` for `open + acknowledged` inbox views.
+- **Why accepted:** AI Ops Inbox needs a way for humans to acknowledge and close
+  briefings without implying automatic remediation. `recovery_receipt` remains a
+  verification signal only; it never changes briefing status by itself.
+- **Vocab review:** `acknowledged`, `resolved`, and `unresolved` are briefing
+  workflow states over existing `ai_ops_briefings.status`. No Project,
+  Application, Compose, Database, Cache, Storage, or MCP response-helper
+  vocabulary changes.
+- **Endpoint collision check:** `rg` for `/api/ai-ops/briefings/:id/status`,
+  `updateAiOpsBriefingStatus`, and `status=unresolved` shows only this web
+  status route and its frontend/API/test callers. It is ordered separately from
+  the existing briefing detail route and does not expose evidence.
+- **Follow-up:** if AI Ops acknowledgement later needs audit identities, add a
+  small audit row or activity event with at least `actor`, `previous_status`,
+  `next_status`, and timestamp instead of overloading the briefing summary
+  payload. If this status mutation is ever exposed through MCP, it must first
+  pass the scoped-token invariant in `src/mcp/scope-policy.ts` so scoped tokens
+  cannot acknowledge or resolve out-of-boundary briefings.
+
 - **AI Ops summary metadata response expansion:** existing AI Ops briefing
   rows and read-only briefing responses now include additive summary metadata:
   `summary_source`, `summary_status`, `summary_truncated`,

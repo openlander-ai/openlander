@@ -276,6 +276,72 @@ describe('AI Ops routes', () => {
     });
   });
 
+  it('lists recent AI Ops briefings across projects for the dashboard inbox', async () => {
+    const db = {
+      listRecentAiOpsBriefings: vi.fn(async () => [
+        makeBriefing({
+          id: 'brief-2',
+          project_id: 'p2',
+          service_id: 'svc-2',
+          severity: 'high',
+          status: 'acknowledged',
+        }),
+        makeBriefing({ status: 'open' }),
+      ]),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/ai-ops/briefings?status=unresolved&limit=7');
+
+    expect(res.status).toBe(200);
+    expect(db.listRecentAiOpsBriefings).toHaveBeenCalledWith({ limit: 7, status: 'unresolved' });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.count).toBe(2);
+    const briefings = body.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-2');
+    expect(briefings[0]?.project_id).toBe('p2');
+    expect(briefings[0]?.status).toBe('acknowledged');
+    expect(briefings[0]).not.toHaveProperty('evidence');
+  });
+
+  it('updates AI Ops briefing status through a manual operator action', async () => {
+    const db = {
+      updateAiOpsBriefingStatus: vi.fn(async () => makeBriefing({ status: 'resolved' })),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/ai-ops/briefings/brief-1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'resolved' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.updateAiOpsBriefingStatus).toHaveBeenCalledWith('brief-1', 'resolved');
+    const body = (await res.json()) as { briefing: Record<string, unknown> };
+    expect(body.briefing).toMatchObject({
+      briefing_id: 'brief-1',
+      status: 'resolved',
+    });
+    expect(body.briefing).not.toHaveProperty('evidence');
+  });
+
+  it('rejects invalid AI Ops briefing status updates', async () => {
+    const db = {
+      updateAiOpsBriefingStatus: vi.fn(),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/ai-ops/briefings/brief-1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'unresolved' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(400);
+    expect(db.updateAiOpsBriefingStatus).not.toHaveBeenCalled();
+  });
+
   it('returns full briefing evidence and LLM usage summary', async () => {
     const db = {
       getAiOpsBriefing: vi.fn(async () =>

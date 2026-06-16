@@ -17,6 +17,9 @@ export const translations = {
     recentBriefings: 'Recent briefings',
     loading: 'Loading...',
     empty: 'No briefings yet.',
+    emptyTitle: 'No incident briefings yet',
+    emptyDescription:
+      'When AI Ops Briefing is enabled, crash, deploy failure, and route-health evidence will appear here.',
     detailTitle: 'AI Ops briefing',
     detailDescription:
       'Deterministic severity and suggested call are owned by OpenLander rules. LLM text is explanatory only.',
@@ -31,9 +34,40 @@ export const translations = {
       copy: 'Copy handoff',
       copied: 'Copied',
     },
+    actions: {
+      viewEvidence: 'View evidence',
+      openInAgent: 'Open in Agent',
+      verifyAfterFix: 'Verify after fix',
+      verifyCopied: 'Verification copied',
+      acknowledge: 'Acknowledge',
+      resolve: 'Resolve',
+    },
+    status: {
+      unresolved: 'Unresolved',
+      open: 'Open',
+      acknowledged: 'Acknowledged',
+      resolved: 'Resolved',
+      all: 'All',
+    },
+    inbox: {
+      title: 'AI Ops Inbox',
+      subtitle: 'Open incident briefings across Projects.',
+      emptyTitle: 'No open AI Ops briefings',
+      emptyDescription:
+        'Enabled Projects will surface crash, deploy failure, and route-health briefings here.',
+    },
+    projectInbox: {
+      title: 'AI Ops briefings',
+      description:
+        'Review operational briefings across this Project without opening each resource.',
+      emptyTitle: 'No matching briefings',
+      emptyDescription:
+        'When this Project has incidents, OpenLander will show deterministic evidence and agent handoff prompts here.',
+    },
     error: {
       load: 'Failed to load AI Ops briefings.',
       save: 'Failed to save AI Ops policy.',
+      status: 'Failed to update briefing status.',
     },
   },
   aiProviders: {
@@ -511,6 +545,7 @@ export const translations = {
     confirmDelete: 'Are you sure you want to delete this project?',
     tabs: {
       services: 'Resources',
+      aiOps: 'AI Ops',
       settings: 'Settings',
     },
     diagnosis: {

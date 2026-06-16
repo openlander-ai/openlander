@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { aiOpsBriefings } from '../schema.drizzle.js';
@@ -42,6 +42,8 @@ export interface CreateAiOpsBriefingData {
   suggestedCall?: AiOpsSuggestedCall | null;
   evidence: AiOpsEvidencePack;
 }
+
+export type AiOpsBriefingStatusFilter = AiOpsBriefingStatus | 'unresolved';
 
 function serializeUsageMetadata(
   usage: AiOpsLlmSummaryUsageMetadata | null | undefined,
@@ -100,11 +102,13 @@ export class AiOpsBriefingRepo {
 
   async listByProject(
     projectId: string,
-    opts?: { limit?: number; status?: AiOpsBriefingStatus },
+    opts?: { limit?: number; status?: AiOpsBriefingStatusFilter },
   ): Promise<AiOpsBriefingRow[]> {
     const limit = opts?.limit ?? 20;
     const conditions = [eq(aiOpsBriefings.project_id, projectId)];
-    if (opts?.status) {
+    if (opts?.status === 'unresolved') {
+      conditions.push(inArray(aiOpsBriefings.status, ['open', 'acknowledged']));
+    } else if (opts?.status) {
       conditions.push(eq(aiOpsBriefings.status, opts.status));
     }
 
@@ -118,11 +122,13 @@ export class AiOpsBriefingRepo {
 
   async listByService(
     serviceId: string,
-    opts?: { limit?: number; status?: AiOpsBriefingStatus },
+    opts?: { limit?: number; status?: AiOpsBriefingStatusFilter },
   ): Promise<AiOpsBriefingRow[]> {
     const limit = opts?.limit ?? 20;
     const conditions = [eq(aiOpsBriefings.service_id, serviceId)];
-    if (opts?.status) {
+    if (opts?.status === 'unresolved') {
+      conditions.push(inArray(aiOpsBriefings.status, ['open', 'acknowledged']));
+    } else if (opts?.status) {
       conditions.push(eq(aiOpsBriefings.status, opts.status));
     }
 
@@ -132,6 +138,50 @@ export class AiOpsBriefingRepo {
       .where(and(...conditions))
       .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
       .limit(limit);
+  }
+
+  async listRecent(opts?: {
+    limit?: number;
+    status?: AiOpsBriefingStatusFilter;
+  }): Promise<AiOpsBriefingRow[]> {
+    const limit = opts?.limit ?? 20;
+    if (opts?.status === 'unresolved') {
+      return await this.db
+        .select()
+        .from(aiOpsBriefings)
+        .where(inArray(aiOpsBriefings.status, ['open', 'acknowledged']))
+        .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+        .limit(limit);
+    }
+    if (opts?.status) {
+      return await this.db
+        .select()
+        .from(aiOpsBriefings)
+        .where(eq(aiOpsBriefings.status, opts.status))
+        .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+        .limit(limit);
+    }
+
+    return await this.db
+      .select()
+      .from(aiOpsBriefings)
+      .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+      .limit(limit);
+  }
+
+  async updateStatus(id: string, status: AiOpsBriefingStatus): Promise<AiOpsBriefingRow | null> {
+    return (
+      (
+        await this.db
+          .update(aiOpsBriefings)
+          .set({
+            status,
+            updated_at: new Date().toISOString(),
+          })
+          .where(eq(aiOpsBriefings.id, id))
+          .returning()
+      )[0] ?? null
+    );
   }
 
   async updateLlmSummary(

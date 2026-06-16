@@ -12,9 +12,10 @@
  * Status rollup keeps reading the legacy `status` field, which P1's
  * additive schema still populates on group rows during transition.
  */
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { StatusPill, TriggerChip } from '@/components/Shell/DeployRow';
@@ -24,6 +25,7 @@ import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useLanguage } from '@/i18n/context';
 import { getRecentDeployments } from '@/lib/api';
+import { listRecentAiOpsBriefings, type AiOpsBriefing } from '@/lib/api/ai-ops';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { DeployLogSummary } from '@/types';
@@ -142,6 +144,9 @@ export function Home() {
   // over `projects` and N+1'd `/api/projects/:id/deployments?limit=1`,
   // which dominated cold-load time on multi-project workspaces.
   const [lastDeployState, setLastDeployState] = useState<LastDeployState | null>(null);
+  const [aiOpsBriefings, setAiOpsBriefings] = useState<AiOpsBriefing[]>([]);
+  const [aiOpsLoading, setAiOpsLoading] = useState(true);
+  const [aiOpsError, setAiOpsError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -163,6 +168,35 @@ export function Home() {
       cancelled = true;
     };
   }, []);
+
+  const loadAiOpsBriefings = useCallback(
+    async (isCancelled?: () => boolean) => {
+      setAiOpsLoading(true);
+      setAiOpsError(null);
+      try {
+        const response = await listRecentAiOpsBriefings({ limit: 5, status: 'unresolved' });
+        if (isCancelled?.()) return;
+        setAiOpsBriefings(response.briefings ?? []);
+      } catch (err) {
+        if (isCancelled?.()) return;
+        setAiOpsError(err instanceof Error ? err.message : t('aiOps.error.load'));
+        setAiOpsBriefings([]);
+      } finally {
+        if (!isCancelled?.()) {
+          setAiOpsLoading(false);
+        }
+      }
+    },
+    [t],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => loadAiOpsBriefings(() => cancelled));
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAiOpsBriefings]);
 
   if (loading && projects.length === 0) {
     return (
@@ -286,6 +320,24 @@ export function Home() {
             </button>
           );
         })()}
+
+      {/* ── 1c. AI Ops inbox ── */}
+      <OuterCard title={t('aiOps.inbox.title')} subtitle={t('aiOps.inbox.subtitle')}>
+        {aiOpsError && (
+          <div className="mb-3 rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+            {aiOpsError}
+          </div>
+        )}
+        <AiOpsBriefingFeed
+          briefings={aiOpsBriefings}
+          loading={aiOpsLoading}
+          emptyTitle={t('aiOps.inbox.emptyTitle')}
+          emptyDescription={t('aiOps.inbox.emptyDescription')}
+          showScope
+          onError={setAiOpsError}
+          onStatusChanged={() => loadAiOpsBriefings()}
+        />
+      </OuterCard>
 
       {/* ── 2. Projects grid ── */}
       <OuterCard

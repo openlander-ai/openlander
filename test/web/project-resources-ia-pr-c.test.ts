@@ -13,9 +13,9 @@ describe('Project resources IA', () => {
   const infraMapSource = readRepoFile('web/src/components/Shell/InfraMap.tsx');
 
   it('keeps the Services tab id as a compatibility alias while rendering Resources copy', () => {
-    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'settings'");
+    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
     expect(projectViewSource).toContain("label: t('projectDetail.tabs.services')");
-    expect(projectViewSource).toContain("panelId=\"projectpanel-services\"");
+    expect(projectViewSource).toContain('panelId="projectpanel-services"');
     expect(projectViewSource).not.toContain('Add service');
     expect(projectViewSource).toContain("t('projectDetail.addResourceWithAgent')");
     expect(projectViewSource).toContain("t('projectDetail.addService.title')");
@@ -24,7 +24,9 @@ describe('Project resources IA', () => {
   it('uses canonical group-service rows for resource cards so Compose stays one card', () => {
     expect(projectViewSource).toContain('const [groupServiceNodes, setGroupServiceNodes]');
     expect(projectViewSource).toContain('listGroupServices(projectId)');
-    expect(projectViewSource).toContain('const resourceServiceNodes = groupServiceNodes ?? services');
+    expect(projectViewSource).toContain(
+      'const resourceServiceNodes = groupServiceNodes ?? services',
+    );
     expect(projectViewSource).toContain(
       "service.kind === 'compose' || service.buildMethod === 'compose'",
     );
