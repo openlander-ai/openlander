@@ -38,8 +38,13 @@ export const translations = {
     actions: {
       viewEvidence: 'Evidence 보기',
       openInAgent: 'Agent에서 열기',
+      verifyAfterFix: '수정 후 검증',
+      verifyCopied: '검증 call 복사됨',
+      acknowledge: '확인',
+      resolve: '종료',
     },
     status: {
+      unresolved: '미종료',
       open: 'Open',
       acknowledged: 'Acknowledged',
       resolved: 'Resolved',
@@ -62,6 +67,7 @@ export const translations = {
     error: {
       load: 'AI Ops 브리핑을 불러오지 못했습니다.',
       save: 'AI Ops 정책 저장에 실패했습니다.',
+      status: '브리핑 상태를 변경하지 못했습니다.',
     },
   },
   aiProviders: {

@@ -12,7 +12,7 @@
  * Status rollup keeps reading the legacy `status` field, which P1's
  * additive schema still populates on group rows during transition.
  */
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
@@ -169,27 +169,34 @@ export function Home() {
     };
   }, []);
 
+  const loadAiOpsBriefings = useCallback(
+    async (isCancelled?: () => boolean) => {
+      setAiOpsLoading(true);
+      setAiOpsError(null);
+      try {
+        const response = await listRecentAiOpsBriefings({ limit: 5, status: 'unresolved' });
+        if (isCancelled?.()) return;
+        setAiOpsBriefings(response.briefings ?? []);
+      } catch (err) {
+        if (isCancelled?.()) return;
+        setAiOpsError(err instanceof Error ? err.message : t('aiOps.error.load'));
+        setAiOpsBriefings([]);
+      } finally {
+        if (!isCancelled?.()) {
+          setAiOpsLoading(false);
+        }
+      }
+    },
+    [t],
+  );
+
   useEffect(() => {
     let cancelled = false;
-    setAiOpsLoading(true);
-    setAiOpsError(null);
-    void (async () => {
-      try {
-        const response = await listRecentAiOpsBriefings({ limit: 5, status: 'open' });
-        if (!cancelled) setAiOpsBriefings(response.briefings ?? []);
-      } catch (err) {
-        if (!cancelled) {
-          setAiOpsError(err instanceof Error ? err.message : t('aiOps.error.load'));
-          setAiOpsBriefings([]);
-        }
-      } finally {
-        if (!cancelled) setAiOpsLoading(false);
-      }
-    })();
+    void Promise.resolve().then(() => loadAiOpsBriefings(() => cancelled));
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [loadAiOpsBriefings]);
 
   if (loading && projects.length === 0) {
     return (
@@ -328,6 +335,7 @@ export function Home() {
           emptyDescription={t('aiOps.inbox.emptyDescription')}
           showScope
           onError={setAiOpsError}
+          onStatusChanged={() => loadAiOpsBriefings()}
         />
       </OuterCard>
 

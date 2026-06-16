@@ -19,6 +19,12 @@ import {
 const PROJECT_MODES = new Set<AiOpsProjectMode>(['off', 'briefing']);
 const SERVICE_MODES = new Set<AiOpsServiceOverrideMode>(['inherit', 'off', 'briefing']);
 const BRIEFING_STATUSES = new Set<AiOpsBriefingStatus>(['open', 'acknowledged', 'resolved']);
+const BRIEFING_STATUS_FILTERS = new Set<AiOpsBriefingStatus | 'unresolved'>([
+  'open',
+  'acknowledged',
+  'resolved',
+  'unresolved',
+]);
 
 function parsePositiveInt(value: string | undefined, fallback: number, max: number): number {
   if (!value) return fallback;
@@ -44,6 +50,19 @@ function isProjectMode(value: unknown): value is AiOpsProjectMode {
 
 function isServiceMode(value: unknown): value is AiOpsServiceOverrideMode {
   return typeof value === 'string' && SERVICE_MODES.has(value as AiOpsServiceOverrideMode);
+}
+
+function isBriefingStatus(value: unknown): value is AiOpsBriefingStatus {
+  return typeof value === 'string' && BRIEFING_STATUSES.has(value as AiOpsBriefingStatus);
+}
+
+function briefingStatusFilter(
+  value: string | undefined,
+): AiOpsBriefingStatus | 'unresolved' | undefined {
+  if (!value) return undefined;
+  return BRIEFING_STATUS_FILTERS.has(value as AiOpsBriefingStatus | 'unresolved')
+    ? (value as AiOpsBriefingStatus | 'unresolved')
+    : undefined;
 }
 
 function numberFromBody(value: unknown): number | undefined {
@@ -132,11 +151,7 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'NOT_FOUND', message: `Project not found: ${projectParam}` }, 404);
     }
 
-    const rawStatus = c.req.query('status');
-    const status =
-      rawStatus && BRIEFING_STATUSES.has(rawStatus as AiOpsBriefingStatus)
-        ? (rawStatus as AiOpsBriefingStatus)
-        : undefined;
+    const status = briefingStatusFilter(c.req.query('status'));
     const limit = parsePositiveInt(c.req.query('limit'), 20, 100);
     const briefings = await ctx.db.listAiOpsBriefingsByProject(project.id, { limit, status });
 
@@ -201,11 +216,7 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
     const resolved = await resolveDeployableServiceForRoute(c, ctx);
     if (resolved instanceof Response) return resolved;
 
-    const rawStatus = c.req.query('status');
-    const status =
-      rawStatus && BRIEFING_STATUSES.has(rawStatus as AiOpsBriefingStatus)
-        ? (rawStatus as AiOpsBriefingStatus)
-        : undefined;
+    const status = briefingStatusFilter(c.req.query('status'));
     const limit = parsePositiveInt(c.req.query('limit'), 20, 100);
     const briefings = await ctx.db.listAiOpsBriefingsByService(resolved.service.id, {
       limit,
@@ -221,11 +232,7 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/ai-ops/briefings', async (c) => {
-    const rawStatus = c.req.query('status');
-    const status =
-      rawStatus && BRIEFING_STATUSES.has(rawStatus as AiOpsBriefingStatus)
-        ? (rawStatus as AiOpsBriefingStatus)
-        : undefined;
+    const status = briefingStatusFilter(c.req.query('status'));
     const limit = parsePositiveInt(c.req.query('limit'), 20, 100);
     const briefings = await ctx.db.listRecentAiOpsBriefings({ limit, status });
 
@@ -233,6 +240,25 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
       count: briefings.length,
       briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
     });
+  });
+
+  api.patch('/ai-ops/briefings/:id/status', async (c) => {
+    const id = c.req.param('id');
+    const body = await readJsonBody(c);
+    const rawStatus = body['status'];
+    if (!isBriefingStatus(rawStatus)) {
+      return c.json(
+        { error: 'INVALID_FIELD', message: 'status must be open, acknowledged, or resolved' },
+        400,
+      );
+    }
+
+    const briefing = await ctx.db.updateAiOpsBriefingStatus(id, rawStatus);
+    if (!briefing) {
+      return c.json({ error: 'NOT_FOUND', message: `AI Ops briefing not found: ${id}` }, 404);
+    }
+
+    return c.json({ briefing: formatAiOpsBriefingRow(briefing) });
   });
 
   api.get('/ai-ops/briefings/:id', async (c) => {

@@ -5,7 +5,7 @@ import { useLanguage } from '@/i18n/context';
 import {
   listProjectAiOpsBriefings,
   type AiOpsBriefing,
-  type AiOpsBriefingStatus,
+  type AiOpsBriefingStatusFilter,
 } from '@/lib/api/ai-ops';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +13,11 @@ interface ProjectAiOpsTabProps {
   projectId: string;
 }
 
-const STATUS_FILTERS: Array<{ value: AiOpsBriefingStatus | 'all'; labelKey: string }> = [
+const STATUS_FILTERS: Array<{
+  value: AiOpsBriefingStatusFilter | 'all';
+  labelKey: string;
+}> = [
+  { value: 'unresolved', labelKey: 'aiOps.status.unresolved' },
   { value: 'open', labelKey: 'aiOps.status.open' },
   { value: 'acknowledged', labelKey: 'aiOps.status.acknowledged' },
   { value: 'resolved', labelKey: 'aiOps.status.resolved' },
@@ -22,7 +26,7 @@ const STATUS_FILTERS: Array<{ value: AiOpsBriefingStatus | 'all'; labelKey: stri
 
 export function ProjectAiOpsTab({ projectId }: ProjectAiOpsTabProps) {
   const { t } = useLanguage();
-  const [status, setStatus] = useState<AiOpsBriefingStatus | 'all'>('open');
+  const [status, setStatus] = useState<AiOpsBriefingStatusFilter | 'all'>('unresolved');
   const [briefings, setBriefings] = useState<AiOpsBriefing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +48,7 @@ export function ProjectAiOpsTab({ projectId }: ProjectAiOpsTabProps) {
   }, [projectId, status, t]);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(() => load());
   }, [load]);
 
   return (
@@ -91,6 +95,7 @@ export function ProjectAiOpsTab({ projectId }: ProjectAiOpsTabProps) {
         emptyDescription={t('aiOps.projectInbox.emptyDescription')}
         showScope
         onError={setError}
+        onStatusChanged={() => load()}
       />
     </div>
   );

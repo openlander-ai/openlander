@@ -4,6 +4,21 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+export function buildAiOpsVerificationCall(briefing: AiOpsBriefing): string {
+  return formatJson({
+    tool: 'openlander_monitor',
+    arguments: {
+      action: 'diagnose_service',
+      params: {
+        ...(briefing.service_id
+          ? { service_id: briefing.service_id }
+          : { project_id: briefing.project_id }),
+        briefing_id: briefing.briefing_id,
+      },
+    },
+  });
+}
+
 export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
   const firstCall = {
     tool: 'openlander_monitor',
@@ -16,19 +31,6 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
   const freshness = briefing.evidence_metadata
     ? `${briefing.evidence_metadata.source}, live=${String(briefing.evidence_metadata.live)}, observed_at=${briefing.evidence_metadata.observed_at}`
     : 'briefing detail not loaded';
-  const verificationCall = {
-    tool: 'openlander_monitor',
-    arguments: {
-      action: 'diagnose_service',
-      params: {
-        ...(briefing.service_id
-          ? { service_id: briefing.service_id }
-          : { project_id: briefing.project_id }),
-        briefing_id: briefing.briefing_id,
-      },
-    },
-  };
-
   return [
     'OpenLander AI Ops handoff',
     '',
@@ -51,7 +53,7 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
     formatJson(briefing.suggested_call ?? null),
     '',
     'Verification MCP call after any change',
-    formatJson(verificationCall),
+    buildAiOpsVerificationCall(briefing),
     '',
     'Verification checklist before saying fixed',
     '- Run the verification MCP call and read recovery_receipt.status.',

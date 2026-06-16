@@ -66,6 +66,25 @@ a release should be recorded here so follow-up work is explicit.
   `recovery_receipt.status="verified"` is a verification signal, not an
   automatic briefing status transition.
 
+- **AI Ops briefing manual status route:** the web API adds
+  `PATCH /api/ai-ops/briefings/:id/status` for explicit operator-driven
+  `open | acknowledged | resolved` transitions. List endpoints also accept the
+  derived read filter `status=unresolved` for `open + acknowledged` inbox views.
+- **Why accepted:** AI Ops Inbox needs a way for humans to acknowledge and close
+  briefings without implying automatic remediation. `recovery_receipt` remains a
+  verification signal only; it never changes briefing status by itself.
+- **Vocab review:** `acknowledged`, `resolved`, and `unresolved` are briefing
+  workflow states over existing `ai_ops_briefings.status`. No Project,
+  Application, Compose, Database, Cache, Storage, or MCP response-helper
+  vocabulary changes.
+- **Endpoint collision check:** `rg` for `/api/ai-ops/briefings/:id/status`,
+  `updateAiOpsBriefingStatus`, and `status=unresolved` shows only this web
+  status route and its frontend/API/test callers. It is ordered separately from
+  the existing briefing detail route and does not expose evidence.
+- **Follow-up:** if AI Ops acknowledgement later needs audit identities, add a
+  small audit row or activity event instead of overloading the briefing summary
+  payload.
+
 - **AI Ops summary metadata response expansion:** existing AI Ops briefing
   rows and read-only briefing responses now include additive summary metadata:
   `summary_source`, `summary_status`, `summary_truncated`,

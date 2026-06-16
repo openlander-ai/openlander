@@ -3,6 +3,7 @@ import { apiGet, apiPatch } from './client';
 export type AiOpsProjectMode = 'off' | 'briefing';
 export type AiOpsServiceOverrideMode = 'inherit' | 'off' | 'briefing';
 export type AiOpsBriefingStatus = 'open' | 'acknowledged' | 'resolved';
+export type AiOpsBriefingStatusFilter = AiOpsBriefingStatus | 'unresolved';
 export type AiOpsBriefingSeverity = 'info' | 'warning' | 'high' | 'critical';
 export type AiOpsBriefingSummarySource = 'llm' | 'deterministic';
 export type AiOpsBriefingSummaryStatus = 'llm' | 'fallback' | 'skipped' | 'deterministic';
@@ -113,7 +114,7 @@ export interface AiOpsBriefingsResponse {
 
 interface AiOpsBriefingListOptions {
   limit?: number;
-  status?: AiOpsBriefingStatus;
+  status?: AiOpsBriefingStatusFilter;
 }
 
 function briefingListQuery(options?: AiOpsBriefingListOptions): string {
@@ -184,4 +185,13 @@ export async function listRecentAiOpsBriefings(
 
 export async function getAiOpsBriefing(briefingId: string): Promise<{ briefing: AiOpsBriefing }> {
   return apiGet<{ briefing: AiOpsBriefing }>(`/api/ai-ops/briefings/${briefingId}`);
+}
+
+export async function updateAiOpsBriefingStatus(
+  briefingId: string,
+  status: AiOpsBriefingStatus,
+): Promise<{ briefing: AiOpsBriefing }> {
+  return apiPatch<{ briefing: AiOpsBriefing }>(`/api/ai-ops/briefings/${briefingId}/status`, {
+    status,
+  });
 }

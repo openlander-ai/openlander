@@ -10,8 +10,13 @@ import {
 } from '@/components/ui/dialog';
 import { useCopy } from '@/hooks/use-copy';
 import { useLanguage } from '@/i18n/context';
-import { buildAiOpsAgentHandoffPrompt } from '@/lib/ai-ops-handoff';
-import { getAiOpsBriefing, type AiOpsBriefing } from '@/lib/api/ai-ops';
+import { buildAiOpsAgentHandoffPrompt, buildAiOpsVerificationCall } from '@/lib/ai-ops-handoff';
+import {
+  getAiOpsBriefing,
+  updateAiOpsBriefingStatus,
+  type AiOpsBriefing,
+  type AiOpsBriefingStatus,
+} from '@/lib/api/ai-ops';
 import { cn } from '@/lib/utils';
 
 interface AiOpsBriefingFeedProps {
@@ -22,6 +27,7 @@ interface AiOpsBriefingFeedProps {
   emptyDescription?: string;
   showScope?: boolean;
   onError?: (message: string) => void;
+  onStatusChanged?: (briefing: AiOpsBriefing) => void | Promise<void>;
 }
 
 function severityClass(severity: AiOpsBriefing['severity']): string {
@@ -62,10 +68,12 @@ export function AiOpsBriefingFeed({
   emptyDescription,
   showScope = false,
   onError,
+  onStatusChanged,
 }: AiOpsBriefingFeedProps) {
   const { t } = useLanguage();
   const [selectedBriefing, setSelectedBriefing] = useState<AiOpsBriefing | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   const { copy, isCopied } = useCopy();
   const visibleBriefings = maxItems ? briefings.slice(0, maxItems) : briefings;
 
@@ -84,6 +92,65 @@ export function AiOpsBriefingFeed({
 
   const copyAgentHandoff = (briefing: AiOpsBriefing) => {
     void copy(buildAiOpsAgentHandoffPrompt(briefing), `ai-ops-handoff-${briefing.briefing_id}`);
+  };
+
+  const copyVerificationCall = (briefing: AiOpsBriefing) => {
+    void copy(buildAiOpsVerificationCall(briefing), `ai-ops-verify-${briefing.briefing_id}`);
+  };
+
+  const changeBriefingStatus = async (briefing: AiOpsBriefing, status: AiOpsBriefingStatus) => {
+    const updateKey = `${briefing.briefing_id}:${status}`;
+    setStatusUpdating(updateKey);
+    try {
+      const response = await updateAiOpsBriefingStatus(briefing.briefing_id, status);
+      setSelectedBriefing((current) =>
+        current?.briefing_id === briefing.briefing_id
+          ? {
+              ...current,
+              status: response.briefing.status,
+              updated_at: response.briefing.updated_at,
+            }
+          : current,
+      );
+      await onStatusChanged?.(response.briefing);
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : t('aiOps.error.status'));
+    } finally {
+      setStatusUpdating(null);
+    }
+  };
+
+  const renderStatusActions = (briefing: AiOpsBriefing) => {
+    if (briefing.status === 'resolved') return null;
+
+    return (
+      <>
+        {briefing.status === 'open' && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={statusUpdating === `${briefing.briefing_id}:acknowledged`}
+            onClick={() => void changeBriefingStatus(briefing, 'acknowledged')}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {t('aiOps.actions.acknowledge')}
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={statusUpdating === `${briefing.briefing_id}:resolved`}
+          onClick={() => void changeBriefingStatus(briefing, 'resolved')}
+          className="h-8 gap-1.5 text-xs"
+        >
+          <Check className="h-3.5 w-3.5" />
+          {t('aiOps.actions.resolve')}
+        </Button>
+      </>
+    );
   };
 
   if (loading) {
@@ -167,6 +234,22 @@ export function AiOpsBriefingFeed({
                   type="button"
                   size="sm"
                   variant="outline"
+                  onClick={() => copyVerificationCall(briefing)}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {isCopied(`ai-ops-verify-${briefing.briefing_id}`) ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied(`ai-ops-verify-${briefing.briefing_id}`)
+                    ? t('aiOps.actions.verifyCopied')
+                    : t('aiOps.actions.verifyAfterFix')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
                   onClick={() => copyAgentHandoff(briefing)}
                   className="h-8 gap-1.5 text-xs"
                 >
@@ -179,6 +262,7 @@ export function AiOpsBriefingFeed({
                     ? t('aiOps.agentHandoff.copied')
                     : t('aiOps.actions.openInAgent')}
                 </Button>
+                {renderStatusActions(briefing)}
               </div>
             </div>
           </div>
@@ -211,6 +295,25 @@ export function AiOpsBriefingFeed({
                 {detailLoading && (
                   <span className="text-[11px] text-foreground/60">{t('aiOps.loading')}</span>
                 )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyVerificationCall(selectedBriefing)}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {isCopied(`ai-ops-verify-${selectedBriefing.briefing_id}`) ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied(`ai-ops-verify-${selectedBriefing.briefing_id}`)
+                    ? t('aiOps.actions.verifyCopied')
+                    : t('aiOps.actions.verifyAfterFix')}
+                </Button>
+                {renderStatusActions(selectedBriefing)}
               </div>
               <p className="text-sm leading-relaxed text-foreground/80">
                 {selectedBriefing.summary}

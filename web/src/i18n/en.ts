@@ -37,8 +37,13 @@ export const translations = {
     actions: {
       viewEvidence: 'View evidence',
       openInAgent: 'Open in Agent',
+      verifyAfterFix: 'Verify after fix',
+      verifyCopied: 'Verification copied',
+      acknowledge: 'Acknowledge',
+      resolve: 'Resolve',
     },
     status: {
+      unresolved: 'Unresolved',
       open: 'Open',
       acknowledged: 'Acknowledged',
       resolved: 'Resolved',
@@ -62,6 +67,7 @@ export const translations = {
     error: {
       load: 'Failed to load AI Ops briefings.',
       save: 'Failed to save AI Ops policy.',
+      status: 'Failed to update briefing status.',
     },
   },
   aiProviders: {

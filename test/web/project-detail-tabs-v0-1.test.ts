@@ -14,16 +14,19 @@ describe('Project detail v0.1 tabs', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
-  it('exposes only Resources and Settings tabs', () => {
-    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'settings'");
+  it('exposes Resources, AI, and Settings tabs', () => {
+    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
     expect(projectViewSource).toContain("id: 'services'");
+    expect(projectViewSource).toContain("id: 'ai'");
     expect(projectViewSource).toContain("id: 'settings'");
     expect(projectViewSource).not.toMatch(/id:\s*'mcp'/);
     expect(projectViewSource).not.toMatch(/id:\s*'activity'/);
   });
 
   it('falls through legacy ?tab=mcp to services without rendering an MCP panel', () => {
-    expect(projectViewSource).toContain("tabParam === 'settings' ? 'settings' : 'services'");
+    expect(projectViewSource).toContain(
+      "tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services'",
+    );
     expect(projectViewSource).not.toContain('projectpanel-mcp');
     expect(projectViewSource).not.toContain('<ProjectMcpTab');
   });
