@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.14] - 2026-06-16
+
+### Added
+
+- Add the Home AI Ops Inbox and Project AI Ops tab so operators can review
+  briefing incidents without drilling into each service's settings tab.
+- Add manual AI Ops briefing status actions for `acknowledged` and `resolved`,
+  plus an `unresolved` filter that keeps open and acknowledged briefings visible
+  until a human closes them.
+- Add a Verify after fix action that copies the deterministic
+  `diagnose_service` + `briefing_id` MCP call for recovery receipt checks while
+  keeping `recovery_receipt.status="verified"` as a signal, not an automatic
+  status transition.
+
 ## [0.2.0-rc.13] - 2026-06-16
 
 ### Fixed
