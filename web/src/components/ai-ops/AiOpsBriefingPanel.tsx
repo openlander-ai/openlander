@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, Check, Copy, ShieldCheck, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Bell, ShieldCheck, Sparkles } from 'lucide-react';
+import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
 import { useLanguage } from '@/i18n/context';
 import {
-  getAiOpsBriefing,
   getProjectAiOps,
   getServiceAiOps,
   listServiceAiOpsBriefings,
@@ -20,9 +12,7 @@ import {
   type AiOpsProjectMode,
   type AiOpsServiceOverrideMode,
 } from '@/lib/api/ai-ops';
-import { buildAiOpsAgentHandoffPrompt } from '@/lib/ai-ops-handoff';
 import { cn } from '@/lib/utils';
-import { useCopy } from '@/hooks/use-copy';
 
 type AiOpsScope = 'project' | 'service';
 
@@ -30,30 +20,6 @@ interface AiOpsBriefingPanelProps {
   scope: AiOpsScope;
   projectId: string;
   serviceId?: string;
-}
-
-function severityClass(severity: AiOpsBriefing['severity']): string {
-  switch (severity) {
-    case 'critical':
-      return 'border-error/30 bg-error/10 text-error';
-    case 'high':
-      return 'border-orange-500/30 bg-orange-500/10 text-orange-600';
-    case 'warning':
-      return 'border-warning/30 bg-warning/10 text-warning';
-    case 'info':
-    default:
-      return 'border-info/30 bg-info/10 text-info';
-  }
-}
-
-function formatMoney(value: number | undefined): string {
-  if (!value) return '$0.0000';
-  return `$${value.toFixed(4)}`;
-}
-
-function formatJson(value: unknown): string {
-  if (value == null) return 'null';
-  return JSON.stringify(value, null, 2);
 }
 
 export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefingPanelProps) {
@@ -66,9 +32,6 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
   const [resolvedMode, setResolvedMode] = useState<AiOpsProjectMode>('off');
   const [budgetText, setBudgetText] = useState('');
   const [briefings, setBriefings] = useState<AiOpsBriefing[]>([]);
-  const [selectedBriefing, setSelectedBriefing] = useState<AiOpsBriefing | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const { copy, isCopied } = useCopy();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,23 +95,6 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
     } finally {
       setSaving(false);
     }
-  };
-
-  const openBriefing = async (briefing: AiOpsBriefing) => {
-    setSelectedBriefing(briefing);
-    setDetailLoading(true);
-    try {
-      const detail = await getAiOpsBriefing(briefing.briefing_id);
-      setSelectedBriefing(detail.briefing);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiOps.error.load'));
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const copyAgentHandoff = (briefing: AiOpsBriefing) => {
-    void copy(buildAiOpsAgentHandoffPrompt(briefing), `ai-ops-handoff-${briefing.briefing_id}`);
   };
 
   const projectModeButtons: Array<{ value: AiOpsProjectMode; label: string }> = [
@@ -235,146 +181,16 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
         </div>
         {loading ? (
           <p className="text-xs text-foreground/60">{t('aiOps.loading')}</p>
-        ) : briefings.length === 0 ? (
-          <p className="text-xs text-foreground/60">{t('aiOps.empty')}</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {briefings.slice(0, 5).map((briefing) => (
-              <button
-                key={briefing.briefing_id}
-                type="button"
-                onClick={() => void openBriefing(briefing)}
-                className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/40 p-3 text-left transition-colors hover:bg-bg-subtle"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={cn(
-                      'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide',
-                      severityClass(briefing.severity),
-                    )}
-                  >
-                    {briefing.severity}
-                  </span>
-                  <span className="truncate text-xs font-medium text-foreground">
-                    {briefing.title}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-[11.5px] text-foreground/70">
-                  {briefing.summary}
-                </p>
-              </button>
-            ))}
-          </div>
+          <AiOpsBriefingFeed
+            briefings={briefings}
+            maxItems={5}
+            emptyTitle={t('aiOps.emptyTitle')}
+            emptyDescription={t('aiOps.emptyDescription')}
+            onError={setError}
+          />
         )}
       </div>
-
-      <Dialog
-        open={selectedBriefing !== null}
-        onOpenChange={(open) => !open && setSelectedBriefing(null)}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{selectedBriefing?.title ?? t('aiOps.detailTitle')}</DialogTitle>
-            <DialogDescription>{t('aiOps.detailDescription')}</DialogDescription>
-          </DialogHeader>
-          {selectedBriefing && (
-            <div className="max-h-[65vh] space-y-4 overflow-auto pt-2">
-              <div className="flex flex-wrap gap-2">
-                <span
-                  className={cn(
-                    'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide',
-                    severityClass(selectedBriefing.severity),
-                  )}
-                >
-                  {selectedBriefing.severity}
-                </span>
-                <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
-                  {selectedBriefing.classification}
-                </span>
-                {detailLoading && (
-                  <span className="text-[11px] text-foreground/60">{t('aiOps.loading')}</span>
-                )}
-              </div>
-              <p className="text-sm leading-relaxed text-foreground/80">
-                {selectedBriefing.summary}
-              </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Metric
-                  label={t('aiOps.tokens')}
-                  value={String(selectedBriefing.usage?.total_tokens ?? 0)}
-                />
-                <Metric
-                  label={t('aiOps.cost')}
-                  value={formatMoney(selectedBriefing.usage?.cost_usd)}
-                />
-                <Metric
-                  label={t('aiOps.llmCalls')}
-                  value={String(selectedBriefing.usage?.count ?? 0)}
-                />
-              </div>
-              <CodeBlock
-                label={t('aiOps.suggestedCall')}
-                value={formatJson(selectedBriefing.suggested_call)}
-              />
-              <div>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-medium text-foreground/80">
-                      {t('aiOps.agentHandoff.title')}
-                    </div>
-                    <p className="mt-1 text-[11px] text-foreground/60">
-                      {t('aiOps.agentHandoff.description')}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyAgentHandoff(selectedBriefing)}
-                    className="h-8 shrink-0 gap-1.5 text-xs"
-                  >
-                    {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`) ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                    {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`)
-                      ? t('aiOps.agentHandoff.copied')
-                      : t('aiOps.agentHandoff.copy')}
-                  </Button>
-                </div>
-                <pre className="max-h-48 overflow-auto rounded-md border border-agent/20 bg-agent/5 p-3 text-[11px] text-foreground/80">
-                  {buildAiOpsAgentHandoffPrompt(selectedBriefing)}
-                </pre>
-              </div>
-              <CodeBlock
-                label={t('aiOps.evidence')}
-                value={formatJson(selectedBriefing.evidence)}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-foreground/50">{label}</div>
-      <div className="ol-mono mt-1 text-xs text-foreground">{value}</div>
-    </div>
-  );
-}
-
-function CodeBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="mb-1 text-xs font-medium text-foreground/80">{label}</div>
-      <pre className="max-h-48 overflow-auto rounded-md border border-[hsl(var(--border))] bg-bg-subtle p-3 text-[11px] text-foreground/80">
-        {value}
-      </pre>
-    </div>
   );
 }

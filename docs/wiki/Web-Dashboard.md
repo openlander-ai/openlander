@@ -33,6 +33,8 @@ The main page after login.
 - KPI cards for deploys, services, alerts, and host health
 - **Live Activity** feed — recent deploy / config / alert events
 - **Needs Attention** panel — highlights error-state projects and unhealthy services
+- **AI Ops Inbox** — latest open briefings across Projects with evidence, Open in Agent handoff,
+  and after-fix verification actions
 
 ### Projects (`/projects`)
 
@@ -87,7 +89,7 @@ Detailed view for a Project and its resources.
 - Share (public URL)
 - Delete
 
-**Tabs** (5 — access via URL tab state like `?tab=recovery`):
+**Tabs** (access via URL tab state such as `?tab=ai`):
 
 | Tab             | Features                                                                                     |
 | --------------- | -------------------------------------------------------------------------------------------- |
@@ -95,17 +97,18 @@ Detailed view for a Project and its resources.
 | **Deployments** | History list with filters (all / success / failed / building), commit SHA, duration, trigger |
 | **Recovery**    | Historical incident/status information when available                                        |
 | **Runtime**     | Service logs + web terminal (xterm.js), ANSI colors, runtime state                           |
+| **AI Ops**      | Project-level briefing feed with status filters and agent handoff actions                    |
 | **Settings**    | Project metadata and danger actions. Application config lives on detail pages.               |
 
-Project Settings includes **AI Ops Briefing** controls. Briefings are read-only: OpenLander can
-summarize deterministic evidence and show a suggested MCP diagnostic call, but it does not restart,
-redeploy, roll back, or edit env vars automatically. The briefing detail dialog includes an
-**Agent handoff** prompt with the `briefing_id`, a deterministic first MCP call
-(`openlander_monitor.get_ai_ops_briefing`), the suggested call, and an after-fix verification
-checklist. The handoff prompt also includes a verification call that passes the same `briefing_id`
-to `openlander_monitor.diagnose_service`, which returns a machine-readable `recovery_receipt`
-comparing the incident snapshot with current live route/container/deploy evidence. The handoff
-prompt intentionally contains no token or credential.
+Project Settings includes **AI Ops Briefing** controls. The Project **AI Ops** tab is the read
+surface for recent briefings. Briefings are read-only: OpenLander can summarize deterministic
+evidence and show a suggested MCP diagnostic call, but it does not restart, redeploy, roll back, or
+edit env vars automatically. The briefing detail dialog includes an **Agent handoff** prompt with
+the `briefing_id`, a deterministic first MCP call (`openlander_monitor.get_ai_ops_briefing`), the
+suggested call, and an after-fix verification checklist. The handoff prompt also includes a
+verification call that passes the same `briefing_id` to `openlander_monitor.diagnose_service`, which
+returns a machine-readable `recovery_receipt` comparing the incident snapshot with current live
+route/container/deploy evidence. The handoff prompt intentionally contains no token or credential.
 
 > **Note**: OpenLander's model is resource-first for runtime configuration. Activity,
 > deployments, domains, env vars, and resource limits belong to Application detail pages rather

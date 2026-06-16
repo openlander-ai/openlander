@@ -47,6 +47,25 @@ a release should be recorded here so follow-up work is explicit.
   rules. PR6 may add Telegram send-only notification, but inbound Telegram
   updates must remain non-mutating.
 
+- **AI Ops Dashboard Inbox read route:** the web API adds read-only
+  `/api/ai-ops/briefings` with existing `status` and `limit` query semantics so
+  Home can show a cross-project AI Ops Inbox without fanout over every Project.
+- **Why accepted:** AI Ops Briefing is operational work, not a settings-only
+  surface. Operators need a severity-first entry point before drilling into a
+  Project or service; Project AI Ops uses the existing Project list route while
+  Home needs one bounded aggregate read model.
+- **Vocab review:** `AI Ops Inbox` is dashboard chrome over existing AI Ops
+  Briefing rows. It does not add a new resource type, MCP action, mutation
+  state, or response helper-call field.
+- **Endpoint collision check:** `rg` for `/api/ai-ops/briefings` and
+  `ai-ops/briefings` over `src`, `web`, `test`, and `docs` shows existing
+  Project/Service list routes plus detail `/api/ai-ops/briefings/:id`. The new
+  aggregate route is ordered before `/:id` and returns the same briefing row
+  shape without evidence.
+- **Follow-up:** acknowledge/resolve controls remain a separate UX/API slice.
+  `recovery_receipt.status="verified"` is a verification signal, not an
+  automatic briefing status transition.
+
 - **AI Ops summary metadata response expansion:** existing AI Ops briefing
   rows and read-only briefing responses now include additive summary metadata:
   `summary_source`, `summary_status`, `summary_truncated`,

@@ -220,6 +220,21 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
     });
   });
 
+  api.get('/ai-ops/briefings', async (c) => {
+    const rawStatus = c.req.query('status');
+    const status =
+      rawStatus && BRIEFING_STATUSES.has(rawStatus as AiOpsBriefingStatus)
+        ? (rawStatus as AiOpsBriefingStatus)
+        : undefined;
+    const limit = parsePositiveInt(c.req.query('limit'), 20, 100);
+    const briefings = await ctx.db.listRecentAiOpsBriefings({ limit, status });
+
+    return c.json({
+      count: briefings.length,
+      briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+    });
+  });
+
   api.get('/ai-ops/briefings/:id', async (c) => {
     const id = c.req.param('id');
     const briefing = await ctx.db.getAiOpsBriefing(id);
