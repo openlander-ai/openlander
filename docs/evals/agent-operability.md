@@ -15,6 +15,11 @@ inspecting one ticket, applying a fix through existing MCP actions, and
 reporting the deterministic `recovery_receipt.status` returned by OpenLander.
 Direct global open-ticket discovery is tracked separately as a gap.
 
+The release contract in
+[`docs/release/V0_2_VERIFIED_FAILURE_TICKET_CONTRACT.md`](../release/V0_2_VERIFIED_FAILURE_TICKET_CONTRACT.md)
+uses this document's Product Gate as its runtime oracle; it does not define a
+separate, weaker pass/fail standard for recovery receipts.
+
 ## What Is Being Measured
 
 The main question is:

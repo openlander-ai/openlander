@@ -7,6 +7,11 @@ discover the ticket, inspect evidence, apply a fix through existing MCP actions,
 and then ask OpenLander for a deterministic recovery receipt. The web UI is a
 human inbox, audit, and fallback surface; it is not the primary execution path.
 
+The `[shipped]`, `[gap]`, and `[defer]` labels below are based on the rc.16
+code and MCP schema contracts, not roadmap intent. If rc.16 only supports a
+scoped Project/service read, that limitation is marked as a gap instead of being
+papered over as a global agent path.
+
 ## Product Contract
 
 - OpenLander does not run the agent.
@@ -78,6 +83,13 @@ Web entry points such as Open in Agent are convenience paths into the same MCP
 flow. They are not required for the happy path.
 
 ## Acceptance Checks
+
+Use the public Agent Operability Product Gate in
+[`docs/evals/agent-operability.md`](../evals/agent-operability.md) as the
+runtime oracle instead of inventing a separate QA definition. For the verified
+failure-ticket path, the relevant checks are the same: route health, app
+read/write behavior, advertised URL behavior, bad-runtime honesty, and whether
+the previous good version remains serving when a candidate fails.
 
 - List responses stay tiny: id, Project/service identity, severity,
   classification, short summary, status, and suggested call. Evidence belongs in
