@@ -14,7 +14,7 @@
  */
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Sparkles } from 'lucide-react';
 import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
@@ -147,6 +147,7 @@ export function Home() {
   const [aiOpsBriefings, setAiOpsBriefings] = useState<AiOpsBriefing[]>([]);
   const [aiOpsLoading, setAiOpsLoading] = useState(true);
   const [aiOpsError, setAiOpsError] = useState<string | null>(null);
+  const aiOpsUnresolvedCount = aiOpsBriefings.length;
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -322,7 +323,58 @@ export function Home() {
         })()}
 
       {/* ── 1c. AI Ops inbox ── */}
-      <OuterCard title={t('aiOps.inbox.title')} subtitle={t('aiOps.inbox.subtitle')}>
+      <OuterCard
+        title={
+          <span className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-agent" />
+            {t('aiOps.inbox.title')}
+          </span>
+        }
+        subtitle={t('aiOps.inbox.subtitle')}
+        actions={
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+          >
+            {t('aiOps.inbox.configure')}
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        }
+      >
+        <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="rounded-md border border-agent/20 bg-agent/5 px-3 py-3">
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  aiOpsUnresolvedCount > 0 ? 'bg-warning' : 'bg-success',
+                )}
+              />
+              <div className="text-sm font-semibold text-foreground">
+                {aiOpsUnresolvedCount > 0
+                  ? t('aiOps.inbox.attentionTitle', { count: aiOpsUnresolvedCount })
+                  : t('aiOps.inbox.clearTitle')}
+              </div>
+            </div>
+            <p className="mt-1 text-[12px] leading-relaxed text-foreground/65">
+              {aiOpsUnresolvedCount > 0
+                ? t('aiOps.inbox.attentionDescription')
+                : t('aiOps.inbox.clearDescription')}
+            </p>
+          </div>
+          <div className="grid min-w-[132px] grid-cols-2 gap-2 sm:grid-cols-1">
+            <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
+                {t('aiOps.status.unresolved')}
+              </div>
+              <div className="ol-mono mt-1 text-lg font-semibold text-[color:var(--ol-fg)]">
+                {aiOpsUnresolvedCount}
+              </div>
+            </div>
+          </div>
+        </div>
         {aiOpsError && (
           <div className="mb-3 rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
             {aiOpsError}
@@ -331,8 +383,19 @@ export function Home() {
         <AiOpsBriefingFeed
           briefings={aiOpsBriefings}
           loading={aiOpsLoading}
+          emptyEyebrow={t('aiOps.inbox.emptyEyebrow')}
           emptyTitle={t('aiOps.inbox.emptyTitle')}
           emptyDescription={t('aiOps.inbox.emptyDescription')}
+          emptyActions={
+            <button
+              type="button"
+              onClick={() => navigate('/projects')}
+              className="inline-flex items-center gap-1.5 rounded-md border border-agent/20 bg-agent/10 px-3 py-1.5 text-[12px] font-medium text-agent transition-colors hover:bg-agent/15"
+            >
+              {t('aiOps.inbox.configure')}
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          }
           showScope
           onError={setAiOpsError}
           onStatusChanged={() => loadAiOpsBriefings()}

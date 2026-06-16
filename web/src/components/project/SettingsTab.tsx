@@ -17,12 +17,13 @@ import {
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
-type SettingsSection = 'general' | 'ai' | 'danger';
+export type SettingsSection = 'general' | 'ai' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
 
 interface SettingsTabProps {
   projectId: string;
   project?: Project | null;
+  initialSection?: SettingsSection;
   onProjectChanged?: () => void;
   onProjectDeleted?: () => void;
 }
@@ -30,11 +31,12 @@ interface SettingsTabProps {
 export function SettingsTab({
   projectId,
   project,
+  initialSection = 'general',
   onProjectChanged,
   onProjectDeleted,
 }: SettingsTabProps) {
   const { t } = useLanguage();
-  const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [confirmAction, setConfirmAction] = useState<ProjectDangerAction | null>(null);
   const [actionLoading, setActionLoading] = useState<ProjectDangerAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -47,6 +49,10 @@ export function SettingsTab({
     { id: 'ai', label: t('settings.nav.ai') },
     { id: 'danger', label: t('projectDetail.danger.nav') },
   ];
+
+  useEffect(() => {
+    setActiveSection(initialSection);
+  }, [initialSection]);
 
   const runProjectAction = async (action: ProjectDangerAction) => {
     setActionError(null);

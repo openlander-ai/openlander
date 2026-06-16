@@ -15,6 +15,8 @@ export const translations = {
     resolvedMode: 'Resolved',
     budget: 'Budget',
     recentBriefings: '최근 브리핑',
+    viewingSurfaceHint:
+      'Incident briefing은 Home Inbox 또는 Project AI Ops 탭에서 봅니다. 이 화면은 service override 설정만 다룹니다.',
     loading: '불러오는 중...',
     empty: '아직 브리핑이 없습니다.',
     emptyTitle: '아직 incident briefing이 없습니다',
@@ -53,16 +55,34 @@ export const translations = {
     inbox: {
       title: 'AI Ops Inbox',
       subtitle: 'Project 전체의 열린 incident briefing입니다.',
+      configure: 'Project 보기',
+      clearTitle: '모니터링 중인 Project에 열린 briefing이 없습니다',
+      clearDescription:
+        'AI Ops가 켜진 Project에서 crash, deploy 실패, route-health 증거가 생기면 여기에 모입니다.',
+      attentionTitle: '미종료 briefing {count}개',
+      attentionDescription: '먼저 Agent에서 열고, 수정 후 검증한 뒤 사람이 직접 종료하세요.',
+      emptyEyebrow: '대기 중인 작업 없음',
       emptyTitle: '열린 AI Ops briefing이 없습니다',
       emptyDescription:
-        'AI Ops가 켜진 Project에서 crash, deploy 실패, route-health briefing이 생기면 여기에 표시됩니다.',
+        'AI Ops가 켜진 Project는 crash, deploy 실패, route-health 증거를 감지합니다. 검토할 일이 생기기 전까지 이 inbox는 조용합니다.',
     },
     projectInbox: {
       title: 'AI Ops briefings',
       description: '각 리소스를 열지 않고 이 Project의 운영 브리핑을 한 곳에서 봅니다.',
+      configure: 'AI Ops 설정',
+      enabledTitle: '이 Project에서 briefing이 켜져 있습니다',
+      enabledDescription:
+        'OpenLander가 crash, deploy 실패, route-health 증거로 읽기 전용 incident briefing을 만듭니다.',
+      disabledTitle: '이 Project에서 briefing이 꺼져 있습니다',
+      disabledDescription:
+        '이 Project의 incident briefing을 만들려면 Project Settings에서 AI Ops Briefing을 켜세요.',
+      emptyEyebrowEnabled: '대기 중인 작업 없음',
+      emptyEyebrowDisabled: 'Project opt-in 필요',
       emptyTitle: '조건에 맞는 briefing이 없습니다',
       emptyDescription:
         '이 Project에 incident가 생기면 deterministic evidence와 agent handoff prompt가 여기에 표시됩니다.',
+      emptyDescriptionDisabled:
+        '현재 이 Project의 AI Ops가 꺼져 있어 새 crash와 route-health 이벤트가 briefing을 만들지 않습니다.',
     },
     error: {
       load: 'AI Ops 브리핑을 불러오지 못했습니다.',

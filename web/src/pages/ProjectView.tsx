@@ -29,7 +29,7 @@ import {
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
-import { SettingsTab } from '@/components/project/SettingsTab';
+import { SettingsTab, type SettingsSection } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
 import { ProjectAiOpsTab } from '@/components/project/ProjectAiOpsTab';
 import { AgentGuideDialog } from '@/components/agent-guide';
@@ -158,6 +158,7 @@ export function ProjectView() {
   const initialTab: ProjectTabId =
     tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('general');
 
   const projectId = id ?? '';
   // 1.0-rc.2 (data-model fullsplit): `useProjectsContext()` returns
@@ -555,7 +556,15 @@ export function ProjectView() {
           labelledBy="project-ai"
           className="p-0"
         >
-          {projectId && <ProjectAiOpsTab projectId={projectId} />}
+          {projectId && (
+            <ProjectAiOpsTab
+              projectId={projectId}
+              onConfigure={() => {
+                setSettingsInitialSection('ai');
+                setActiveTab('settings');
+              }}
+            />
+          )}
         </TabPanel>
         <TabPanel
           active={activeTab === 'settings'}
@@ -567,6 +576,7 @@ export function ProjectView() {
             <SettingsTab
               projectId={projectId}
               project={realProject}
+              initialSection={settingsInitialSection}
               onProjectChanged={() => {
                 void refetchProjects();
               }}
