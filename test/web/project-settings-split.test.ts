@@ -32,17 +32,16 @@ describe('Project Settings split contract', () => {
 
   it('keeps deployable ownership on Service Detail (v0.1 service IA)', () => {
     // v0.1 service detail tabs: Overview / Logs / Deployments / Monitoring /
-    // AI / Environment / Domains. Resources is folded into Overview; Advanced and
-    // Settings tabs are cut (PR #198). SourceSettingsPanel was removed
-    // alongside the Advanced tab —
-    // source/build edits route through MCP for v0.1.
+    // Environment / Domains. Resources is folded into Overview; Advanced, AI,
+    // and Settings tabs are cut. SourceSettingsPanel was removed alongside the
+    // Advanced tab — source/build edits route through MCP for v0.1.
     expect(serviceDetailSource).toContain("'overview'");
     expect(serviceDetailSource).toContain("'environment'");
     expect(serviceDetailSource).toContain("'domains'");
     expect(serviceDetailSource).toContain("'deployments'");
     expect(serviceDetailSource).toContain("'logs'");
     expect(serviceDetailSource).toContain("'monitoring'");
-    expect(serviceDetailSource).toContain("'ai'");
+    expect(serviceDetailSource).not.toContain("'ai'");
     expect(serviceDetailSource).not.toMatch(/\|\s*'resources'/);
     expect(serviceDetailSource).not.toMatch(/\|\s*'advanced'/);
     expect(serviceDetailSource).not.toMatch(/\|\s*'general'/);

@@ -4,8 +4,6 @@ export const translations = {
     beta: 'Beta',
     projectDescription:
       'Opt in to read-only operational briefings for this Project. OpenLander will summarize evidence, but will not restart, redeploy, roll back, or edit env vars.',
-    serviceDescription:
-      'Override the Project AI Ops mode for this Application/Compose resource. Briefings stay read-only.',
     noAutomation: 'No automatic changes',
     mode: {
       off: 'Off',
@@ -14,9 +12,8 @@ export const translations = {
     },
     resolvedMode: 'Resolved',
     budget: 'Budget',
-    recentBriefings: 'Recent briefings',
-    viewingSurfaceHint:
-      'Use Home Inbox or the Project AI Ops tab to review incident briefings. This screen only controls the service override.',
+    settingsBriefingsHint:
+      'Incident briefings live in the Project AI Ops tab. Keep this page focused on opt-in and budget settings.',
     loading: 'Loading...',
     empty: 'No briefings yet.',
     emptyTitle: 'No incident briefings yet',
@@ -38,6 +35,7 @@ export const translations = {
     },
     actions: {
       viewEvidence: 'View evidence',
+      viewProjectBriefings: 'View Project AI Ops',
       openInAgent: 'Open in Agent',
       verifyAfterFix: 'Verify after fix',
       verifyCopied: 'Verification copied',
@@ -77,6 +75,11 @@ export const translations = {
       disabledTitle: 'Briefings are off for this Project',
       disabledDescription:
         'Turn on AI Ops Briefing in Project Settings to create incident briefings for this Project.',
+      serviceFilter: 'Service',
+      allServices: 'All services',
+      serviceUnavailable: 'Selected service is no longer available.',
+      servicePolicyFollows: 'Follows Project setting: {mode}',
+      servicePolicyOverride: 'Service override: {mode}',
       emptyEyebrowEnabled: 'No action waiting',
       emptyEyebrowDisabled: 'Project opt-in required',
       emptyTitle: 'No matching briefings',

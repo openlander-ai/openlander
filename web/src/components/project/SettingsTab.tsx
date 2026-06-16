@@ -24,6 +24,7 @@ interface SettingsTabProps {
   projectId: string;
   project?: Project | null;
   initialSection?: SettingsSection;
+  onOpenAiOps?: () => void;
   onProjectChanged?: () => void;
   onProjectDeleted?: () => void;
 }
@@ -32,6 +33,7 @@ export function SettingsTab({
   projectId,
   project,
   initialSection = 'general',
+  onOpenAiOps,
   onProjectChanged,
   onProjectDeleted,
 }: SettingsTabProps) {
@@ -153,7 +155,9 @@ export function SettingsTab({
         {activeSection === 'general' && (
           <ProjectGeneralPanel project={project} onProjectChanged={onProjectChanged} />
         )}
-        {activeSection === 'ai' && <ProjectAiOpsPanel projectId={projectId} />}
+        {activeSection === 'ai' && (
+          <ProjectAiOpsPanel projectId={projectId} onOpenAiOps={onOpenAiOps} />
+        )}
         {activeSection === 'danger' && (
           <div className="flex max-w-2xl flex-col gap-4">
             <div>
@@ -493,10 +497,16 @@ function ArchivedServicesDangerPanel({
   );
 }
 
-function ProjectAiOpsPanel({ projectId }: { projectId: string }) {
+function ProjectAiOpsPanel({
+  projectId,
+  onOpenAiOps,
+}: {
+  projectId: string;
+  onOpenAiOps?: () => void;
+}) {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      <AiOpsBriefingPanel scope="project" projectId={projectId} />
+      <AiOpsBriefingPanel projectId={projectId} onViewBriefings={onOpenAiOps} />
     </div>
   );
 }

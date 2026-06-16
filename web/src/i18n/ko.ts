@@ -4,8 +4,6 @@ export const translations = {
     beta: 'Beta',
     projectDescription:
       '이 Project에서 읽기 전용 운영 브리핑을 켭니다. OpenLander는 증거를 요약하지만 restart, redeploy, rollback, env 수정은 자동으로 하지 않습니다.',
-    serviceDescription:
-      '이 Application/Compose 리소스의 Project AI Ops 모드를 덮어씁니다. 브리핑은 읽기 전용입니다.',
     noAutomation: '자동 변경 없음',
     mode: {
       off: 'Off',
@@ -14,9 +12,8 @@ export const translations = {
     },
     resolvedMode: 'Resolved',
     budget: 'Budget',
-    recentBriefings: '최근 브리핑',
-    viewingSurfaceHint:
-      'Incident briefing은 Home Inbox 또는 Project AI Ops 탭에서 봅니다. 이 화면은 service override 설정만 다룹니다.',
+    settingsBriefingsHint:
+      'Incident briefing은 Project AI Ops 탭에서 봅니다. 이 화면은 opt-in과 budget 설정만 다룹니다.',
     loading: '불러오는 중...',
     empty: '아직 브리핑이 없습니다.',
     emptyTitle: '아직 incident briefing이 없습니다',
@@ -39,6 +36,7 @@ export const translations = {
     },
     actions: {
       viewEvidence: 'Evidence 보기',
+      viewProjectBriefings: 'Project AI Ops 보기',
       openInAgent: 'Agent에서 열기',
       verifyAfterFix: '수정 후 검증',
       verifyCopied: '검증 call 복사됨',
@@ -76,6 +74,11 @@ export const translations = {
       disabledTitle: '이 Project에서 briefing이 꺼져 있습니다',
       disabledDescription:
         '이 Project의 incident briefing을 만들려면 Project Settings에서 AI Ops Briefing을 켜세요.',
+      serviceFilter: 'Service',
+      allServices: 'All services',
+      serviceUnavailable: '선택한 service를 더 이상 찾을 수 없습니다.',
+      servicePolicyFollows: 'Project setting을 따름: {mode}',
+      servicePolicyOverride: 'Service override: {mode}',
       emptyEyebrowEnabled: '대기 중인 작업 없음',
       emptyEyebrowDisabled: 'Project opt-in 필요',
       emptyTitle: '조건에 맞는 briefing이 없습니다',

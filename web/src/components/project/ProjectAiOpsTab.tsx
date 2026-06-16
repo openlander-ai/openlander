@@ -1,20 +1,27 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronRight, Filter, ShieldCheck, Sparkles } from 'lucide-react';
 import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
 import { useLanguage } from '@/i18n/context';
 import {
   getProjectAiOps,
+  getServiceAiOps,
   listProjectAiOpsBriefings,
+  listServiceAiOpsBriefings,
   type AiOpsBriefing,
   type AiOpsBriefingStatusFilter,
   type AiOpsProjectMode,
+  type ServiceAiOpsResponse,
 } from '@/lib/api/ai-ops';
+import { listGroupServices, type GroupService } from '@/lib/api/services';
 import { cn } from '@/lib/utils';
 
 interface ProjectAiOpsTabProps {
   projectId: string;
   onConfigure?: () => void;
 }
+
+const ALL_SERVICES = 'all';
 
 const STATUS_FILTERS: Array<{
   value: AiOpsBriefingStatusFilter | 'all';
@@ -29,37 +36,102 @@ const STATUS_FILTERS: Array<{
 
 export function ProjectAiOpsTab({ projectId, onConfigure }: ProjectAiOpsTabProps) {
   const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedServiceId = searchParams.get('service') ?? ALL_SERVICES;
   const [status, setStatus] = useState<AiOpsBriefingStatusFilter | 'all'>('unresolved');
   const [briefings, setBriefings] = useState<AiOpsBriefing[]>([]);
+  const [services, setServices] = useState<GroupService[]>([]);
+  const [selectedServicePolicy, setSelectedServicePolicy] = useState<ServiceAiOpsResponse | null>(
+    null,
+  );
   const [projectMode, setProjectMode] = useState<AiOpsProjectMode>('off');
   const [budgetText, setBudgetText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedService = useMemo(
+    () =>
+      selectedServiceId === ALL_SERVICES
+        ? null
+        : (services.find((service) => service.id === selectedServiceId) ?? null),
+    [selectedServiceId, services],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [policy, response] = await Promise.all([
+      const [policy, serviceRows] = await Promise.all([
         getProjectAiOps(projectId),
-        listProjectAiOpsBriefings(projectId, {
-          limit: 50,
-          status: status === 'all' ? undefined : status,
-        }),
+        listGroupServices(projectId),
       ]);
       setProjectMode(policy.policy.mode);
       setBudgetText(`${policy.budget.projectUsed}/${policy.budget.projectLimit}`);
+      setServices(serviceRows);
+
+      const selectedRow =
+        selectedServiceId === ALL_SERVICES
+          ? null
+          : (serviceRows.find((service) => service.id === selectedServiceId) ?? null);
+
+      if (selectedServiceId !== ALL_SERVICES && !selectedRow) {
+        setSelectedServicePolicy(null);
+        setBriefings([]);
+        setError(t('aiOps.projectInbox.serviceUnavailable'));
+        return;
+      }
+
+      if (selectedRow) {
+        const [servicePolicy, response] = await Promise.all([
+          getServiceAiOps(projectId, selectedRow.id),
+          listServiceAiOpsBriefings(projectId, selectedRow.id, {
+            limit: 50,
+            status: status === 'all' ? undefined : status,
+          }),
+        ]);
+        setSelectedServicePolicy(servicePolicy);
+        setBriefings(response.briefings ?? []);
+        return;
+      }
+
+      const response = await listProjectAiOpsBriefings(projectId, {
+        limit: 50,
+        status: status === 'all' ? undefined : status,
+      });
+      setSelectedServicePolicy(null);
       setBriefings(response.briefings ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiOps.error.load'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, status, t]);
+  }, [projectId, selectedServiceId, status, t]);
 
   useEffect(() => {
     void Promise.resolve().then(() => load());
   }, [load]);
+
+  const updateSelectedService = (serviceId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'ai');
+    if (serviceId === ALL_SERVICES) {
+      next.delete('service');
+    } else {
+      next.set('service', serviceId);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const servicePolicyText =
+    selectedServicePolicy == null
+      ? null
+      : selectedServicePolicy.resolved_policy.source === 'project'
+        ? t('aiOps.projectInbox.servicePolicyFollows', {
+            mode: t(`aiOps.mode.${selectedServicePolicy.resolved_policy.mode}`),
+          })
+        : t('aiOps.projectInbox.servicePolicyOverride', {
+            mode: t(`aiOps.mode.${selectedServicePolicy.resolved_policy.mode}`),
+          });
 
   return (
     <div className="flex flex-col gap-4 p-5">
@@ -127,23 +199,51 @@ export function ProjectAiOpsTab({ projectId, onConfigure }: ProjectAiOpsTabProps
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-md border border-[hsl(var(--border))] bg-bg-subtle p-1">
-        {STATUS_FILTERS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setStatus(option.value)}
-            className={cn(
-              'rounded px-2.5 py-1 text-[11.5px] transition-colors',
-              status === option.value
-                ? 'bg-bg-panel text-foreground shadow-sm'
-                : 'text-foreground/60 hover:text-foreground',
-            )}
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <label className="flex min-w-0 items-center gap-2 rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-[12px] text-foreground/70">
+          <Filter className="h-3.5 w-3.5 text-foreground/50" />
+          <span className="shrink-0 font-medium text-foreground/80">
+            {t('aiOps.projectInbox.serviceFilter')}
+          </span>
+          <select
+            value={selectedServiceId}
+            onChange={(event) => updateSelectedService(event.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-none"
           >
-            {t(option.labelKey)}
-          </button>
-        ))}
+            <option value={ALL_SERVICES}>{t('aiOps.projectInbox.allServices')}</option>
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-wrap gap-1 rounded-md border border-[hsl(var(--border))] bg-bg-subtle p-1">
+          {STATUS_FILTERS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setStatus(option.value)}
+              className={cn(
+                'rounded px-2.5 py-1 text-[11.5px] transition-colors',
+                status === option.value
+                  ? 'bg-bg-panel text-foreground shadow-sm'
+                  : 'text-foreground/60 hover:text-foreground',
+              )}
+            >
+              {t(option.labelKey)}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {selectedService && servicePolicyText && (
+        <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2">
+          <div className="text-[11px] font-medium text-foreground">{selectedService.name}</div>
+          <div className="mt-0.5 text-[12px] text-foreground/65">{servicePolicyText}</div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">

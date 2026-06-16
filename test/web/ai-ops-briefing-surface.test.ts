@@ -19,12 +19,12 @@ describe('AI Ops briefing web surface', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
-  it('mounts the same read-only briefing panel on Project and Service detail surfaces', () => {
+  it('keeps AI Ops settings on Project Settings and removes the Service AI surface', () => {
     expect(projectSettingsSource).toContain(
-      '<AiOpsBriefingPanel scope="project" projectId={projectId} />',
+      '<AiOpsBriefingPanel projectId={projectId} onViewBriefings={onOpenAiOps} />',
     );
-    expect(serviceDetailSource).toContain('<AiOpsBriefingPanel');
-    expect(serviceDetailSource).toContain('scope="service"');
+    expect(serviceDetailSource).not.toContain('<AiOpsBriefingPanel');
+    expect(serviceDetailSource).not.toContain('servicepanel-ai');
     expect(panelSource).toContain("t('aiOps.noAutomation')");
     expect(panelSource).not.toMatch(/restartService|redeployService|rollback|updateServiceEnvVars/);
   });
@@ -41,29 +41,25 @@ describe('AI Ops briefing web surface', () => {
     expect(koSource).toContain("ai: 'AI'");
   });
 
-  it('keeps Service AI Ops under a dedicated Service AI tab', () => {
+  it('does not expose Service AI Ops as a dedicated Service tab', () => {
     const overviewStart = serviceDetailSource.indexOf('panelId="servicepanel-overview"');
     const overviewEnd = serviceDetailSource.indexOf('panelId="servicepanel-environment"');
     const overviewSource = serviceDetailSource.slice(overviewStart, overviewEnd);
 
-    expect(serviceDetailSource).toContain("{ id: 'ai', label: t('services.detail.tabs.ai')");
-    expect(serviceDetailSource).toContain('panelId="servicepanel-ai"');
-    expect(serviceDetailSource).toContain('labelledBy="service-ai"');
+    expect(serviceDetailSource).not.toContain("{ id: 'ai', label: t('services.detail.tabs.ai')");
+    expect(serviceDetailSource).not.toContain('panelId="servicepanel-ai"');
+    expect(serviceDetailSource).not.toContain('labelledBy="service-ai"');
     expect(overviewSource).not.toContain('AiOpsBriefingPanel');
   });
 
-  it('keeps Project and Service policy controls explicit and default-off friendly', () => {
+  it('keeps Project policy controls explicit and default-off friendly', () => {
     expect(panelSource).toContain("useState<AiOpsProjectMode>('off')");
-    expect(panelSource).toContain("useState<AiOpsServiceOverrideMode>('inherit')");
     expect(panelSource).toContain("useState<AiOpsProjectMode>('off')");
     expect(panelSource).toContain('const projectModeButtons: Array<{ value: AiOpsProjectMode');
     expect(panelSource).toContain("{ value: 'off', label: t('aiOps.mode.off') }");
     expect(panelSource).toContain("{ value: 'briefing', label: t('aiOps.mode.briefing') }");
-    expect(panelSource).toContain(
-      'const serviceModeButtons: Array<{ value: AiOpsServiceOverrideMode',
-    );
-    expect(panelSource).toContain("{ value: 'inherit', label: t('aiOps.mode.inherit') }");
-    expect(panelSource).toMatch(/scope === 'service'\s+\? void saveServiceMode/);
+    expect(panelSource).not.toContain('AiOpsServiceOverrideMode');
+    expect(panelSource).not.toContain('saveServiceMode');
     expect(panelSource).toContain('void saveProjectMode');
   });
 
@@ -79,9 +75,10 @@ describe('AI Ops briefing web surface', () => {
     expect(apiSource).toContain('/api/ai-ops/briefings/${briefingId}/status');
     expect(panelSource).toContain('getProjectAiOps');
     expect(panelSource).toContain('updateProjectAiOps');
-    expect(panelSource).toContain('getServiceAiOps');
-    expect(panelSource).toContain('updateServiceAiOps');
-    expect(panelSource).toContain('listServiceAiOpsBriefings');
+    expect(projectAiOpsTabSource).toContain('getServiceAiOps');
+    expect(projectAiOpsTabSource).toContain('listServiceAiOpsBriefings');
+    expect(panelSource).not.toContain('updateServiceAiOps');
+    expect(panelSource).not.toContain('listServiceAiOpsBriefings');
     expect(feedSource).toContain('getAiOpsBriefing');
     expect(feedSource).toContain('updateAiOpsBriefingStatus');
     expect(panelSource).not.toContain('fetch(');
@@ -129,9 +126,8 @@ describe('AI Ops briefing web surface', () => {
   });
 
   it('guards missing briefing arrays from partial project policy responses', () => {
-    expect(panelSource).toContain('setBriefings(policy.recent_briefings ?? [])');
-    expect(panelSource).toContain('setBriefings(response.recent_briefings ?? [])');
-    expect(panelSource).toContain('setBriefings(list.briefings ?? [])');
+    expect(projectAiOpsTabSource).toContain('setBriefings(response.briefings ?? [])');
+    expect(panelSource).not.toContain('setBriefings');
   });
 
   it('adds AI Ops i18n keys in both locales', () => {
@@ -140,24 +136,26 @@ describe('AI Ops briefing web surface', () => {
         'aiOps:',
         'title:',
         'projectDescription:',
-        'serviceDescription:',
         'noAutomation:',
         'resolvedMode:',
-        'recentBriefings:',
+        'settingsBriefingsHint:',
         'tokens:',
         'cost:',
         'llmCalls:',
         'suggestedCall:',
         'evidence:',
         'agentHandoff:',
+        'viewProjectBriefings:',
         'verifyAfterFix:',
         'acknowledge:',
         'resolve:',
-        'viewingSurfaceHint:',
         'clearTitle:',
         'attentionTitle:',
         'enabledTitle:',
         'disabledTitle:',
+        'serviceFilter:',
+        'servicePolicyFollows:',
+        'servicePolicyOverride:',
       ]) {
         expect(source).toContain(key);
       }
@@ -179,8 +177,15 @@ describe('AI Ops briefing web surface', () => {
     expect(homeSource).toContain("t('aiOps.inbox.attentionTitle'");
     expect(homeSource).toContain('onStatusChanged={() => loadAiOpsBriefings()}');
     expect(projectAiOpsTabSource).toContain('getProjectAiOps(projectId)');
+    expect(projectAiOpsTabSource).toContain('useSearchParams');
+    expect(projectAiOpsTabSource).toContain("next.set('tab', 'ai')");
+    expect(projectAiOpsTabSource).toContain("next.set('service', serviceId)");
+    expect(projectAiOpsTabSource).toContain('listGroupServices(projectId)');
+    expect(projectAiOpsTabSource).toContain('getServiceAiOps(projectId, selectedRow.id)');
     expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.enabledTitle')");
     expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.disabledTitle')");
+    expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.serviceFilter')");
+    expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.servicePolicyOverride'");
     expect(projectAiOpsTabSource).toContain('emptyEyebrow=');
     expect(feedSource).toContain('emptyActions');
     expect(feedSource).toContain("t('aiOps.actions.viewEvidence')");

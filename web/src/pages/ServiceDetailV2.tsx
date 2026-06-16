@@ -1,8 +1,8 @@
 /**
  * ServiceDetailV2 — v0.1.
  *
- * Seven tabs (observability-first per v0.1 spec):
- *   Overview · Logs · Deployments · Monitoring · AI · Environment · Domains
+ * Six tabs (observability-first per v0.1 spec):
+ *   Overview · Logs · Deployments · Monitoring · Environment · Domains
  *
  * Resources and Advanced were folded away in PR #198 (Resources →
  * inline panel inside Overview; Advanced → ServiceDangerZone in
@@ -28,7 +28,6 @@ import {
   Activity as ActivityIcon,
   Archive,
   ArchiveRestore,
-  Bot,
   Box,
   ClipboardPaste,
   Code2,
@@ -49,7 +48,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
-import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer as ConsoleLogViewer } from '@/components/logs/LogViewer';
 import { ServiceResourceLimitsPanel } from '@/components/service/ServiceResourceLimitsPanel';
@@ -105,14 +103,7 @@ import { cn } from '@/lib/utils';
 import { isValidEnvKey } from '@/lib/env-key';
 import { parseEnvContent } from '@/lib/parse-env';
 
-type ServiceTabId =
-  | 'overview'
-  | 'environment'
-  | 'domains'
-  | 'deployments'
-  | 'logs'
-  | 'monitoring'
-  | 'ai';
+type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
 type ManagedServiceTabId = 'overview' | 'logs' | 'connections';
 
 const SERVICE_TAB_IDS = new Set<ServiceTabId>([
@@ -122,7 +113,6 @@ const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'deployments',
   'logs',
   'monitoring',
-  'ai',
 ]);
 
 function isServiceTabId(value: string | null): value is ServiceTabId {
@@ -340,7 +330,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   };
 
   // v0.1 spec mandates an observability-first order:
-  //   Overview · Logs · Deployments · Monitoring · AI · Environment · Domains.
+  //   Overview · Logs · Deployments · Monitoring · Environment · Domains.
   // OpenLander is an agent-first PaaS — agents do most env/domain
   // configuration via MCP, and humans visit the resource detail page
   // mostly to diagnose, verify, or monitor. Tabs that surface runtime
@@ -359,7 +349,6 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         count: deployments.length || undefined,
       },
       { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
-      { id: 'ai', label: t('services.detail.tabs.ai'), icon: Bot },
       { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
       { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
     ],
@@ -578,19 +567,6 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           className="p-5"
         >
           <MonitoringTab service={resolvedService} />
-        </TabPanel>
-
-        <TabPanel
-          active={activeTab === 'ai'}
-          panelId="servicepanel-ai"
-          labelledBy="service-ai"
-          className="p-5"
-        >
-          <AiOpsBriefingPanel
-            scope="service"
-            projectId={project.id}
-            serviceId={resolvedService.id}
-          />
         </TabPanel>
       </OuterCard>
     </div>
