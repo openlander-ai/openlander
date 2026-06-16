@@ -82,8 +82,11 @@ a release should be recorded here so follow-up work is explicit.
   status route and its frontend/API/test callers. It is ordered separately from
   the existing briefing detail route and does not expose evidence.
 - **Follow-up:** if AI Ops acknowledgement later needs audit identities, add a
-  small audit row or activity event instead of overloading the briefing summary
-  payload.
+  small audit row or activity event with at least `actor`, `previous_status`,
+  `next_status`, and timestamp instead of overloading the briefing summary
+  payload. If this status mutation is ever exposed through MCP, it must first
+  pass the scoped-token invariant in `src/mcp/scope-policy.ts` so scoped tokens
+  cannot acknowledge or resolve out-of-boundary briefings.
 
 - **AI Ops summary metadata response expansion:** existing AI Ops briefing
   rows and read-only briefing responses now include additive summary metadata:

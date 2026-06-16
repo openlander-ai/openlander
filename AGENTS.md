@@ -381,6 +381,9 @@ actual target resolution in lockstep.
 - Do not add an action-local target path that bypasses `resolveMcpScopeTargets`. If a target cannot
   be resolved for a scoped identity, normalize it to `SCOPE_VIOLATION` with
   `target_not_found_or_out_of_scope` where possible to avoid existence oracles.
+- If a web-only workflow later becomes an MCP mutation, apply this invariant before exposing it.
+  In particular, AI Ops briefing status transitions must scope-check the target `briefing_id` so a
+  scoped token cannot acknowledge or resolve a briefing outside its Project/service boundary.
 
 ### MCP Response Contract
 
