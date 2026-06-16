@@ -577,6 +577,10 @@ export function ProjectView() {
               projectId={projectId}
               project={realProject}
               initialSection={settingsInitialSection}
+              onOpenAiOps={() => {
+                setActiveTab('ai');
+                navigate(`/projects/${projectId}?tab=ai`, { replace: true });
+              }}
               onProjectChanged={() => {
                 void refetchProjects();
               }}
