@@ -47,3 +47,8 @@ rewriting a long private history.
 - Prepare short answers for common launch questions: how OpenLander differs from Coolify/Railway,
   what MCP adds, what destructive actions agents cannot perform, and what the known 0.1 limitations
   are.
+- Position OpenLander as an agent-native deploy/ops layer, not as a generic "AI-native" product.
+  The concise answer is: OpenLander turns failures into MCP-readable tickets and verifies fixes
+  against runtime state; LLM summaries are optional explanation, not the source of operational truth.
+- Do not claim "works on top of Coolify/Dokploy with no migration" until an attach/adopt mode is a
+  real supported product surface.

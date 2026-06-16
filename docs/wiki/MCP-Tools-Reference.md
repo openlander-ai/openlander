@@ -12,6 +12,11 @@ Run `{ action: "help" }` on any composite to list its action catalog with machin
 `input_schema`, `required_params`, and `optional_params`. Run
 `{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch one action contract.
 
+This surface is intentionally not a one-tool-per-REST-endpoint wrapper. MCP
+responses carry the next useful operation as `diagnostic_call`, `suggested_call`,
+`poll_call`, and `_agent_guidance` so agents can stay on high-level workflows
+instead of exploring a raw API catalog.
+
 Model note: **Project = workspace**. **Application**, **Compose**, **Database**, **Cache**, and **Storage** are resources inside a Project. Wire fields and MCP action names such as `service_id` and `openlander_service` remain compatible in v0.1.x.
 
 Agent routing rule of thumb:
@@ -28,6 +33,7 @@ Agent routing rule of thumb:
 | "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
 | "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
 | "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
+| "Did the fix actually work?"                     | `openlander_monitor.diagnose_service` with `service_id` and `briefing_id`                                   |
 | "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
@@ -907,8 +913,10 @@ Use this first when multiple OpenLander servers are connected to the same AI cli
 AI Ops Briefing Beta read surface. These actions are read-only and do not restart,
 redeploy, roll back, edit env vars, or acknowledge incidents.
 
-`list_ai_ops_briefings` lists persisted briefings for either a Project or an
-Application/Compose service.
+`list_ai_ops_briefings` lists persisted failure tickets for either a Project or
+an Application/Compose service. Treat it as a tiny triage payload: id,
+Project/service identity, status, severity, classification, one-line summary,
+and suggested call. Full evidence belongs in `get_ai_ops_briefing`.
 
 | Parameter    | Type   | Required | Description                           |
 | ------------ | ------ | -------- | ------------------------------------- |
@@ -917,9 +925,12 @@ Application/Compose service.
 | `status`     | string | No       | `open`, `acknowledged`, or `resolved` |
 | `limit`      | number | No       | Max rows, 1-100                       |
 
-Provide `project_id` or `service_id`. The response includes deterministic
-`classification`, `severity`, `summary`, and `suggested_call`; full evidence is
-kept out of the list response.
+Provide `project_id` or `service_id`. If the user asks an agent what needs
+attention in a known Project or service, this action is the preferred starting
+point. Direct global open-ticket discovery is not part of this MCP action yet;
+agents should first identify the relevant Project/service or use the web Home
+Inbox for cross-project triage. Full evidence is kept out of the list response
+so agents do not spend context budget on incidents they will not inspect.
 
 `get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
 The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
@@ -1024,7 +1035,10 @@ briefing snapshot and current live diagnostics. The receipt includes
 `status: "verified" | "needs_attention" | "unknown" | "unavailable"` plus checks
 for `route_health`, `container_status`, `restart_stability`, and `latest_deploy`.
 Agents should read this receipt before telling the user that an incident is
-fixed.
+fixed. `verified` is a signal, not a status mutation; a human still
+acknowledges or resolves the briefing. Route 2xx alone should not be treated as
+proof that the intended deploy/version is serving; inspect the `latest_deploy`
+check when reporting the result.
 
 Day-2 recovery loop: call `diagnose_service`, execute its top-level
 `suggested_call` when present, then read the action result's verification detail

@@ -1,6 +1,6 @@
 # OpenLander
 
-**MCP-native deployment control plane for coding agents.**
+**Agent-native deploy and operations layer for self-hosted apps.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Release](https://img.shields.io/github/v/release/openlander-ai/openlander)](https://github.com/openlander-ai/openlander/releases)
@@ -8,10 +8,11 @@
 [Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [Agent evals](#agent-operability-evals) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
-your own server, with risky actions gated by human approval.
+your own server, with risky actions gated by human approval and runtime checks
+that verify what actually changed.
 
 <p align="center">
-  <img src="docs/assets/social-preview.png" alt="OpenLander — MCP-native deployment control plane for coding agents" width="920" />
+  <img src="docs/assets/social-preview.png" alt="OpenLander — agent-native deploy and operations layer for self-hosted apps" width="920" />
 </p>
 
 ---
@@ -105,7 +106,7 @@ AI coding agents made building software faster, but deployment is still a
 bottleneck. Cloud platforms get expensive; self-hosting is cheaper, but most
 deploy tools assume a human is clicking the dashboard. Agents can hit a REST
 API, but they often don't get the context they need to debug a failed build,
-inspect runtime state, or recover safely.
+inspect runtime state, or verify that a recovery actually worked.
 
 OpenLander's core operations are protocol-independent. v0.1 ships with MCP as
 the first supported adapter because it is the most practical interface current
@@ -144,7 +145,9 @@ a shape an agent can act on.
 ```
 
 A generic API gives an agent endpoints. OpenLander gives it status, IDs,
-diagnostics, and the next call shape needed to keep working.
+diagnostics, and the next call shape needed to keep working. The direction is
+to turn production failures into MCP-readable tickets and then verify fixes
+against live runtime state.
 
 OpenLander 0.1 does not run an internal self-healing agent. It gives external
 MCP-capable coding agents structured tools and context to deploy, inspect,
@@ -168,7 +171,7 @@ form, and clicks the button. OpenLander is built the other way around.
 Cursor, OpenCode, Cline, Windsurf, and Codex can drive deploys, redeploys, log
 inspection, and recovery through OpenLander today.
 
-**Guardrails are built in.** Agents get org- and project-scoped tokens.
+**Guardrails are built in.** Agents get scoped tokens and approval gates.
 Destructive MCP actions are either blocked outright or held for human
 approval. The dashboard surfaces what the agent did, what's pending, and
 what's blocked — so you stay in the loop without staying at the keyboard.
@@ -309,9 +312,12 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 
 **Next**
 
+- **Verified failure tickets** — surface runtime failures as MCP-readable
+  tickets, let external agents inspect and fix through existing MCP actions, and
+  return deterministic recovery receipts before anyone claims the issue is
+  fixed.
 - **Recovery loop hardening** — expand high-confidence diagnostics and verified
-  hot paths before turning on built-in automation. External agents still decide
-  and call each remediation step explicitly.
+  hot paths before turning on built-in automation.
 - **Environment contract** — first-class project, deployment-target, service,
   and generated runtime variable scopes, with clear redeploy guidance.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
@@ -322,9 +328,9 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
   so staging can be added later without a rewrite.
 - **Notifications** — Slack and Discord webhooks for deploy / health /
   approval events.
-- **Internal AI Ops** — optional incident response inside a policy you set,
-  built on the deterministic recovery contracts above rather than a separate
-  chat-first automation path.
+- **Internal AI Ops** — optional explanation and briefing surfaces inside a
+  policy you set, built on the deterministic recovery contracts above rather
+  than a separate chat-first automation path.
 
 If a roadmap item matters to you, opening an issue moves it up the queue
 more than waiting for it does.

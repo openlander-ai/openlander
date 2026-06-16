@@ -1,9 +1,10 @@
 # OpenLander Documentation
 
-**Self-hosted deployment control plane with MCP-native agent workflows.**
+**Agent-native deploy and operations layer for self-hosted apps.**
 
 Paste a Git URL. It builds, deploys, and hands you a URL. If something breaks,
-OpenLander keeps the logs/status and your external MCP agent can inspect and redeploy.
+OpenLander keeps the logs/status, exposes the failure as an MCP-readable ticket,
+and returns a deterministic recovery receipt after a fix attempt.
 
 ---
 

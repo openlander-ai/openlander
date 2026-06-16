@@ -9,6 +9,12 @@ They are not a broad benchmark suite, a universal uptime claim, or proof that
 every workload is faster. They are product-direction checks for an agent-native
 control plane, not a feature race against mature PaaS products.
 
+The v0.2 eval direction adds a narrower check: can an agent operate without the
+web UI by listing open failure tickets for a Project or service over MCP,
+inspecting one ticket, applying a fix through existing MCP actions, and
+reporting the deterministic `recovery_receipt.status` returned by OpenLander.
+Direct global open-ticket discovery is tracked separately as a gap.
+
 ## What Is Being Measured
 
 The main question is:

@@ -34,7 +34,7 @@ The main page after login.
 - **Live Activity** feed — recent deploy / config / alert events
 - **Needs Attention** panel — highlights error-state projects and unhealthy services
 - **AI Ops Inbox** — latest open briefings across Projects with evidence, Open in Agent handoff,
-  and after-fix verification actions
+  and after-fix verification actions. Agents can also access the same tickets directly through MCP.
 
 ### Projects (`/projects`)
 
@@ -101,14 +101,17 @@ Detailed view for a Project and its resources.
 | **Settings**    | Project metadata and danger actions. Application config lives on detail pages.               |
 
 Project Settings includes **AI Ops Briefing** controls. The Project **AI Ops** tab is the read
-surface for recent briefings. Briefings are read-only: OpenLander can summarize deterministic
-evidence and show a suggested MCP diagnostic call, but it does not restart, redeploy, roll back, or
-edit env vars automatically. The briefing detail dialog includes an **Agent handoff** prompt with
-the `briefing_id`, a deterministic first MCP call (`openlander_monitor.get_ai_ops_briefing`), the
-suggested call, and an after-fix verification checklist. The handoff prompt also includes a
-verification call that passes the same `briefing_id` to `openlander_monitor.diagnose_service`, which
-returns a machine-readable `recovery_receipt` comparing the incident snapshot with current live
-route/container/deploy evidence. The handoff prompt intentionally contains no token or credential.
+surface for recent briefings. Briefings are read-only failure tickets: OpenLander can summarize
+deterministic evidence and show a suggested MCP diagnostic call, but it does not restart, redeploy,
+roll back, or edit env vars automatically.
+
+The primary agent path does not require opening the web UI. A connected agent can call
+`openlander_monitor.list_ai_ops_briefings`, inspect one ticket with
+`get_ai_ops_briefing`, and verify after a fix with `diagnose_service(briefing_id)`.
+The web UI is the human inbox, audit, and fallback surface for that same ticket queue. The briefing
+detail dialog still includes an **Agent handoff** prompt with the `briefing_id`, a deterministic
+first MCP call, the suggested call, and a verification call. The handoff prompt intentionally
+contains no token or credential.
 
 > **Note**: OpenLander's model is resource-first for runtime configuration. Activity,
 > deployments, domains, env vars, and resource limits belong to Application detail pages rather
@@ -158,7 +161,6 @@ operations on resources already connected to a Project.
 | **Monitoring**  | CPU / memory time-series and request-side health.                                 |
 | **Environment** | Application env vars (read/write).                                                |
 | **Domains**     | Host/path routes registered for the Application. DNS/TLS remain external in v0.1. |
-| **AI**          | Per-Application AI Ops Briefing override plus recent briefing handoff prompts.    |
 
 Applications use the full detail surface. Database/Cache/Storage resources
 use a narrower project-scoped detail surface with Overview, Logs, and
@@ -166,6 +168,10 @@ Connections. Lifecycle and danger actions live in Overview to match Application
 detail. Project detail shows connected project-scoped Database/Cache/Storage
 resources in the Resources tab; cross-project shared resources and external TCP
 endpoints are deferred.
+
+AI Ops briefings are not configured or listed from Application detail. Enable
+briefing generation from Project Settings, then view Application-specific
+briefings from the Project AI Ops tab with the service filter.
 
 ---
 
@@ -177,6 +183,13 @@ Read-only observability page for the routing layer. Shows the proxy detection re
 
 GitHub identity card (octocat + `@login` + tri-state status pip), action menu (Manage on GitHub / Re-authorize / Refresh / Disconnect), and a stat block (Repos linked / Last sync / Connected on / OAuth scopes). GitLab and Bitbucket rows are future placeholders; 0.2.0 keeps GitHub as the only live Git provider surface.
 
+### AI Providers (`/settings/ai-providers`)
+
+Instance-level LLM provider settings for optional AI Ops summary text. Saving a
+provider does not enable AI Ops Briefing for any Project. When no provider is
+connected, OpenLander can still create deterministic tickets; LLM summary status
+is shown as skipped rather than blocking the ticket.
+
 The legacy multi-tab `/settings` host (System / Security / Proxy / GitHub / MCP) was retired for v0.1: Global Secrets are backend-only, Security folded into the AccountPopover, Proxy moved to Web Server, MCP moved to Your Agent (`/mcp-server`), and `/settings` itself is now a narrow GitHub device-flow handoff that the Git Providers Re-authorize and Connect buttons land on.
 
 ---
@@ -187,7 +200,7 @@ The legacy multi-tab `/settings` host (System / Security / Proxy / GitHub / MCP)
 
 - **Search** (⌘K): open command palette to jump to projects / pages, plus quick-links for Web Server + Git Providers.
 - **Workspace**: Home, Your Agent, Projects, Activity, Deployments, Monitoring, Web Server.
-- **Settings**: Git Providers.
+- **Settings**: Git Providers, AI Providers.
 - **Account footer**: admin avatar with Change Password / Sign Out popover.
 
 ## UI Features
