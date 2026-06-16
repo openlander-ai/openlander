@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.15] - 2026-06-16
+
+### Changed
+
+- Improve the Home AI Ops Inbox so the empty and active states read as an
+  operations surface with all-clear/attention copy, unresolved count, and a
+  clear Projects CTA.
+- Make the Project AI Ops tab policy-aware by showing the Project briefing mode,
+  budget status, opt-in guidance, and a direct Configure AI Ops path.
+- Promote Open in Agent as the primary briefing action while keeping Verify
+  after fix, View evidence, and manual status actions visible as secondary
+  controls.
+- Clarify that the Service AI Ops panel controls service-level overrides while
+  incident briefings should be reviewed from Home Inbox or Project AI Ops.
+
 ## [0.2.0-rc.14] - 2026-06-16
 
 ### Added
