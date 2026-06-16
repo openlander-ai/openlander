@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.13] - 2026-06-16
+
+### Fixed
+
+- Fix the Service AI Ops override save response so the web panel receives the
+  Project policy, Service override, and resolved policy shape it expects after
+  saving.
+
 ## [0.2.0-rc.12] - 2026-06-14
 
 ### Added
