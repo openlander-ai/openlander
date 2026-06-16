@@ -128,6 +128,12 @@ export function AiOpsBriefingPanel({ scope, projectId, serviceId }: AiOpsBriefin
         </div>
       </header>
 
+      {scope === 'service' && (
+        <div className="mt-3 rounded-md border border-agent/20 bg-agent/5 px-3 py-2 text-[12px] leading-relaxed text-foreground/65">
+          {t('aiOps.viewingSurfaceHint')}
+        </div>
+      )}
+
       <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap gap-1 rounded-md border border-[hsl(var(--border))] bg-bg-subtle p-1">
           {(scope === 'service' ? serviceModeButtons : projectModeButtons).map((option) => {

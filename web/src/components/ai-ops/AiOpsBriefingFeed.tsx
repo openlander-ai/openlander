@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Check, Copy, Eye, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +25,8 @@ interface AiOpsBriefingFeedProps {
   maxItems?: number;
   emptyTitle?: string;
   emptyDescription?: string;
+  emptyEyebrow?: string;
+  emptyActions?: ReactNode;
   showScope?: boolean;
   onError?: (message: string) => void;
   onStatusChanged?: (briefing: AiOpsBriefing) => void | Promise<void>;
@@ -66,6 +68,8 @@ export function AiOpsBriefingFeed({
   maxItems,
   emptyTitle,
   emptyDescription,
+  emptyEyebrow,
+  emptyActions,
   showScope = false,
   onError,
   onStatusChanged,
@@ -159,16 +163,24 @@ export function AiOpsBriefingFeed({
 
   if (briefings.length === 0) {
     return (
-      <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/40 px-3 py-4">
-        <div className="flex items-start gap-2">
-          <Sparkles className="mt-0.5 h-3.5 w-3.5 text-agent" />
+      <div className="rounded-md border border-agent/20 bg-agent/5 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-agent/20 bg-agent/10">
+            <Sparkles className="h-3.5 w-3.5 text-agent" />
+          </span>
           <div>
-            <p className="text-xs font-medium text-foreground">
+            {emptyEyebrow && (
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-agent">
+                {emptyEyebrow}
+              </p>
+            )}
+            <p className="text-sm font-semibold text-foreground">
               {emptyTitle ?? t('aiOps.emptyTitle')}
             </p>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-foreground/60">
+            <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-foreground/65">
               {emptyDescription ?? t('aiOps.emptyDescription')}
             </p>
+            {emptyActions && <div className="mt-3 flex flex-wrap gap-2">{emptyActions}</div>}
           </div>
         </div>
       </div>
@@ -223,12 +235,17 @@ export function AiOpsBriefingFeed({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  onClick={() => void openBriefing(briefing)}
-                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => copyAgentHandoff(briefing)}
+                  className="h-8 gap-1.5 bg-agent text-xs text-white hover:bg-agent/90"
                 >
-                  <Eye className="h-3.5 w-3.5" />
-                  {t('aiOps.actions.viewEvidence')}
+                  {isCopied(`ai-ops-handoff-${briefing.briefing_id}`) ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied(`ai-ops-handoff-${briefing.briefing_id}`)
+                    ? t('aiOps.agentHandoff.copied')
+                    : t('aiOps.actions.openInAgent')}
                 </Button>
                 <Button
                   type="button"
@@ -250,17 +267,11 @@ export function AiOpsBriefingFeed({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => copyAgentHandoff(briefing)}
+                  onClick={() => void openBriefing(briefing)}
                   className="h-8 gap-1.5 text-xs"
                 >
-                  {isCopied(`ai-ops-handoff-${briefing.briefing_id}`) ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {isCopied(`ai-ops-handoff-${briefing.briefing_id}`)
-                    ? t('aiOps.agentHandoff.copied')
-                    : t('aiOps.actions.openInAgent')}
+                  <Eye className="h-3.5 w-3.5" />
+                  {t('aiOps.actions.viewEvidence')}
                 </Button>
                 {renderStatusActions(briefing)}
               </div>
@@ -297,6 +308,21 @@ export function AiOpsBriefingFeed({
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => copyAgentHandoff(selectedBriefing)}
+                  className="h-8 gap-1.5 bg-agent text-xs text-white hover:bg-agent/90"
+                >
+                  {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`) ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied(`ai-ops-handoff-${selectedBriefing.briefing_id}`)
+                    ? t('aiOps.agentHandoff.copied')
+                    : t('aiOps.actions.openInAgent')}
+                </Button>
                 <Button
                   type="button"
                   size="sm"

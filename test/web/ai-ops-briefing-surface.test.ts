@@ -9,6 +9,7 @@ function readRepoFile(relativePath: string): string {
 describe('AI Ops briefing web surface', () => {
   const panelSource = readRepoFile('web/src/components/ai-ops/AiOpsBriefingPanel.tsx');
   const feedSource = readRepoFile('web/src/components/ai-ops/AiOpsBriefingFeed.tsx');
+  const projectAiOpsTabSource = readRepoFile('web/src/components/project/ProjectAiOpsTab.tsx');
   const projectSettingsSource = readRepoFile('web/src/components/project/SettingsTab.tsx');
   const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
   const homeSource = readRepoFile('web/src/pages/Home.tsx');
@@ -152,6 +153,11 @@ describe('AI Ops briefing web surface', () => {
         'verifyAfterFix:',
         'acknowledge:',
         'resolve:',
+        'viewingSurfaceHint:',
+        'clearTitle:',
+        'attentionTitle:',
+        'enabledTitle:',
+        'disabledTitle:',
       ]) {
         expect(source).toContain(key);
       }
@@ -164,10 +170,19 @@ describe('AI Ops briefing web surface', () => {
   it('adds Project-level and dashboard AI Ops briefing discovery surfaces', () => {
     expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
     expect(projectViewSource).toContain("id: 'ai'");
-    expect(projectViewSource).toContain('<ProjectAiOpsTab projectId={projectId} />');
+    expect(projectViewSource).toContain('<ProjectAiOpsTab');
+    expect(projectViewSource).toContain("setSettingsInitialSection('ai')");
+    expect(projectViewSource).toContain('initialSection={settingsInitialSection}');
     expect(homeSource).toContain('<AiOpsBriefingFeed');
     expect(homeSource).toContain("listRecentAiOpsBriefings({ limit: 5, status: 'unresolved' })");
+    expect(homeSource).toContain("t('aiOps.inbox.clearTitle')");
+    expect(homeSource).toContain("t('aiOps.inbox.attentionTitle'");
     expect(homeSource).toContain('onStatusChanged={() => loadAiOpsBriefings()}');
+    expect(projectAiOpsTabSource).toContain('getProjectAiOps(projectId)');
+    expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.enabledTitle')");
+    expect(projectAiOpsTabSource).toContain("t('aiOps.projectInbox.disabledTitle')");
+    expect(projectAiOpsTabSource).toContain('emptyEyebrow=');
+    expect(feedSource).toContain('emptyActions');
     expect(feedSource).toContain("t('aiOps.actions.viewEvidence')");
     expect(feedSource).toContain("t('aiOps.actions.verifyAfterFix')");
     expect(feedSource).toContain("t('aiOps.actions.openInAgent')");

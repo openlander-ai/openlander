@@ -15,6 +15,8 @@ export const translations = {
     resolvedMode: 'Resolved',
     budget: 'Budget',
     recentBriefings: 'Recent briefings',
+    viewingSurfaceHint:
+      'Use Home Inbox or the Project AI Ops tab to review incident briefings. This screen only controls the service override.',
     loading: 'Loading...',
     empty: 'No briefings yet.',
     emptyTitle: 'No incident briefings yet',
@@ -52,17 +54,36 @@ export const translations = {
     inbox: {
       title: 'AI Ops Inbox',
       subtitle: 'Open incident briefings across Projects.',
+      configure: 'Review Projects',
+      clearTitle: 'All clear across monitored Projects',
+      clearDescription:
+        'OpenLander will put crash, deploy failure, and route-health briefings here when AI Ops is enabled.',
+      attentionTitle: 'Unresolved briefings: {count}',
+      attentionDescription:
+        'Start with Open in Agent, then verify after the fix before resolving the briefing.',
+      emptyEyebrow: 'No action waiting',
       emptyTitle: 'No open AI Ops briefings',
       emptyDescription:
-        'Enabled Projects will surface crash, deploy failure, and route-health briefings here.',
+        'Enabled Projects are monitored for crash, deploy failure, and route-health evidence. This inbox stays quiet until there is something to review.',
     },
     projectInbox: {
       title: 'AI Ops briefings',
       description:
         'Review operational briefings across this Project without opening each resource.',
+      configure: 'Configure AI Ops',
+      enabledTitle: 'Briefings are enabled for this Project',
+      enabledDescription:
+        'OpenLander will create read-only incident briefings from crash, deploy failure, and route-health evidence.',
+      disabledTitle: 'Briefings are off for this Project',
+      disabledDescription:
+        'Turn on AI Ops Briefing in Project Settings to create incident briefings for this Project.',
+      emptyEyebrowEnabled: 'No action waiting',
+      emptyEyebrowDisabled: 'Project opt-in required',
       emptyTitle: 'No matching briefings',
       emptyDescription:
         'When this Project has incidents, OpenLander will show deterministic evidence and agent handoff prompts here.',
+      emptyDescriptionDisabled:
+        'AI Ops is currently off for this Project, so new crash and route-health events will not create briefings.',
     },
     error: {
       load: 'Failed to load AI Ops briefings.',
