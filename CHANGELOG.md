@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc.16] - 2026-06-16
+
+### Changed
+
+- Simplify AI Ops surfaces by removing the Service Detail AI tab and keeping
+  service-specific briefing review inside the Project AI Ops tab.
+- Keep Project Settings AI focused on opt-in and budget policy, with a direct
+  link to Project AI Ops for briefing review.
+- Add a Project AI Ops service filter and `?tab=ai&service=...` deep link so
+  service-scoped briefing views live under the Project investigation surface.
+- Show a read-only selected-service policy indicator when service AI Ops
+  behavior follows the Project setting or has a service override.
+
 ## [0.2.0-rc.15] - 2026-06-16
 
 ### Changed
