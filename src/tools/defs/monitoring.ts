@@ -2161,6 +2161,20 @@ function dependencyNetworkUnreachable(check: Record<string, unknown> | null | un
   return typeof check['status_code'] !== 'number';
 }
 
+function firstUnreachableDependency(
+  dependencies: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const depChecks = asRecord(dependencies)?.['checks'];
+  if (!Array.isArray(depChecks)) {
+    return null;
+  }
+  return (
+    depChecks
+      .map((item) => asRecord(item))
+      .find((item): item is Record<string, unknown> => dependencyNetworkUnreachable(item)) ?? null
+  );
+}
+
 function buildDiagnoseNextSteps(input: {
   service: ServiceRow;
   recentDeployment: Record<string, unknown>;
@@ -2200,14 +2214,12 @@ function buildDiagnoseNextSteps(input: {
     );
   }
 
-  const depChecks = asRecord(input.dependencies)?.['checks'];
-  if (
-    Array.isArray(depChecks) &&
-    input.container['running'] === true &&
-    depChecks.some((item) => dependencyNetworkUnreachable(asRecord(item)))
-  ) {
+  const failedDependency = firstUnreachableDependency(input.dependencies);
+  if (input.container['running'] === true && failedDependency) {
+    const key =
+      typeof failedDependency['key'] === 'string' ? failedDependency['key'] : 'dependency endpoint';
     nextSteps.push(
-      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call update_app.',
+      `${key} is unreachable from Docker. Ask the user for the correct value; do not guess or invent one. After the user provides it, update the service env and call update_app.`,
     );
   }
 
@@ -2236,6 +2248,12 @@ interface SynthesizedServiceDiagnosis {
   confidence: 'high' | 'medium';
   summary: string;
   evidence: Record<string, unknown>;
+  recoverability?: 'needs_user_input';
+  input_required?: {
+    field: string;
+    reason: string;
+    instruction: string;
+  };
   suggested_call?: SuggestedServiceDiagnosisCall;
 }
 
@@ -2968,12 +2986,7 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
-  const depChecks = asRecord(input.dependencies)?.['checks'];
-  const failedDependency = Array.isArray(depChecks)
-    ? depChecks
-        .map((item) => asRecord(item))
-        .find((item): item is Record<string, unknown> => dependencyNetworkUnreachable(item))
-    : undefined;
+  const failedDependency = firstUnreachableDependency(input.dependencies);
   if (failedDependency) {
     if (input.httpCheck['reachable'] === false) {
       return null;
@@ -2983,7 +2996,13 @@ function buildSynthesizedServiceDiagnosis(input: {
     return {
       code: 'DEPENDENCY_UNREACHABLE',
       confidence: 'high',
-      summary: `Dependency ${key} is unreachable from the service network.`,
+      summary: `Dependency ${key} is unreachable from the service network. OpenLander cannot infer the replacement value.`,
+      recoverability: 'needs_user_input',
+      input_required: {
+        field: key,
+        reason: `The saved ${key} endpoint is unreachable from the service network.`,
+        instruction: `Ask the user for the correct ${key} value. Do not guess or invent an endpoint.`,
+      },
       evidence: {
         key: failed['key'],
         target: failed['target'],

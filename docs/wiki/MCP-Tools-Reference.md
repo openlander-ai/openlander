@@ -1007,9 +1007,17 @@ High-confidence deterministic findings add `diagnosis: { code, summary,
 confidence, evidence }` and, when a safe next operation exists, top-level
 `suggested_call`. Current codes include `PORT_MISMATCH`,
 `ROUTE_BACKEND_MISMATCH`, `RUNTIME_ENV_MISSING`, `BUILD_TIME_ENV_MISSING`, and
-`NO_RUNTIME_IMAGE`. Ambiguous cases omit `diagnosis` and keep raw `env`,
+`NO_RUNTIME_IMAGE`, `DEPENDENCY_UNREACHABLE`, `RESTART_LOOP`, and
+`CONTAINER_NOT_RUNNING`. Ambiguous cases omit `diagnosis` and keep raw `env`,
 `buildTimeEnv`, `container`, `logs`, `httpCheck`, `route`, and `dependencies`
 fields for agent review.
+
+`DEPENDENCY_UNREACHABLE` is intentionally user-input-gated. When a saved
+dependency endpoint such as `EXCHANGE_API_URL` cannot be reached from Docker,
+`diagnosis.recoverability` is `needs_user_input` and `diagnosis.input_required`
+names the field. Agents must ask the operator for the correct value instead of
+guessing or inventing a replacement endpoint. OpenLander omits `suggested_call`
+until the missing value is known.
 
 `diagnose_service` also returns a normalized `evidence` block plus
 `evidence_metadata`. This metadata uses `live: true` because the action probes

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Make `diagnose_service` mark unreachable dependency endpoints as
+  user-input-gated so agents ask operators for missing values instead of
+  guessing replacement URLs.
+
 ## [0.2.0-rc.16] - 2026-06-16
 
 ### Changed

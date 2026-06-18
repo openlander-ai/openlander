@@ -2088,12 +2088,23 @@ describe('service-targeted monitoring tools', () => {
       diagnosis: {
         code: 'DEPENDENCY_UNREACHABLE',
         confidence: 'high',
+        recoverability: 'needs_user_input',
+        input_required: {
+          field: 'DATABASE_URL',
+        },
         evidence: {
           key: 'DATABASE_URL',
         },
       },
     });
     expect(result['suggested_call']).toBeUndefined();
+    expect(result).toMatchObject({
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Ask the user for the correct value'),
+        ]),
+      },
+    });
   });
 
   it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {
@@ -2261,6 +2272,10 @@ describe('service-targeted monitoring tools', () => {
       diagnosis: {
         code: 'DEPENDENCY_UNREACHABLE',
         confidence: 'high',
+        recoverability: 'needs_user_input',
+        input_required: {
+          field: 'DATABASE_URL',
+        },
         evidence: {
           key: 'DATABASE_URL',
         },
