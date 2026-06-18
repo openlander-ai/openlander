@@ -14,11 +14,36 @@ function parseJsonRecord(value: string | null): Record<string, unknown> | null {
   return null;
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function buildTicketDiagnosticCall(
+  row: AiOpsBriefingRow,
+  persistedSuggestedCall: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const persistedParams = recordValue(persistedSuggestedCall?.['params']) ?? {};
+  return {
+    tool: 'openlander_monitor',
+    action: 'diagnose_service',
+    params: {
+      ...persistedParams,
+      project_id: row.project_id,
+      ...(row.service_id ? { service_id: row.service_id } : {}),
+      briefing_id: row.id,
+    },
+  };
+}
+
 export function formatAiOpsBriefingRow(
   row: AiOpsBriefingRow,
   opts: { includeEvidence?: boolean } = {},
 ) {
   const suggestedCall = parseJsonRecord(row.suggested_call_json);
+  const diagnosticCall = buildTicketDiagnosticCall(row, suggestedCall);
   const evidenceContext = opts.includeEvidence
     ? normalizeAiOpsEvidenceForRead(parseJsonRecord(row.evidence_json), {
         source: 'briefing_snapshot',
@@ -52,7 +77,8 @@ export function formatAiOpsBriefingRow(
     ...(row.llm_summary ? { llm_summary: row.llm_summary } : {}),
     fingerprint: row.fingerprint,
     dedupe_key: row.dedupe_key,
-    suggested_call: suggestedCall,
+    suggested_call: diagnosticCall,
+    diagnostic_call: diagnosticCall,
     ...(evidenceContext
       ? { evidence: evidenceContext.evidence, evidence_metadata: evidenceContext.metadata }
       : {}),

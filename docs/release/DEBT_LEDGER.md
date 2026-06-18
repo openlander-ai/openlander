@@ -5,6 +5,31 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **Verified Failure Ticket MCP response hardening:** existing
+  `list_ai_ops_briefings` / `get_ai_ops_briefing` rows now expose additive
+  `diagnostic_call` and normalize the existing `suggested_call` so
+  `diagnose_service` receives the ticket `briefing_id`. Existing
+  `diagnose_service` dependency failures also expose structured
+  `agent_terminal`, `input_required.source_required="user"`, and
+  `report_to_user` fields. The MCP composite router redirects common
+  `openlander_service.diagnose`-style hallucinations to
+  `openlander_monitor.diagnose_service`.
+- **Why accepted:** open-model QA showed smaller coding models can wander when
+  they resolve targets themselves or receive prose-only guidance for
+  user-owned external values. The ticket must carry the exact diagnostic call,
+  and user-input terminal states must be machine-readable before any mutation.
+- **Vocab review:** `diagnostic_call`, `briefing_id`, `agent_terminal`,
+  `input_required`, and `report_to_user` are read-only response fields under
+  existing MCP actions. They do not add a resource type, route, table, or
+  mutation capability. `UNKNOWN_ACTION` remains the error code for redirected
+  aliases.
+- **Endpoint collision check:** no MCP action, composite slot, REST route, or
+  table is added. The change extends existing `openlander_monitor` briefing and
+  diagnosis responses plus the existing composite unknown-action error path.
+- **Follow-up:** a deterministic mutation gate for awaited user-owned values
+  requires explicit ticket state and must pass freeze gate before it can block
+  env/redeploy actions based on user-provided input.
+
 - **AI Providers settings surface:** the web API adds
   `/api/settings/ai-providers`,
   `/api/settings/ai-providers/ai-ops-briefing`, and

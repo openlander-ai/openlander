@@ -482,8 +482,9 @@ describe('AI Ops briefing monitor actions', () => {
     expect(briefings[0]?.suggested_call).toEqual({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
-      params: { service_id: 'svc-1' },
+      params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
     });
+    expect(briefings[0]?.diagnostic_call).toEqual(briefings[0]?.suggested_call);
     expect(briefings[0]).not.toHaveProperty('evidence');
   });
 
@@ -541,6 +542,12 @@ describe('AI Ops briefing monitor actions', () => {
       summary_usage: { output_tokens: 42 },
     });
     expect(briefing.deterministic_summary).toContain('HTTP 502');
+    expect(briefing.suggested_call).toEqual({
+      tool: 'openlander_monitor',
+      action: 'diagnose_service',
+      params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
+    });
+    expect(briefing.diagnostic_call).toEqual(briefing.suggested_call);
     expect(briefing.evidence).toEqual({
       route_health: { reachable: false, status_code: 502 },
       container_state: { running: true },
@@ -2089,8 +2096,16 @@ describe('service-targeted monitoring tools', () => {
         code: 'DEPENDENCY_UNREACHABLE',
         confidence: 'high',
         recoverability: 'needs_user_input',
+        agent_terminal: true,
         input_required: {
           field: 'DATABASE_URL',
+          source_required: 'user',
+        },
+        report_to_user: {
+          status: 'needs_user_input',
+          required_input: {
+            field: 'DATABASE_URL',
+          },
         },
         evidence: {
           key: 'DATABASE_URL',
@@ -2101,7 +2116,7 @@ describe('service-targeted monitoring tools', () => {
     expect(result).toMatchObject({
       _agent_guidance: {
         next_steps: expect.arrayContaining([
-          expect.stringContaining('Ask the user for the correct value'),
+          expect.stringContaining('Do not guess or invent DATABASE_URL'),
         ]),
       },
     });
@@ -2273,8 +2288,13 @@ describe('service-targeted monitoring tools', () => {
         code: 'DEPENDENCY_UNREACHABLE',
         confidence: 'high',
         recoverability: 'needs_user_input',
+        agent_terminal: true,
         input_required: {
           field: 'DATABASE_URL',
+          source_required: 'user',
+        },
+        report_to_user: {
+          status: 'needs_user_input',
         },
         evidence: {
           key: 'DATABASE_URL',

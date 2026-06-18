@@ -918,8 +918,9 @@ Application/Compose service.
 | `limit`      | number | No       | Max rows, 1-100                       |
 
 Provide `project_id` or `service_id`. The response includes deterministic
-`classification`, `severity`, `summary`, and `suggested_call`; full evidence is
-kept out of the list response.
+`classification`, `severity`, `summary`, and a ticket-first `suggested_call` /
+`diagnostic_call` for `openlander_monitor.diagnose_service` with the
+`briefing_id` already populated; full evidence is kept out of the list response.
 
 `get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
 The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
@@ -1014,10 +1015,12 @@ fields for agent review.
 
 `DEPENDENCY_UNREACHABLE` is intentionally user-input-gated. When a saved
 dependency endpoint such as `EXCHANGE_API_URL` cannot be reached from Docker,
-`diagnosis.recoverability` is `needs_user_input` and `diagnosis.input_required`
-names the field. Agents must ask the operator for the correct value instead of
-guessing or inventing a replacement endpoint. OpenLander omits `suggested_call`
-until the missing value is known.
+`diagnosis.recoverability` is `needs_user_input`, `diagnosis.agent_terminal` is
+`true`, and `diagnosis.input_required` names the field with
+`source_required: "user"`. Agents must report `diagnosis.report_to_user` to the
+operator and wait for the correct value instead of guessing or inventing a
+replacement endpoint. OpenLander omits `suggested_call` until the missing value
+is known.
 
 `diagnose_service` also returns a normalized `evidence` block plus
 `evidence_metadata`. This metadata uses `live: true` because the action probes

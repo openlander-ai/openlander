@@ -308,6 +308,28 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('composite', 'openlander_service');
     });
 
+    it('redirects hallucinated service diagnose actions to monitor diagnostics', async () => {
+      const result = (await tool.execute(
+        { action: 'diagnose', params: { service_id: 'svc-1', briefing_id: 'brief-1' } },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'UNKNOWN_ACTION',
+        action: 'diagnose',
+        composite: 'openlander_service',
+        suggested_call: {
+          tool: 'openlander_monitor',
+          arguments: {
+            action: 'diagnose_service',
+            params: { service_id: 'svc-1', briefing_id: 'brief-1' },
+          },
+        },
+      });
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(String(guidance['message'])).toContain('openlander_monitor.diagnose_service');
+    });
+
     it('does not expose managed create_service action', async () => {
       const result = (await tool.execute(
         { action: 'create_service', params: {} },

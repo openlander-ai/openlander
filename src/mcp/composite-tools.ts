@@ -392,6 +392,39 @@ function humanUiOnlyResponse(toolName: string, action: string): Record<string, u
   };
 }
 
+function unknownActionRedirect(
+  toolName: keyof typeof COMPOSITE_REGISTRY,
+  action: string,
+  params: Record<string, unknown> | undefined,
+  availableActions: string[],
+): Record<string, unknown> | null {
+  const serviceDiagnosticAliases = new Set(['diagnose', 'diagnose_service', 'get_diagnostics']);
+  if (toolName === 'openlander_service' && serviceDiagnosticAliases.has(action)) {
+    return {
+      error: 'UNKNOWN_ACTION',
+      action,
+      composite: toolName,
+      available_actions: availableActions,
+      suggested_call: {
+        tool: 'openlander_monitor',
+        arguments: {
+          action: 'diagnose_service',
+          params: params ?? {},
+        },
+      },
+      _agent_guidance: {
+        message:
+          'Application/Compose diagnostics are exposed through openlander_monitor.diagnose_service, not openlander_service.',
+        next_steps: [
+          'Retry the suggested_call exactly, preserving service_id or briefing_id if present.',
+          'For an AI Ops ticket, prefer the briefing diagnostic_call from list_ai_ops_briefings or get_ai_ops_briefing.',
+        ],
+      },
+    };
+  }
+  return null;
+}
+
 function createCompositeTool(
   toolName: keyof typeof COMPOSITE_REGISTRY,
   description: string,
@@ -416,11 +449,21 @@ function createCompositeTool(
             if (isHumanUiOnlyAction(requestedAction)) {
               return humanUiOnlyResponse(toolName, requestedAction);
             }
+            const availableActions = toolDefs.map((item) => item.name).sort();
+            const redirect = unknownActionRedirect(
+              toolName,
+              requestedAction,
+              undefined,
+              availableActions,
+            );
+            if (redirect) {
+              return redirect;
+            }
             return {
               error: 'UNKNOWN_ACTION',
               action: requestedAction,
               composite: toolName,
-              available_actions: toolDefs.map((item) => item.name).sort(),
+              available_actions: availableActions,
               suggested_call: {
                 tool: toolName,
                 arguments: { action: 'help' },
@@ -456,11 +499,16 @@ function createCompositeTool(
         if (isHumanUiOnlyAction(action)) {
           return humanUiOnlyResponse(toolName, action);
         }
+        const availableActions = toolDefs.map((item) => item.name).sort();
+        const redirect = unknownActionRedirect(toolName, action, params, availableActions);
+        if (redirect) {
+          return redirect;
+        }
         return {
           error: 'UNKNOWN_ACTION',
           action,
           composite: toolName,
-          available_actions: toolDefs.map((item) => item.name).sort(),
+          available_actions: availableActions,
           suggested_call: {
             tool: toolName,
             arguments: { action: 'help' },

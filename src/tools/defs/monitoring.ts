@@ -2249,10 +2249,20 @@ interface SynthesizedServiceDiagnosis {
   summary: string;
   evidence: Record<string, unknown>;
   recoverability?: 'needs_user_input';
+  agent_terminal?: boolean;
   input_required?: {
     field: string;
     reason: string;
     instruction: string;
+    source_required?: 'user';
+  };
+  report_to_user?: {
+    status: 'needs_user_input';
+    message: string;
+    required_input: {
+      field: string;
+      reason: string;
+    };
   };
   suggested_call?: SuggestedServiceDiagnosisCall;
 }
@@ -2779,6 +2789,15 @@ function nextStepsForDiagnosis(
   diagnosis: SynthesizedServiceDiagnosis,
   fallback: string[],
 ): string[] {
+  if (diagnosis.recoverability === 'needs_user_input') {
+    const field = diagnosis.input_required?.field ?? 'the required value';
+    return [
+      `Report diagnosis.report_to_user.message to the user and wait for a user-provided ${field} value.`,
+      `Do not guess or invent ${field}. Do not change env, restart, redeploy, or roll back for this diagnosis until the user provides the value.`,
+      `After the user provides ${field}, update the service env, apply/redeploy as appropriate, then call diagnose_service again with the same briefing_id to read recovery_receipt.`,
+    ];
+  }
+
   if (!diagnosis.suggested_call) {
     return fallback;
   }
@@ -2993,15 +3012,27 @@ function buildSynthesizedServiceDiagnosis(input: {
     }
     const failed = failedDependency;
     const key = typeof failed['key'] === 'string' ? failed['key'] : 'endpoint';
+    const reason = `The saved ${key} endpoint is unreachable from the service network.`;
+    const message = `OpenLander found that ${key} is unreachable from the service network, but it cannot infer the replacement value. Please provide the correct ${key} value; I should not guess or invent one.`;
     return {
       code: 'DEPENDENCY_UNREACHABLE',
       confidence: 'high',
       summary: `Dependency ${key} is unreachable from the service network. OpenLander cannot infer the replacement value.`,
       recoverability: 'needs_user_input',
+      agent_terminal: true,
       input_required: {
         field: key,
-        reason: `The saved ${key} endpoint is unreachable from the service network.`,
+        reason,
         instruction: `Ask the user for the correct ${key} value. Do not guess or invent an endpoint.`,
+        source_required: 'user',
+      },
+      report_to_user: {
+        status: 'needs_user_input',
+        message,
+        required_input: {
+          field: key,
+          reason,
+        },
       },
       evidence: {
         key: failed['key'],

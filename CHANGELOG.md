@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Harden Verified Failure Ticket MCP responses so AI Ops briefing rows carry a
+  `briefing_id`-aware diagnostic call, dependency failures expose structured
+  `needs_user_input` terminal guidance, and common hallucinated service
+  diagnose actions redirect to `openlander_monitor.diagnose_service`.
+
 ## [0.2.0-rc.17] - 2026-06-18
 
 ### Fixed
