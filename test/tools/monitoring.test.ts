@@ -907,6 +907,7 @@ describe('diagnose_service tool', () => {
             created_at: '2026-05-12T00:01:00.000Z',
           },
         ]),
+        resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
       },
       pipeline: {
         getLogs: vi.fn(
@@ -1047,6 +1048,7 @@ describe('diagnose_service tool', () => {
         getEnvVars: vi.fn(async () => ({})),
         getEnvVarsForService: vi.fn(async () => ({})),
         getDeployLogs: vi.fn(async () => []),
+        resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
       },
       pipeline: { getLogs: vi.fn(async () => '') },
       docker: {
@@ -1111,6 +1113,7 @@ describe('diagnose_service tool', () => {
         getEnvVars: vi.fn(async () => ({})),
         getEnvVarsForService: vi.fn(async () => ({})),
         getDeployLogs: vi.fn(async () => []),
+        resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
       },
       pipeline: { getLogs: vi.fn(async () => '') },
       docker: {
@@ -1170,6 +1173,20 @@ describe('service-targeted monitoring tools', () => {
         getEnvVarsForService: vi.fn(async () => ({ NODE_ENV: 'production' })),
         getDeployLogs: vi.fn(async () => []),
         getAiOpsBriefing: vi.fn(async () => null),
+        upsertAiOpsPendingInput: vi.fn(async (input: Record<string, unknown>) => ({
+          id: 'pending-1',
+          project_id: input['projectId'],
+          service_id: input['serviceId'],
+          briefing_id: input['briefingId'] ?? null,
+          field: input['field'],
+          reason: input['reason'],
+          source_required: 'user',
+          status: 'pending',
+          created_at: '2026-06-18T00:00:00.000Z',
+          updated_at: '2026-06-18T00:00:00.000Z',
+          resolved_at: null,
+        })),
+        resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
       },
       pipeline: {
         getLogs: vi.fn(async () => 'service logs'),
@@ -2120,6 +2137,39 @@ describe('service-targeted monitoring tools', () => {
         ]),
       },
     });
+    expect(ctx.db.upsertAiOpsPendingInput).toHaveBeenCalledWith({
+      projectId: 'app',
+      serviceId: 'app__svc',
+      briefingId: null,
+      field: 'DATABASE_URL',
+      reason: 'The saved DATABASE_URL endpoint is unreachable from the service network.',
+    });
+  });
+
+  it('diagnose_service does not create pending input for OpenLander-managed dependency hosts', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://ol-svc-postgres:5432/app',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      diagnosis: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        recoverability: 'needs_user_input',
+        input_required: { field: 'DATABASE_URL' },
+      },
+    });
+    expect(ctx.db.upsertAiOpsPendingInput).not.toHaveBeenCalled();
   });
 
   it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {

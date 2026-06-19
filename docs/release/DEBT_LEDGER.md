@@ -5,6 +5,35 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **Awaited user-input mutation gate:** the database gains
+  `ai_ops_pending_inputs` to track user-owned external env values that
+  `diagnose_service` has classified as requiring operator input. Existing MCP
+  composites now return `USER_INPUT_REQUIRED` before env writes or
+  update/redeploy inline env application can mutate a pending field. Trusted web
+  env saves, briefing resolve, and later reachable diagnoses clear the pending
+  state.
+- **Why accepted:** open-model QA showed an agent can invent an external
+  endpoint such as `EXCHANGE_API_URL` and try to apply it. The product contract
+  is that OpenLander must enforce "ask the user" as state, not prose guidance,
+  while still allowing unrelated env writes and route-only repairs.
+- **Vocab review:** `USER_INPUT_REQUIRED`, `field`, `source_required="user"`,
+  `report_to_user`, `service_id`, `project_id`, and `briefing_id` reuse the
+  existing AI Ops and MCP response vocabulary. `ai_ops_pending_inputs` is
+  internal safety bookkeeping, not a new public resource or MCP action.
+- **Endpoint collision check:** no MCP action, composite slot, or REST route is
+  added. The change extends the existing `diagnose_service`, `set_env_vars`,
+  `update_app`, and `redeploy_app` contracts and the existing web env/status
+  routes. `rg "USER_INPUT_REQUIRED|ai_ops_pending_inputs|pending input"` showed
+  no pre-existing public action or route collision before this slice.
+- **Follow-up:** if pending inputs need operator audit provenance, add actor and
+  previous/new state metadata rather than overloading the pending-input reason
+  field. If REST becomes an agent surface, move this gate below the shared
+  mutation boundary instead of relying on MCP-only enforcement. Pending inputs
+  are cleared by web env saves, briefing resolve, or a later reachable
+  diagnosis; if operators need passive stale cleanup, add an explicit TTL or
+  successful deploy/verify sweep rather than silently expiring active safety
+  gates.
+
 - **Verified Failure Ticket MCP response hardening:** existing
   `list_ai_ops_briefings` / `get_ai_ops_briefing` rows now expose additive
   `diagnostic_call` and normalize the existing `suggested_call` so

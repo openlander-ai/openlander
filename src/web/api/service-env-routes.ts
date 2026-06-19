@@ -67,13 +67,17 @@ export function createServiceEnvRoutes(ctx: AppContext): Hono {
       environmentId === undefined
         ? await ctx.env.setBulkForService(project.id, service.id, parsed.variables)
         : await ctx.env.setBulkForService(project.id, service.id, parsed.variables, environmentId);
+    const keys = Object.keys(parsed.variables);
+    if (changed) {
+      await ctx.db.resolveAiOpsPendingInputsForServiceKeys(service.id, keys);
+    }
     return c.json({
       status: changed ? 'updated' : 'unchanged',
       project: project.name,
       service: service.name,
       ...(parsedScope.scope ? { scope } : {}),
       ...(environmentResolution ? { environment_key: environmentResolution.environmentKey } : {}),
-      keys: Object.keys(parsed.variables),
+      keys,
       needsRedeploy: changed && service.status === 'running',
     });
   });

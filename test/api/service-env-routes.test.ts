@@ -88,7 +88,11 @@ function makeEnvironmentRow(overrides: Partial<EnvironmentRow> = {}): Environmen
 
 function createApp(ctx: Partial<AppContext>) {
   const app = new Hono();
-  app.route('/api', createServiceEnvRoutes(ctx as AppContext));
+  const db = {
+    resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
+    ...((ctx.db as Record<string, unknown> | undefined) ?? {}),
+  };
+  app.route('/api', createServiceEnvRoutes({ ...ctx, db } as AppContext));
   return app;
 }
 
@@ -155,12 +159,14 @@ describe('createServiceEnvRoutes', () => {
     const env = {
       setBulkForService: vi.fn(async () => true),
     };
+    const db = {
+      getProject: vi.fn(async () => project),
+      getProjectByName: vi.fn(async () => undefined),
+      getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+      resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 1),
+    };
     const app = createApp({
-      db: {
-        getProject: vi.fn(async () => project),
-        getProjectByName: vi.fn(async () => undefined),
-        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
-      },
+      db,
       env,
     });
 
@@ -174,6 +180,9 @@ describe('createServiceEnvRoutes', () => {
     expect(env.setBulkForService).toHaveBeenCalledWith('group-1', 'group-1__svc', {
       NODE_ENV: 'production',
     });
+    expect(db.resolveAiOpsPendingInputsForServiceKeys).toHaveBeenCalledWith('group-1__svc', [
+      'NODE_ENV',
+    ]);
     await expect(res.json()).resolves.toMatchObject({
       status: 'updated',
       keys: ['NODE_ENV'],

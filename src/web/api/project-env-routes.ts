@@ -235,6 +235,10 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
         environmentId === undefined
           ? await ctx.env.setBulk(project.id, parsed.variables)
           : await ctx.env.setBulk(project.id, parsed.variables, environmentId);
+      const keys = Object.keys(parsed.variables);
+      if (changed) {
+        await ctx.db.resolveAiOpsPendingInputsForProjectKeys(project.id, keys);
+      }
       const needsRedeploy =
         environmentResolution === undefined
           ? await projectScopeNeedsRedeploy(ctx, project.id, changed)
@@ -244,7 +248,7 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
         project: project.name,
         scope: parsedScope.scope,
         ...(environmentResolution ? { environment_key: environmentResolution.environmentKey } : {}),
-        keys: Object.keys(parsed.variables),
+        keys,
         needsRedeploy,
       });
     }
@@ -253,12 +257,20 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
     const changed = service
       ? await ctx.env.setBulkForService(project.id, service.id, parsed.variables)
       : await ctx.env.setBulk(project.id, parsed.variables);
+    const keys = Object.keys(parsed.variables);
+    if (changed) {
+      if (service) {
+        await ctx.db.resolveAiOpsPendingInputsForServiceKeys(service.id, keys);
+      } else {
+        await ctx.db.resolveAiOpsPendingInputsForProjectKeys(project.id, keys);
+      }
+    }
     const status = service?.status ?? project.status;
     return c.json({
       status: changed ? 'updated' : 'unchanged',
       project: project.name,
       ...(service ? { service: service.name } : {}),
-      keys: Object.keys(parsed.variables),
+      keys,
       needsRedeploy: changed && status === 'running',
     });
   });

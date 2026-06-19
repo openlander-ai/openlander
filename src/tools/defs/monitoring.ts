@@ -52,6 +52,7 @@ import {
   parseRepresentativeTraffic,
   representativeTrafficFailed,
 } from './representative-traffic.js';
+import { isUserOwnedExternalEnvDependency } from '../../monitor/user-owned-input.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -736,6 +737,14 @@ export const monitoringToolDefs: ToolDef[] = [
             service,
           })
         : null;
+      await syncPendingUserInputFromDiagnosis(appCtx, {
+        projectId: project.id,
+        serviceId: service.id,
+        briefingId,
+        diagnosis,
+        dependencies,
+        effectiveEnv,
+      });
 
       return {
         project: {
@@ -2172,6 +2181,90 @@ function firstUnreachableDependency(
     depChecks
       .map((item) => asRecord(item))
       .find((item): item is Record<string, unknown> => dependencyNetworkUnreachable(item)) ?? null
+  );
+}
+
+function dependencyChecks(dependencies: Record<string, unknown>): Record<string, unknown>[] {
+  const depChecks = asRecord(dependencies)?.['checks'];
+  if (!Array.isArray(depChecks)) return [];
+  return depChecks.flatMap((item) => {
+    const record = asRecord(item);
+    return record ? [record] : [];
+  });
+}
+
+function dependencyField(check: Record<string, unknown>): string | null {
+  return typeof check['key'] === 'string' && check['key'].trim() ? check['key'].trim() : null;
+}
+
+function userOwnedDependencyCheck(
+  field: string,
+  dependencies: Record<string, unknown>,
+): Record<string, unknown> | null {
+  return (
+    dependencyChecks(dependencies).find((check) => {
+      if (dependencyField(check) !== field) return false;
+      return isUserOwnedExternalEnvDependency({
+        key: field,
+        target: typeof check['target'] === 'string' ? check['target'] : null,
+        host: typeof check['host'] === 'string' ? check['host'] : null,
+      });
+    }) ?? null
+  );
+}
+
+function reachableUserOwnedDependencyFields(dependencies: Record<string, unknown>): string[] {
+  return dependencyChecks(dependencies).flatMap((check) => {
+    if (check['reachable'] !== true) return [];
+    const field = dependencyField(check);
+    if (!field) return [];
+    return isUserOwnedExternalEnvDependency({
+      key: field,
+      target: typeof check['target'] === 'string' ? check['target'] : null,
+      host: typeof check['host'] === 'string' ? check['host'] : null,
+    })
+      ? [field]
+      : [];
+  });
+}
+
+async function syncPendingUserInputFromDiagnosis(
+  appCtx: AppCtx,
+  input: {
+    projectId: string;
+    serviceId: string;
+    briefingId?: string;
+    diagnosis: SynthesizedServiceDiagnosis | null;
+    dependencies: Record<string, unknown>;
+    effectiveEnv: Record<string, string>;
+  },
+): Promise<void> {
+  const diagnosis = input.diagnosis;
+  if (
+    diagnosis?.code === 'DEPENDENCY_UNREACHABLE' &&
+    diagnosis.confidence === 'high' &&
+    diagnosis.recoverability === 'needs_user_input' &&
+    diagnosis.input_required?.source_required === 'user'
+  ) {
+    const field = diagnosis.input_required.field;
+    if (
+      Object.hasOwn(input.effectiveEnv, field) &&
+      userOwnedDependencyCheck(field, input.dependencies)
+    ) {
+      await appCtx.db.upsertAiOpsPendingInput({
+        projectId: input.projectId,
+        serviceId: input.serviceId,
+        briefingId: input.briefingId || null,
+        field,
+        reason: diagnosis.input_required.reason,
+      });
+      return;
+    }
+  }
+
+  await appCtx.db.resolveAiOpsPendingInputsForServiceKeys(
+    input.serviceId,
+    reachableUserOwnedDependencyFields(input.dependencies),
   );
 }
 
