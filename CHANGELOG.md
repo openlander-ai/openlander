@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add awaited user-input safety state for AI Ops dependency failures so
+  user-owned external env values such as `EXCHANGE_API_URL` are recorded as
+  pending operator input before an agent can mutate them.
+
+### Security
+
+- Block MCP `set_env_vars`, `update_app`, and `redeploy_app` attempts that try
+  to guess or apply pending user-owned external env values, while still allowing
+  unrelated env changes and route-only repairs.
+
 ## [0.2.0-rc.18] - 2026-06-19
 
 ### Changed
