@@ -92,4 +92,43 @@ describeWithDatabase('AI Ops briefing persistence on Postgres', () => {
       }
     });
   });
+
+  it('upserts pending user inputs atomically under concurrent diagnosis calls', async () => {
+    await withIsolatedPostgresDatabase('ai_ops_pending_input', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const project = await db.createProjectGroup({
+          id: 'p-ai-ops-pending',
+          name: 'ai-ops-pending-app',
+        });
+        const service = await db.ensureDeployableServiceForProject(project.id, {
+          source: 'git',
+          repoUrl: 'https://github.com/example/ai-ops-pending-app',
+          branch: 'main',
+        });
+
+        const rows = await Promise.all(
+          Array.from({ length: 4 }, (_, index) =>
+            db.upsertAiOpsPendingInput({
+              projectId: project.id,
+              serviceId: service.id,
+              field: 'EXCHANGE_API_URL',
+              reason: `dependency unreachable ${index}`,
+            }),
+          ),
+        );
+
+        expect(new Set(rows.map((row) => row.id)).size).toBe(1);
+
+        const listed = await db.listPendingAiOpsInputsForServiceKeys(service.id, [
+          'EXCHANGE_API_URL',
+        ]);
+        expect(listed).toHaveLength(1);
+        expect(listed[0]?.field).toBe('EXCHANGE_API_URL');
+        expect(listed[0]?.status).toBe('pending');
+      } finally {
+        await db.close();
+      }
+    });
+  });
 });

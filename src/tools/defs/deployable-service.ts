@@ -78,6 +78,10 @@ const deployServiceSchema = z
       ),
     health_check_path: z.string().optional().describe('Health check endpoint path'),
     cmd: z.array(z.string()).optional().describe('Override container start command'),
+    env_vars: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe('Inline environment variables to save before this update/redeploy.'),
   })
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',

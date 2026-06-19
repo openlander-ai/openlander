@@ -25,6 +25,7 @@ import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import { AuthRepo } from './repos/auth.repo.js';
 import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
 import { AiOpsBriefingRepo } from './repos/ai-ops-briefing.repo.js';
+import { AiOpsPendingInputRepo } from './repos/ai-ops-pending-input.repo.js';
 import { AiOpsPolicyRepo } from './repos/ai-ops-policy.repo.js';
 import { ActionRunRepo } from './repos/action-run.repo.js';
 import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
@@ -58,6 +59,8 @@ export type {
   AuthRow,
   AiOpsBriefingRow,
   AiOpsBriefingStatus,
+  AiOpsPendingInputRow,
+  AiOpsPendingInputStatus,
   AiOpsDedupeRow,
   AiOpsInstancePolicyRow,
   AiOpsProjectPolicyRow,
@@ -263,6 +266,7 @@ export class Database implements AuthDatabase {
   private readonly authRepo: AuthRepo;
   private readonly aiUsageLogRepo: AiUsageLogRepo;
   private readonly aiOpsBriefingRepo: AiOpsBriefingRepo;
+  private readonly aiOpsPendingInputRepo: AiOpsPendingInputRepo;
   private readonly aiOpsPolicyRepo: AiOpsPolicyRepo;
   private readonly actionRunRepo: ActionRunRepo;
   private readonly deploymentPatternRepo: DeploymentPatternRepo;
@@ -298,6 +302,7 @@ export class Database implements AuthDatabase {
     this.authRepo = new AuthRepo(this.db);
     this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.client);
     this.aiOpsBriefingRepo = new AiOpsBriefingRepo(this.db, this.client);
+    this.aiOpsPendingInputRepo = new AiOpsPendingInputRepo(this.db, this.client);
     this.aiOpsPolicyRepo = new AiOpsPolicyRepo(this.db, this.client);
     this.actionRunRepo = new ActionRunRepo(this.db, this.client);
     this.deploymentPatternRepo = new DeploymentPatternRepo(this.db, this.client);
@@ -541,6 +546,12 @@ export class Database implements AuthDatabase {
   listAiOpsBriefingsByService(serviceId: string, opts?: Parameters<AiOpsBriefingRepo['listByService']>[1]) { return this.aiOpsBriefingRepo.listByService(serviceId, opts); }
   updateAiOpsBriefingStatus(...args: Parameters<AiOpsBriefingRepo['updateStatus']>) { return this.aiOpsBriefingRepo.updateStatus(...args); }
   updateAiOpsBriefingLlmSummary(...args: Parameters<AiOpsBriefingRepo['updateLlmSummary']>) { return this.aiOpsBriefingRepo.updateLlmSummary(...args); }
+  upsertAiOpsPendingInput(data: Parameters<AiOpsPendingInputRepo['upsertPending']>[0]) { return this.aiOpsPendingInputRepo.upsertPending(data); }
+  listPendingAiOpsInputsForServiceKeys(...args: Parameters<AiOpsPendingInputRepo['listPendingForServiceKeys']>) { return this.aiOpsPendingInputRepo.listPendingForServiceKeys(...args); }
+  listPendingAiOpsInputsForProjectKeys(...args: Parameters<AiOpsPendingInputRepo['listPendingForProjectKeys']>) { return this.aiOpsPendingInputRepo.listPendingForProjectKeys(...args); }
+  resolveAiOpsPendingInputsForServiceKeys(...args: Parameters<AiOpsPendingInputRepo['resolveForServiceKeys']>) { return this.aiOpsPendingInputRepo.resolveForServiceKeys(...args); }
+  resolveAiOpsPendingInputsForProjectKeys(...args: Parameters<AiOpsPendingInputRepo['resolveForProjectKeys']>) { return this.aiOpsPendingInputRepo.resolveForProjectKeys(...args); }
+  resolveAiOpsPendingInputsForBriefing(...args: Parameters<AiOpsPendingInputRepo['resolveForBriefing']>) { return this.aiOpsPendingInputRepo.resolveForBriefing(...args); }
   getAiOpsInstancePolicy() { return this.aiOpsPolicyRepo.getInstancePolicy(); }
   setAiOpsInstancePolicy(input: Parameters<AiOpsPolicyRepo['setInstancePolicy']>[0]) { return this.aiOpsPolicyRepo.setInstancePolicy(input); }
   getAiOpsProjectPolicy(projectId: string) { return this.aiOpsPolicyRepo.getProjectPolicy(projectId); }

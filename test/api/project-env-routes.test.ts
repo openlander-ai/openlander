@@ -90,13 +90,18 @@ function makeEnvironmentRow(overrides: Partial<EnvironmentRow> = {}): Environmen
 
 function createApp(ctx: Partial<AppContext>) {
   const app = new Hono();
+  const db = {
+    resolveAiOpsPendingInputsForProjectKeys: vi.fn(async () => 0),
+    resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
+    ...((ctx.db as Record<string, unknown> | undefined) ?? {}),
+  };
   app.onError((err, c) => {
     if (err instanceof OpenLanderError) {
       return c.json(err.toJSON(), err.statusCode as 400);
     }
     return c.json({ error: 'INTERNAL_ERROR', message: err.message }, 500);
   });
-  app.route('/api', createProjectEnvRoutes(ctx as AppContext));
+  app.route('/api', createProjectEnvRoutes({ ...ctx, db } as AppContext));
   return app;
 }
 
@@ -261,12 +266,14 @@ describe('createProjectEnvRoutes', () => {
       setBulk: vi.fn(async () => true),
       setBulkForService: vi.fn(async () => true),
     };
+    const db = {
+      getProject: vi.fn(async () => project),
+      getProjectByName: vi.fn(async () => undefined),
+      getDeployablesByGroup: vi.fn(async () => [service]),
+      resolveAiOpsPendingInputsForProjectKeys: vi.fn(async () => 1),
+    };
     const app = createApp({
-      db: {
-        getProject: vi.fn(async () => project),
-        getProjectByName: vi.fn(async () => undefined),
-        getDeployablesByGroup: vi.fn(async () => [service]),
-      },
+      db,
       env: envManager,
     });
 
@@ -279,6 +286,9 @@ describe('createProjectEnvRoutes', () => {
     expect(res.status).toBe(200);
     expect(envManager.setBulk).toHaveBeenCalledWith('group-1', { SHARED_KEY: 'project' });
     expect(envManager.setBulkForService).not.toHaveBeenCalled();
+    expect(db.resolveAiOpsPendingInputsForProjectKeys).toHaveBeenCalledWith('group-1', [
+      'SHARED_KEY',
+    ]);
     await expect(res.json()).resolves.toMatchObject({
       status: 'updated',
       scope: 'project',

@@ -464,6 +464,22 @@ export interface AiOpsBriefingRow {
   server_id: string;
 }
 
+export type AiOpsPendingInputStatus = 'pending' | 'resolved' | 'dismissed';
+
+export interface AiOpsPendingInputRow {
+  id: string;
+  project_id: string;
+  service_id: string;
+  briefing_id: string | null;
+  field: string;
+  reason: string;
+  source_required: 'user';
+  status: AiOpsPendingInputStatus;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
 export interface ActionRunRow {
   id: string;
   project_id: string;

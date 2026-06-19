@@ -257,6 +257,9 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
     if (!briefing) {
       return c.json({ error: 'NOT_FOUND', message: `AI Ops briefing not found: ${id}` }, 404);
     }
+    if (rawStatus === 'resolved') {
+      await ctx.db.resolveAiOpsPendingInputsForBriefing(id);
+    }
 
     return c.json({ briefing: formatAiOpsBriefingRow(briefing) });
   });

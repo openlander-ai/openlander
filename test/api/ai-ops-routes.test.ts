@@ -132,7 +132,11 @@ function makeUsage(overrides: Partial<AiUsageLogRow> = {}): AiUsageLogRow {
 
 function createApp(ctx: Partial<AppContext>) {
   const app = new Hono();
-  app.route('/api', createAiOpsRoutes(ctx as AppContext));
+  const db = {
+    resolveAiOpsPendingInputsForBriefing: vi.fn(async () => 0),
+    ...((ctx.db as Record<string, unknown> | undefined) ?? {}),
+  };
+  app.route('/api', createAiOpsRoutes({ ...ctx, db } as AppContext));
   return app;
 }
 
@@ -307,6 +311,7 @@ describe('AI Ops routes', () => {
   it('updates AI Ops briefing status through a manual operator action', async () => {
     const db = {
       updateAiOpsBriefingStatus: vi.fn(async () => makeBriefing({ status: 'resolved' })),
+      resolveAiOpsPendingInputsForBriefing: vi.fn(async () => 1),
     };
     const app = createApp({ db });
 
@@ -318,6 +323,7 @@ describe('AI Ops routes', () => {
 
     expect(res.status).toBe(200);
     expect(db.updateAiOpsBriefingStatus).toHaveBeenCalledWith('brief-1', 'resolved');
+    expect(db.resolveAiOpsPendingInputsForBriefing).toHaveBeenCalledWith('brief-1');
     const body = (await res.json()) as { briefing: Record<string, unknown> };
     expect(body.briefing).toMatchObject({
       briefing_id: 'brief-1',

@@ -6,6 +6,7 @@ import {
   HUMAN_UI_ONLY_ALIAS_SET,
   PROJECT_LIFECYCLE_ALIAS_SET,
 } from './mcp-restricted-actions.js';
+import { maybeRejectPendingUserInput } from './pending-user-input-gate.js';
 import { maybeRejectMcpScope } from './scope-policy.js';
 import {
   buildActionContract,
@@ -546,6 +547,11 @@ function createCompositeTool(
       const scopeResult = await maybeRejectMcpScope(def, parsed.data, context);
       if (scopeResult !== undefined) {
         return scopeResult;
+      }
+
+      const pendingInputResult = await maybeRejectPendingUserInput(def, parsed.data, context);
+      if (pendingInputResult !== undefined) {
+        return pendingInputResult;
       }
 
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);

@@ -96,6 +96,16 @@ Database/Cache/Storage resources, not Applications). For whole Project lifecycle
 `archive_project` / `unarchive_project` with `project_id` or `project_name`; for one Application,
 use `archive_service` / `unarchive_service` with a `service_id`.
 
+User-owned external configuration is also gated. If `diagnose_service` determines that a saved
+external dependency value such as `EXCHANGE_API_URL` requires user input, OpenLander records a
+pending input for that field. MCP attempts to change that field through `set_env_vars` or inline
+`update_app` / `redeploy_app` `env_vars` return `{ code: "USER_INPUT_REQUIRED" }` and include
+`report_to_user`; agents must ask the user for the value and must not retry with a guessed endpoint.
+Unrelated env changes, route-only repairs such as `apply_route_config`, read-only AI Ops actions,
+and restart calls without env mutation are not blocked by this gate. The gate can be cleared only
+from trusted human surfaces (for example, saving the value in the web UI) or by a later
+`diagnose_service` observing the dependency as reachable.
+
 Composite catalog:
 
 | Composite                    | Action slots | Purpose                                                                               |
@@ -421,14 +431,15 @@ Project-level runtime actions have been removed. Git-based dependency installs
 get a targeted dependency-layer refresh; `no_cache=true` remains the manual
 full-cache bypass.
 
-| Parameter           | Type    | Required | Description                                                                 |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- |
-| `service_id`        | string  | No       | Application id                                                              |
-| `service_name`      | string  | No       | Application name                                                            |
-| `project_name`      | string  | No       | Optional group scope for name lookups                                       |
-| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes             |
-| `strategy`          | string  | No       | Defaults to `'blue-green'` when eligible; falls back to `'force'` otherwise |
-| `health_check_path` | string  | No       | Health check path                                                           |
+| Parameter           | Type    | Required | Description                                                                                              |
+| ------------------- | ------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `service_id`        | string  | No       | Application id                                                                                           |
+| `service_name`      | string  | No       | Application name                                                                                         |
+| `project_name`      | string  | No       | Optional group scope for name lookups                                                                    |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes                                          |
+| `strategy`          | string  | No       | Defaults to `'blue-green'` when eligible; falls back to `'force'` otherwise                              |
+| `health_check_path` | string  | No       | Health check path                                                                                        |
+| `env_vars`          | object  | No       | Inline env vars to save before update/redeploy; user-input-gated fields can return `USER_INPUT_REQUIRED` |
 
 Provide either `service_id` or `service_name`.
 
@@ -636,6 +647,11 @@ container, call `update_app`, or pass `defer_redeploy=false`. Runtime-only env c
 with a verified same-image recreate (`apply_mode: same_image_recreate`); build-time keys such as
 `NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`, `NUXT_PUBLIC_*`, `PUBLIC_*`, and `GATSBY_*` still require a
 full redeploy (`apply_mode: full_redeploy`).
+
+If a field is pending user input from `diagnose_service`, MCP `set_env_vars` returns
+`USER_INPUT_REQUIRED` before writing env or starting any apply/redeploy path. This includes
+Project-scoped writes when any service in that Project is awaiting the same field. Use the
+`report_to_user` message and wait for the operator to supply the value through the web UI.
 
 Immediate applies include `runtime_apply`. For same-image recreates, `runtime_apply.status`
 is `verified` when route verification passed, `applied` when the recreate succeeded but
@@ -1020,7 +1036,10 @@ dependency endpoint such as `EXCHANGE_API_URL` cannot be reached from Docker,
 `source_required: "user"`. Agents must report `diagnosis.report_to_user` to the
 operator and wait for the correct value instead of guessing or inventing a
 replacement endpoint. OpenLander omits `suggested_call` until the missing value
-is known.
+is known. For high-confidence user-owned external values, the same diagnosis also
+creates or refreshes a pending-input safety row so MCP mutations for that field
+are blocked until a trusted human surface provides the value or a later diagnosis
+observes the dependency as reachable.
 
 `diagnose_service` also returns a normalized `evidence` block plus
 `evidence_metadata`. This metadata uses `live: true` because the action probes

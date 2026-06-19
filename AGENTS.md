@@ -385,6 +385,23 @@ actual target resolution in lockstep.
   In particular, AI Ops briefing status transitions must scope-check the target `briefing_id` so a
   scoped token cannot acknowledge or resolve a briefing outside its Project/service boundary.
 
+### MCP Pending User Input Gate Invariant
+
+When `diagnose_service` marks a user-owned external env value as awaiting operator input, MCP must
+not let an agent guess and apply that value through another mutation path.
+
+- Keep env-changing MCP actions behind `maybeRejectPendingUserInput` in
+  `src/mcp/composite-tools.ts`. The order is scope check → pending-input check → destructive safety
+  → action execution.
+- `diagnose_service` may create or resolve pending-input rows as system-owned safety bookkeeping.
+  That write must not start an agent, mutate runtime, restart/redeploy, or auto-resolve a briefing.
+- Any new MCP action that writes env vars, applies inline `env_vars`, or starts a deploy/redeploy
+  from supplied env must either reuse this gate or prove it cannot touch pending fields.
+- Do not add an MCP bypass flag such as `user_provided=true`. Pending inputs are cleared by trusted
+  human surfaces or by a later diagnosis observing the dependency as reachable.
+- Read-only actions, route-only repair actions, and restarts without env mutation should not be
+  blocked by this gate.
+
 ### MCP Response Contract
 
 Keep MCP responses small and action-oriented. The stable envelope is:

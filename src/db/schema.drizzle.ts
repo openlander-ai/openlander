@@ -782,6 +782,50 @@ export const aiOpsBriefings = pgTable(
   ],
 );
 
+export const aiOpsPendingInputs = pgTable(
+  'ai_ops_pending_inputs',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    briefing_id: text('briefing_id').references(() => aiOpsBriefings.id, {
+      onDelete: 'set null',
+    }),
+    field: text('field').notNull(),
+    reason: text('reason').notNull(),
+    source_required: text('source_required', { enum: ['user'] })
+      .notNull()
+      .default('user'),
+    status: text('status', { enum: ['pending', 'resolved', 'dismissed'] })
+      .notNull()
+      .default('pending'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+    resolved_at: text('resolved_at'),
+  },
+  (table) => [
+    check('ai_ops_pending_inputs_source_required_check', sql`${table.source_required} IN ('user')`),
+    check(
+      'ai_ops_pending_inputs_status_check',
+      sql`${table.status} IN ('pending', 'resolved', 'dismissed')`,
+    ),
+    uniqueIndex('ai_ops_pending_inputs_active_unique')
+      .on(table.service_id, table.field)
+      .where(sql`${table.status} = 'pending'`),
+    index('idx_ai_ops_pending_inputs_project_status').on(table.project_id, table.status),
+    index('idx_ai_ops_pending_inputs_service_status').on(table.service_id, table.status),
+    index('idx_ai_ops_pending_inputs_briefing').on(table.briefing_id),
+  ],
+);
+
 export const actionRuns = pgTable(
   'action_runs',
   {
@@ -966,6 +1010,8 @@ export type AiOpsDedupeRow = typeof aiOpsDedupe.$inferSelect;
 export type NewAiOpsDedupe = typeof aiOpsDedupe.$inferInsert;
 export type AiOpsBriefingRow = typeof aiOpsBriefings.$inferSelect;
 export type NewAiOpsBriefing = typeof aiOpsBriefings.$inferInsert;
+export type AiOpsPendingInputRow = typeof aiOpsPendingInputs.$inferSelect;
+export type NewAiOpsPendingInput = typeof aiOpsPendingInputs.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
 export type NewActionRun = typeof actionRuns.$inferInsert;
 export type DeploymentPatternRow = typeof deploymentPatterns.$inferSelect;
@@ -1106,6 +1152,7 @@ export const drizzleSchema = {
   aiOpsServiceOverrides,
   aiOpsDedupe,
   aiOpsBriefings,
+  aiOpsPendingInputs,
   actionRuns,
   deploymentPatterns,
   opsIncidents,

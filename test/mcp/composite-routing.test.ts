@@ -359,6 +359,20 @@ describe('Composite Action Routing', () => {
       expect(String(guidance['message'])).toContain('branch');
     });
 
+    it('exposes inline env_vars for update/redeploy actions so pending-input gating can inspect them', async () => {
+      const result = (await tool.execute(
+        { action: 'help', params: { action_name: 'update_app' } },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      const action = result['action'] as Record<string, unknown>;
+      expect(action).toMatchObject({
+        name: 'update_app',
+        optional_params: expect.arrayContaining(['env_vars']),
+        allowed_params: expect.arrayContaining(['env_vars']),
+      });
+    });
+
     it('rc.2: remove_service is in MANAGED_SERVICE_ACTIONS, not openlander_service', async () => {
       // rc.2 split: openlander_service is the deployable-vocab composite,
       // and remove_service moved to openlander_managed_service. Calling
