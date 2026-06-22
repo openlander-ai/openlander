@@ -314,9 +314,11 @@ describe('AI Ops briefing runtime trigger', () => {
 
     expect(result.status).toBe('created');
     expect(result.deterministic?.classification).toBe('deploy_failed');
+    expect(result.deterministic?.severity).toBe('warning');
     expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
       expect.objectContaining({
         classification: 'deploy_failed',
+        severity: 'warning',
         evidence: expect.objectContaining({
           deployLog: expect.objectContaining({
             status: 'failed',
@@ -502,6 +504,38 @@ describe('AI Ops briefing runtime trigger', () => {
     expect(result.status).toBe('created');
     expect(result.deterministic?.classification).toBe('restart_loop');
     expect(result.deterministic?.deterministicSummary).toContain('restart count 4');
+  });
+
+  it('does not treat active Docker restarting loops as self-healed', async () => {
+    const db = makeDb();
+    const runtime = {
+      inspectContainer: vi.fn(async () => ({
+        RestartCount: 6,
+        State: {
+          Running: true,
+          Restarting: true,
+          Status: 'restarting',
+          ExitCode: 1,
+        },
+      })),
+    };
+    const { trigger } = makeTrigger({ db, runtime });
+
+    const result = await trigger.handleContainerDie({
+      projectId: 'proj-1',
+      containerId: 'container-1',
+      containerName: 'ol-api',
+      exitCode: 1,
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.deterministic?.classification).toBe('restart_loop');
+    expect(result.deterministic?.deterministicSummary).toContain('restart count 6');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'restart_loop',
+      }),
+    );
   });
 
   it('suppresses duplicate fingerprints before creating a briefing', async () => {

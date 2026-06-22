@@ -179,7 +179,7 @@ export class AiOpsBriefingTrigger {
     const service = (await this.options.db.getDeployableForProject(payload.projectId)) ?? null;
     if (!service) return { status: 'skipped', reason: 'service_not_found' };
     const current = await this.inspectContainerAfterDie(payload.containerId);
-    if (current?.running) {
+    if (current?.running && !current.restarting && (current.restartCount ?? 0) < 3) {
       return { status: 'skipped', reason: 'container_self_healed' };
     }
 
@@ -229,6 +229,7 @@ export class AiOpsBriefingTrigger {
 
   private async inspectContainerAfterDie(containerId: string): Promise<{
     running: boolean;
+    restarting: boolean;
     status?: string | null;
     restartCount?: number | null;
     exitCode?: number | null;
@@ -238,7 +239,8 @@ export class AiOpsBriefingTrigger {
       const inspected = await this.options.runtime.inspectContainer(containerId);
       const state = inspected.State;
       return {
-        running: state?.Running === true || state?.Restarting === true,
+        running: state?.Running === true,
+        restarting: state?.Restarting === true,
         status: state?.Status ?? null,
         restartCount: typeof inspected.RestartCount === 'number' ? inspected.RestartCount : null,
         exitCode: typeof state?.ExitCode === 'number' ? state.ExitCode : null,

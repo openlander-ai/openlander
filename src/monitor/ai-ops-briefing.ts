@@ -290,7 +290,7 @@ export function buildDeterministicAiOpsBriefing(
     suggestedCall = diagnoseCall(serviceId);
   } else if (deployLog?.status === 'failed' || deployLog?.status === 'unhealthy') {
     classification = 'deploy_failed';
-    severity = 'high';
+    severity = 'warning';
     title = 'Recent deploy failed or became unhealthy';
     deterministicSummary =
       deployLog.buildLogTail ??

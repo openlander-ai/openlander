@@ -45,6 +45,7 @@ describe('AI Ops deterministic briefing core', () => {
     });
 
     expect(briefing.classification).toBe('deploy_failed');
+    expect(briefing.severity).toBe('warning');
     expect(briefing.suggestedCall).toEqual({
       tool: 'openlander_deploy',
       action: 'get_build_log',
