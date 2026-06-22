@@ -546,6 +546,7 @@ export async function createAppContext(
   ctx.aiOpsBriefingTrigger = new AiOpsBriefingTrigger({
     eventBus,
     db,
+    runtime: docker,
     modelRegistry,
     channelManager,
     config,

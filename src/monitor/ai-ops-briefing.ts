@@ -6,11 +6,11 @@ import { buildAiOpsDedupeKey } from './ai-ops-policy.js';
 export type AiOpsBriefingClassification =
   | 'traffic_health_mismatch'
   | 'route_failure'
+  | 'container_exited'
   | 'restart_loop'
   | 'dependency_failure'
   | 'runtime_incident'
   | 'deploy_failed'
-  | 'runtime_logs_available'
   | 'no_issue_detected';
 
 export interface AiOpsSuggestedCall {
@@ -145,10 +145,20 @@ function isRestartLoop(input: BuildAiOpsBriefingInput): boolean {
   const containerRestarts = input.container?.restartCount ?? 0;
   const incidentRestarts = input.runtimeIncident?.restartCount ?? 0;
   const category = input.runtimeIncident?.category?.toLowerCase() ?? '';
-  return containerRestarts >= 3 || incidentRestarts >= 3 || category.includes('restart');
+  return (
+    containerRestarts >= 3 || incidentRestarts >= 3 || /(?:restart|crash)[_-]?loop/.test(category)
+  );
 }
 
-function buildRestartSummary(evidence: AiOpsEvidencePack): string {
+function hasContainerExitEvidence(input: BuildAiOpsBriefingInput): boolean {
+  return (
+    input.container?.running === false ||
+    input.container?.status === 'exited' ||
+    typeof input.container?.exitCode === 'number'
+  );
+}
+
+function buildContainerRuntimeSummary(evidence: AiOpsEvidencePack): string {
   const details: string[] = [];
   const serviceLabel = evidence.serviceName ?? evidence.serviceId ?? null;
   if (serviceLabel) details.push(`service ${serviceLabel}`);
@@ -166,7 +176,7 @@ function buildRestartSummary(evidence: AiOpsEvidencePack): string {
     return `Runtime evidence shows ${details.join(', ')}.`;
   }
 
-  return 'Runtime evidence indicates a container restart or crash loop.';
+  return 'Runtime evidence indicates a container crash or restart issue.';
 }
 
 export function normalizeAiOpsEvidencePack(input: BuildAiOpsBriefingInput): AiOpsEvidencePack {
@@ -240,8 +250,19 @@ export function buildDeterministicAiOpsBriefing(
     classification = 'restart_loop';
     severity = 'high';
     title = 'Service appears to be restart-looping';
-    deterministicSummary = buildRestartSummary(evidence);
+    deterministicSummary = buildContainerRuntimeSummary(evidence);
     fingerprint = 'restart-loop';
+    suggestedCall = diagnoseCall(serviceId);
+  } else if (hasContainerExitEvidence(input)) {
+    classification = 'container_exited';
+    severity = 'high';
+    title = 'Service container exited';
+    deterministicSummary = buildContainerRuntimeSummary(evidence);
+    fingerprint = `container-exited:${sanitizeFingerprintPart(
+      evidence.container?.name ??
+        evidence.container?.status ??
+        String(evidence.container?.exitCode),
+    )}`;
     suggestedCall = diagnoseCall(serviceId);
   } else if (runtimeIncident && isDependencyIncident(runtimeIncident)) {
     classification = 'dependency_failure';
@@ -269,7 +290,7 @@ export function buildDeterministicAiOpsBriefing(
     suggestedCall = diagnoseCall(serviceId);
   } else if (deployLog?.status === 'failed' || deployLog?.status === 'unhealthy') {
     classification = 'deploy_failed';
-    severity = 'high';
+    severity = 'warning';
     title = 'Recent deploy failed or became unhealthy';
     deterministicSummary =
       deployLog.buildLogTail ??
@@ -279,15 +300,6 @@ export function buildDeterministicAiOpsBriefing(
       deployLog.buildLogTail ?? deployLog.runtimeLogTail ?? deployLog.id,
     )}`;
     suggestedCall = buildLogCall(deployLog.id) ?? diagnoseCall(serviceId);
-  } else if (evidence.recentLogTail) {
-    classification = 'runtime_logs_available';
-    severity = 'warning';
-    title = 'Runtime logs need inspection';
-    deterministicSummary = 'Recent runtime logs are available but no stronger rule matched.';
-    fingerprint = 'logs:runtime';
-    suggestedCall = serviceId
-      ? { tool: 'openlander_monitor', action: 'get_logs', params: { service_id: serviceId } }
-      : null;
   }
 
   if (suggestedCall && AUTO_MUTATION_ACTIONS.has(suggestedCall.action)) {

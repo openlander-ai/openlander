@@ -45,6 +45,7 @@ describe('AI Ops deterministic briefing core', () => {
     });
 
     expect(briefing.classification).toBe('deploy_failed');
+    expect(briefing.severity).toBe('warning');
     expect(briefing.suggestedCall).toEqual({
       tool: 'openlander_deploy',
       action: 'get_build_log',
@@ -81,7 +82,7 @@ describe('AI Ops deterministic briefing core', () => {
     expect(JSON.stringify(first.suggestedCall)).not.toMatch(/restart|redeploy|rollback|env/i);
   });
 
-  it('keeps container exit details in restart-loop fallback summaries', () => {
+  it('keeps single container exit details without calling it a restart loop', () => {
     const briefing = buildDeterministicAiOpsBriefing({
       projectId: 'proj-1',
       serviceId: 'svc-api',
@@ -94,12 +95,12 @@ describe('AI Ops deterministic briefing core', () => {
         restartCount: null,
       },
       runtimeIncident: {
-        category: 'container_restart',
+        category: 'container_exit',
         errorSnippet: 'Container ol-api exited with code 137.',
       },
     });
 
-    expect(briefing.classification).toBe('restart_loop');
+    expect(briefing.classification).toBe('container_exited');
     expect(briefing.deterministicSummary).toContain('service api__svc');
     expect(briefing.deterministicSummary).toContain('container ol-api');
     expect(briefing.deterministicSummary).toContain('exit code 137');
@@ -109,6 +110,29 @@ describe('AI Ops deterministic briefing core', () => {
       exitCode: 137,
     });
     expect(briefing.suggestedCall?.action).toBe('diagnose_service');
+  });
+
+  it('requires explicit loop evidence before classifying a runtime incident as restart-looping', () => {
+    const singleExit = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-api',
+      runtimeIncident: {
+        category: 'container_restart',
+        errorSnippet: 'Container ol-api exited once.',
+      },
+    });
+    const explicitLoop = buildDeterministicAiOpsBriefing({
+      projectId: 'proj-1',
+      serviceId: 'svc-api',
+      runtimeIncident: {
+        category: 'container_restart_loop',
+        restartCount: 4,
+        errorSnippet: 'Container ol-api restarted repeatedly.',
+      },
+    });
+
+    expect(singleExit.classification).toBe('runtime_incident');
+    expect(explicitLoop.classification).toBe('restart_loop');
   });
 
   it('maps dependency runtime incidents to diagnosis instead of inventing a fix', () => {
@@ -148,7 +172,7 @@ describe('AI Ops deterministic briefing core', () => {
     expect(evidence.deployLog?.buildLogTail?.split('\n')).toHaveLength(40);
   });
 
-  it('redacts secrets before evidence persistence and log fingerprints stay stable', () => {
+  it('redacts log-only evidence without promoting it into a ticket', () => {
     const first = buildDeterministicAiOpsBriefing({
       projectId: 'proj-1',
       serviceId: 'svc-api',
@@ -165,8 +189,11 @@ describe('AI Ops deterministic briefing core', () => {
     expect(first.evidence.recentLogTail).toContain('Bearer [REDACTED]');
     expect(first.evidence.recentLogTail).not.toContain('super-secret');
     expect(second.evidence.recentLogTail).toContain('OPENAI_API_KEY=[REDACTED]');
-    expect(first.fingerprint).toBe('logs:runtime');
-    expect(second.fingerprint).toBe('logs:runtime');
+    expect(first.classification).toBe('no_issue_detected');
+    expect(second.classification).toBe('no_issue_detected');
+    expect(first.fingerprint).toBe('no-issue');
+    expect(second.fingerprint).toBe('no-issue');
     expect(first.dedupeKey).toBe(second.dedupeKey);
+    expect(first.suggestedCall?.action).toBe('diagnose_service');
   });
 });

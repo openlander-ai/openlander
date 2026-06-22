@@ -173,20 +173,26 @@ function makeDb(overrides: Record<string, unknown> = {}) {
   return db;
 }
 
-function makeTrigger(overrides: {
-  db?: ReturnType<typeof makeDb>;
-  channel?: Channel;
-  config?: { channels: { telegram: { recoveryChannelId: string } } };
-  eventBus?: EventBus;
-} = {}) {
+function makeTrigger(
+  overrides: {
+    db?: ReturnType<typeof makeDb>;
+    channel?: Channel;
+    config?: { channels: { telegram: { recoveryChannelId: string } } };
+    eventBus?: EventBus;
+    runtime?: { inspectContainer: ReturnType<typeof vi.fn> };
+  } = {},
+) {
   const eventBus = overrides.eventBus ?? new EventBus();
   const db = overrides.db ?? makeDb();
   const channel = overrides.channel ?? makeChannel();
   const trigger = new AiOpsBriefingTrigger({
     eventBus,
     db: db as never,
+    runtime: overrides.runtime,
     modelRegistry: { getModel: vi.fn(() => null) },
-    channelManager: { getChannel: vi.fn((type: string) => (type === 'telegram' ? channel : undefined)) },
+    channelManager: {
+      getChannel: vi.fn((type: string) => (type === 'telegram' ? channel : undefined)),
+    },
     config: (overrides.config ?? {
       channels: { telegram: { recoveryChannelId: '12345' } },
     }) as never,
@@ -263,7 +269,7 @@ describe('AI Ops briefing runtime trigger', () => {
     expect(db.claimAiOpsDedupeWindow).toHaveBeenCalledTimes(1);
   });
 
-  it('treats deploy:failed events as failed even when the latest deploy row is stale success', async () => {
+  it('skips build-only deploy failures unless runtime traffic failed too', async () => {
     const db = makeDb({
       getLastDeployLogForService: vi.fn(async () =>
         makeDeployLog({
@@ -282,17 +288,94 @@ describe('AI Ops briefing runtime trigger', () => {
       buildLog: 'npm install failed',
     });
 
+    expect(result.status).toBe('skipped');
+    expect(result.reason).toBe('deploy_failure_build_only');
+    expect(db.createAiOpsBriefing).not.toHaveBeenCalled();
+  });
+
+  it('treats runtime deploy failures as failed even when the latest deploy row is stale success', async () => {
+    const db = makeDb({
+      getLastDeployLogForService: vi.fn(async () =>
+        makeDeployLog({
+          status: 'success',
+          build_log: null,
+          runtime_log: null,
+        }),
+      ),
+    });
+    const { trigger } = makeTrigger({ db });
+
+    const result = await trigger.handleDeployFailed({
+      projectId: 'proj-1',
+      step: 'startup',
+      error: 'image build failed',
+      buildLog: 'npm install failed',
+    });
+
     expect(result.status).toBe('created');
     expect(result.deterministic?.classification).toBe('deploy_failed');
+    expect(result.deterministic?.severity).toBe('warning');
     expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
       expect.objectContaining({
         classification: 'deploy_failed',
+        severity: 'warning',
         evidence: expect.objectContaining({
           deployLog: expect.objectContaining({
             status: 'failed',
             buildLogTail: 'npm install failed',
           }),
         }),
+      }),
+    );
+  });
+
+  it('skips user-cancelled deploy failures', async () => {
+    const db = makeDb();
+    const { trigger } = makeTrigger({ db });
+
+    const result = await trigger.handleDeployFailed({
+      projectId: 'proj-1',
+      step: 'cancelled',
+      error: 'Build cancelled by user',
+      cancelled: true,
+    });
+
+    expect(result.status).toBe('skipped');
+    expect(result.reason).toBe('deploy_failure_cancelled');
+    expect(db.getDeployableForProject).not.toHaveBeenCalled();
+    expect(db.createAiOpsBriefing).not.toHaveBeenCalled();
+  });
+
+  it('keeps failed representative traffic as the deploy failure ticket reason', async () => {
+    const db = makeDb({
+      getLastDeployLogForService: vi.fn(async () =>
+        makeDeployLog({
+          status: 'failed',
+          build_log: 'build failed',
+          representative_traffic_json: JSON.stringify({
+            status: 'failed',
+            path: '/',
+            severity: 'fail',
+            status_code: 503,
+            attempts: 3,
+          }),
+        }),
+      ),
+    });
+    const { trigger } = makeTrigger({ db });
+
+    const result = await trigger.handleDeployFailed({
+      projectId: 'proj-1',
+      step: 'build',
+      error: 'build failed',
+      buildLog: 'build failed',
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.deterministic?.classification).toBe('traffic_health_mismatch');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'traffic_health_mismatch',
       }),
     );
   });
@@ -353,19 +436,104 @@ describe('AI Ops briefing runtime trigger', () => {
     });
 
     expect(result.status).toBe('created');
-    expect(result.deterministic?.classification).toBe('restart_loop');
+    expect(result.deterministic?.classification).toBe('container_exited');
     expect(result.deterministic?.deterministicSummary).toContain('container ol-api');
     expect(result.deterministic?.deterministicSummary).toContain('exit code 137');
     expect(result.deterministic?.deterministicSummary).not.toContain('unknown');
     expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
       expect.objectContaining({
-        classification: 'restart_loop',
+        classification: 'container_exited',
         evidence: expect.objectContaining({
           container: expect.objectContaining({
             name: 'ol-api',
             exitCode: 137,
           }),
         }),
+      }),
+    );
+  });
+
+  it('skips container die events when Docker reports the same container already running again', async () => {
+    const db = makeDb();
+    const runtime = {
+      inspectContainer: vi.fn(async () => ({
+        RestartCount: 1,
+        State: {
+          Running: true,
+          Status: 'running',
+          ExitCode: 0,
+        },
+      })),
+    };
+    const { trigger } = makeTrigger({ db, runtime });
+
+    const result = await trigger.handleContainerDie({
+      projectId: 'proj-1',
+      containerId: 'container-1',
+      containerName: 'ol-api',
+      exitCode: 137,
+    });
+
+    expect(result.status).toBe('skipped');
+    expect(result.reason).toBe('container_self_healed');
+    expect(runtime.inspectContainer).toHaveBeenCalledWith('container-1');
+    expect(db.createAiOpsBriefing).not.toHaveBeenCalled();
+  });
+
+  it('uses explicit Docker restart counts when classifying restart loops', async () => {
+    const db = makeDb();
+    const runtime = {
+      inspectContainer: vi.fn(async () => ({
+        RestartCount: 4,
+        State: {
+          Running: false,
+          Status: 'exited',
+          ExitCode: 1,
+        },
+      })),
+    };
+    const { trigger } = makeTrigger({ db, runtime });
+
+    const result = await trigger.handleContainerDie({
+      projectId: 'proj-1',
+      containerId: 'container-1',
+      containerName: 'ol-api',
+      exitCode: 1,
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.deterministic?.classification).toBe('restart_loop');
+    expect(result.deterministic?.deterministicSummary).toContain('restart count 4');
+  });
+
+  it('does not treat active Docker restarting loops as self-healed', async () => {
+    const db = makeDb();
+    const runtime = {
+      inspectContainer: vi.fn(async () => ({
+        RestartCount: 6,
+        State: {
+          Running: true,
+          Restarting: true,
+          Status: 'restarting',
+          ExitCode: 1,
+        },
+      })),
+    };
+    const { trigger } = makeTrigger({ db, runtime });
+
+    const result = await trigger.handleContainerDie({
+      projectId: 'proj-1',
+      containerId: 'container-1',
+      containerName: 'ol-api',
+      exitCode: 1,
+    });
+
+    expect(result.status).toBe('created');
+    expect(result.deterministic?.classification).toBe('restart_loop');
+    expect(result.deterministic?.deterministicSummary).toContain('restart count 6');
+    expect(db.createAiOpsBriefing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'restart_loop',
       }),
     );
   });
@@ -400,7 +568,7 @@ describe('AI Ops briefing runtime trigger', () => {
     trigger.start();
     await eventBus.emit('deploy:failed', {
       projectId: 'proj-1',
-      step: 'build',
+      step: 'startup',
       error: 'build failed',
       buildLog: 'missing dependency',
     });
