@@ -35,11 +35,28 @@ type TriggerDb = Pick<
   | 'updateAiOpsBriefingLlmSummary'
 >;
 
+interface ContainerRuntimeInspect {
+  RestartCount?: number;
+  State?: {
+    Running?: boolean;
+    Restarting?: boolean;
+    Status?: string;
+    ExitCode?: number | null;
+  };
+}
+
+interface ContainerRuntimeInspector {
+  inspectContainer(containerId: string): Promise<ContainerRuntimeInspect>;
+}
+
 export type AiOpsBriefingTriggerSkipReason =
   | 'ai_ops_off'
   | 'service_not_found'
   | 'dedupe_suppressed'
-  | 'no_issue_detected';
+  | 'no_issue_detected'
+  | 'container_self_healed'
+  | 'deploy_failure_cancelled'
+  | 'deploy_failure_build_only';
 
 export interface AiOpsBriefingTriggerResult {
   status: 'created' | 'skipped';
@@ -53,6 +70,7 @@ export interface AiOpsBriefingTriggerResult {
 export interface AiOpsBriefingTriggerOptions {
   eventBus: EventBus;
   db: TriggerDb;
+  runtime?: ContainerRuntimeInspector;
   modelRegistry: Pick<ModelRegistry, 'getModel'>;
   channelManager: Pick<ChannelManager, 'getChannel'>;
   config: Pick<OpenLanderConfig, 'channels'>;
@@ -85,6 +103,15 @@ function deployLogEvidence(log: DeployLogRow | undefined, fallback?: string) {
 
 function representativeTrafficEvidence(log: DeployLogRow | undefined) {
   return parseRepresentativeTraffic(log?.representative_traffic_json);
+}
+
+function representativeTrafficFailed(log: DeployLogRow | undefined): boolean {
+  const traffic = representativeTrafficEvidence(log);
+  return traffic?.status === 'failed' && traffic.severity === 'fail';
+}
+
+function isBuildOnlyDeployFailure(payload: EventPayload['deploy:failed']): boolean {
+  return ['auto-detect', 'build', 'clone', 'preflight'].includes(payload.step);
 }
 
 export class AiOpsBriefingTrigger {
@@ -151,6 +178,10 @@ export class AiOpsBriefingTrigger {
   ): Promise<AiOpsBriefingTriggerResult> {
     const service = (await this.options.db.getDeployableForProject(payload.projectId)) ?? null;
     if (!service) return { status: 'skipped', reason: 'service_not_found' };
+    const current = await this.inspectContainerAfterDie(payload.containerId);
+    if (current?.running) {
+      return { status: 'skipped', reason: 'container_self_healed' };
+    }
 
     return this.createFromEvidence({
       projectId: payload.projectId,
@@ -160,14 +191,14 @@ export class AiOpsBriefingTrigger {
       container: {
         name: payload.containerName,
         running: false,
-        status: 'exited',
-        exitCode: payload.exitCode,
-        restartCount: null,
+        status: current?.status ?? 'exited',
+        exitCode: current?.exitCode ?? payload.exitCode,
+        restartCount: current?.restartCount ?? null,
       },
       runtimeIncident: {
-        category: 'container_restart',
+        category: 'container_exit',
         errorSnippet: `Container ${payload.containerName} exited with code ${String(
-          payload.exitCode,
+          current?.exitCode ?? payload.exitCode,
         )}.`,
       },
     });
@@ -176,10 +207,16 @@ export class AiOpsBriefingTrigger {
   async handleDeployFailed(
     payload: EventPayload['deploy:failed'],
   ): Promise<AiOpsBriefingTriggerResult> {
+    if (payload.cancelled) return { status: 'skipped', reason: 'deploy_failure_cancelled' };
+
     const service = (await this.options.db.getDeployableForProject(payload.projectId)) ?? null;
     if (!service) return { status: 'skipped', reason: 'service_not_found' };
 
     const lastLog = await this.options.db.getLastDeployLogForService(service.id);
+    if (!representativeTrafficFailed(lastLog) && isBuildOnlyDeployFailure(payload)) {
+      return { status: 'skipped', reason: 'deploy_failure_build_only' };
+    }
+
     return this.createFromEvidence({
       projectId: payload.projectId,
       serviceId: service.id,
@@ -188,6 +225,28 @@ export class AiOpsBriefingTrigger {
       representativeTraffic: representativeTrafficEvidence(lastLog),
       deployLog: deployLogEvidence(lastLog, payload.buildLog ?? payload.error),
     });
+  }
+
+  private async inspectContainerAfterDie(containerId: string): Promise<{
+    running: boolean;
+    status?: string | null;
+    restartCount?: number | null;
+    exitCode?: number | null;
+  } | null> {
+    if (!this.options.runtime) return null;
+    try {
+      const inspected = await this.options.runtime.inspectContainer(containerId);
+      const state = inspected.State;
+      return {
+        running: state?.Running === true || state?.Restarting === true,
+        status: state?.Status ?? null,
+        restartCount: typeof inspected.RestartCount === 'number' ? inspected.RestartCount : null,
+        exitCode: typeof state?.ExitCode === 'number' ? state.ExitCode : null,
+      };
+    } catch (err) {
+      log.debug({ err, containerId }, 'AI Ops container self-heal inspect failed');
+      return null;
+    }
   }
 
   private async createFromEvidence(
