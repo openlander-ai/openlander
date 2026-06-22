@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Reduce noisy AI Ops failure tickets by skipping log-only evidence,
+  self-healed container crashes, cancelled deploys, and build-only deploy
+  failures while preserving restart-loop tickets when Docker reports explicit
+  restart evidence.
+
 ## [0.2.0-rc.19] - 2026-06-19
 
 ### Added
