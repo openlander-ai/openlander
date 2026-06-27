@@ -19,11 +19,18 @@ a release should be recorded here so follow-up work is explicit.
 - **Vocab review:** `summary`, `report_to_user`, `can_resolve`,
   `primary_check`, `failed_checks`, and `unknown_checks` are additive fields
   under the existing `recovery_receipt` read contract. No new resource,
-  mutation, table, or MCP action is introduced.
+  mutation, table, or MCP action is introduced. The instance-wide list is
+  intentionally a compact triage projection; full summaries, LLM telemetry,
+  dedupe fields, and evidence remain in `get_ai_ops_briefing`.
 - **Endpoint collision check:** no MCP action, composite slot, REST route, or
   table is added. The change extends the existing
   `openlander_monitor.list_ai_ops_briefings` and
   `openlander_monitor.diagnose_service` response contracts.
+- **Tenant boundary assumption:** v0.2 self-hosted instances are single-tenant.
+  Project/service-scoped tokens must pass an explicit target; targetless
+  instance-wide listing is only reachable through the existing instance/default
+  owner token path. A future multi-org instance model must add an org filter
+  before exposing targetless ticket lists across tenants.
 - **Follow-up:** release QA should run an agent-primary path against the rc:
   list open tickets, get detail, diagnose with `briefing_id`, apply the fix, and
   report `recovery_receipt.status` plus the readable receipt fields.

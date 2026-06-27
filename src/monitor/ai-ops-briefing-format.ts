@@ -38,6 +38,27 @@ function buildTicketDiagnosticCall(
   };
 }
 
+function oneLineSummary(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  return compact.length > 240 ? `${compact.slice(0, 237)}...` : compact;
+}
+
+export function formatAiOpsBriefingTriageRow(row: AiOpsBriefingRow) {
+  const suggestedCall = parseJsonRecord(row.suggested_call_json);
+  return {
+    briefing_id: row.id,
+    project_id: row.project_id,
+    service_id: row.service_id,
+    status: row.status,
+    severity: row.severity,
+    classification: row.classification,
+    title: row.title,
+    summary: oneLineSummary(row.llm_summary ?? row.deterministic_summary),
+    diagnostic_call: buildTicketDiagnosticCall(row, suggestedCall),
+    created_at: row.created_at,
+  };
+}
+
 export function formatAiOpsBriefingRow(
   row: AiOpsBriefingRow,
   opts: { includeEvidence?: boolean } = {},

@@ -14,7 +14,10 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
-import { formatAiOpsBriefingRow } from '../../monitor/ai-ops-briefing-format.js';
+import {
+  formatAiOpsBriefingRow,
+  formatAiOpsBriefingTriageRow,
+} from '../../monitor/ai-ops-briefing-format.js';
 import {
   normalizeAiOpsEvidenceForRead,
   type AiOpsEvidenceMetadata,
@@ -317,10 +320,10 @@ export const monitoringToolDefs: ToolDef[] = [
         scope: serviceId ? 'service' : projectId ? 'project' : 'instance',
         project_id: projectId || undefined,
         service_id: serviceId || undefined,
-        briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+        briefings: briefings.map((row) => formatAiOpsBriefingTriageRow(row)),
         _agent_guidance: {
           message:
-            'Briefings are read-only failure tickets. Use diagnostic_call or suggested_call to inspect evidence before making any change.',
+            'Briefings are read-only failure tickets. Use diagnostic_call to inspect evidence before making any change.',
         },
       };
     },

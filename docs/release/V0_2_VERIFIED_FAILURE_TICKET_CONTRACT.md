@@ -42,8 +42,8 @@ agent execution surface.
   `openlander_monitor.get_ai_ops_briefing`.
 - [shipped] Status filtering for `open`, `acknowledged`, `resolved`, and
   `unresolved` views.
-- [shipped] Ticket-first `diagnostic_call` / `suggested_call` that points agents
-  at `openlander_monitor.diagnose_service`.
+- [shipped] Ticket-first list `diagnostic_call` that points agents at
+  `openlander_monitor.diagnose_service`.
 - [shipped] Capped, redacted evidence on detail reads with
   `evidence_metadata`.
 - [shipped] `diagnose_service(briefing_id)` recovery receipt with:
@@ -65,7 +65,8 @@ agent execution surface.
 - [shipped] Agent-primary verification: after a fix, the agent calls
   `diagnose_service({ service_id, briefing_id })` and reports
   `recovery_receipt.status`, `summary`, and failed/unknown checks.
-- [shipped] List response economy: list responses stay tiny triage payloads; full
+- [shipped] List response economy: list responses stay tiny triage payloads with
+  no evidence, LLM telemetry, dedupe fields, or duplicate call links. Full
   evidence remains in detail reads.
 - [shipped] Receipt readability: `latest_deploy` is the most visible receipt
   signal when it is failing or unknown.

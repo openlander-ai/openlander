@@ -474,18 +474,23 @@ describe('AI Ops briefing monitor actions', () => {
     const briefings = result.briefings as Array<Record<string, unknown>>;
     expect(briefings[0]?.briefing_id).toBe('brief-1');
     expect(briefings[0]?.summary).toContain('HTTP 502');
-    expect(briefings[0]).toMatchObject({
-      summary_source: 'deterministic',
-      summary_status: 'deterministic',
-      summary_truncated: false,
-    });
-    expect(briefings[0]?.suggested_call).toEqual({
+    expect(briefings[0]?.diagnostic_call).toEqual({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
       params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
     });
-    expect(briefings[0]?.diagnostic_call).toEqual(briefings[0]?.suggested_call);
+    expect(briefings[0]).not.toHaveProperty('suggested_call');
     expect(briefings[0]).not.toHaveProperty('evidence');
+    expect(briefings[0]).not.toHaveProperty('deterministic_summary');
+    expect(briefings[0]).not.toHaveProperty('llm_summary');
+    expect(briefings[0]).not.toHaveProperty('summary_usage');
+    expect(briefings[0]).not.toHaveProperty('summary_finish_reason');
+    expect(briefings[0]).not.toHaveProperty('summary_error');
+    expect(briefings[0]).not.toHaveProperty('summary_source');
+    expect(briefings[0]).not.toHaveProperty('summary_status');
+    expect(briefings[0]).not.toHaveProperty('summary_truncated');
+    expect(briefings[0]).not.toHaveProperty('fingerprint');
+    expect(briefings[0]).not.toHaveProperty('dedupe_key');
   });
 
   it('lists recent open briefings for agent-primary triage without a project target', async () => {
@@ -518,6 +523,7 @@ describe('AI Ops briefing monitor actions', () => {
       action: 'diagnose_service',
       params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
     });
+    expect(briefings[0]).not.toHaveProperty('suggested_call');
     expect(briefings[0]).not.toHaveProperty('evidence');
   });
 

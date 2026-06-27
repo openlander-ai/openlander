@@ -936,11 +936,12 @@ unambiguous.
 | `status`     | string | No       | `open`, `acknowledged`, `resolved`, or `unresolved` |
 | `limit`      | number | No       | Max rows, 1-100                                     |
 
-The response includes deterministic `classification`, `severity`, `summary`,
-and a ticket-first `suggested_call` / `diagnostic_call` for
+The response is a compact triage payload: `briefing_id`, `project_id`,
+`service_id`, `status`, `severity`, `classification`, `title`, one-line
+`summary`, `created_at`, and a ticket-first `diagnostic_call` for
 `openlander_monitor.diagnose_service` with the `briefing_id` already populated.
-Full evidence is kept out of the list response; call `get_ai_ops_briefing` for
-detail.
+Full evidence, LLM telemetry, dedupe fields, and full summaries are kept out of
+the list response; call `get_ai_ops_briefing` for detail.
 
 `get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
 The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
