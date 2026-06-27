@@ -474,17 +474,56 @@ describe('AI Ops briefing monitor actions', () => {
     const briefings = result.briefings as Array<Record<string, unknown>>;
     expect(briefings[0]?.briefing_id).toBe('brief-1');
     expect(briefings[0]?.summary).toContain('HTTP 502');
-    expect(briefings[0]).toMatchObject({
-      summary_source: 'deterministic',
-      summary_status: 'deterministic',
-      summary_truncated: false,
-    });
-    expect(briefings[0]?.suggested_call).toEqual({
+    expect(briefings[0]?.diagnostic_call).toEqual({
       tool: 'openlander_monitor',
       action: 'diagnose_service',
       params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
     });
-    expect(briefings[0]?.diagnostic_call).toEqual(briefings[0]?.suggested_call);
+    expect(briefings[0]).not.toHaveProperty('suggested_call');
+    expect(briefings[0]).not.toHaveProperty('evidence');
+    expect(briefings[0]).not.toHaveProperty('deterministic_summary');
+    expect(briefings[0]).not.toHaveProperty('llm_summary');
+    expect(briefings[0]).not.toHaveProperty('summary_usage');
+    expect(briefings[0]).not.toHaveProperty('summary_finish_reason');
+    expect(briefings[0]).not.toHaveProperty('summary_error');
+    expect(briefings[0]).not.toHaveProperty('summary_source');
+    expect(briefings[0]).not.toHaveProperty('summary_status');
+    expect(briefings[0]).not.toHaveProperty('summary_truncated');
+    expect(briefings[0]).not.toHaveProperty('fingerprint');
+    expect(briefings[0]).not.toHaveProperty('dedupe_key');
+  });
+
+  it('lists recent open briefings for agent-primary triage without a project target', async () => {
+    const row = makeAiOpsBriefingRow();
+    const db = {
+      listRecentAiOpsBriefings: vi.fn(async () => [row]),
+      listAiOpsBriefingsByProject: vi.fn(async () => []),
+      listAiOpsBriefingsByService: vi.fn(async () => []),
+    };
+    const ctx = { db } as unknown as AppContext;
+    const tool = getDirectMonitoringTool('list_ai_ops_briefings');
+
+    const result = (await tool.execute(
+      { limit: 10, status: 'open' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(db.listRecentAiOpsBriefings).toHaveBeenCalledWith({ limit: 10, status: 'open' });
+    expect(db.listAiOpsBriefingsByProject).not.toHaveBeenCalled();
+    expect(db.listAiOpsBriefingsByService).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'ok',
+      count: 1,
+      scope: 'instance',
+    });
+    const briefings = result.briefings as Array<Record<string, unknown>>;
+    expect(briefings[0]?.briefing_id).toBe('brief-1');
+    expect(briefings[0]?.diagnostic_call).toEqual({
+      tool: 'openlander_monitor',
+      action: 'diagnose_service',
+      params: { project_id: 'p1', service_id: 'svc-1', briefing_id: 'brief-1' },
+    });
+    expect(briefings[0]).not.toHaveProperty('suggested_call');
     expect(briefings[0]).not.toHaveProperty('evidence');
   });
 
@@ -1649,13 +1688,29 @@ describe('service-targeted monitoring tools', () => {
       project_id: 'app',
       service_id: service.id,
       status: 'verified',
+      summary: 'OpenLander verified the live route, container, restart, and latest deploy checks.',
+      report_to_user:
+        'OpenLander verified the live recovery checks. You can resolve the ticket when you agree the incident is done.',
+      can_resolve: true,
+      failed_checks: [],
+      unknown_checks: [],
       baseline_observed_at: '2026-06-13T12:00:00.000Z',
+    });
+    expect(receipt.primary_check).toMatchObject({
+      name: 'latest_deploy',
+      status: 'pass',
+      label: 'Latest deploy status',
+      severity: 'info',
+      reason: expect.stringContaining('deploy-status evidence'),
     });
     expect(receipt.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'route_health',
           status: 'pass',
+          label: 'Route health',
+          severity: 'info',
+          reason: 'The live route health check is healthy.',
           before: { status: 'unhealthy', status_code: 502 },
           after: { status: 'healthy' },
         }),
@@ -1673,12 +1728,122 @@ describe('service-targeted monitoring tools', () => {
         expect.objectContaining({
           name: 'latest_deploy',
           status: 'pass',
+          label: 'Latest deploy status',
+          severity: 'info',
+          reason: expect.stringContaining('deploy-status evidence'),
           before: { id: 'deploy-before', status: 'failed', commit_sha: 'badcafe' },
           after: { id: 'deploy-after', status: 'success', commit_sha: 'goodcafe' },
           changed: true,
         }),
       ]),
     );
+  });
+
+  it('diagnose_service recovery receipt highlights failing latest deploy evidence', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    vi.mocked(ctx.db.getAiOpsBriefing).mockResolvedValueOnce(
+      makeAiOpsBriefingRow({
+        id: 'brief-deploy-failed',
+        project_id: 'app',
+        service_id: service.id,
+        evidence_json: JSON.stringify({
+          routeHealth: { status: 'unhealthy', statusCode: 502 },
+          container: {
+            running: true,
+            status: 'running',
+            restartCount: 2,
+          },
+          deployLog: {
+            id: 'deploy-before',
+            status: 'failed',
+            commitSha: 'badcafe',
+          },
+        }),
+      }),
+    );
+    vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
+      {
+        id: 'deploy-after',
+        service_id: service.id,
+        environment_id: null,
+        status: 'failed',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: 'stillbad',
+        commit_message: 'attempted fix',
+        build_log: 'Build failed',
+        runtime_log: null,
+        duration_ms: 5000,
+        created_at: '2026-06-13T12:05:00.000Z',
+        representative_traffic_json: null,
+      },
+    ]);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: service.id, briefing_id: 'brief-deploy-failed', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    const receipt = result.recovery_receipt as Record<string, unknown>;
+    expect(receipt).toMatchObject({
+      status: 'needs_attention',
+      can_resolve: false,
+      failed_checks: ['latest_deploy'],
+      unknown_checks: [],
+      summary: 'OpenLander still sees a failing recovery check: Latest deploy status.',
+      report_to_user: expect.stringContaining('The latest deploy is still failed or unhealthy'),
+    });
+    expect(receipt.primary_check).toMatchObject({
+      name: 'latest_deploy',
+      status: 'fail',
+      label: 'Latest deploy status',
+      severity: 'critical',
+      reason:
+        'The latest deploy is still failed or unhealthy, so OpenLander cannot verify the fix.',
+    });
+  });
+
+  it('diagnose_service recovery receipt surfaces unknown checks without allowing resolve', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    vi.mocked(ctx.db.getAiOpsBriefing).mockResolvedValueOnce(
+      makeAiOpsBriefingRow({
+        id: 'brief-unknown',
+        project_id: 'app',
+        service_id: service.id,
+        evidence_json: JSON.stringify({
+          routeHealth: { status: 'unhealthy', statusCode: 502 },
+          container: {
+            running: false,
+            status: 'exited',
+            restartCount: 4,
+          },
+        }),
+      }),
+    );
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: service.id, briefing_id: 'brief-unknown', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    const receipt = result.recovery_receipt as Record<string, unknown>;
+    expect(receipt).toMatchObject({
+      status: 'unknown',
+      can_resolve: false,
+      failed_checks: [],
+      unknown_checks: ['latest_deploy'],
+      summary:
+        'OpenLander could not fully verify recovery because Latest deploy status is missing or inconclusive.',
+      report_to_user: expect.stringContaining(
+        'OpenLander does not have enough latest deploy evidence',
+      ),
+    });
+    expect(receipt.primary_check).toMatchObject({
+      name: 'latest_deploy',
+      status: 'unknown',
+      label: 'Latest deploy status',
+      severity: 'warning',
+    });
   });
 
   it('diagnose_service accepts project_id targets', async () => {

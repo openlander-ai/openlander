@@ -42,14 +42,16 @@ agent execution surface.
   `openlander_monitor.get_ai_ops_briefing`.
 - [shipped] Status filtering for `open`, `acknowledged`, `resolved`, and
   `unresolved` views.
-- [shipped] Ticket-first `diagnostic_call` / `suggested_call` that points agents
-  at `openlander_monitor.diagnose_service`.
+- [shipped] Ticket-first list `diagnostic_call` that points agents at
+  `openlander_monitor.diagnose_service`.
 - [shipped] Capped, redacted evidence on detail reads with
   `evidence_metadata`.
 - [shipped] `diagnose_service(briefing_id)` recovery receipt with:
   `verified`, `needs_attention`, `unknown`, or `unavailable`.
 - [shipped] Receipt checks for `route_health`, `container_status`,
   `restart_stability`, and `latest_deploy`.
+- [shipped] Receipt readability fields: `summary`, `report_to_user`,
+  `can_resolve`, `primary_check`, `failed_checks`, and `unknown_checks`.
 - [shipped] Home AI Ops Inbox and Project AI Ops tab.
 - [shipped] Token-free Open in Agent prompt as a convenience entry point.
 - [shipped] Manual `acknowledge` / `resolve`; receipt verification is not an
@@ -57,16 +59,20 @@ agent execution surface.
 
 ## Gaps To Validate Or Polish
 
-- [gap] Agent-primary acceptance: an agent starts with
-  `list_ai_ops_briefings(status="open", limit=10)` without opening the web UI.
-- [gap] Agent-primary verification: after a fix, the agent calls
+- [shipped] Agent-primary acceptance: an instance/default-token agent can start
+  with `list_ai_ops_briefings(status="open", limit=10)` without opening the web
+  UI.
+- [shipped] Agent-primary verification: after a fix, the agent calls
   `diagnose_service({ service_id, briefing_id })` and reports
-  `recovery_receipt.status`.
-- [gap] List response economy: list responses stay tiny triage payloads; full
+  `recovery_receipt.status`, `summary`, and failed/unknown checks.
+- [shipped] List response economy: list responses stay tiny triage payloads with
+  no evidence, LLM telemetry, dedupe fields, or duplicate call links. Full
   evidence remains in detail reads.
-- [gap] Receipt readability: `latest_deploy` / serving-version mismatch should
-  be the most visible receipt signal when present.
-- [gap] Receipt wording: route 200 alone must not imply that a fix is verified.
+- [shipped] Receipt readability: `latest_deploy` is the most visible receipt
+  signal when it is failing or unknown.
+- [shipped] Receipt wording: route 200 alone does not imply that a fix is
+  verified.
+- [gap] Release QA still needs a live agent-primary run against the rc build.
 
 ## Deferred Work
 

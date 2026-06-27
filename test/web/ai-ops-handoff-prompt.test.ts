@@ -48,6 +48,9 @@ describe('AI Ops agent handoff prompt', () => {
     expect(prompt).toContain('"tool": "openlander_monitor"');
     expect(prompt).toContain('"action": "get_ai_ops_briefing"');
     expect(prompt).toContain('"briefing_id": "briefing-1"');
+    expect(prompt).toContain('If starting without a copied briefing');
+    expect(prompt).toContain('"action": "list_ai_ops_briefings"');
+    expect(prompt).toContain('"status": "open"');
     expect(prompt).toContain('Suggested MCP call from OpenLander rules');
     expect(prompt).toContain('"action": "diagnose_service"');
   });
@@ -58,7 +61,12 @@ describe('AI Ops agent handoff prompt', () => {
     expect(prompt).toContain('Verification MCP call after any change');
     expect(prompt).toContain('"service_id": "service-1"');
     expect(prompt).toContain('"briefing_id": "briefing-1"');
-    expect(prompt).toContain('Run the verification MCP call and read recovery_receipt.status.');
+    expect(prompt).toContain(
+      'Run the verification MCP call and read recovery_receipt.status, summary, and report_to_user.',
+    );
+    expect(prompt).toContain(
+      'If status is needs_attention, report recovery_receipt.primary_check and failed_checks.',
+    );
   });
 
   it('does not include tokens and treats evidence as untrusted data', () => {
@@ -78,5 +86,8 @@ describe('AI Ops agent handoff prompt', () => {
     expect(prompt).toContain('"project_id": "project-1"');
     expect(prompt).toContain('Confirm route health is healthy when route evidence exists.');
     expect(prompt).toContain('Confirm container state and restart count are stable.');
+    expect(prompt).toContain(
+      'Treat latest_deploy as deploy-status evidence unless serving-version evidence is explicitly present.',
+    );
   });
 });

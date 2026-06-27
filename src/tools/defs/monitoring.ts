@@ -14,7 +14,10 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
-import { formatAiOpsBriefingRow } from '../../monitor/ai-ops-briefing-format.js';
+import {
+  formatAiOpsBriefingRow,
+  formatAiOpsBriefingTriageRow,
+} from '../../monitor/ai-ops-briefing-format.js';
 import {
   normalizeAiOpsEvidenceForRead,
   type AiOpsEvidenceMetadata,
@@ -298,21 +301,29 @@ export const monitoringToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
       const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
-      const status = args['status'] as 'open' | 'acknowledged' | 'resolved' | undefined;
+      const status = args['status'] as
+        | 'open'
+        | 'acknowledged'
+        | 'resolved'
+        | 'unresolved'
+        | undefined;
       const limit = (args['limit'] as number | undefined) ?? 20;
       const briefings = serviceId
         ? await appCtx.db.listAiOpsBriefingsByService(serviceId, { limit, status })
-        : await appCtx.db.listAiOpsBriefingsByProject(projectId, { limit, status });
+        : projectId
+          ? await appCtx.db.listAiOpsBriefingsByProject(projectId, { limit, status })
+          : await appCtx.db.listRecentAiOpsBriefings({ limit, status });
 
       return {
         status: 'ok',
         count: briefings.length,
+        scope: serviceId ? 'service' : projectId ? 'project' : 'instance',
         project_id: projectId || undefined,
         service_id: serviceId || undefined,
-        briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+        briefings: briefings.map((row) => formatAiOpsBriefingTriageRow(row)),
         _agent_guidance: {
           message:
-            'Briefings are read-only summaries. Use suggested_call to inspect evidence before making any change.',
+            'Briefings are read-only failure tickets. Use diagnostic_call to inspect evidence before making any change.',
         },
       };
     },
@@ -2569,6 +2580,28 @@ function buildDiagnoseServiceEvidence(input: {
 
 type RecoveryCheckStatus = 'pass' | 'fail' | 'unknown';
 type RecoveryReceiptStatus = 'verified' | 'needs_attention' | 'unknown' | 'unavailable';
+type RecoveryCheckSeverity = 'critical' | 'warning' | 'info';
+
+const RECOVERY_CHECK_LABELS: Record<string, string> = {
+  latest_deploy: 'Latest deploy status',
+  route_health: 'Route health',
+  container_status: 'Container state',
+  restart_stability: 'Restart stability',
+};
+
+const RECOVERY_CHECK_FAIL_ORDER = [
+  'latest_deploy',
+  'route_health',
+  'container_status',
+  'restart_stability',
+] as const;
+
+const RECOVERY_CHECK_UNKNOWN_ORDER = [
+  'latest_deploy',
+  'route_health',
+  'container_status',
+  'restart_stability',
+] as const;
 
 function parseJsonRecord(value: string | null): Record<string, unknown> {
   if (!value) return {};
@@ -2718,14 +2751,183 @@ function receiptStatus(checks: Record<string, unknown>[]): RecoveryReceiptStatus
   return 'unknown';
 }
 
+function recoveryCheckStatus(check: Record<string, unknown>): RecoveryCheckStatus {
+  const status = check['status'];
+  if (status === 'pass' || status === 'fail' || status === 'unknown') return status;
+  return 'unknown';
+}
+
+function recoveryCheckName(check: Record<string, unknown>): string {
+  const name = check['name'];
+  return typeof name === 'string' && name ? name : 'unknown';
+}
+
+function recoveryCheckLabel(name: string): string {
+  return RECOVERY_CHECK_LABELS[name] ?? name;
+}
+
+function recoveryCheckSeverity(name: string, status: RecoveryCheckStatus): RecoveryCheckSeverity {
+  if (status === 'pass') return 'info';
+  if (name === 'restart_stability') return 'warning';
+  return status === 'fail' ? 'critical' : 'warning';
+}
+
+function recoveryCheckReason(check: Record<string, unknown>): string {
+  const name = recoveryCheckName(check);
+  const status = recoveryCheckStatus(check);
+  const changed = check['changed'] === true;
+
+  if (name === 'latest_deploy') {
+    if (status === 'pass') {
+      return changed
+        ? 'The latest deploy status is successful after the briefing snapshot. This is deploy-status evidence, not standalone serving-version proof.'
+        : 'The latest deploy status is successful, but the deploy id did not change from the briefing snapshot.';
+    }
+    if (status === 'fail') {
+      return 'The latest deploy is still failed or unhealthy, so OpenLander cannot verify the fix.';
+    }
+    return 'OpenLander does not have enough latest deploy evidence to verify the fix.';
+  }
+
+  if (name === 'route_health') {
+    if (status === 'pass') return 'The live route health check is healthy.';
+    if (status === 'fail') return 'The live route health check is still unhealthy or degraded.';
+    return 'Route health evidence is missing or inconclusive.';
+  }
+
+  if (name === 'container_status') {
+    if (status === 'pass') return 'The service container is running and not restarting.';
+    if (status === 'fail') return 'The service container is stopped, exited, or still restarting.';
+    return 'Container state evidence is missing or inconclusive.';
+  }
+
+  if (name === 'restart_stability') {
+    if (status === 'pass') return 'The restart count did not increase from the briefing snapshot.';
+    if (status === 'fail')
+      return 'The container is still restarting or the restart count increased.';
+    return 'Restart count evidence is missing or inconclusive.';
+  }
+
+  if (status === 'pass') return 'This recovery check passed.';
+  if (status === 'fail') return 'This recovery check is still failing.';
+  return 'This recovery check is missing or inconclusive.';
+}
+
+function decorateRecoveryCheck(check: Record<string, unknown>): Record<string, unknown> {
+  const name = recoveryCheckName(check);
+  const status = recoveryCheckStatus(check);
+  return {
+    ...check,
+    label: recoveryCheckLabel(name),
+    severity: recoveryCheckSeverity(name, status),
+    reason: recoveryCheckReason(check),
+  };
+}
+
+function checkNamesByStatus(
+  checks: Record<string, unknown>[],
+  status: RecoveryCheckStatus,
+): string[] {
+  return checks
+    .filter((check) => recoveryCheckStatus(check) === status)
+    .map((check) => recoveryCheckName(check));
+}
+
+function findRecoveryCheck(
+  checks: Record<string, unknown>[],
+  name: string,
+  status?: RecoveryCheckStatus,
+): Record<string, unknown> | null {
+  return (
+    checks.find((check) => {
+      if (recoveryCheckName(check) !== name) return false;
+      return status ? recoveryCheckStatus(check) === status : true;
+    }) ?? null
+  );
+}
+
+function primaryRecoveryCheck(
+  checks: Record<string, unknown>[],
+  status: RecoveryReceiptStatus,
+): Record<string, unknown> | null {
+  if (status === 'needs_attention') {
+    for (const name of RECOVERY_CHECK_FAIL_ORDER) {
+      const check = findRecoveryCheck(checks, name, 'fail');
+      if (check) return check;
+    }
+  }
+
+  if (status === 'unknown') {
+    for (const name of RECOVERY_CHECK_UNKNOWN_ORDER) {
+      const check = findRecoveryCheck(checks, name, 'unknown');
+      if (check) return check;
+    }
+  }
+
+  const changedDeploy = checks.find(
+    (check) =>
+      recoveryCheckName(check) === 'latest_deploy' &&
+      recoveryCheckStatus(check) === 'pass' &&
+      check['changed'] === true,
+  );
+  if (changedDeploy) return changedDeploy;
+
+  return (
+    findRecoveryCheck(checks, 'route_health', 'pass') ??
+    findRecoveryCheck(checks, 'latest_deploy', 'pass') ??
+    checks[0] ??
+    null
+  );
+}
+
+function recoveryReceiptSummary(
+  status: RecoveryReceiptStatus,
+  primaryCheck: Record<string, unknown> | null,
+): string {
+  const primaryLabel =
+    typeof primaryCheck?.['label'] === 'string' ? primaryCheck['label'] : 'Recovery check';
+  if (status === 'verified') {
+    return 'OpenLander verified the live route, container, restart, and latest deploy checks.';
+  }
+  if (status === 'needs_attention') {
+    return `OpenLander still sees a failing recovery check: ${primaryLabel}.`;
+  }
+  if (status === 'unavailable') {
+    return 'OpenLander could not build a recovery receipt for this briefing.';
+  }
+  return `OpenLander could not fully verify recovery because ${primaryLabel} is missing or inconclusive.`;
+}
+
+function recoveryReceiptReportToUser(
+  status: RecoveryReceiptStatus,
+  primaryCheck: Record<string, unknown> | null,
+): string {
+  const primaryReason =
+    typeof primaryCheck?.['reason'] === 'string' ? primaryCheck['reason'] : null;
+  if (status === 'verified') {
+    return 'OpenLander verified the live recovery checks. You can resolve the ticket when you agree the incident is done.';
+  }
+  if (status === 'needs_attention') {
+    return primaryReason
+      ? `OpenLander cannot verify the fix yet. ${primaryReason}`
+      : 'OpenLander cannot verify the fix yet. At least one live recovery check is still failing.';
+  }
+  if (status === 'unavailable') {
+    return 'OpenLander could not build a recovery receipt for this briefing. Re-open the ticket detail or retry with a matching service.';
+  }
+  return primaryReason
+    ? `OpenLander cannot fully verify the fix yet. ${primaryReason}`
+    : 'OpenLander cannot fully verify the fix yet because live evidence is missing or inconclusive.';
+}
+
 function receiptGuidance(status: RecoveryReceiptStatus): Record<string, unknown> {
   if (status === 'verified') {
     return {
       message:
         'OpenLander live diagnostics look recovered relative to the AI Ops briefing snapshot.',
       next_steps: [
-        'Report the recovery_receipt.status and checks to the user.',
-        'If the user still sees symptoms, inspect application-level logs or external dependencies.',
+        'Report recovery_receipt.summary and recovery_receipt.status to the user.',
+        'The user can manually resolve the ticket if they agree the incident is done.',
       ],
     };
   }
@@ -2734,7 +2936,7 @@ function receiptGuidance(status: RecoveryReceiptStatus): Record<string, unknown>
       message:
         'OpenLander still sees at least one failing live diagnostic after the attempted fix.',
       next_steps: [
-        'Inspect recovery_receipt.checks for failed checks.',
+        'Inspect recovery_receipt.primary_check and recovery_receipt.failed_checks.',
         'Use the top-level diagnosis or suggested_call before claiming the incident is fixed.',
       ],
     };
@@ -2743,17 +2945,25 @@ function receiptGuidance(status: RecoveryReceiptStatus): Record<string, unknown>
     message:
       'OpenLander could not fully verify recovery because one or more before/after signals are missing.',
     next_steps: [
-      'Inspect recovery_receipt.checks with unknown status.',
+      'Inspect recovery_receipt.primary_check and recovery_receipt.unknown_checks.',
       'Run get_logs or get_build_log if omitted_evidence lists follow-up calls.',
     ],
   };
 }
 
 function unavailableRecoveryReceipt(briefingId: string, reason: string): Record<string, unknown> {
+  const status: RecoveryReceiptStatus = 'unavailable';
   return {
     briefing_id: briefingId,
-    status: 'unavailable',
+    status,
     reason,
+    summary: recoveryReceiptSummary(status, null),
+    report_to_user: recoveryReceiptReportToUser(status, null),
+    can_resolve: false,
+    primary_check: null,
+    failed_checks: [],
+    unknown_checks: [],
+    checks: [],
     _agent_guidance: {
       message: 'OpenLander could not build a recovery receipt for this briefing.',
       next_steps: ['Call list_ai_ops_briefings and retry with a briefing for this service.'],
@@ -2783,15 +2993,22 @@ function buildAiOpsRecoveryReceipt(input: {
     containerCheck(input.liveEvidence),
     restartCheck(beforeEvidence, input.liveEvidence),
     deployCheck(beforeEvidence, input.liveEvidence),
-  ];
+  ].map((check) => decorateRecoveryCheck(check));
   const status = receiptStatus(checks);
+  const primaryCheck = primaryRecoveryCheck(checks, status);
   return {
     briefing_id: input.briefing.id,
     project_id: input.project.id,
     service_id: input.service.id,
     status,
+    summary: recoveryReceiptSummary(status, primaryCheck),
+    report_to_user: recoveryReceiptReportToUser(status, primaryCheck),
+    can_resolve: status === 'verified',
     baseline_observed_at: input.briefing.created_at,
     live_observed_at: input.liveEvidenceMetadata.observed_at,
+    primary_check: primaryCheck,
+    failed_checks: checkNamesByStatus(checks, 'fail'),
+    unknown_checks: checkNamesByStatus(checks, 'unknown'),
     checks,
     _agent_guidance: receiptGuidance(status),
   };

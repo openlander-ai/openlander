@@ -923,20 +923,25 @@ Use this first when multiple OpenLander servers are connected to the same AI cli
 AI Ops Briefing Beta read surface. These actions are read-only and do not restart,
 redeploy, roll back, edit env vars, or acknowledge incidents.
 
-`list_ai_ops_briefings` lists persisted briefings for either a Project or an
-Application/Compose service.
+`list_ai_ops_briefings` lists persisted briefings. With no target, an
+instance/default token can use it as the agent-primary triage queue. With
+`project_id` or `service_id`, it lists only that Project or Application/Compose
+service. Scoped tokens should pass their explicit target so the scope boundary is
+unambiguous.
 
-| Parameter    | Type   | Required | Description                           |
-| ------------ | ------ | -------- | ------------------------------------- |
-| `project_id` | string | No       | Project id                            |
-| `service_id` | string | No       | Application/Compose service_id        |
-| `status`     | string | No       | `open`, `acknowledged`, or `resolved` |
-| `limit`      | number | No       | Max rows, 1-100                       |
+| Parameter    | Type   | Required | Description                                         |
+| ------------ | ------ | -------- | --------------------------------------------------- |
+| `project_id` | string | No       | Project id                                          |
+| `service_id` | string | No       | Application/Compose service_id                      |
+| `status`     | string | No       | `open`, `acknowledged`, `resolved`, or `unresolved` |
+| `limit`      | number | No       | Max rows, 1-100                                     |
 
-Provide `project_id` or `service_id`. The response includes deterministic
-`classification`, `severity`, `summary`, and a ticket-first `suggested_call` /
-`diagnostic_call` for `openlander_monitor.diagnose_service` with the
-`briefing_id` already populated; full evidence is kept out of the list response.
+The response is a compact triage payload: `briefing_id`, `project_id`,
+`service_id`, `status`, `severity`, `classification`, `title`, one-line
+`summary`, `created_at`, and a ticket-first `diagnostic_call` for
+`openlander_monitor.diagnose_service` with the `briefing_id` already populated.
+Full evidence, LLM telemetry, dedupe fields, and full summaries are kept out of
+the list response; call `get_ai_ops_briefing` for detail.
 
 `get_ai_ops_briefing` takes `briefing_id` and returns one briefing with evidence.
 The deterministic `suggested_call` is the next diagnostic read. LLM summary text,
@@ -1052,7 +1057,12 @@ When called with `briefing_id`, `diagnose_service` also returns
 `recovery_receipt`: a machine-readable before/after comparison between the AI Ops
 briefing snapshot and current live diagnostics. The receipt includes
 `status: "verified" | "needs_attention" | "unknown" | "unavailable"` plus checks
-for `route_health`, `container_status`, `restart_stability`, and `latest_deploy`.
+for `route_health`, `container_status`, `restart_stability`, and
+`latest_deploy`. It also includes `summary`, `report_to_user`, `can_resolve`,
+`primary_check`, `failed_checks`, and `unknown_checks` so agents can report the
+verification result without interpreting raw check arrays. `latest_deploy` is
+deploy-status evidence unless the response explicitly carries serving-version
+evidence; route 200 alone is not proof that the expected version is serving.
 Agents should read this receipt before telling the user that an incident is
 fixed.
 

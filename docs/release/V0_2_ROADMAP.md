@@ -297,19 +297,20 @@ Beta 한계: runtime trigger 귀속은 canonical service 우선이다. multi-App
 Project와 compose-child 단위 귀속, ticket escalation history, persisted receipt
 history는 v0.2 이후 별도 개선한다.
 
-## 0.2.x 다음 우선순위
+## 0.2.x 후속 상태
 
 0.2.0 final 이후에는 새 tool surface 확장보다 이미 들어간 Failure Ticket 경로의
-가독성과 agent-primary acceptance를 우선한다.
+가독성과 agent-primary acceptance를 우선한다. 다음 두 항목은 rc 후속 PR에서
+코드 계약으로 닫혔고, 남은 일은 release QA와 demo 고정이다.
 
-1. **Recovery Receipt readability**
+1. **Recovery Receipt readability** `[shipped, needs live QA]`
    - `diagnose_service(briefing_id)` 응답에서 verdict, failed checks, latest
      deploy / serving-version mismatch가 한눈에 보이게 한다.
    - Route 200만으로 verified라고 오해하지 않게 `route_health`,
      `container_status`, `restart_stability`, `latest_deploy` 체크를 분리한다.
    - `verified`는 signal이고 `resolved`는 human action이라는 문구를 Web/MCP
      양쪽에 유지한다.
-2. **Agent-primary triage acceptance**
+2. **Agent-primary triage acceptance** `[shipped, needs live QA]`
    - Web button이 아니라 agent가 `list_ai_ops_briefings(status="open")`로
      시작하는 시나리오를 release QA에 고정한다.
    - `list` response는 tiny triage payload로 유지하고, full evidence는
