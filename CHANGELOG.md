@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Improve MCP-first AI Ops failure-ticket triage by allowing instance/default
+  agents to list open tickets without a project target while keeping scoped
+  tokens target-bound.
+- Make `list_ai_ops_briefings` return a compact triage projection with no
+  evidence, LLM telemetry, dedupe fields, or duplicate call links.
+- Add readable `recovery_receipt` fields including `summary`, `report_to_user`,
+  `can_resolve`, `primary_check`, `failed_checks`, and `unknown_checks` so
+  agents can report verification results without interpreting raw check arrays.
+
 ## [0.2.0-rc.20] - 2026-06-22
 
 ### Fixed
