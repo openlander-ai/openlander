@@ -309,9 +309,14 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 
 **Next**
 
-- **Recovery loop hardening** — expand high-confidence diagnostics and verified
-  hot paths before turning on built-in automation. External agents still decide
-  and call each remediation step explicitly.
+- **Verified Failure Tickets** — turn runtime failures into MCP-readable tickets
+  that agents can triage without opening the dashboard.
+- **Recovery Receipts** — make `diagnose_service(briefing_id)` return a clear
+  before/after verification result so agents can report whether a fix is really
+  serving.
+- **Agent-primary triage** — keep the web dashboard as the human inbox / audit
+  surface while the happy path starts from MCP (`list_ai_ops_briefings` →
+  `get_ai_ops_briefing` → `diagnose_service`).
 - **Environment contract** — first-class project, deployment-target, service,
   and generated runtime variable scopes, with clear redeploy guidance.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
@@ -322,9 +327,9 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
   so staging can be added later without a rewrite.
 - **Notifications** — Slack and Discord webhooks for deploy / health /
   approval events.
-- **Internal AI Ops** — optional incident response inside a policy you set,
-  built on the deterministic recovery contracts above rather than a separate
-  chat-first automation path.
+- **Internal AI Ops** — deferred until deterministic ticket, receipt, approval,
+  and audit contracts are strong enough to support it without a chat-first
+  automation path.
 
 If a roadmap item matters to you, opening an issue moves it up the queue
 more than waiting for it does.

@@ -2,25 +2,63 @@
 
 ## 목표
 
-0.2.0은 **AI Ops Briefing Beta**를 출시한다.
+0.2.0은 **Verified Failure Ticket**의 첫 beta를 출시한다.
 
 0.1.x에서 안정화한 MCP 기반 배포/운영 경로 위에, OpenLander가 런타임
-증거를 모아 사람이 읽기 쉬운 운영 브리핑으로 정리한다. 이 릴리스의
-AI는 조치 실행자가 아니라 **요약자**다.
+failure를 persisted ticket으로 만들고, 외부 coding agent가 MCP로 그
+ticket을 읽어 수정한 뒤, OpenLander가 deterministic recovery receipt로
+실제 복구 여부를 검증한다.
+
+AI Ops Briefing Beta는 이 제품 계약의 구현 표면이다. LLM은 선택적
+summary provider일 뿐이고, ticket 생성, action suggestion, verification은
+deterministic rule이 소유한다.
+
+제품 정의:
+
+> OpenLander는 runtime failure를 MCP-readable ticket으로 만들고, coding
+> agent가 그 ticket을 읽고 수정한 뒤, OpenLander가 deterministic recovery
+> receipt로 실제 복구 여부를 검증한다. Web은 primary execution surface가
+> 아니라 human inbox / audit / fallback surface다.
 
 핵심 원칙:
 
 - AI Ops는 기본 OFF다.
 - LLM provider를 설정해도 AI Ops가 자동으로 켜지지 않는다.
-- Project 단위로 `off | briefing`을 선택하고, Service는 `inherit | off |
-briefing`으로 override한다.
+- Project 단위로 `off | briefing`을 선택하고, Service는 `inherit | off | briefing`으로
+  override할 수 있지만 기본 UX는 Project-level opt-in과 Project AI Ops feed를
+  우선한다.
 - classification, severity, suggested action은 deterministic rule이
   소유한다.
-- LLM은 evidence 요약만 담당한다.
+- LLM은 optional evidence summary만 담당한다.
 - 자동 restart, redeploy, rollback, env edit은 제외한다.
-- MCP agent가 브리핑만 읽고 다음 확인 action을 고를 수 있어야 한다.
+- OpenLander는 built-in agent를 실행하지 않는다.
+- detect / handoff / verify는 LLM을 호출하지 않는다.
+- MCP agent가 web 없이 ticket을 찾고, evidence를 읽고, recovery receipt를
+  보고할 수 있어야 한다.
 - Telegram은 send-only 알림만 제공한다. Telegram inbound command는
   mutation으로 이어지지 않는다.
+
+## 0.2 제품 계약
+
+0.2의 중심 객체는 "브리핑 카드"가 아니라 **Failure Ticket**이다.
+
+- Failure Ticket: persisted `ai_ops_briefings` row. Agent가
+  `list_ai_ops_briefings` / `get_ai_ops_briefing`으로 발견하고 읽는 work item.
+- Recovery Receipt: `diagnose_service(briefing_id)`가 반환하는 deterministic
+  before/after verification result.
+- `recovery_receipt.status="verified"`는 복구 신호다. `resolved`는 사람이
+  명시적으로 누르는 ticket workflow 상태다.
+
+OpenLander가 하지 않는 것:
+
+- internal agent loop 실행
+- repeated LLM loop 실행
+- 자동 redeploy / rollback / env edit
+- recovery receipt를 근거로 자동 resolve
+
+자세한 release-scope lock은
+[`V0_2_VERIFIED_FAILURE_TICKET_CONTRACT.md`](./V0_2_VERIFIED_FAILURE_TICKET_CONTRACT.md)를
+따른다.
 
 ## 0.2.0 범위
 
@@ -38,12 +76,12 @@ briefing`으로 override한다.
 
 ### 2. Provider / Model / Usage Foundation
 
-AI Ops briefing 전용 model profile을 추가한다.
+AI Ops ticket summary 전용 model profile을 추가한다.
 
 - OpenAI-compatible provider와 Anthropic provider를 지원한다.
 - provider secret은 기존 encryption helper를 재사용한다.
-- `ai_ops_briefing` usage에는 provider, model, token, cost, project,
-  service, briefing id를 기록한다.
+- `ai_ops_briefing` usage에는 provider, model, token, cost, project, service, ticket id를
+  기록한다.
 - provider configured 상태와 AI Ops enabled 상태를 분리한다.
 
 #### 2.1 Provider Runtime Policy
@@ -107,41 +145,69 @@ AI Ops 실행 정책은 명시 opt-in이다.
 
 ### 4. Deterministic Briefing Core
 
-OpenLander rule이 운영 증거를 정규화하고 브리핑을 만든다.
+OpenLander rule이 운영 증거를 정규화하고 Failure Ticket을 만든다.
 
 Evidence pack:
 
 - route health
 - representative traffic
 - deploy log
-- recent log tail
 - container state
 - restart count
 - runtime incident
 
-Briefing row는 deterministic summary, severity, classification,
-suggested MCP call, evidence, optional LLM summary를 저장한다. Suggested
-call은 기존 MCP action만 사용할 수 있고, 자동 mutation action을 제안하지
-않는다.
+Ticket row는 deterministic summary, severity, classification,
+diagnostic/suggested MCP call, evidence, optional LLM summary를 저장한다.
+Suggested call은 기존 MCP action만 사용할 수 있고, 자동 mutation action을
+제안하지 않는다.
+
+Ticket 생성 기준은 alert threshold가 아니라 **agent actionability**다.
+
+- agent가 read-only diagnostic을 시작할 수 있으면 ticket 후보가 될 수 있다.
+- caller가 이미 동기적으로 받은 foreground deploy error는 ticket으로 만들지
+  않는다.
+- log-tail-only evidence는 ticket으로 만들지 않는다.
+- self-healed container die는 ticket으로 만들지 않는다.
+- ambiguous warning은 ticket으로 만들지 않는다. 의심스러우면 ticket을 만들지
+  않는다.
+- active restart-loop, representative-traffic failure, route/runtime mismatch,
+  dependency failure처럼 agent가 structured diagnostic을 이어갈 수 있는 신호를
+  우선한다.
 
 ### 5. Web / MCP Surface
 
-사람과 MCP agent가 브리핑을 읽을 수 있게 한다.
+MCP가 primary agent surface다. Web은 사람이 같은 queue를 보고 개입하는
+inbox / audit / fallback surface다.
 
 MCP:
 
 - `openlander_monitor.list_ai_ops_briefings`
 - `openlander_monitor.get_ai_ops_briefing`
+- `openlander_monitor.diagnose_service` with `briefing_id`
+
+Agent-primary happy path:
+
+1. 사용자가 agent에게 "OpenLander에 열린 장애 있어?"라고 묻는다.
+2. Agent가 `list_ai_ops_briefings(status="open", limit=10)`을 호출한다.
+3. Agent가 선택한 ticket에 `get_ai_ops_briefing`을 호출한다.
+4. Agent가 ticket의 `diagnostic_call` 또는 `suggested_call`을 따른다.
+5. Fix 후 agent가 `diagnose_service({ service_id, briefing_id })`를 호출한다.
+6. Agent가 `recovery_receipt.status`와 failed checks를 사용자에게 보고한다.
 
 Web:
 
 - Project AI Ops toggle
-- Project AI Ops briefing feed
+- Project AI Ops ticket feed
 - Home AI Ops Inbox
-- Service override
-- Briefing card
-- Briefing detail drawer
-- token/cost 표시
+- ticket detail dialog
+- Open in Agent prompt as a convenience entry, not the primary execution path
+- manual acknowledge / resolve
+- token/cost 표시 for optional LLM summary
+
+Service-level override exists in the policy model for future restricted /
+contractor use, but the default v0.2 UX keeps service-level AI configuration out
+of the main Service detail screen. Project Settings owns opt-in; Project AI Ops
+and Home Inbox own reading and triage.
 
 #### 5.1 AI Providers IA
 
@@ -173,19 +239,18 @@ Settings
 
 - `AI Providers`: instance에 LLM provider를 연결한다.
 - Project `AI Ops Briefing`: 특정 Project에서 브리핑 생성을 opt in한다.
-- Service override: 특정 Application/Compose 리소스만 `inherit | off |
-briefing`으로 조정한다.
+- Service override: backend policy model에 남아 있지만 기본 UX에서는 숨긴다.
 
-Provider 미설정 상태에서 Project/Service AI Ops 패널은 deterministic briefing만
-동작하며, LLM summary가 필요한 경우 `Settings -> AI Providers`로 이동하는
-명확한 링크를 제공한다.
+Provider 미설정 상태에서도 Project AI Ops는 deterministic ticket을 만들 수
+있다. LLM summary가 필요한 경우 `Settings -> AI Providers`로 이동하는 명확한
+링크를 제공한다.
 
 Web/API endpoint와 MCP action 추가는 freeze gate 대상이다. i18n은
 `web/src/i18n/en.ts`와 `web/src/i18n/ko.ts`를 같은 PR에서 갱신한다.
 
 ### 6. LLM Summary
 
-LLM은 브리핑 설명만 담당한다.
+LLM은 ticket 설명만 담당한다.
 
 - `aiOpsBriefing` model profile을 사용한다.
 - prompt는 evidence 밖 원인, 존재하지 않는 action, remediation claim을
@@ -197,7 +262,7 @@ LLM은 브리핑 설명만 담당한다.
 
 AI Ops briefing 알림은 Telegram 전용 send-only 경로로 시작한다.
 
-- Project/Service AI Ops policy가 `briefing`일 때만 전송한다.
+- Project policy 또는 service override policy가 `briefing`일 때만 전송한다.
 - durable fingerprint cooldown을 따른다.
 - Telegram 미설정/미연결은 skip으로 처리한다.
 - `broadcast` / `broadcastStructured` fanout을 쓰지 않아 Slack/Discord/email로
@@ -207,29 +272,55 @@ AI Ops briefing 알림은 Telegram 전용 send-only 경로로 시작한다.
 
 ### 8. Runtime Trigger Wiring
 
-마지막으로 기존 passive monitor 신호를 briefing 생성 체인에 연결한다.
+기존 passive monitor 신호를 ticket 생성 체인에 연결한다.
 
 트리거는 자동 복구가 아니다. 이미 발생한 `health:degraded`,
 `container:die`, `deploy:failed` 같은 신호를 evidence pack으로 정규화하고,
-opt-in policy / budget / durable dedupe를 통과한 경우에만 briefing row를
-쓴다.
+opt-in policy / budget / durable dedupe / actionability gate를 통과한 경우에만
+ticket row를 쓴다.
 
 실행 순서:
 
 1. monitor signal 수신.
-2. Project/Service AI Ops policy 확인. `off`면 종료.
-3. deterministic briefing 후보 생성.
+2. Project policy와 service override policy 확인. `off`면 종료.
+3. deterministic ticket 후보 생성.
 4. durable fingerprint cooldown 확인. 중복이면 종료.
 5. budget 확인. 초과 시 LLM summary만 생략.
-6. briefing row 저장.
-7. LLM summary는 허용될 때만 시도하고 실패해도 deterministic briefing 유지.
+6. ticket row 저장.
+7. LLM summary는 허용될 때만 시도하고 실패해도 deterministic ticket 유지.
 8. Telegram send-only notification은 policy와 cooldown을 다시 존중한다.
 
 이 트리거는 `RecoveryCoordinator`, `OpsAgent`, chat route, deploy/redeploy,
 rollback, env edit을 호출하지 않는다.
 
 Beta 한계: runtime trigger 귀속은 canonical service 우선이다. multi-Application
-Project와 compose-child 단위 귀속은 첫 AI Ops Beta smoke 이후 별도 개선한다.
+Project와 compose-child 단위 귀속, ticket escalation history, persisted receipt
+history는 v0.2 이후 별도 개선한다.
+
+## 0.2.x 다음 우선순위
+
+0.2.0 final 이후에는 새 tool surface 확장보다 이미 들어간 Failure Ticket 경로의
+가독성과 agent-primary acceptance를 우선한다.
+
+1. **Recovery Receipt readability**
+   - `diagnose_service(briefing_id)` 응답에서 verdict, failed checks, latest
+     deploy / serving-version mismatch가 한눈에 보이게 한다.
+   - Route 200만으로 verified라고 오해하지 않게 `route_health`,
+     `container_status`, `restart_stability`, `latest_deploy` 체크를 분리한다.
+   - `verified`는 signal이고 `resolved`는 human action이라는 문구를 Web/MCP
+     양쪽에 유지한다.
+2. **Agent-primary triage acceptance**
+   - Web button이 아니라 agent가 `list_ai_ops_briefings(status="open")`로
+     시작하는 시나리오를 release QA에 고정한다.
+   - `list` response는 tiny triage payload로 유지하고, full evidence는
+     `get_ai_ops_briefing` detail read에 둔다.
+   - Fix 후 agent가 `diagnose_service({ service_id, briefing_id })`로
+     recovery receipt를 보고하는지 검증한다.
+3. **60-second verified handoff demo**
+   - 장애 생성 -> ticket 발견 -> agent diagnosis/fix -> recovery receipt report
+     하나의 demo path를 고정한다.
+   - 공개 카피는 경쟁사 비교 공격 대신 "OpenLander verifies fixes against
+     runtime state"를 사용한다.
 
 ## 0.2.0에서 분리하는 작업
 
@@ -328,15 +419,15 @@ git diff --check
 
 - AI Ops default OFF.
 - Provider configured 상태만으로 AI Ops가 켜지지 않음.
-- Provider가 없거나 실패해도 deterministic briefing은 생성됨.
-- LLM provider 설정 UI는 `Settings -> AI Providers`에 있고, Project/Service
-  AI Ops opt-in과 분리됨.
+- Provider가 없거나 실패해도 deterministic ticket은 생성됨.
+- LLM provider 설정 UI는 `Settings -> AI Providers`에 있고, Project AI Ops
+  opt-in과 분리됨.
 - Local account runtime은 core가 subscription token/cookie를 읽지 않는 optional
   package 경계 밖 실험 기능으로 유지.
 - `RecoveryCoordinator` / `OpsAgent` / built-in chat route dormant 유지.
 - 자동 restart / redeploy / rollback / env edit 없음.
 - Telegram inbound webhook은 mutation을 실행하지 않음.
-- LLM 실패는 deterministic briefing 생성을 막지 않음.
+- LLM 실패는 deterministic ticket 생성을 막지 않음.
 - runtime trigger는 Project/Service policy, budget, durable dedupe를 적용함.
 - MCP response는 기존 contract helper만 사용.
 - 새 AI Ops MCP action은 `openlander_monitor` 하위에만 위치.
@@ -352,11 +443,12 @@ git diff --check
 4. `Settings -> AI Providers`에서 provider 연결/connection test 확인.
 5. Project AI Ops ON.
 6. route failure 또는 restart-loop 유발.
-7. Web briefing 생성 확인.
-8. MCP briefing 조회 확인.
+7. Failure Ticket 생성 확인.
+8. MCP ticket 조회 확인.
 9. Telegram send-only notification 확인.
 10. 동일 fingerprint 재발 시 cooldown 확인.
 11. 자동 mutation이 발생하지 않았는지 확인.
+12. `diagnose_service(briefing_id)`가 recovery receipt를 반환하는지 확인.
 
 ### AWS Web UI Smoke
 
@@ -370,14 +462,13 @@ AI Ops Web UI는 rc smoke에서 브라우저로도 확인한다.
    확인한다.
 4. Project mode를 `Briefing`으로 바꾸고 새로고침 후에도 저장되는지
    확인한다.
-5. Service detail에서 `inherit / off / briefing` override가 보이고,
-   Service `off`가 Project `Briefing`보다 우선하는지 확인한다.
-6. route failure 또는 restart-loop 유발 후 Project/Service 화면에 briefing
-   card가 생성되는지 확인한다.
+5. Service detail에 기본 AI configuration tab이 노출되지 않는지 확인한다.
+6. route failure 또는 restart-loop 유발 후 Home Inbox와 Project AI Ops에
+   ticket이 생성되는지 확인한다.
 7. Home AI Ops Inbox와 Project AI Ops tab에 같은 briefing이 보이고 status
    filter가 동작하는지 확인한다.
-8. briefing detail drawer에서 severity, classification, summary, token/cost,
-   suggested MCP call, evidence가 보이는지 확인한다.
+8. ticket detail dialog에서 severity, classification, summary, token/cost,
+   diagnostic/suggested MCP call, evidence, after-fix verification prompt가 보이는지 확인한다.
 9. evidence와 summary에 token, API key, database password 같은 secret이
    노출되지 않는지 확인한다.
 10. 언어를 en/ko로 전환했을 때 깨진 i18n key가 없는지 확인한다.
@@ -398,9 +489,11 @@ PR5 이후 weak-model QA를 시작한다.
 성공 기준:
 
 - 모델이 자동 mutation을 시도하지 않는다.
-- briefing의 suggested call을 올바르게 식별한다.
+- ticket의 diagnostic/suggested call을 올바르게 식별한다.
 - evidence 밖 원인을 지어내지 않는다.
 - 사용자 입력이 필요하면 멈추고 요청한다.
+- fix 후 recovery receipt를 확인하고 `verified`, `needs_attention`, `unknown`을
+  구분해 보고한다.
 
 ## Final AWS Full QA
 
@@ -429,18 +522,18 @@ PR5 이후 weak-model QA를 시작한다.
 
 - AI Ops가 보이지만 기본 OFF다.
 - Provider setup만으로 AI Ops가 실행되지 않는다.
-- Project ON 상태에서 deterministic briefing이 생성된다.
-- Service override가 동작한다.
+- Project ON 상태에서 deterministic Failure Ticket이 생성된다.
 - OpenAI-compatible과 Anthropic provider로 LLM summary가 동작한다.
-- Provider 미설정 또는 provider 실패 상태에서도 deterministic briefing fallback이
-  동작한다.
+- Provider 미설정 또는 provider 실패 상태에서도 deterministic ticket fallback이 동작한다.
 - LLM 실패가 clean fallback으로 처리된다.
 - token/cost usage가 기록된다.
 - Telegram send-only notification이 동작한다.
 - duplicate incident가 durable cooldown으로 dedupe된다.
 - Telegram inbound가 command를 실행하지 않는다.
 - 자동 remediation이 없다.
-- MCP agent가 briefing과 suggested call을 조회할 수 있다.
+- MCP agent가 ticket과 diagnostic/suggested call을 조회할 수 있다.
+- MCP agent가 `diagnose_service(briefing_id)`로 recovery receipt를 조회할 수 있다.
+- Recovery receipt `verified`는 자동 `resolved` 전환을 만들지 않는다.
 - Web i18n en/ko parity가 통과한다.
-- weak model이 briefing에서 올바른 next MCP action을 고를 수 있다.
+- weak model이 ticket에서 올바른 next MCP action을 고를 수 있다.
 - AWS full QA가 통과한다.

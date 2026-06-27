@@ -45,5 +45,5 @@ rewriting a long private history.
 - Prefer GitHub Discussions for early support unless maintainers can actively monitor a Discord
   server. An empty chat server looks worse than no chat server.
 - Prepare short answers for common launch questions: how OpenLander differs from Coolify/Railway,
-  what MCP adds, what destructive actions agents cannot perform, and what the known 0.1 limitations
-  are.
+  what MCP adds, how Failure Tickets and Recovery Receipts help agents verify fixes, what
+  destructive actions agents cannot perform, and what the known 0.1/0.2 limitations are.
