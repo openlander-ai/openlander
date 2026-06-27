@@ -5,6 +5,29 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **Agent-primary failure ticket triage and readable recovery receipts:**
+  `list_ai_ops_briefings` can now be called without `project_id` or
+  `service_id` by an instance/default-token agent to read the recent ticket
+  queue. Project/service-targeted calls remain supported, and scoped tokens
+  should continue to pass an explicit target. `diagnose_service(briefing_id)`
+  also returns additive receipt fields: `summary`, `report_to_user`,
+  `can_resolve`, `primary_check`, `failed_checks`, and `unknown_checks`.
+- **Why accepted:** v0.2 positions MCP as the primary agent path. A coding agent
+  must be able to ask OpenLander "what open failure tickets need attention?"
+  without opening the web UI, and it must be able to report a recovery receipt
+  without interpreting raw check arrays.
+- **Vocab review:** `summary`, `report_to_user`, `can_resolve`,
+  `primary_check`, `failed_checks`, and `unknown_checks` are additive fields
+  under the existing `recovery_receipt` read contract. No new resource,
+  mutation, table, or MCP action is introduced.
+- **Endpoint collision check:** no MCP action, composite slot, REST route, or
+  table is added. The change extends the existing
+  `openlander_monitor.list_ai_ops_briefings` and
+  `openlander_monitor.diagnose_service` response contracts.
+- **Follow-up:** release QA should run an agent-primary path against the rc:
+  list open tickets, get detail, diagnose with `briefing_id`, apply the fix, and
+  report `recovery_receipt.status` plus the readable receipt fields.
+
 - **Awaited user-input mutation gate:** the database gains
   `ai_ops_pending_inputs` to track user-owned external env values that
   `diagnose_service` has classified as requiring operator input. Existing MCP

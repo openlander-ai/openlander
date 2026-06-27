@@ -27,6 +27,13 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
       params: { briefing_id: briefing.briefing_id },
     },
   };
+  const triageCall = {
+    tool: 'openlander_monitor',
+    arguments: {
+      action: 'list_ai_ops_briefings',
+      params: { status: 'open', limit: 10 },
+    },
+  };
 
   const freshness = briefing.evidence_metadata
     ? `${briefing.evidence_metadata.source}, live=${String(briefing.evidence_metadata.live)}, observed_at=${briefing.evidence_metadata.observed_at}`
@@ -49,6 +56,9 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
     'First MCP call',
     formatJson(firstCall),
     '',
+    'If starting without a copied briefing',
+    formatJson(triageCall),
+    '',
     'Suggested MCP call from OpenLander rules',
     formatJson(briefing.suggested_call ?? null),
     '',
@@ -56,9 +66,11 @@ export function buildAiOpsAgentHandoffPrompt(briefing: AiOpsBriefing): string {
     buildAiOpsVerificationCall(briefing),
     '',
     'Verification checklist before saying fixed',
-    '- Run the verification MCP call and read recovery_receipt.status.',
+    '- Run the verification MCP call and read recovery_receipt.status, summary, and report_to_user.',
+    '- If status is needs_attention, report recovery_receipt.primary_check and failed_checks.',
+    '- If status is unknown, report recovery_receipt.unknown_checks instead of claiming success.',
     '- Confirm route health is healthy when route evidence exists.',
     '- Confirm container state and restart count are stable.',
-    '- Confirm the latest deploy/status evidence matches the version you expect.',
+    '- Treat latest_deploy as deploy-status evidence unless serving-version evidence is explicitly present.',
   ].join('\n');
 }

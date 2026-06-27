@@ -116,16 +116,15 @@ export const getTopologySchema = z
 
 export const getInstanceInfoSchema = z.object({}).strict();
 
-export const listAiOpsBriefingsSchema = z
-  .object({
-    project_id: z.string().min(1).optional().describe('Project id'),
-    service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
-    status: z.enum(['open', 'acknowledged', 'resolved']).optional().describe('Briefing status'),
-    limit: z.number().int().min(1).max(100).optional().describe('Maximum briefings to return'),
-  })
-  .refine((value) => Boolean(value.project_id || value.service_id), {
-    message: 'project_id or service_id is required',
-  });
+export const listAiOpsBriefingsSchema = z.object({
+  project_id: z.string().min(1).optional().describe('Project id'),
+  service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
+  status: z
+    .enum(['open', 'acknowledged', 'resolved', 'unresolved'])
+    .optional()
+    .describe('Briefing status'),
+  limit: z.number().int().min(1).max(100).optional().describe('Maximum briefings to return'),
+});
 
 export const getAiOpsBriefingSchema = z.object({
   briefing_id: z.string().min(1).describe('AI Ops briefing id'),
