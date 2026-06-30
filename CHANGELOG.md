@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Promote `v0.2.0` from `v0.2.0-rc.21` after final AWS rc.21 health and
+  MCP-first failure-ticket triage smoke passed.
+
 ## [0.2.0-rc.21] - 2026-06-27
 
 ### Changed
