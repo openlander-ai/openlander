@@ -51,7 +51,8 @@ agent execution surface.
 - [shipped] Receipt checks for `route_health`, `container_status`,
   `restart_stability`, and `latest_deploy`.
 - [shipped] Receipt readability fields: `summary`, `report_to_user`,
-  `can_resolve`, `primary_check`, `failed_checks`, and `unknown_checks`.
+  `next_action`, `can_resolve`, `primary_check`, `passed_checks`,
+  `failed_checks`, `unknown_checks`, and `check_summary`.
 - [shipped] Home AI Ops Inbox and Project AI Ops tab.
 - [shipped] Token-free Open in Agent prompt as a convenience entry point.
 - [shipped] Manual `acknowledge` / `resolve`; receipt verification is not an

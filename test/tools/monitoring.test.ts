@@ -1691,10 +1691,16 @@ describe('service-targeted monitoring tools', () => {
       summary: 'OpenLander verified the live route, container, restart, and latest deploy checks.',
       report_to_user:
         'OpenLander verified the live recovery checks. You can resolve the ticket when you agree the incident is done.',
+      next_action:
+        'Report the verified receipt to the user. The user can manually resolve the ticket if they agree the incident is done.',
       can_resolve: true,
+      passed_checks: ['route_health', 'container_status', 'restart_stability', 'latest_deploy'],
       failed_checks: [],
       unknown_checks: [],
       baseline_observed_at: '2026-06-13T12:00:00.000Z',
+    });
+    expect(receipt._agent_guidance).toMatchObject({
+      next_steps: [receipt.next_action],
     });
     expect(receipt.primary_check).toMatchObject({
       name: 'latest_deploy',
@@ -1734,6 +1740,17 @@ describe('service-targeted monitoring tools', () => {
           before: { id: 'deploy-before', status: 'failed', commit_sha: 'badcafe' },
           after: { id: 'deploy-after', status: 'success', commit_sha: 'goodcafe' },
           changed: true,
+        }),
+      ]),
+    );
+    expect(receipt.check_summary).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'latest_deploy',
+          label: 'Latest deploy status',
+          status: 'pass',
+          severity: 'info',
+          reason: expect.stringContaining('deploy-status evidence'),
         }),
       ]),
     );
@@ -1788,10 +1805,16 @@ describe('service-targeted monitoring tools', () => {
     expect(receipt).toMatchObject({
       status: 'needs_attention',
       can_resolve: false,
+      passed_checks: ['route_health', 'container_status', 'restart_stability'],
       failed_checks: ['latest_deploy'],
       unknown_checks: [],
       summary: 'OpenLander still sees a failing recovery check: Latest deploy status.',
       report_to_user: expect.stringContaining('The latest deploy is still failed or unhealthy'),
+      next_action:
+        'Do not resolve the ticket yet. Investigate Latest deploy status and run diagnose_service again after the fix.',
+    });
+    expect(receipt._agent_guidance).toMatchObject({
+      next_steps: [receipt.next_action],
     });
     expect(receipt.primary_check).toMatchObject({
       name: 'latest_deploy',
@@ -1801,6 +1824,18 @@ describe('service-targeted monitoring tools', () => {
       reason:
         'The latest deploy is still failed or unhealthy, so OpenLander cannot verify the fix.',
     });
+    expect(receipt.check_summary).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'latest_deploy',
+          label: 'Latest deploy status',
+          status: 'fail',
+          severity: 'critical',
+          reason:
+            'The latest deploy is still failed or unhealthy, so OpenLander cannot verify the fix.',
+        }),
+      ]),
+    );
   });
 
   it('diagnose_service recovery receipt surfaces unknown checks without allowing resolve', async () => {
@@ -1830,6 +1865,7 @@ describe('service-targeted monitoring tools', () => {
     expect(receipt).toMatchObject({
       status: 'unknown',
       can_resolve: false,
+      passed_checks: ['route_health', 'container_status', 'restart_stability'],
       failed_checks: [],
       unknown_checks: ['latest_deploy'],
       summary:
@@ -1837,6 +1873,11 @@ describe('service-targeted monitoring tools', () => {
       report_to_user: expect.stringContaining(
         'OpenLander does not have enough latest deploy evidence',
       ),
+      next_action:
+        'Do not claim the incident is fixed yet. Gather more evidence for Latest deploy status and run diagnose_service again.',
+    });
+    expect(receipt._agent_guidance).toMatchObject({
+      next_steps: [receipt.next_action],
     });
     expect(receipt.primary_check).toMatchObject({
       name: 'latest_deploy',

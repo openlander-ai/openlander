@@ -2920,54 +2920,86 @@ function recoveryReceiptReportToUser(
     : 'OpenLander cannot fully verify the fix yet because live evidence is missing or inconclusive.';
 }
 
-function receiptGuidance(status: RecoveryReceiptStatus): Record<string, unknown> {
+function recoveryReceiptNextAction(
+  status: RecoveryReceiptStatus,
+  primaryCheck: Record<string, unknown> | null,
+): string {
+  const primaryLabel =
+    typeof primaryCheck?.['label'] === 'string' ? primaryCheck['label'] : 'recovery evidence';
+  if (status === 'verified') {
+    return 'Report the verified receipt to the user. The user can manually resolve the ticket if they agree the incident is done.';
+  }
+  if (status === 'needs_attention') {
+    return `Do not resolve the ticket yet. Investigate ${primaryLabel} and run diagnose_service again after the fix.`;
+  }
+  if (status === 'unavailable') {
+    return 'Retry with a briefing id that belongs to this service, or open the ticket detail before verifying.';
+  }
+  return `Do not claim the incident is fixed yet. Gather more evidence for ${primaryLabel} and run diagnose_service again.`;
+}
+
+function receiptGuidance(
+  status: RecoveryReceiptStatus,
+  nextAction: string,
+): Record<string, unknown> {
   if (status === 'verified') {
     return {
       message:
         'OpenLander live diagnostics look recovered relative to the AI Ops briefing snapshot.',
-      next_steps: [
-        'Report recovery_receipt.summary and recovery_receipt.status to the user.',
-        'The user can manually resolve the ticket if they agree the incident is done.',
-      ],
+      next_steps: [nextAction],
     };
   }
   if (status === 'needs_attention') {
     return {
       message:
         'OpenLander still sees at least one failing live diagnostic after the attempted fix.',
-      next_steps: [
-        'Inspect recovery_receipt.primary_check and recovery_receipt.failed_checks.',
-        'Use the top-level diagnosis or suggested_call before claiming the incident is fixed.',
-      ],
+      next_steps: [nextAction],
     };
   }
   return {
     message:
       'OpenLander could not fully verify recovery because one or more before/after signals are missing.',
-    next_steps: [
-      'Inspect recovery_receipt.primary_check and recovery_receipt.unknown_checks.',
-      'Run get_logs or get_build_log if omitted_evidence lists follow-up calls.',
-    ],
+    next_steps: [nextAction],
+  };
+}
+
+function readableRecoveryCheck(check: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: recoveryCheckName(check),
+    label:
+      typeof check['label'] === 'string'
+        ? check['label']
+        : recoveryCheckLabel(recoveryCheckName(check)),
+    status: recoveryCheckStatus(check),
+    severity:
+      check['severity'] === 'info' ||
+      check['severity'] === 'warning' ||
+      check['severity'] === 'critical'
+        ? check['severity']
+        : recoveryCheckSeverity(recoveryCheckName(check), recoveryCheckStatus(check)),
+    reason: typeof check['reason'] === 'string' ? check['reason'] : recoveryCheckReason(check),
   };
 }
 
 function unavailableRecoveryReceipt(briefingId: string, reason: string): Record<string, unknown> {
   const status: RecoveryReceiptStatus = 'unavailable';
+  const primaryCheck = null;
+  const nextAction = recoveryReceiptNextAction(status, primaryCheck);
   return {
     briefing_id: briefingId,
     status,
     reason,
-    summary: recoveryReceiptSummary(status, null),
-    report_to_user: recoveryReceiptReportToUser(status, null),
+    summary: recoveryReceiptSummary(status, primaryCheck),
+    report_to_user: recoveryReceiptReportToUser(status, primaryCheck),
+    next_action: nextAction,
     can_resolve: false,
     primary_check: null,
+    passed_checks: [],
     failed_checks: [],
     unknown_checks: [],
+    check_summary: [],
     checks: [],
-    _agent_guidance: {
-      message: 'OpenLander could not build a recovery receipt for this briefing.',
-      next_steps: ['Call list_ai_ops_briefings and retry with a briefing for this service.'],
-    },
+    _agent_guidance: receiptGuidance(status, nextAction),
   };
 }
 
@@ -2996,6 +3028,7 @@ function buildAiOpsRecoveryReceipt(input: {
   ].map((check) => decorateRecoveryCheck(check));
   const status = receiptStatus(checks);
   const primaryCheck = primaryRecoveryCheck(checks, status);
+  const nextAction = recoveryReceiptNextAction(status, primaryCheck);
   return {
     briefing_id: input.briefing.id,
     project_id: input.project.id,
@@ -3003,14 +3036,17 @@ function buildAiOpsRecoveryReceipt(input: {
     status,
     summary: recoveryReceiptSummary(status, primaryCheck),
     report_to_user: recoveryReceiptReportToUser(status, primaryCheck),
+    next_action: nextAction,
     can_resolve: status === 'verified',
     baseline_observed_at: input.briefing.created_at,
     live_observed_at: input.liveEvidenceMetadata.observed_at,
     primary_check: primaryCheck,
+    passed_checks: checkNamesByStatus(checks, 'pass'),
     failed_checks: checkNamesByStatus(checks, 'fail'),
     unknown_checks: checkNamesByStatus(checks, 'unknown'),
+    check_summary: checks.map((check) => readableRecoveryCheck(check)),
     checks,
-    _agent_guidance: receiptGuidance(status),
+    _agent_guidance: receiptGuidance(status, nextAction),
   };
 }
 

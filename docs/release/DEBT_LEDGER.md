@@ -11,17 +11,21 @@ a release should be recorded here so follow-up work is explicit.
   queue. Project/service-targeted calls remain supported, and scoped tokens
   should continue to pass an explicit target. `diagnose_service(briefing_id)`
   also returns additive receipt fields: `summary`, `report_to_user`,
-  `can_resolve`, `primary_check`, `failed_checks`, and `unknown_checks`.
+  `next_action`, `can_resolve`, `primary_check`, `passed_checks`,
+  `failed_checks`, `unknown_checks`, and `check_summary`.
 - **Why accepted:** v0.2 positions MCP as the primary agent path. A coding agent
   must be able to ask OpenLander "what open failure tickets need attention?"
   without opening the web UI, and it must be able to report a recovery receipt
   without interpreting raw check arrays.
-- **Vocab review:** `summary`, `report_to_user`, `can_resolve`,
-  `primary_check`, `failed_checks`, and `unknown_checks` are additive fields
-  under the existing `recovery_receipt` read contract. No new resource,
-  mutation, table, or MCP action is introduced. The instance-wide list is
-  intentionally a compact triage projection; full summaries, LLM telemetry,
-  dedupe fields, and evidence remain in `get_ai_ops_briefing`.
+- **Vocab review:** `summary`, `report_to_user`, `next_action`,
+  `can_resolve`, `primary_check`, `passed_checks`, `failed_checks`,
+  `unknown_checks`, and `check_summary` are additive fields under the existing
+  `recovery_receipt` read contract. No new resource, mutation, table, or MCP
+  action is introduced. The instance-wide list is intentionally a compact triage
+  projection; full summaries, LLM telemetry, dedupe fields, and evidence remain
+  in `get_ai_ops_briefing`. `next_action` is the canonical receipt action;
+  `_agent_guidance.next_steps` repeats it for compatibility with the broader MCP
+  envelope.
 - **Endpoint collision check:** no MCP action, composite slot, REST route, or
   table is added. The change extends the existing
   `openlander_monitor.list_ai_ops_briefings` and
