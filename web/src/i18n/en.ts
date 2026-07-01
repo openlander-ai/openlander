@@ -1465,13 +1465,6 @@ export const translations = {
       loadFailed: 'Failed to load GitHub status.',
       retry: 'Retry',
     },
-    others: {
-      title: 'Other providers',
-      v02Badge: 'v0.2',
-      gitlab: 'GitLab',
-      bitbucket: 'Bitbucket',
-      comingInV02: 'Coming in v0.2',
-    },
   },
   // Canonical OpenLander vocabulary. Kept in English across locales by
   // project policy (see CONTRIBUTING / agent memory); descriptive copy

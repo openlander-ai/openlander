@@ -4,9 +4,7 @@
  * `GET /api/git-providers/github` declared in
  * `src/web/api/git-providers-routes.ts`.
  *
- * v0.1: GitHub is the only provider with a live status endpoint. GitLab
- * and Bitbucket are surfaced as compressed v0.2 placeholder rows directly
- * in the page; they have no client function.
+ * v0.1: GitHub is the only source provider surfaced in the app.
  */
 import { apiGet } from './client';
 

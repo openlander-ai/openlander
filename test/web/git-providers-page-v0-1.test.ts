@@ -103,13 +103,14 @@ describe('Git Providers page v0.1', () => {
     expect(pageSource).toContain("t('gitProviders.github.empty.cta')");
   });
 
-  it('renders compressed GitLab / Bitbucket rows marked v0.2', () => {
-    expect(pageSource).toContain("data-testid=\"git-providers-other-list\"");
-    expect(pageSource).toContain("data-testid={`git-providers-other-${row.key}`}");
-    expect(pageSource).toContain("t('gitProviders.others.gitlab')");
-    expect(pageSource).toContain("t('gitProviders.others.bitbucket')");
-    expect(pageSource).toContain("t('gitProviders.others.v02Badge')");
-    expect(pageSource).toContain("t('gitProviders.others.comingInV02')");
+  it('does not surface deferred non-GitHub provider placeholders', () => {
+    expect(pageSource).not.toContain('OtherProvidersCard');
+    expect(pageSource).not.toContain('git-providers-other-list');
+    expect(pageSource).not.toContain('gitProviders.others');
+    expect(enSource).not.toContain('gitProviders.others');
+    expect(koSource).not.toContain('gitProviders.others');
+    expect(enSource).not.toContain('Coming in v0.2');
+    expect(koSource).not.toContain('Coming in v0.2');
   });
 
   it('keeps tokenValid ternary state separate from connected (no fake green pip)', () => {
@@ -191,8 +192,6 @@ describe('Git Providers page v0.1', () => {
       expect(dict).toMatch(/stats:\s*\{/);
       expect(dict).toMatch(/pendingFirstSync:/);
       expect(dict).toMatch(/empty:\s*\{/);
-      expect(dict).toMatch(/others:\s*\{/);
-      expect(dict).toMatch(/v02Badge:/);
     }
   });
 });

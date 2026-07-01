@@ -1697,15 +1697,6 @@ export const translations = {
       // Chrome — retry button.
       retry: 'Retry',
     },
-    others: {
-      // Chrome — section title + provider names + version badge.
-      title: 'Other providers',
-      v02Badge: 'v0.2',
-      gitlab: 'GitLab',
-      bitbucket: 'Bitbucket',
-      // Chrome — badge label.
-      comingInV02: 'Coming in v0.2',
-    },
   },
   // Canonical OpenLander 용어. 프로젝트 정책상 모든 로케일에서 영어 표기를
   // 유지합니다 (CONTRIBUTING / agent memory 참고). 주변 서술 카피는 한국어로

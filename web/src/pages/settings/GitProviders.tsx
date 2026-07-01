@@ -11,7 +11,6 @@
  *      - stat block: Repos linked / Last sync / Connected on / OAuth scope chips
  *   2. Empty-state card (only when no token configured)
  *      - single CTA "Connect GitHub" pointing to the legacy connection flow
- *   3. Other providers — compressed rows for GitLab / Bitbucket marked v0.2
  *
  * v0.1 honest gaps:
  *   - `connectedAt` / `lastSyncAt` come from lightweight backend config
@@ -468,46 +467,6 @@ function GitHubEmptyCard() {
   );
 }
 
-function OtherProvidersCard() {
-  const { t } = useLanguage();
-  const rows: Array<{ key: string; label: string }> = [
-    { key: 'gitlab', label: t('gitProviders.others.gitlab') },
-    { key: 'bitbucket', label: t('gitProviders.others.bitbucket') },
-  ];
-  return (
-    <OuterCard
-      title={
-        <span className="flex items-center gap-2 text-[color:var(--ol-fg-muted)]">
-          {t('gitProviders.others.title')}
-        </span>
-      }
-    >
-      <ul
-        data-testid="git-providers-other-list"
-        className="divide-y divide-[color:var(--ol-border-subtle)]"
-      >
-        {rows.map((row) => (
-          <li
-            key={row.key}
-            data-testid={`git-providers-other-${row.key}`}
-            className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
-          >
-            <span className="text-[13px] text-[color:var(--ol-fg-muted)]">{row.label}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-                {t('gitProviders.others.comingInV02')}
-              </span>
-              <span className="rounded-full border border-[color:var(--ol-border-subtle)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)]">
-                {t('gitProviders.others.v02Badge')}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </OuterCard>
-  );
-}
-
 function LoadingCard({ t }: { t: Translate }) {
   return (
     <OuterCard
@@ -584,7 +543,6 @@ export function GitProvidersSettings() {
         </p>
       </header>
       {mainCard}
-      <OtherProvidersCard />
     </div>
   );
 }
