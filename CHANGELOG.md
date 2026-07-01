@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1-rc.1] - 2026-07-02
+
+### Changed
+
+- Improve `recovery_receipt` readability for agent-primary verification by
+  adding `next_action`, `passed_checks`, and compact `check_summary` fields.
+- Make `next_action` the canonical receipt action while keeping
+  `_agent_guidance.next_steps` derived from it for MCP envelope compatibility.
+
 ## [0.2.0] - 2026-06-30
 
 ### Changed
