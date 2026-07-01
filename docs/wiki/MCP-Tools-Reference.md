@@ -1059,8 +1059,11 @@ briefing snapshot and current live diagnostics. The receipt includes
 `status: "verified" | "needs_attention" | "unknown" | "unavailable"` plus checks
 for `route_health`, `container_status`, `restart_stability`, and
 `latest_deploy`. It also includes `summary`, `report_to_user`, `can_resolve`,
-`primary_check`, `failed_checks`, and `unknown_checks` so agents can report the
-verification result without interpreting raw check arrays. `latest_deploy` is
+`next_action`, `primary_check`, `passed_checks`, `failed_checks`,
+`unknown_checks`, and `check_summary` so agents can report the verification
+result without interpreting raw before/after payloads. `next_action` is the
+canonical agent action; `_agent_guidance.next_steps` repeats it for compatibility
+with the broader MCP guidance envelope. `latest_deploy` is
 deploy-status evidence unless the response explicitly carries serving-version
 evidence; route 200 alone is not proof that the expected version is serving.
 Agents should read this receipt before telling the user that an incident is

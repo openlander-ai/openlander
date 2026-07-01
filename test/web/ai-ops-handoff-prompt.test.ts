@@ -62,10 +62,10 @@ describe('AI Ops agent handoff prompt', () => {
     expect(prompt).toContain('"service_id": "service-1"');
     expect(prompt).toContain('"briefing_id": "briefing-1"');
     expect(prompt).toContain(
-      'Run the verification MCP call and read recovery_receipt.status, summary, and report_to_user.',
+      'Run the verification MCP call and read recovery_receipt.status, summary, report_to_user, and next_action.',
     );
     expect(prompt).toContain(
-      'If status is needs_attention, report recovery_receipt.primary_check and failed_checks.',
+      'If status is needs_attention, report recovery_receipt.primary_check, failed_checks, and check_summary.',
     );
   });
 

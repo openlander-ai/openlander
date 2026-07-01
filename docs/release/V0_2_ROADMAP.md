@@ -304,8 +304,9 @@ history는 v0.2 이후 별도 개선한다.
 코드 계약으로 닫혔고, 남은 일은 release QA와 demo 고정이다.
 
 1. **Recovery Receipt readability** `[shipped, needs live QA]`
-   - `diagnose_service(briefing_id)` 응답에서 verdict, failed checks, latest
-     deploy / serving-version mismatch가 한눈에 보이게 한다.
+   - `diagnose_service(briefing_id)` 응답에서 status, `next_action`,
+     `check_summary`, failed checks, latest deploy / serving-version mismatch가
+     한눈에 보이게 한다.
    - Route 200만으로 verified라고 오해하지 않게 `route_health`,
      `container_status`, `restart_stability`, `latest_deploy` 체크를 분리한다.
    - `verified`는 signal이고 `resolved`는 human action이라는 문구를 Web/MCP
