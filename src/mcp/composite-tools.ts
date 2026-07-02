@@ -90,6 +90,7 @@ export const PROJECT_ACTIONS = [
  * Renamed from `SERVICE_ACTIONS` — see plan §6.7. The 21-action list is
  * frozen verbatim from the rc.1 SERVICE_ACTIONS baseline.
  * - Database/Cache/Storage resource provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
+ * - Read-only Project-aware data inspection
  * - Resource lifecycle (start, stop, remove)
  * - Resource credentials & connection strings
  * - Service backups & restoration
@@ -98,11 +99,14 @@ export const PROJECT_ACTIONS = [
  * - Container execution
  * - Persistent volumes
  * - Disk usage monitoring
- * Total: 21 tools
+ * Total: 24 tools
  */
 export const MANAGED_SERVICE_ACTIONS = [
   'create_service',
   'list_services',
+  'list_data_sources',
+  'describe_data_source',
+  'read_data_source',
   'get_service_status',
   'get_service_credentials',
   'get_service_logs',
@@ -212,7 +216,7 @@ export const PLATFORM_ACTIONS = [
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
  * - PROJECT_ACTIONS: 17 tools
- * - MANAGED_SERVICE_ACTIONS: 21 tools
+ * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 13 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)

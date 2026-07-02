@@ -599,6 +599,46 @@ export const listServicesSchema = z
   })
   .strict();
 
+export const listDataSourcesSchema = z
+  .object({
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
+    environment_key: z
+      .enum(ENVIRONMENT_KEYS)
+      .optional()
+      .describe('Reserved for environment-scoped data sources. v1 lists Project-level sources.'),
+  })
+  .refine((value) => Boolean(value.project_id || value.project_name), {
+    message: 'project_id or project_name is required',
+  });
+
+export const describeDataSourceSchema = z.object({
+  service_id: z.string().min(1).describe('Managed Postgres/Redis service_id'),
+  database: z.string().min(1).optional().describe('Postgres database to inspect'),
+  schema: z.string().min(1).optional().describe('Postgres schema to inspect (default: public)'),
+});
+
+export const readDataSourceSchema = z.object({
+  service_id: z.string().min(1).describe('Managed Postgres/Redis service_id'),
+  operation: z
+    .enum([
+      'sql.query',
+      'redis.get',
+      'redis.mget',
+      'redis.type',
+      'redis.ttl',
+      'redis.hgetall',
+      'redis.scan',
+    ])
+    .describe('Read-only data operation. Write operations are intentionally not expressible.'),
+  query: z.string().optional().describe('Postgres SELECT or read-only WITH query'),
+  database: z.string().min(1).optional().describe('Postgres database'),
+  key: z.string().min(1).optional().describe('Redis key for get/type/ttl/hgetall'),
+  keys: z.array(z.string().min(1)).optional().describe('Redis keys for mget'),
+  pattern: z.string().optional().describe('Redis SCAN pattern'),
+  limit: z.number().int().positive().max(100).optional().describe('Row/item cap, max 100'),
+});
+
 export const platformAdoptOrphanServiceSchema = z.object({
   container_id: z.string().optional().describe('Docker container id to adopt'),
   container_name: z.string().optional().describe('Docker container name to adopt'),

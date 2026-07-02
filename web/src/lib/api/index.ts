@@ -9,3 +9,4 @@ export * from './notifications.js';
 export * from './web-server.js';
 export * from './ai-ops.js';
 export * from './ai-providers.js';
+export * from './data-access.js';

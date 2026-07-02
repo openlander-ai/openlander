@@ -978,6 +978,7 @@ export const translations = {
       // Chrome — sub-nav label.
       general: 'General',
       ai: 'AI',
+      data: 'Data',
     },
     general: {
       // Chrome — section title + form labels + buttons.
@@ -1005,6 +1006,34 @@ export const translations = {
       generateToken: 'Generate a token →',
       // Content — description.
       description: '비공개 레포지토리를 배포하려면 GitHub 계정을 연결하세요.',
+    },
+    data: {
+      // Chrome — section title, status labels, and buttons.
+      title: 'Data Access',
+      enable: 'Enable read access',
+      disable: 'Disable access',
+      saving: 'Saving…',
+      status: {
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        external: 'Setup required',
+      },
+      // Content — descriptive copy and errors.
+      description:
+        'Project 소유 Postgres와 Redis 전체에 대해 읽기 전용 MCP 접근을 켭니다. OpenLander는 agent에게 원본 credential을 노출하지 않습니다.',
+      boundaryTitle: 'Agent 조회는 scope와 audit 안에서만 실행됩니다',
+      boundaryDescription:
+        'Postgres는 public schema 전체에 SELECT 권한이 있는 전용 read-only DB role을 사용합니다. Redis는 명시적인 read operation만 허용합니다. Query result는 cap이 걸리고 저장되지 않습니다.',
+      loading: '데이터 소스를 불러오는 중…',
+      loadFailed: '데이터 소스를 불러오지 못했습니다.',
+      saveFailed: 'Data access를 변경하지 못했습니다.',
+      emptyTitle: '관리형 데이터 소스가 없습니다',
+      emptyDescription:
+        '이 Project에 관리형 Postgres 또는 Redis 리소스를 만들거나 연결하면 agent read inspection을 켤 수 있습니다.',
+      enabledDescription: 'Agent가 제한된 MCP read action으로 이 source 전체를 조회할 수 있습니다.',
+      disabledDescription: 'Agent가 이 source를 조회하려면 먼저 접근을 켜야 합니다.',
+      externalDescription:
+        '외부 데이터 소스는 별도 read-only connector 설정 후 agent inspection을 지원합니다.',
     },
   },
   services: {

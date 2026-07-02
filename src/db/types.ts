@@ -480,6 +480,23 @@ export interface AiOpsPendingInputRow {
   resolved_at: string | null;
 }
 
+export type DataSourceAccessMode = 'disabled' | 'read';
+
+export interface DataSourceAccessRow {
+  id: string;
+  project_id: string;
+  service_id: string;
+  environment_id: string | null;
+  mode: DataSourceAccessMode;
+  reader_username: string | null;
+  reader_password_encrypted: string | null;
+  reader_password_iv: string | null;
+  enabled_at: string | null;
+  created_at: string;
+  updated_at: string;
+  server_id: string;
+}
+
 export interface ActionRunRow {
   id: string;
   project_id: string;

@@ -16,9 +16,12 @@ describe('Project Settings split contract', () => {
   const serviceDetailSource = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
 
   it('keeps Project Settings group-owned only', () => {
-    expect(projectSettingsSource).toContain("type SettingsSection = 'general' | 'ai' | 'danger'");
+    expect(projectSettingsSource).toContain(
+      "type SettingsSection = 'general' | 'ai' | 'data' | 'danger'",
+    );
     expect(projectSettingsSource).toContain("id: 'general'");
     expect(projectSettingsSource).toContain("id: 'ai'");
+    expect(projectSettingsSource).toContain("id: 'data'");
     expect(projectSettingsSource).toContain("id: 'danger'");
 
     expect(projectSettingsSource).not.toMatch(

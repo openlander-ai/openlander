@@ -261,6 +261,7 @@ describe('Postgres migration sanity gate', () => {
       '0006_ai_ops_summary_metadata',
       '0007_pat_service_scope',
       '0008_ai_ops_pending_inputs',
+      '0009_data_source_access',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -272,6 +273,7 @@ describe('Postgres migration sanity gate', () => {
       '0006_ai_ops_summary_metadata.sql',
       '0007_pat_service_scope.sql',
       '0008_ai_ops_pending_inputs.sql',
+      '0009_data_source_access.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -282,6 +284,9 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "ai_ops_pending_inputs"');
     expect(sql).toContain('CONSTRAINT "ai_ops_pending_inputs_status_check"');
     expect(sql).toContain('CREATE UNIQUE INDEX "ai_ops_pending_inputs_active_unique"');
+    expect(sql).toContain('CREATE TABLE "data_source_access"');
+    expect(sql).toContain('CONSTRAINT "data_source_access_mode_check"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "data_source_access_project_service_idx"');
     expect(sql).toContain('CREATE TABLE "domain_mappings"');
     expect(sql).toContain('"target_port" integer');
     expect(sql).toContain('CONSTRAINT "domain_mappings_path_prefix_check"');
@@ -396,7 +401,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 10 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 11 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

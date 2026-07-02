@@ -2,6 +2,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { ManagedServiceLinker } from '../../pipeline/managed-service-linker.js';
+import {
+  describeDataSource,
+  listProjectDataSources,
+  readDataSource,
+} from '../../data-inspector/index.js';
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
 import {
@@ -23,14 +28,17 @@ import {
   createDatabaseSchema,
   createServiceSchema,
   createServiceUserSchema,
+  describeDataSourceSchema,
   deleteBucketSchema,
   execServiceContainerSchema,
   getServiceLogsSchema,
+  listDataSourcesSchema,
   listBucketsSchema,
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
   managedServiceTargetSchema,
+  readDataSourceSchema,
   removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
@@ -840,6 +848,111 @@ export const serviceToolDefs: ToolDef[] = [
         bucket: bucketName,
         warning: 'Bucket and all its contents have been permanently deleted.',
       };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'list_data_sources',
+    riskLevel: 'low',
+    description:
+      'List Project-connected data sources that an agent can inspect through OpenLander. Returns managed Postgres/Redis sources and external env URLs as setup-required placeholders. Does not return credentials or connection strings.',
+    mcpDescription:
+      'List Project data sources for read-only agent inspection. Credentials are never returned.',
+    inputSchema: listDataSourcesSchema,
+    execute: async (args, { appCtx, identity }) => {
+      if (identity?.mcpScopeKind === 'service') {
+        return {
+          status: 'blocked',
+          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          message: 'Data source discovery requires a Project-scoped or instance token.',
+          _agent_guidance: {
+            message:
+              'This service-scoped token cannot inspect Project data sources. Ask the user for a Project-scoped read token.',
+          },
+        };
+      }
+      const projectTarget = await resolveOptionalProjectTarget(appCtx, args);
+      if (!projectTarget.ok) {
+        return projectTarget.response;
+      }
+      if (!projectTarget.project) {
+        return {
+          status: 'failed',
+          error: 'PROJECT_TARGET_REQUIRED',
+          code: 'PROJECT_TARGET_REQUIRED',
+          message: 'project_id or project_name is required.',
+        };
+      }
+      const sources = await listProjectDataSources(appCtx, projectTarget.project.id);
+      return {
+        status: 'ok',
+        project_id: projectTarget.project.id,
+        project_name: projectTarget.project.name,
+        count: sources.length,
+        data_sources: sources,
+        _agent_guidance: {
+          message:
+            'Use describe_data_source for schema/keyspace inspection and read_data_source for bounded read-only queries. Do not ask for raw credentials.',
+          next_steps: [
+            'If queryable=false, ask the user to enable Agent read access in Project Settings → Data Access.',
+            'Use service_id as data_source_id for describe_data_source and read_data_source.',
+          ],
+        },
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'describe_data_source',
+    riskLevel: 'low',
+    description:
+      'Describe a managed Postgres/Redis data source after Project Data Access is enabled. Returns schema/table/column metadata or Redis keyspace metadata, not credentials or row values.',
+    mcpDescription:
+      'Describe a read-enabled managed data source. Requires service_id. Credentials are never returned.',
+    inputSchema: describeDataSourceSchema,
+    execute: async (args, { appCtx, identity }) => {
+      if (identity?.mcpScopeKind === 'service') {
+        return {
+          status: 'blocked',
+          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          message: 'Data source inspection requires a Project-scoped or instance token.',
+          _agent_guidance: {
+            message:
+              'This service-scoped token cannot inspect data sources. Ask the user for a Project-scoped read token.',
+          },
+        };
+      }
+      return await describeDataSource(appCtx, args['service_id'] as string, {
+        database: args['database'] as string | undefined,
+        schema: args['schema'] as string | undefined,
+      });
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'read_data_source',
+    riskLevel: 'low',
+    description:
+      'Run a bounded read-only query against a managed Postgres/Redis data source after Project Data Access is enabled. Postgres accepts SELECT/read-only WITH only; Redis accepts explicit read operations only. Results are capped and audited.',
+    mcpDescription:
+      'Read a managed data source through bounded read-only operations. Credentials are never returned.',
+    inputSchema: readDataSourceSchema,
+    execute: async (args, { appCtx, identity }) => {
+      if (identity?.mcpScopeKind === 'service') {
+        return {
+          status: 'blocked',
+          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          message: 'Data source reads require a Project-scoped or instance token.',
+          _agent_guidance: {
+            message:
+              'This service-scoped token cannot query data sources. Ask the user for a Project-scoped read token.',
+          },
+        };
+      }
+      return await readDataSource(appCtx, args['service_id'] as string, args);
     },
     targets: ['mcp'],
   },

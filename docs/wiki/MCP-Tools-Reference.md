@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **80 unique default operations** surfaced through those composites
+- **83 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -26,6 +26,7 @@ Agent routing rule of thumb:
 | "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                                        |
 | "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
 | "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
+| "Inspect this project's database/cache safely"   | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
 | "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
 | "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
 | "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
@@ -113,7 +114,7 @@ Composite catalog:
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                         |
 | `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
 | `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                      |
-| `openlander_managed_service` | 21           | Database/Cache/Storage resources, credentials, backups, volumes, disk usage           |
+| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage   |
 | `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes        |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
@@ -127,6 +128,7 @@ Composite catalog:
 | [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                       |
 | [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources     |
+| [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection              |
 | [Domains](#domains)                                      | 2     | Register Host/path domain routes                      |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                         |
 | [Monitoring](#monitoring--logs)                          | 12    | Logs, stats, alerts, AI Ops briefings, host diagnosis |
@@ -787,6 +789,67 @@ typed-confirm deletion with the managed-volume opt-in checkbox.
 | `service_name` | string | No       | Database/Cache/Storage resource name |
 
 Provide either `service_id` or `service_name`.
+
+### Project-Aware Data Inspector
+
+`list_data_sources`, `describe_data_source`, and `read_data_source` let an
+agent inspect Project-connected managed Postgres/Redis resources without
+receiving database credentials. This is not a general SQL editor, not a write
+path, and not an external RDS/Atlas/Upstash connector. The web UI owns the
+human enable/disable switch under Project Settings → Data Access; MCP reads
+return `DATA_ACCESS_NOT_ENABLED` until that access is enabled.
+
+Data-source identifiers are managed `service_id` values. The actions require an
+explicit Project or service target so normal scoped-token checks run before
+execution. Service-scoped tokens cannot read data sources in v1; use a
+Project-scoped or instance token. Query results are capped, timed out, and not
+stored. OpenLander writes an activity-log audit row with the operation, query
+hash, literal-masked preview, duration, row/item count, and truncation flag, but
+not result values.
+
+#### `list_data_sources`
+
+| Parameter         | Type   | Required | Description                             |
+| ----------------- | ------ | -------- | --------------------------------------- |
+| `project_id`      | string | No       | Project id                              |
+| `project_name`    | string | No       | Project name                            |
+| `environment_key` | string | No       | Reserved for future environment support |
+
+Returns managed Postgres/Redis sources attached to the Project and external
+database/cache URL env vars as `external_requires_setup` placeholders. It never
+returns passwords, connection strings, or raw credential fields.
+
+#### `describe_data_source`
+
+| Parameter    | Type   | Required | Description                          |
+| ------------ | ------ | -------- | ------------------------------------ |
+| `service_id` | string | Yes      | Managed Postgres/Redis service id    |
+| `database`   | string | No       | Postgres database name               |
+| `schema`     | string | No       | Postgres schema name, default public |
+
+For Postgres, returns schema/table/column metadata. For Redis, returns keyspace
+metadata, database size, and sample key names only.
+
+#### `read_data_source`
+
+| Parameter    | Type   | Required | Description                        |
+| ------------ | ------ | -------- | ---------------------------------- |
+| `service_id` | string | Yes      | Managed Postgres/Redis service id  |
+| `operation`  | string | Yes      | `sql.query` or a Redis read op     |
+| `query`      | string | SQL only | Single SELECT/read-only WITH query |
+| `database`   | string | No       | Postgres database name             |
+| `limit`      | number | No       | Default 50, max 100                |
+| `key`        | string | Redis    | Key for get/type/ttl/hgetall       |
+| `keys`       | array  | Redis    | Keys for mget                      |
+| `pattern`    | string | Redis    | SCAN pattern, default `*`          |
+
+Postgres uses a dedicated read-only role created by OpenLander when Agent read
+access is enabled. SQL text checks are a UX guard only; the read-only database
+role is the real boundary. `INSERT`, `UPDATE`, `DELETE`, `COPY`, DDL, grants,
+stored-procedure calls, psql backslash commands, and multiple statements are
+blocked before execution. Redis does not accept arbitrary command strings; only
+`redis.get`, `redis.mget`, `redis.type`, `redis.ttl`, `redis.hgetall`, and
+`redis.scan` are expressible.
 
 ### `get_service_logs`
 

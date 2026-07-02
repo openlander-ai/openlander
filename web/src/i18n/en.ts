@@ -863,6 +863,7 @@ export const translations = {
     nav: {
       general: 'General',
       ai: 'AI',
+      data: 'Data',
     },
     general: {
       title: 'General',
@@ -886,6 +887,32 @@ export const translations = {
       connectWithGithub: 'Connect with GitHub',
       enterToken: 'Enter a Personal Access Token:',
       generateToken: 'Generate a token →',
+    },
+    data: {
+      title: 'Data Access',
+      description:
+        'Enable read-only MCP access to entire Project-owned Postgres and Redis resources. OpenLander never exposes raw credentials to agents.',
+      boundaryTitle: 'Agent reads stay scoped and audited',
+      boundaryDescription:
+        'Postgres uses a dedicated read-only database role with SELECT across the public schema. Redis is limited to explicit read operations. Query results are capped and are not stored.',
+      loading: 'Loading data sources…',
+      loadFailed: 'Failed to load data sources.',
+      saveFailed: 'Failed to update data access.',
+      emptyTitle: 'No managed data sources',
+      emptyDescription:
+        'Create or connect a managed Postgres or Redis resource in this Project to enable read-only agent inspection.',
+      enabledDescription: 'Agents can inspect this entire source through bounded MCP read actions.',
+      disabledDescription: 'Enable access before agents can inspect this source.',
+      externalDescription:
+        'External data sources require a separate read-only connector before agents can inspect them.',
+      enable: 'Enable read access',
+      disable: 'Disable access',
+      saving: 'Saving…',
+      status: {
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        external: 'Setup required',
+      },
     },
   },
   services: {

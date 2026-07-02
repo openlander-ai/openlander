@@ -5,6 +5,37 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **Project-aware Data Inspector:** `openlander_managed_service` gains
+  read-only `list_data_sources`, `describe_data_source`, and
+  `read_data_source` actions for Project-connected managed Postgres/Redis
+  resources. The web API adds Project Settings → Data Access enable/disable
+  routes, and the database gains `data_source_access` to store whether a
+  managed source is enabled for agent reads plus the encrypted Postgres reader
+  credential.
+- **Why accepted:** operators already keep database/cache connection details in
+  OpenLander-managed resources. Agents need bounded read access for debugging
+  without receiving raw credentials, installing per-environment database MCP
+  connectors, or gaining write capability.
+- **Vocab review:** "data source" means an OpenLander-managed Postgres or Redis
+  service connected to a Project. `data_source_id` is intentionally the managed
+  `service_id`, not a new public resource id. External RDS/Atlas/Upstash-style
+  URLs are discovery-only `external_requires_setup` placeholders in this slice.
+- **Endpoint collision check:** `rg "list_data_sources|describe_data_source|read_data_source|data_source_access"`
+  showed no existing MCP action, REST route, or table before this slice. The new
+  web routes live under the existing Project settings namespace:
+  `/api/projects/:id/data-sources` and
+  `/api/projects/:id/data-sources/:serviceId/access`.
+- **Safety contract:** Postgres uses a dedicated read-only database role
+  created by OpenLander with a server-side statement timeout; Redis uses an
+  operation enum rather than arbitrary command strings. Query results are
+  capped, timed out, and not persisted. Activity log audit rows store operation
+  metadata, query hash, literal-masked preview, counts, duration, and truncation
+  status, but not result values or credentials.
+- **Follow-up:** Mongo/MySQL, external cloud database connectors, read-write
+  mode, SQL editor UI, persisted/shareable query results, and automatic
+  ticket/briefing result attachment stay deferred until the read-only
+  inspector contract has been validated.
+
 - **Agent-primary failure ticket triage and readable recovery receipts:**
   `list_ai_ops_briefings` can now be called without `project_id` or
   `service_id` by an instance/default-token agent to read the recent ticket
