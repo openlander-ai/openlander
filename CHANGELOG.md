@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Clarify the Project Data Access enable flow with explicit default-off copy,
+  visible read-scope/credential/audit facts, and a confirmation dialog before
+  enabling agent read access.
+
 ## [0.2.1-rc.7] - 2026-07-04
 
 ### Changed
