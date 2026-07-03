@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1-rc.4] - 2026-07-03
+
+### Fixed
+
+- Pass the AI Ops briefing system prompt through the AI SDK `system` option
+  instead of a system-role message in `messages`, preserving the untrusted
+  evidence guard while avoiding provider SDK warning paths.
+
 ## [0.2.1-rc.3] - 2026-07-03
 
 ### Fixed
