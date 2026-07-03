@@ -220,7 +220,7 @@ gh workflow run release-gate.yml \
 docker pull ghcr.io/openlander-ai/openlander:0.1.0
 curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
   | sudo env OPENLANDER_VERSION=v0.1.0 bash
-curl -fsS http://localhost:10114/api/health
+curl -fsS http://localhost:10114/health
 ```
 
 For a release candidate, pin the installer to the exact prerelease tag:

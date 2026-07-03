@@ -5,6 +5,27 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.2.0
 
+- **AI Ops briefing health status:** `/health` now includes an additive
+  `aiOpsBriefing` object with `configured`, `status`, and `routeSource` so the
+  optional AI Ops briefing provider route can be inspected independently from
+  the dormant legacy `llmConfigured=false` / `llmStatus=offline` fields.
+- **Why accepted:** v0.2 keeps built-in agent/LLM runtime surfaces dormant, but
+  AI Ops briefing summaries can use a feature-specific `routes.aiOpsBriefing`
+  provider. A configured feature route should not look unconfigured merely
+  because the legacy global LLM status stays offline.
+- **Vocab review:** `aiOpsBriefing.configured` means the configured
+  `aiOpsBriefing` route (or default fallback route) points at a provider entry
+  with a stored credential. `status` is one of `configured`, `not_configured`,
+  `provider_missing`, or `credential_missing`. `routeSource` is `feature`,
+  `default`, or `none`. These fields are health/status metadata, not an agent
+  loop, model test, or provider availability probe.
+- **Endpoint collision check:** no route, table, or MCP action is added. The
+  change extends the existing public `/health` response shape and preserves the
+  existing legacy LLM fields for compatibility.
+- **Follow-up:** once AWS access is restored, deploy the rc containing this
+  field and verify `/health.aiOpsBriefing.configured=true` on a box with a saved
+  `routes.aiOpsBriefing` provider.
+
 - **Project-aware Data Inspector:** `openlander_managed_service` gains
   read-only `list_data_sources`, `describe_data_source`, and
   `read_data_source` actions for Project-connected managed Postgres/Redis
