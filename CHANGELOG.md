@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1-rc.2] - 2026-07-03
+
+### Added
+
+- Add Project-aware read-only Data Inspector MCP actions for managed Postgres
+  and Redis: `list_data_sources`, `describe_data_source`, and
+  `read_data_source`.
+- Add Project Settings → Data Access opt-in UI and `data_source_access`
+  persistence for agent read access.
+- Add bounded query execution with Postgres read-only reader roles, Redis
+  read-operation allowlists, result caps, timeouts, and activity audit metadata.
+
+### Changed
+
+- Increase the default MCP operation count to 83 and document the Data
+  Inspector contract in the MCP reference.
+
 ## [0.2.1-rc.1] - 2026-07-02
 
 ### Changed
