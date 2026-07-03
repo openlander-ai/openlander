@@ -210,6 +210,92 @@ describe('Project-aware data inspector', () => {
     expect(exec).not.toHaveBeenCalled();
   });
 
+  it('blocks Postgres session-mutating functions before container exec', async () => {
+    const pg = service({ id: 'svc-pg' });
+    const exec = vi.fn();
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: null,
+          reader_password_iv: null,
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-pg', {
+      operation: 'sql.query',
+      query: "select set_config('x', 'y', true)",
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        code: 'DATA_QUERY_BLOCKED',
+        status: 'blocked',
+      }),
+    );
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('returns a bounded error when Postgres JSON output is byte-truncated', async () => {
+    vi.stubEnv('OPENLANDER_MASTER_KEY', '0'.repeat(64));
+    _resetCachedKey();
+    const pg = service({ id: 'svc-pg' });
+    const encrypted = encrypt('reader-secret');
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{\"payload\":\"unterminated',
+      stderr: '',
+      truncated: true,
+    });
+    const insertActivityLog = vi.fn().mockResolvedValue({});
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: encrypted.encrypted,
+          reader_password_iv: encrypted.iv,
+        }),
+        insertActivityLog,
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-pg', {
+      operation: 'sql.query',
+      query: "select repeat('x', 2000) as payload from generate_series(1,100)",
+      limit: 100,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        code: 'DATA_RESULT_TOO_LARGE',
+        status: 'blocked',
+        truncated: true,
+        details: expect.objectContaining({
+          max_result_bytes: 128 * 1024,
+          limit: 100,
+        }),
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain('unterminated');
+    expect(insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activity_type: 'data_access',
+        metadata: expect.stringContaining('"truncated":true'),
+      }),
+    );
+  });
+
   it('enables Postgres read access by creating a reader role and storing encrypted credentials', async () => {
     vi.stubEnv('OPENLANDER_MASTER_KEY', '0'.repeat(64));
     _resetCachedKey();

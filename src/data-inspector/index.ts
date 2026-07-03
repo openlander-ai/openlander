@@ -8,6 +8,7 @@ import { decrypt, encrypt } from '../env/crypto.js';
 const SUPPORTED_KINDS = new Set(['postgres', 'redis']);
 const POSTGRES_FORBIDDEN_SQL =
   /\b(?:insert|update|delete|copy|create|alter|drop|truncate|grant|revoke|do|call|merge|refresh|vacuum|analyze|listen|notify|set|reset)\b/i;
+const POSTGRES_FORBIDDEN_FUNCTIONS = /\bset_config\s*\(/i;
 const POSTGRES_MAX_ROWS = 100;
 const POSTGRES_DEFAULT_ROWS = 50;
 const MAX_RESULT_BYTES = 128 * 1024;
@@ -79,6 +80,10 @@ export function dataAccessBlockedResponse(
   code: string,
   message: string,
   details: Record<string, unknown> = {},
+  nextSteps: string[] = [
+    'Do not ask for or expose raw database credentials.',
+    'Ask the user to enable Agent read access in Project Settings → Data Access if needed.',
+  ],
 ): Record<string, unknown> {
   return {
     status: 'blocked',
@@ -88,10 +93,7 @@ export function dataAccessBlockedResponse(
     details,
     _agent_guidance: {
       message,
-      next_steps: [
-        'Do not ask for or expose raw database credentials.',
-        'Ask the user to enable Agent read access in Project Settings → Data Access if needed.',
-      ],
+      next_steps: nextSteps,
     },
   };
 }
@@ -469,6 +471,9 @@ function normalizePostgresQuery(
   if (POSTGRES_FORBIDDEN_SQL.test(withoutTerminalSemicolon)) {
     return { ok: false, message: 'Query contains a blocked SQL keyword.' };
   }
+  if (POSTGRES_FORBIDDEN_FUNCTIONS.test(withoutTerminalSemicolon)) {
+    return { ok: false, message: 'Query contains a blocked SQL function.' };
+  }
   return { ok: true, sql: withoutTerminalSemicolon };
 }
 
@@ -663,6 +668,28 @@ export async function readDataSource(
         exec.stderr.trim() || exec.stdout.trim(),
       );
     }
+    if (exec.truncated === true) {
+      const response = {
+        ...dataAccessBlockedResponse(
+          'DATA_RESULT_TOO_LARGE',
+          'Query result exceeded the response byte cap.',
+          {
+            service_id: service.id,
+            max_result_bytes: MAX_RESULT_BYTES,
+            limit,
+          },
+          [
+            'Retry with a lower limit.',
+            'Select fewer or smaller columns.',
+            'Do not ask for or expose raw database credentials.',
+          ],
+        ),
+        truncated: true,
+        duration_ms: Date.now() - startedAt,
+      };
+      await auditDataAccess(ctx, service, operation, query, response);
+      return response;
+    }
     const rows = JSON.parse(exec.stdout.trim() || '[]') as Array<Record<string, unknown>>;
     const visibleRows = rows.slice(0, limit);
     result = {
@@ -672,7 +699,7 @@ export async function readDataSource(
       rows: visibleRows,
       count: visibleRows.length,
       limit,
-      truncated: rows.length > limit || exec.truncated === true,
+      truncated: rows.length > limit,
       duration_ms: Date.now() - startedAt,
     };
     await auditDataAccess(ctx, service, operation, query, result);

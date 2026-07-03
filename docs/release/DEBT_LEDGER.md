@@ -30,7 +30,10 @@ a release should be recorded here so follow-up work is explicit.
   operation enum rather than arbitrary command strings. Query results are
   capped, timed out, and not persisted. Activity log audit rows store operation
   metadata, query hash, literal-masked preview, counts, duration, and truncation
-  status, but not result values or credentials.
+  status, but not result values or credentials. If the Postgres byte cap is hit
+  before JSON rows can be parsed, the MCP response must fail closed with
+  `DATA_RESULT_TOO_LARGE` rather than surfacing a generic tool error or malformed
+  partial data.
 - **Follow-up:** Mongo/MySQL, external cloud database connectors, read-write
   mode, SQL editor UI, persisted/shareable query results, and automatic
   ticket/briefing result attachment stay deferred until the read-only
