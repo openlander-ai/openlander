@@ -85,8 +85,14 @@ export interface HealthResponse {
   status: string;
   version: string;
   llmConfigured: boolean;
+  llmStatus?: string;
+  aiOpsBriefing?: {
+    configured: boolean;
+    status: 'configured' | 'not_configured' | 'provider_missing' | 'credential_missing';
+    routeSource: 'feature' | 'default' | 'none';
+  };
   timestamp: string;
-  uptime: number;
+  uptime: number | string;
   dockerContainers: number;
 }
 
