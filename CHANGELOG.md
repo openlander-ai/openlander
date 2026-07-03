@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Update runtime AI SDK, provider, Hono, Docker, and utility dependencies.
+- Update development toolchain dependencies, including Playwright, Vitest
+  coverage, Prettier, release-it, and typescript-eslint.
+- Update GitHub workflows to use `actions/checkout@v7`.
+- Document the `/health.aiOpsBriefing` release contract and fix the release
+  process health verification endpoint.
+
 ## [0.2.1-rc.5] - 2026-07-03
 
 ### Fixed
