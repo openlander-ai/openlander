@@ -10,7 +10,7 @@ export const translations = {
       briefing: 'Briefing',
       inherit: 'Inherit',
     },
-    resolvedMode: 'Resolved',
+    resolvedMode: 'Effective mode',
     budget: 'Budget',
     settingsBriefingsHint:
       'Incident briefing은 Project AI Ops 탭에서 봅니다. 이 화면은 opt-in과 budget 설정만 다룹니다.',
@@ -57,12 +57,17 @@ export const translations = {
       clearTitle: '모니터링 중인 Project에 열린 briefing이 없습니다',
       clearDescription:
         'AI Ops가 켜진 Project에서 crash, deploy 실패, route-health 증거가 생기면 여기에 모입니다.',
+      healthIssueNoBriefingTitle: 'Health issue without an AI Ops briefing',
+      healthIssueNoBriefingDescription:
+        'Project health issue {count}개가 보이지만 briefing은 생성되지 않았습니다. briefing은 AI Ops가 켜진 actionable runtime failure에만 생성됩니다.',
       attentionTitle: '미종료 briefing {count}개',
       attentionDescription: '먼저 Agent에서 열고, 수정 후 검증한 뒤 사람이 직접 종료하세요.',
       emptyEyebrow: '대기 중인 작업 없음',
       emptyTitle: '열린 AI Ops briefing이 없습니다',
       emptyDescription:
         'AI Ops가 켜진 Project는 crash, deploy 실패, route-health 증거를 감지합니다. 검토할 일이 생기기 전까지 이 inbox는 조용합니다.',
+      emptyDescriptionWithHealthIssues:
+        'AI Ops 밖에서 Project health issue {count}개가 보입니다. 리소스를 직접 확인하거나, 이 상태를 agent-readable ticket으로 만들려면 AI Ops 설정을 확인하세요.',
     },
     projectInbox: {
       title: 'AI Ops briefings',
@@ -84,6 +89,8 @@ export const translations = {
       emptyTitle: '조건에 맞는 briefing이 없습니다',
       emptyDescription:
         '이 Project에 incident가 생기면 deterministic evidence와 agent handoff prompt가 여기에 표시됩니다.',
+      emptyDescriptionWithDegradedResources:
+        '현재 비정상 리소스 {count}개가 있지만 이 필터에 맞는 AI Ops briefing은 없습니다. briefing은 AI Ops가 다루는 actionable runtime failure에만 생성됩니다.',
       emptyDescriptionDisabled:
         '현재 이 Project의 AI Ops가 꺼져 있어 새 crash와 route-health 이벤트가 briefing을 만들지 않습니다.',
     },
@@ -314,6 +321,7 @@ export const translations = {
         system: 'System',
         crash: 'Crashes',
         mcp: 'MCP',
+        data: 'Data access',
       },
     },
     page: {
@@ -1032,8 +1040,22 @@ export const translations = {
         '이 Project에 관리형 Postgres 또는 Redis 리소스를 만들거나 연결하면 agent read inspection을 켤 수 있습니다.',
       enabledDescription: 'Agent가 제한된 MCP read action으로 이 source 전체를 조회할 수 있습니다.',
       disabledDescription: 'Agent가 이 source를 조회하려면 먼저 접근을 켜야 합니다.',
+      enableWarning:
+        '켜면 query result가 agent에게 반환됩니다. 결과는 cap이 걸리고 저장되지 않지만, 허용된 read operation으로 이 source가 노출하는 모든 table/key를 읽을 수 있습니다.',
+      auditHint:
+        'Agent read는 Activity에 query hash, operation, row/item count, duration과 함께 기록됩니다.',
+      viewAudit: 'View audit',
       externalDescription:
         '외부 데이터 소스는 별도 read-only connector 설정 후 agent inspection을 지원합니다.',
+      relationship: {
+        managed: 'Managed source',
+        external: 'External env',
+      },
+      health: {
+        healthy: 'Healthy',
+        crashed: 'Crashed',
+        deploying: 'Deploying',
+      },
     },
   },
   services: {

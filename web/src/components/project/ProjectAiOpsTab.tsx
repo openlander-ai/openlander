@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 
 interface ProjectAiOpsTabProps {
   projectId: string;
+  degradedResourceCount?: number;
   onConfigure?: () => void;
 }
 
@@ -34,7 +35,11 @@ const STATUS_FILTERS: Array<{
   { value: 'all', labelKey: 'aiOps.status.all' },
 ];
 
-export function ProjectAiOpsTab({ projectId, onConfigure }: ProjectAiOpsTabProps) {
+export function ProjectAiOpsTab({
+  projectId,
+  degradedResourceCount = 0,
+  onConfigure,
+}: ProjectAiOpsTabProps) {
   const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedServiceId = searchParams.get('service') ?? ALL_SERVICES;
@@ -261,9 +266,13 @@ export function ProjectAiOpsTab({ projectId, onConfigure }: ProjectAiOpsTabProps
         }
         emptyTitle={t('aiOps.projectInbox.emptyTitle')}
         emptyDescription={
-          projectMode === 'briefing'
-            ? t('aiOps.projectInbox.emptyDescription')
-            : t('aiOps.projectInbox.emptyDescriptionDisabled')
+          projectMode === 'briefing' && degradedResourceCount > 0
+            ? t('aiOps.projectInbox.emptyDescriptionWithDegradedResources', {
+                count: degradedResourceCount,
+              })
+            : projectMode === 'briefing'
+              ? t('aiOps.projectInbox.emptyDescription')
+              : t('aiOps.projectInbox.emptyDescriptionDisabled')
         }
         emptyActions={
           onConfigure ? (

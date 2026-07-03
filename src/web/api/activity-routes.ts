@@ -1,11 +1,12 @@
 /**
  * Activity routes — v4 cross-actor audit timeline.
  *
- * Aggregates 3 data sources into the v4 ActivityEvent shape consumed by
+ * Aggregates backend activity sources into the v4 ActivityEvent shape consumed by
  * Home / Activity / MCPServer pages:
  *
  *   - deploy_logs                 → deploy_completed | deploy_failed | deploy_cancelled
  *   - activity_log config rows    → config_changed
+ *   - activity_log data rows      → data_access_read
  *   - runtime_incidents           → service_crashed (active) | service_recovered (resolved)
  *   - MCP session lifecycle       → mcp_connected | mcp_disconnected
  *
@@ -126,6 +127,7 @@ function actorFromActivityLog(metadata: Record<string, unknown>, eventType: stri
   }
   if (eventType.startsWith('webhook:')) return 'webhook';
   if (eventType.startsWith('env:')) return 'mcp';
+  if (eventType.startsWith('data_access:')) return 'mcp';
   return 'system';
 }
 
@@ -228,6 +230,36 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         id: `activity-${row.id}`,
         actor,
         kind: 'config_changed',
+        at,
+        relTs,
+        project: projectId,
+        service: serviceRef?.serviceId ?? null,
+        projectName: projectNameById.get(projectId) ?? null,
+        serviceName: serviceRef?.serviceName ?? null,
+        title: row.title,
+        detail: row.description,
+      });
+    }
+
+    // --- Source 2b: activity_log data-access rows ---
+    // Data Inspector writes audit rows into activity_log with result values omitted.
+    const dataAccessRows = await ctx.db.findActivityLogRecent(limit * 3, {
+      activity_type: 'data_access',
+    });
+    for (const row of dataAccessRows) {
+      const metadata = parseMetadata(row.metadata);
+      const serviceId = typeof metadata['service_id'] === 'string' ? metadata['service_id'] : null;
+      const serviceRef = serviceId ? serviceById.get(serviceId) : undefined;
+      const projectId = serviceRef?.projectId ?? row.project_id;
+      if (projectScoped && projectId !== projectFilter) continue;
+      const ms = parseTimestamp(row.created_at);
+      if (ms == null) continue;
+      const { at, relTs } = relativeTime(ms, now);
+      const actor = actorFromActivityLog(metadata, row.event_type);
+      events.push({
+        id: `activity-${row.id}`,
+        actor,
+        kind: 'data_access_read',
         at,
         relTs,
         project: projectId,

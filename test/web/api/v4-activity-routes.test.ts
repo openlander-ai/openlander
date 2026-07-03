@@ -113,4 +113,39 @@ describe('GET /api/activity v4 feed', () => {
       detail: 'set 2 environment variable(s)',
     });
   });
+
+  it('includes data-access activity rows in the dashboard feed', async () => {
+    const app = createApp(
+      baseDb({
+        findActivityLogRecent: async (_limit: number, filters: { activity_type?: string }) => {
+          if (filters.activity_type !== 'data_access') return [];
+          return [
+            {
+              id: 'data-1',
+              event_type: 'data_access:read',
+              activity_type: 'data_access',
+              project_id: 'group-1',
+              title: 'Agent data source read',
+              description: 'sql.query on app-db',
+              metadata: JSON.stringify({ service_id: 'svc-1', operation: 'sql.query' }),
+              created_at: new Date().toISOString(),
+            },
+          ];
+        },
+      }),
+    );
+
+    const res = await app.request('/api/activity?limit=5&type=data');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.activities[0]).toMatchObject({
+      id: 'activity-data-1',
+      actor: 'mcp',
+      kind: 'data_access_read',
+      project: 'group-1',
+      service: 'svc-1',
+      title: 'Agent data source read',
+      detail: 'sql.query on app-db',
+    });
+  });
 });

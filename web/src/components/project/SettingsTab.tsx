@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Archive, ArchiveRestore, Database, ShieldCheck, Trash2 } from 'lucide-react';
 import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import {
   type DataSourceSummary,
 } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
+import type { ServiceHealth } from '@/lib/projectTopology';
 import type { Project } from '@/types';
 
 export type SettingsSection = 'general' | 'ai' | 'data' | 'danger';
@@ -29,6 +31,7 @@ interface SettingsTabProps {
   projectId: string;
   project?: Project | null;
   initialSection?: SettingsSection;
+  resourceHealthById?: Record<string, ServiceHealth>;
   onOpenAiOps?: () => void;
   onProjectChanged?: () => void;
   onProjectDeleted?: () => void;
@@ -38,6 +41,7 @@ export function SettingsTab({
   projectId,
   project,
   initialSection = 'general',
+  resourceHealthById,
   onOpenAiOps,
   onProjectChanged,
   onProjectDeleted,
@@ -164,7 +168,9 @@ export function SettingsTab({
         {activeSection === 'ai' && (
           <ProjectAiOpsPanel projectId={projectId} onOpenAiOps={onOpenAiOps} />
         )}
-        {activeSection === 'data' && <ProjectDataAccessPanel projectId={projectId} />}
+        {activeSection === 'data' && (
+          <ProjectDataAccessPanel projectId={projectId} resourceHealthById={resourceHealthById} />
+        )}
         {activeSection === 'danger' && (
           <div className="flex max-w-2xl flex-col gap-4">
             <div>
@@ -518,7 +524,13 @@ function ProjectAiOpsPanel({
   );
 }
 
-function ProjectDataAccessPanel({ projectId }: { projectId: string }) {
+function ProjectDataAccessPanel({
+  projectId,
+  resourceHealthById,
+}: {
+  projectId: string;
+  resourceHealthById?: Record<string, ServiceHealth>;
+}) {
   const { t } = useLanguage();
   const [sources, setSources] = useState<DataSourceSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -602,6 +614,7 @@ function ProjectDataAccessPanel({ projectId }: { projectId: string }) {
             const busy = actionKey === source.service_id;
             const enabled = source.status === 'enabled';
             const external = source.source === 'external_env';
+            const health = source.service_id ? resourceHealthById?.[source.service_id] : undefined;
             return (
               <div
                 key={source.data_source_id}
@@ -617,6 +630,25 @@ function ProjectDataAccessPanel({ projectId }: { projectId: string }) {
                       <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
                         {source.kind}
                       </span>
+                      <span className="rounded-full border border-[hsl(var(--border))] bg-bg-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
+                        {external
+                          ? t('settings.data.relationship.external')
+                          : t('settings.data.relationship.managed')}
+                      </span>
+                      {health && (
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide',
+                            health === 'crashed'
+                              ? 'border-error/30 bg-error/10 text-error'
+                              : health === 'deploying'
+                                ? 'border-info/30 bg-info/10 text-info'
+                                : 'border-success/30 bg-success/10 text-success',
+                          )}
+                        >
+                          {t(`settings.data.health.${health}`)}
+                        </span>
+                      )}
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide',
@@ -642,6 +674,23 @@ function ProjectDataAccessPanel({ projectId }: { projectId: string }) {
                           ? t('settings.data.enabledDescription')
                           : t('settings.data.disabledDescription')}
                     </p>
+                    {!external && (
+                      <>
+                        <p className="mt-1 max-w-xl text-[11.5px] leading-relaxed text-foreground/55">
+                          {enabled
+                            ? t('settings.data.auditHint')
+                            : t('settings.data.enableWarning')}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Link
+                            to={`/activity?project=${encodeURIComponent(projectId)}&type=data`}
+                            className="text-[11.5px] font-medium text-agent hover:underline"
+                          >
+                            {t('settings.data.viewAudit')}
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </div>
                   {!external && source.service_id && (
                     <Button

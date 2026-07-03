@@ -10,7 +10,7 @@ export const translations = {
       briefing: 'Briefing',
       inherit: 'Inherit',
     },
-    resolvedMode: 'Resolved',
+    resolvedMode: 'Effective mode',
     budget: 'Budget',
     settingsBriefingsHint:
       'Incident briefings live in the Project AI Ops tab. Keep this page focused on opt-in and budget settings.',
@@ -56,6 +56,9 @@ export const translations = {
       clearTitle: 'All clear across monitored Projects',
       clearDescription:
         'OpenLander will put crash, deploy failure, and route-health briefings here when AI Ops is enabled.',
+      healthIssueNoBriefingTitle: 'Health issue without an AI Ops briefing',
+      healthIssueNoBriefingDescription:
+        '{count} Project health issue(s) are visible, but no briefing was created. Briefings appear only for enabled, actionable runtime failures.',
       attentionTitle: 'Unresolved briefings: {count}',
       attentionDescription:
         'Start with Open in Agent, then verify after the fix before resolving the briefing.',
@@ -63,6 +66,8 @@ export const translations = {
       emptyTitle: 'No open AI Ops briefings',
       emptyDescription:
         'Enabled Projects are monitored for crash, deploy failure, and route-health evidence. This inbox stays quiet until there is something to review.',
+      emptyDescriptionWithHealthIssues:
+        '{count} Project health issue(s) are visible outside AI Ops. Open the Project to inspect the resource, or enable/configure AI Ops if this should become an agent-readable ticket.',
     },
     projectInbox: {
       title: 'AI Ops briefings',
@@ -85,6 +90,8 @@ export const translations = {
       emptyTitle: 'No matching briefings',
       emptyDescription:
         'When this Project has incidents, OpenLander will show deterministic evidence and agent handoff prompts here.',
+      emptyDescriptionWithDegradedResources:
+        '{count} resource(s) are currently unhealthy, but no AI Ops briefing matched this filter. Briefings are created only for actionable runtime failures covered by AI Ops.',
       emptyDescriptionDisabled:
         'AI Ops is currently off for this Project, so new crash and route-health events will not create briefings.',
     },
@@ -287,6 +294,7 @@ export const translations = {
         system: 'System',
         crash: 'Crashes',
         mcp: 'MCP',
+        data: 'Data access',
       },
     },
     page: {
@@ -903,8 +911,22 @@ export const translations = {
         'Create or connect a managed Postgres or Redis resource in this Project to enable read-only agent inspection.',
       enabledDescription: 'Agents can inspect this entire source through bounded MCP read actions.',
       disabledDescription: 'Enable access before agents can inspect this source.',
+      enableWarning:
+        'Enabling returns query results to the agent. Results are capped and not stored, but the agent can read every table/key this source exposes through allowed read operations.',
+      auditHint:
+        'Agent reads are written to Activity with query hash, operation, row/item count, and duration.',
+      viewAudit: 'View audit',
       externalDescription:
         'External data sources require a separate read-only connector before agents can inspect them.',
+      relationship: {
+        managed: 'Managed source',
+        external: 'External env',
+      },
+      health: {
+        healthy: 'Healthy',
+        crashed: 'Crashed',
+        deploying: 'Deploying',
+      },
       enable: 'Enable read access',
       disable: 'Disable access',
       saving: 'Saving…',
