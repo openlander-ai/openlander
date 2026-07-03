@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Clarify Home and Project AI Ops empty states when runtime health is degraded
+  but no AI Ops briefing exists.
+- Improve Project Data Access cards with managed/external source labels,
+  health badges, read-access warning copy, and direct Activity audit links.
+- Add a Data Access filter to the Activity timeline so agent data-read audit
+  rows are easier to review.
+- Fix the Home project card markup so service health chips are not nested
+  inside another button.
+
 ## [0.2.1-rc.6] - 2026-07-03
 
 ### Changed
