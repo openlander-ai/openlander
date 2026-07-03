@@ -849,7 +849,9 @@ role is the real boundary. `INSERT`, `UPDATE`, `DELETE`, `COPY`, DDL, grants,
 stored-procedure calls, psql backslash commands, and multiple statements are
 blocked before execution. Redis does not accept arbitrary command strings; only
 `redis.get`, `redis.mget`, `redis.type`, `redis.ttl`, `redis.hgetall`, and
-`redis.scan` are expressible.
+`redis.scan` are expressible. If a Postgres result exceeds the response byte cap,
+`read_data_source` returns `DATA_RESULT_TOO_LARGE` instead of returning partial
+or malformed row data.
 
 ### `get_service_logs`
 
