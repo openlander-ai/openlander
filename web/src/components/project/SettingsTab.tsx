@@ -1,6 +1,15 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, ArchiveRestore, Database, ShieldCheck, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  Archive,
+  ArchiveRestore,
+  Database,
+  KeyRound,
+  LockKeyhole,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react';
 import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -536,6 +545,7 @@ function ProjectDataAccessPanel({
   const [loading, setLoading] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [enableTarget, setEnableTarget] = useState<DataSourceSummary | null>(null);
 
   const loadSources = useCallback(async () => {
     setLoading(true);
@@ -676,6 +686,35 @@ function ProjectDataAccessPanel({
                     </p>
                     {!external && (
                       <>
+                        <div className="mt-3 grid gap-x-4 gap-y-2 border-y border-[hsl(var(--border))] py-2 text-[11.5px] sm:grid-cols-3">
+                          <div>
+                            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+                              <Database className="h-3.5 w-3.5 text-foreground/50" />
+                              {t('settings.data.factScopeLabel')}
+                            </div>
+                            <p className="mt-1 text-foreground/55">
+                              {t('settings.data.factScopeValue')}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+                              <KeyRound className="h-3.5 w-3.5 text-foreground/50" />
+                              {t('settings.data.factCredentialLabel')}
+                            </div>
+                            <p className="mt-1 text-foreground/55">
+                              {t('settings.data.factCredentialValue')}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+                              <Activity className="h-3.5 w-3.5 text-foreground/50" />
+                              {t('settings.data.factAuditLabel')}
+                            </div>
+                            <p className="mt-1 text-foreground/55">
+                              {t('settings.data.factAuditValue')}
+                            </p>
+                          </div>
+                        </div>
                         <p className="mt-1 max-w-xl text-[11.5px] leading-relaxed text-foreground/55">
                           {enabled
                             ? t('settings.data.auditHint')
@@ -697,8 +736,15 @@ function ProjectDataAccessPanel({
                       variant={enabled ? 'outline' : 'default'}
                       size="sm"
                       disabled={busy}
-                      onClick={() => void setAccess(source, enabled ? 'disabled' : 'read')}
+                      onClick={() => {
+                        if (enabled) {
+                          void setAccess(source, 'disabled');
+                        } else {
+                          setEnableTarget(source);
+                        }
+                      }}
                     >
+                      {!enabled && <LockKeyhole className="h-3.5 w-3.5" />}
                       {busy
                         ? t('settings.data.saving')
                         : enabled
@@ -712,6 +758,22 @@ function ProjectDataAccessPanel({
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={enableTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEnableTarget(null);
+        }}
+        title={t('settings.data.enableConfirmTitle')}
+        description={t('settings.data.enableConfirmDescription', {
+          name: enableTarget?.name ?? t('settings.data.title'),
+        })}
+        confirmLabel={t('settings.data.enableConfirm')}
+        cancelLabel={t('projectDetail.env.cancel')}
+        onConfirm={() => {
+          if (enableTarget) void setAccess(enableTarget, 'read');
+        }}
+      />
     </div>
   );
 }

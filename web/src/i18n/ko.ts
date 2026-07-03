@@ -1039,12 +1039,23 @@ export const translations = {
       emptyDescription:
         '이 Project에 관리형 Postgres 또는 Redis 리소스를 만들거나 연결하면 agent read inspection을 켤 수 있습니다.',
       enabledDescription: 'Agent가 제한된 MCP read action으로 이 source 전체를 조회할 수 있습니다.',
-      disabledDescription: 'Agent가 이 source를 조회하려면 먼저 접근을 켜야 합니다.',
+      disabledDescription:
+        '기본값은 꺼짐입니다. 사람이 read access를 켜기 전까지 agent는 이 source를 조회할 수 없습니다.',
       enableWarning:
         '켜면 query result가 agent에게 반환됩니다. 결과는 cap이 걸리고 저장되지 않지만, 허용된 read operation으로 이 source가 노출하는 모든 table/key를 읽을 수 있습니다.',
       auditHint:
         'Agent read는 Activity에 query hash, operation, row/item count, duration과 함께 기록됩니다.',
       viewAudit: 'View audit',
+      factScopeLabel: 'Read scope',
+      factScopeValue: 'Entire source',
+      factCredentialLabel: 'Credential',
+      factCredentialValue: 'Hidden from agents',
+      factAuditLabel: 'Audit',
+      factAuditValue: 'Every read logged',
+      enableConfirmTitle: 'Agent read access를 켤까요?',
+      enableConfirmDescription:
+        '{name} 전체가 제한된 MCP read action으로 조회 가능해집니다. Agent에게 credential은 노출되지 않고, write는 계속 차단되며, query result는 cap이 걸리고 저장되지 않고, 모든 read는 audit에 기록됩니다.',
+      enableConfirm: 'Enable read access',
       externalDescription:
         '외부 데이터 소스는 별도 read-only connector 설정 후 agent inspection을 지원합니다.',
       relationship: {

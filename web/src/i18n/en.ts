@@ -910,12 +910,23 @@ export const translations = {
       emptyDescription:
         'Create or connect a managed Postgres or Redis resource in this Project to enable read-only agent inspection.',
       enabledDescription: 'Agents can inspect this entire source through bounded MCP read actions.',
-      disabledDescription: 'Enable access before agents can inspect this source.',
+      disabledDescription:
+        'Off by default. Agents cannot inspect this source until a human enables read access.',
       enableWarning:
         'Enabling returns query results to the agent. Results are capped and not stored, but the agent can read every table/key this source exposes through allowed read operations.',
       auditHint:
         'Agent reads are written to Activity with query hash, operation, row/item count, and duration.',
       viewAudit: 'View audit',
+      factScopeLabel: 'Read scope',
+      factScopeValue: 'Entire source',
+      factCredentialLabel: 'Credential',
+      factCredentialValue: 'Hidden from agents',
+      factAuditLabel: 'Audit',
+      factAuditValue: 'Every read logged',
+      enableConfirmTitle: 'Enable agent read access?',
+      enableConfirmDescription:
+        '{name} will become readable through bounded MCP read actions. Agents still receive no credentials, writes stay blocked, query results are capped and not stored, and every read is audited.',
+      enableConfirm: 'Enable read access',
       externalDescription:
         'External data sources require a separate read-only connector before agents can inspect them.',
       relationship: {
