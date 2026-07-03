@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1-rc.3] - 2026-07-03
+
+### Fixed
+
+- Make oversized Postgres Data Inspector reads fail closed with
+  `DATA_RESULT_TOO_LARGE` when the response byte cap is reached before row JSON
+  can be parsed, instead of surfacing a generic MCP tool error.
+- Block Postgres `set_config()` queries before execution so session-mutating
+  functions get the same explicit `DATA_QUERY_BLOCKED` response as other
+  non-read SQL.
+
 ## [0.2.1-rc.2] - 2026-07-03
 
 ### Added
