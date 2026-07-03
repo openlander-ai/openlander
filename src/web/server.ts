@@ -19,6 +19,7 @@ import { createAuthRoutes } from './api/auth-routes.js';
 import { createAuthMiddleware, isAuthenticated } from './middleware/auth.js';
 import { createCorsOriginPolicy } from './middleware/cors-policy.js';
 import { AuthService } from '../auth/auth-service.js';
+import { normalizeLlmConfig, type LLMProviderConfig } from '../config/index.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { OpenLanderError } from '../errors.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
@@ -57,6 +58,62 @@ function formatUptime(seconds: number): string {
 /** Get seconds since server start. */
 export function getServerUptime(): number {
   return Math.floor((Date.now() - serverStartTime) / 1000);
+}
+
+export type AiOpsBriefingHealthStatus =
+  | 'configured'
+  | 'not_configured'
+  | 'provider_missing'
+  | 'credential_missing';
+
+export interface AiOpsBriefingHealth {
+  configured: boolean;
+  status: AiOpsBriefingHealthStatus;
+  routeSource: 'feature' | 'default' | 'none';
+}
+
+function hasProviderCredential(
+  provider: ReturnType<typeof normalizeLlmConfig>['providers'][string],
+): boolean {
+  return Boolean(
+    (provider.encryptedApiKey && provider.apiKeyIv) ||
+    provider.apiKey?.trim() ||
+    provider.authToken?.trim(),
+  );
+}
+
+export function resolveAiOpsBriefingHealth(llm: LLMProviderConfig): AiOpsBriefingHealth {
+  const normalized = normalizeLlmConfig(llm);
+  const featureRoute = normalized.routes?.aiOpsBriefing;
+  const route = featureRoute ?? normalized.defaultRoute;
+
+  if (route.providerId === '__none__') {
+    return { configured: false, status: 'not_configured', routeSource: 'none' };
+  }
+
+  const routeSource = featureRoute ? 'feature' : 'default';
+  const provider = normalized.providers[route.providerId];
+  if (!provider) {
+    return {
+      configured: false,
+      status: 'provider_missing',
+      routeSource,
+    };
+  }
+
+  if (!hasProviderCredential(provider)) {
+    return {
+      configured: false,
+      status: 'credential_missing',
+      routeSource,
+    };
+  }
+
+  return {
+    configured: true,
+    status: 'configured',
+    routeSource,
+  };
 }
 
 export interface ServerOptions {
@@ -200,6 +257,7 @@ function createApp(
       version: VERSION,
       llmConfigured: false,
       llmStatus: 'offline',
+      aiOpsBriefing: resolveAiOpsBriefingHealth(ctx.config.llm),
       timestamp: new Date().toISOString(),
       uptime,
       dockerContainers,
