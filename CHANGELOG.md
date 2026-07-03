@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1-rc.5] - 2026-07-03
+
+### Fixed
+
+- Add feature-specific AI Ops briefing provider status to `/health` so an
+  `aiOpsBriefing` route can be reported independently from the dormant legacy
+  LLM/agent status fields.
+
 ## [0.2.1-rc.4] - 2026-07-03
 
 ### Fixed
