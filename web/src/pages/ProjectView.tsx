@@ -332,6 +332,14 @@ export function ProjectView() {
     services,
     showArchivedServiceList,
   ]);
+  const crashedResourceCount = services.filter((service) => service.health === 'crashed').length;
+  const resourceHealthById = useMemo(() => {
+    const entries: Array<[string, ServiceHealth]> = [];
+    for (const service of [...projectServiceRows, ...services]) {
+      entries.push([service.id, service.health]);
+    }
+    return Object.fromEntries(entries);
+  }, [projectServiceRows, services]);
 
   useEffect(() => {
     if (tabParam === 'activity' && projectId) {
@@ -559,6 +567,7 @@ export function ProjectView() {
           {projectId && (
             <ProjectAiOpsTab
               projectId={projectId}
+              degradedResourceCount={crashedResourceCount}
               onConfigure={() => {
                 setSettingsInitialSection('ai');
                 setActiveTab('settings');
@@ -577,6 +586,7 @@ export function ProjectView() {
               projectId={projectId}
               project={realProject}
               initialSection={settingsInitialSection}
+              resourceHealthById={resourceHealthById}
               onOpenAiOps={() => {
                 setActiveTab('ai');
                 navigate(`/projects/${projectId}?tab=ai`, { replace: true });

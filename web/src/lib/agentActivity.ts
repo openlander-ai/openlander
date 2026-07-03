@@ -28,6 +28,7 @@ export type ActivityKind =
   | 'deploy_failed'
   | 'deploy_cancelled'
   | 'config_changed'
+  | 'data_access_read'
   | 'service_crashed'
   | 'service_recovered'
   | 'mcp_connected'
@@ -59,14 +60,15 @@ export interface ActivityEvent {
  *  Activity page. `system` covers crash/recovery (the canonical "things
  *  the platform noticed on its own"); `crashes` is kept as a legacy URL
  *  alias so existing bookmarks like `/activity?type=crash` still route. */
-export type KindGroup = 'all' | 'deploys' | 'mcp' | 'system' | 'config';
-export type ActivityTypeParam = 'all' | 'deploy' | 'config' | 'system' | 'mcp';
+export type KindGroup = 'all' | 'deploys' | 'mcp' | 'system' | 'config' | 'data';
+export type ActivityTypeParam = 'all' | 'deploy' | 'config' | 'data' | 'system' | 'mcp';
 
 const KIND_GROUP_MAP: Record<Exclude<KindGroup, 'all'>, ActivityKind[]> = {
   deploys: ['deploy_started', 'deploy_completed', 'deploy_failed', 'deploy_cancelled'],
   system: ['service_crashed', 'service_recovered'],
   mcp: ['mcp_connected', 'mcp_disconnected'],
   config: ['config_changed'],
+  data: ['data_access_read'],
 };
 
 export function isKindInGroup(kind: ActivityKind, group: KindGroup): boolean {
@@ -80,6 +82,8 @@ export function kindGroupFromTypeParam(value: string | null | undefined): KindGr
       return 'deploys';
     case 'config':
       return 'config';
+    case 'data':
+      return 'data';
     // Legacy URL alias — `?type=crash` was the v0.1 spelling before the
     // tab strip renamed the group to "System".
     case 'crash':
@@ -99,6 +103,8 @@ export function typeParamFromKindGroup(kind: KindGroup): ActivityTypeParam {
       return 'deploy';
     case 'config':
       return 'config';
+    case 'data':
+      return 'data';
     case 'system':
       return 'system';
     case 'mcp':
@@ -125,6 +131,7 @@ export function severityForKind(kind: ActivityKind): ActivitySeverity {
     case 'deploy_cancelled':
       return 'warning';
     case 'deploy_started':
+    case 'data_access_read':
     case 'mcp_connected':
       return 'info';
     case 'mcp_disconnected':

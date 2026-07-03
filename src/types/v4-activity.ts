@@ -16,6 +16,7 @@ export type ActivityKind =
   | 'deploy_failed'
   | 'deploy_cancelled'
   | 'config_changed'
+  | 'data_access_read'
   | 'service_crashed'
   | 'service_recovered'
   | 'mcp_connected'

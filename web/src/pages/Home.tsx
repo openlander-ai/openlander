@@ -148,6 +148,8 @@ export function Home() {
   const [aiOpsLoading, setAiOpsLoading] = useState(true);
   const [aiOpsError, setAiOpsError] = useState<string | null>(null);
   const aiOpsUnresolvedCount = aiOpsBriefings.length;
+  const hasHealthIssuesWithoutBriefings =
+    !aiOpsLoading && tally.crashed > 0 && aiOpsUnresolvedCount === 0;
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -355,13 +357,19 @@ export function Home() {
               <div className="text-sm font-semibold text-foreground">
                 {aiOpsUnresolvedCount > 0
                   ? t('aiOps.inbox.attentionTitle', { count: aiOpsUnresolvedCount })
-                  : t('aiOps.inbox.clearTitle')}
+                  : hasHealthIssuesWithoutBriefings
+                    ? t('aiOps.inbox.healthIssueNoBriefingTitle')
+                    : t('aiOps.inbox.clearTitle')}
               </div>
             </div>
             <p className="mt-1 text-[12px] leading-relaxed text-foreground/65">
               {aiOpsUnresolvedCount > 0
                 ? t('aiOps.inbox.attentionDescription')
-                : t('aiOps.inbox.clearDescription')}
+                : hasHealthIssuesWithoutBriefings
+                  ? t('aiOps.inbox.healthIssueNoBriefingDescription', {
+                      count: tally.crashed,
+                    })
+                  : t('aiOps.inbox.clearDescription')}
             </p>
           </div>
           <div className="grid min-w-[132px] grid-cols-2 gap-2 sm:grid-cols-1">
@@ -385,7 +393,11 @@ export function Home() {
           loading={aiOpsLoading}
           emptyEyebrow={t('aiOps.inbox.emptyEyebrow')}
           emptyTitle={t('aiOps.inbox.emptyTitle')}
-          emptyDescription={t('aiOps.inbox.emptyDescription')}
+          emptyDescription={
+            hasHealthIssuesWithoutBriefings
+              ? t('aiOps.inbox.emptyDescriptionWithHealthIssues', { count: tally.crashed })
+              : t('aiOps.inbox.emptyDescription')
+          }
           emptyActions={
             <button
               type="button"
@@ -441,13 +453,21 @@ export function Home() {
                 p.serviceCount ??
                 0;
               return (
-                <button
+                <div
                   key={p.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate(`/projects/${p.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    navigate(`/projects/${p.id}`);
+                  }}
                   aria-label={t('home.projects.openProject', { name: p.name })}
                   className={cn(
+                    'cursor-pointer',
                     'group flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ol-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ol-bg)]',
                     state === 'crashed'
                       ? 'border-[color:var(--ol-error)] border-opacity-40 hover:border-[color:var(--ol-error)]'
                       : 'border-[color:var(--ol-border-subtle)] hover:border-[color:var(--ol-border)]',
@@ -485,7 +505,7 @@ export function Home() {
                     />
                   </div>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
-                </button>
+                </div>
               );
             })}
           </div>
