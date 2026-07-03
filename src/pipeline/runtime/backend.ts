@@ -126,6 +126,7 @@ export interface RuntimeBackend {
   execSimple(
     containerId: Parameters<ExecOps['execSimple']>[0],
     cmd: Parameters<ExecOps['execSimple']>[1],
+    opts?: Parameters<ExecOps['execSimple']>[2],
     serverId?: string,
   ): ReturnType<ExecOps['execSimple']>;
   execStream(...args: Parameters<ExecOps['execStream']>): ReturnType<ExecOps['execStream']>;

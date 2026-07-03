@@ -33,6 +33,7 @@ const EXPECTED_TOOLS = [
   'delete_bucket',
   'delete_env_var',
   'deploy_app',
+  'describe_data_source',
   'diagnose_host_resources',
   'diagnose_service',
   'dismiss_alert',
@@ -59,6 +60,7 @@ const EXPECTED_TOOLS = [
   'list_ai_ops_briefings',
   'list_archived_services',
   'list_buckets',
+  'list_data_sources',
   'list_domain_routes',
   'list_env_vars',
   'list_github_repos',
@@ -72,6 +74,7 @@ const EXPECTED_TOOLS = [
   'mcp_action_status',
   'preview_deploy',
   'probe_host',
+  'read_data_source',
   'redeploy_app',
   'remove_secret_file',
   'remove_service',
@@ -138,8 +141,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 80 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(80);
+  it('maintains exactly 83 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(83);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

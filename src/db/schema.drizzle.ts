@@ -826,6 +826,42 @@ export const aiOpsPendingInputs = pgTable(
   ],
 );
 
+export const dataSourceAccess = pgTable(
+  'data_source_access',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    environment_id: text('environment_id').references(() => environments.id, {
+      onDelete: 'set null',
+    }),
+    mode: text('mode', { enum: ['disabled', 'read'] })
+      .notNull()
+      .default('disabled'),
+    reader_username: text('reader_username'),
+    reader_password_encrypted: text('reader_password_encrypted'),
+    reader_password_iv: text('reader_password_iv'),
+    enabled_at: text('enabled_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+    server_id: text('server_id').notNull().default('local'),
+  },
+  (table) => [
+    check('data_source_access_mode_check', sql`${table.mode} IN ('disabled', 'read')`),
+    uniqueIndex('data_source_access_project_service_idx').on(table.project_id, table.service_id),
+    index('idx_data_source_access_project').on(table.project_id),
+    index('idx_data_source_access_service').on(table.service_id),
+  ],
+);
+
 export const actionRuns = pgTable(
   'action_runs',
   {
@@ -1153,6 +1189,7 @@ export const drizzleSchema = {
   aiOpsDedupe,
   aiOpsBriefings,
   aiOpsPendingInputs,
+  dataSourceAccess,
   actionRuns,
   deploymentPatterns,
   opsIncidents,

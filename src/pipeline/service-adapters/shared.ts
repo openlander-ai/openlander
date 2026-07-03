@@ -10,6 +10,7 @@ export interface ExecOptions {
   throwOnNonZeroExit?: boolean;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  env?: Record<string, string>;
 }
 
 export async function execInServiceContainer(
@@ -34,7 +35,13 @@ export async function execInServiceContainer(
     });
 
     try {
-      execResult = await Promise.race([runtime.execSimple(containerId, command), timeoutPromise]);
+      const env = options?.env
+        ? Object.entries(options.env).map(([key, value]) => `${key}=${value}`)
+        : undefined;
+      const execPromise = env
+        ? runtime.execSimple(containerId, command, { env })
+        : runtime.execSimple(containerId, command);
+      execResult = await Promise.race([execPromise, timeoutPromise]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }

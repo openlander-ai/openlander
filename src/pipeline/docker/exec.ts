@@ -12,10 +12,12 @@ export class ExecOps {
   async execSimple(
     containerId: string,
     cmd: string[],
+    opts?: { env?: string[] },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     const container = this.ctx.client.getContainer(containerId);
     const exec = await container.exec({
       Cmd: cmd,
+      ...(opts?.env ? { Env: opts.env } : {}),
       AttachStdout: true,
       AttachStderr: true,
     });

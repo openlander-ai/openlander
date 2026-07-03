@@ -26,6 +26,7 @@ import { AuthRepo } from './repos/auth.repo.js';
 import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
 import { AiOpsBriefingRepo } from './repos/ai-ops-briefing.repo.js';
 import { AiOpsPendingInputRepo } from './repos/ai-ops-pending-input.repo.js';
+import { DataSourceAccessRepo } from './repos/data-source-access.repo.js';
 import { AiOpsPolicyRepo } from './repos/ai-ops-policy.repo.js';
 import { ActionRunRepo } from './repos/action-run.repo.js';
 import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
@@ -61,6 +62,8 @@ export type {
   AiOpsBriefingStatus,
   AiOpsPendingInputRow,
   AiOpsPendingInputStatus,
+  DataSourceAccessRow,
+  DataSourceAccessMode,
   AiOpsDedupeRow,
   AiOpsInstancePolicyRow,
   AiOpsProjectPolicyRow,
@@ -267,6 +270,7 @@ export class Database implements AuthDatabase {
   private readonly aiUsageLogRepo: AiUsageLogRepo;
   private readonly aiOpsBriefingRepo: AiOpsBriefingRepo;
   private readonly aiOpsPendingInputRepo: AiOpsPendingInputRepo;
+  private readonly dataSourceAccessRepo: DataSourceAccessRepo;
   private readonly aiOpsPolicyRepo: AiOpsPolicyRepo;
   private readonly actionRunRepo: ActionRunRepo;
   private readonly deploymentPatternRepo: DeploymentPatternRepo;
@@ -303,6 +307,7 @@ export class Database implements AuthDatabase {
     this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.client);
     this.aiOpsBriefingRepo = new AiOpsBriefingRepo(this.db, this.client);
     this.aiOpsPendingInputRepo = new AiOpsPendingInputRepo(this.db, this.client);
+    this.dataSourceAccessRepo = new DataSourceAccessRepo(this.db, this.client);
     this.aiOpsPolicyRepo = new AiOpsPolicyRepo(this.db, this.client);
     this.actionRunRepo = new ActionRunRepo(this.db, this.client);
     this.deploymentPatternRepo = new DeploymentPatternRepo(this.db, this.client);
@@ -453,6 +458,10 @@ export class Database implements AuthDatabase {
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
   listServiceConnectionsByProject(projectId: string, environmentId?: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId, environmentId); }
+  listDataSourceAccessByProject(projectId: string) { return this.dataSourceAccessRepo.findByProject(projectId); }
+  listDataSourceAccessByProjectAndServices(projectId: string, serviceIds: readonly string[]) { return this.dataSourceAccessRepo.findByProjectAndServices(projectId, serviceIds); }
+  getDataSourceAccess(projectId: string, serviceId: string) { return this.dataSourceAccessRepo.findByProjectAndService(projectId, serviceId); }
+  upsertDataSourceAccess(input: Parameters<DataSourceAccessRepo['upsert']>[0]) { return this.dataSourceAccessRepo.upsert(input); }
   listServiceConnectionsByService(serviceId: string) { return this.serviceConnectionRepo.listConnectionsByService(serviceId); }
   listServiceConsumersForProvider(serviceId: string) { return this.serviceConnectionRepo.listConsumersForProvider(serviceId); }
   updateServiceConnection(id: string, updates: Parameters<ServiceConnectionRepo['updateConnection']>[1]) { return this.serviceConnectionRepo.updateConnection(id, updates); }

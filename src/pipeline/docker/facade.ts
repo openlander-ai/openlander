@@ -206,9 +206,12 @@ export class Docker implements RuntimeBackend {
   execSimple(
     containerId: Parameters<ExecOps['execSimple']>[0],
     cmd: Parameters<ExecOps['execSimple']>[1],
+    opts?: Parameters<ExecOps['execSimple']>[2],
     _serverId?: string,
   ) {
-    return this.execOps.execSimple(containerId, cmd);
+    return opts
+      ? this.execOps.execSimple(containerId, cmd, opts)
+      : this.execOps.execSimple(containerId, cmd);
   }
 
   execStream(...args: Parameters<ExecOps['execStream']>) {

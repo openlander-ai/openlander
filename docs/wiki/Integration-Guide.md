@@ -218,29 +218,30 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **80 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **83 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                           |
 | ---------------------------- | ------- | --------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build                               |
 | `openlander_project`         | 17      | Projects: metadata, secrets, exposure                                             |
 | `openlander_service`         | 25      | Application lifecycle, config, domains                                            |
-| `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes                                  |
+| `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                 |
 | `openlander_monitor`         | 13      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, stats, host diagnosis |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task     | Composite → action                              | Description                            |
-| -------- | ----------------------------------------------- | -------------------------------------- |
-| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door                  |
-| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status                |
-| List     | `openlander_project` → `list_projects`          | Show all projects                      |
-| Logs     | `openlander_monitor` → `get_logs`               | Container logs                         |
-| Env Vars | `openlander_service` → `set_env_vars`           | Save Application environment variables |
-| Update   | `openlander_service` → `update_app`             | Ship latest stored source/config       |
-| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only   |
-| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL           |
-| Resource | `openlander_managed_service` → `create_service` | Create Database/Cache resource         |
+| Task     | Composite → action                                 | Description                            |
+| -------- | -------------------------------------------------- | -------------------------------------- |
+| Deploy   | `openlander_deploy` → `deploy_app`                 | App deploy front door                  |
+| Status   | `openlander_deploy` → `get_deploy_status`          | Check deployment status                |
+| List     | `openlander_project` → `list_projects`             | Show all projects                      |
+| Logs     | `openlander_monitor` → `get_logs`                  | Container logs                         |
+| Env Vars | `openlander_service` → `set_env_vars`              | Save Application environment variables |
+| Update   | `openlander_service` → `update_app`                | Ship latest stored source/config       |
+| Rollback | `openlander_deploy` → `rollback_service`           | Revert to previous Docker image only   |
+| Share    | `openlander_project` → `expose_public`             | Generate temporary share URL           |
+| Resource | `openlander_managed_service` → `create_service`    | Create Database/Cache resource         |
+| Inspect  | `openlander_managed_service` → `list_data_sources` | Discover Project data sources          |
 
 MCP env changes target Applications. Use `service_id` or `service_name`;
 `project_name` works only for Projects with exactly one Application.

@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Database, ShieldCheck, Trash2 } from 'lucide-react';
 import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -14,10 +14,15 @@ import {
   updateProject,
   type GroupService,
 } from '@/lib/api';
+import {
+  listProjectDataSources,
+  updateDataSourceAccess,
+  type DataSourceSummary,
+} from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
-export type SettingsSection = 'general' | 'ai' | 'danger';
+export type SettingsSection = 'general' | 'ai' | 'data' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
 
 interface SettingsTabProps {
@@ -49,6 +54,7 @@ export function SettingsTab({
   const navItems: { id: SettingsSection; label: string }[] = [
     { id: 'general', label: t('settings.nav.general') },
     { id: 'ai', label: t('settings.nav.ai') },
+    { id: 'data', label: t('settings.nav.data') },
     { id: 'danger', label: t('projectDetail.danger.nav') },
   ];
 
@@ -158,6 +164,7 @@ export function SettingsTab({
         {activeSection === 'ai' && (
           <ProjectAiOpsPanel projectId={projectId} onOpenAiOps={onOpenAiOps} />
         )}
+        {activeSection === 'data' && <ProjectDataAccessPanel projectId={projectId} />}
         {activeSection === 'danger' && (
           <div className="flex max-w-2xl flex-col gap-4">
             <div>
@@ -507,6 +514,155 @@ function ProjectAiOpsPanel({
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <AiOpsBriefingPanel projectId={projectId} onViewBriefings={onOpenAiOps} />
+    </div>
+  );
+}
+
+function ProjectDataAccessPanel({ projectId }: { projectId: string }) {
+  const { t } = useLanguage();
+  const [sources, setSources] = useState<DataSourceSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionKey, setActionKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSources = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await listProjectDataSources(projectId);
+      setSources(response.data_sources);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.data.loadFailed'));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, t]);
+
+  useEffect(() => {
+    void loadSources();
+  }, [loadSources]);
+
+  const setAccess = async (source: DataSourceSummary, mode: 'read' | 'disabled') => {
+    if (!source.service_id) return;
+    setActionKey(source.service_id);
+    setError(null);
+    try {
+      const response = await updateDataSourceAccess(projectId, source.service_id, mode);
+      setSources((current) =>
+        current.map((candidate) =>
+          candidate.data_source_id === response.data_source.data_source_id
+            ? response.data_source
+            : candidate,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.data.saveFailed'));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  return (
+    <div className="flex max-w-2xl flex-col gap-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{t('settings.data.title')}</h3>
+        <p className="mt-1 text-xs text-foreground/70">{t('settings.data.description')}</p>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          {error}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-0.5 h-4 w-4 text-agent" />
+          <div>
+            <h4 className="text-sm font-medium text-foreground">
+              {t('settings.data.boundaryTitle')}
+            </h4>
+            <p className="mt-1 text-xs text-foreground/70">
+              {t('settings.data.boundaryDescription')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-foreground/60">{t('settings.data.loading')}</p>
+      ) : sources.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[hsl(var(--border))] bg-bg-panel p-4">
+          <p className="text-sm font-medium text-foreground">{t('settings.data.emptyTitle')}</p>
+          <p className="mt-1 text-xs text-foreground/70">{t('settings.data.emptyDescription')}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {sources.map((source) => {
+            const busy = actionKey === source.service_id;
+            const enabled = source.status === 'enabled';
+            const external = source.source === 'external_env';
+            return (
+              <div
+                key={source.data_source_id}
+                className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Database className="h-4 w-4 text-foreground/60" />
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {source.name}
+                      </span>
+                      <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
+                        {source.kind}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide',
+                          enabled
+                            ? 'border border-success/30 bg-success/10 text-success'
+                            : 'border border-[hsl(var(--border))] text-foreground/60',
+                        )}
+                      >
+                        {enabled
+                          ? t('settings.data.status.enabled')
+                          : external
+                            ? t('settings.data.status.external')
+                            : t('settings.data.status.disabled')}
+                      </span>
+                    </div>
+                    <p className="ol-mono mt-1 break-all text-[11px] text-foreground/60">
+                      {source.service_id ?? source.env_key ?? source.data_source_id}
+                    </p>
+                    <p className="mt-1 text-xs text-foreground/70">
+                      {external
+                        ? t('settings.data.externalDescription')
+                        : enabled
+                          ? t('settings.data.enabledDescription')
+                          : t('settings.data.disabledDescription')}
+                    </p>
+                  </div>
+                  {!external && source.service_id && (
+                    <Button
+                      variant={enabled ? 'outline' : 'default'}
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void setAccess(source, enabled ? 'disabled' : 'read')}
+                    >
+                      {busy
+                        ? t('settings.data.saving')
+                        : enabled
+                          ? t('settings.data.disable')
+                          : t('settings.data.enable')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

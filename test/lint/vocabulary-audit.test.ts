@@ -69,6 +69,9 @@ const FROZEN_MANAGED_SERVICE_ACTIONS = [
   'remove_volume',
   'get_disk_usage',
   'cleanup_docker',
+  'list_data_sources',
+  'describe_data_source',
+  'read_data_source',
 ] as const;
 
 const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
