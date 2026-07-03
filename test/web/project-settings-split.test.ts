@@ -94,3 +94,29 @@ describe('Legacy project-env editor stays pruned', () => {
     }
   });
 });
+
+describe('Project Data Access UX contract', () => {
+  const projectSettingsSource = readRepoFile('web/src/components/project/SettingsTab.tsx');
+
+  it('keeps agent data access human-enabled from Project Settings', () => {
+    expect(projectSettingsSource).toContain('ProjectDataAccessPanel');
+    expect(projectSettingsSource).toContain('enableTarget');
+    expect(projectSettingsSource).toContain('settings.data.enableConfirmTitle');
+    expect(projectSettingsSource).toContain('settings.data.enableConfirmDescription');
+    expect(projectSettingsSource).toContain("void setAccess(enableTarget, 'read')");
+    expect(projectSettingsSource).toContain("setEnableTarget(source)");
+  });
+
+  it('pins the visible safety facts in both locales', () => {
+    for (const locale of ['en', 'ko']) {
+      const dict = readRepoFile(`web/src/i18n/${locale}.ts`);
+      expect(dict).toContain(locale === 'en' ? 'Off by default' : '기본값은 꺼짐');
+      expect(dict).toContain('factScopeLabel');
+      expect(dict).toContain('factCredentialLabel');
+      expect(dict).toContain('factAuditLabel');
+      expect(dict).toContain('enableConfirmDescription');
+      expect(dict).toContain('Hidden from agents');
+      expect(dict).toContain('Every read logged');
+    }
+  });
+});
