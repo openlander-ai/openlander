@@ -208,10 +208,8 @@ export async function summarizeAiOpsBriefingWithLlm(
       () =>
         generateText({
           model,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: buildPrompt(options.briefing) },
-          ],
+          system: SYSTEM_PROMPT,
+          prompt: buildPrompt(options.briefing),
           maxOutputTokens: 260,
         }),
     );
