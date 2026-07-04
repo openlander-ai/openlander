@@ -333,6 +333,8 @@ export const translations = {
         '활동 감사 로그 — 탭에서 배포 / MCP / 시스템 이벤트 / 설정 변경 활동을 선택해 보세요.',
       emptyState:
         '아직 활동이 없습니다. 트리거, 배포, 에이전트 실행, 인시던트가 발생하면 여기에 표시됩니다.',
+      emptyStateData:
+        '아직 Data Access 기록이 없습니다. Data Access를 켠 뒤 agent가 제한된 database/cache read를 실행하면 audit metadata와 함께 여기에 표시됩니다.',
     },
   },
   overview: {
@@ -833,6 +835,13 @@ export const translations = {
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
         '선택한 Application/Compose/Database/Cache/Storage 리소스의 호환 id입니다. MCP 후속 작업에는 이 service_id를 전달하세요.',
+    },
+    dataAccessIndicator: {
+      enabled: 'Agent read: On',
+      disabled: 'Agent read: Off',
+      external: 'Agent read: Setup required',
+      unsupported: 'Agent read: Unsupported',
+      settingsHint: '{name}의 read access는 Project Settings → Data Access에서 변경합니다.',
     },
     domains: {
       // Chrome — action button + retry + badge.

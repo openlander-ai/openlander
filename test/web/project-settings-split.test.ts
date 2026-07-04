@@ -97,6 +97,8 @@ describe('Legacy project-env editor stays pruned', () => {
 
 describe('Project Data Access UX contract', () => {
   const projectSettingsSource = readRepoFile('web/src/components/project/SettingsTab.tsx');
+  const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
+  const activitySource = readRepoFile('web/src/pages/Activity.tsx');
 
   it('keeps agent data access human-enabled from Project Settings', () => {
     expect(projectSettingsSource).toContain('ProjectDataAccessPanel');
@@ -104,7 +106,19 @@ describe('Project Data Access UX contract', () => {
     expect(projectSettingsSource).toContain('settings.data.enableConfirmTitle');
     expect(projectSettingsSource).toContain('settings.data.enableConfirmDescription');
     expect(projectSettingsSource).toContain("void setAccess(enableTarget, 'read')");
-    expect(projectSettingsSource).toContain("setEnableTarget(source)");
+    expect(projectSettingsSource).toContain('setEnableTarget(source)');
+  });
+
+  it('keeps data access discoverable from Resources without moving the toggle there', () => {
+    expect(projectViewSource).toContain('listProjectDataSources(projectId)');
+    expect(projectViewSource).toContain('dataAccessByServiceId');
+    expect(projectViewSource).toContain('DataAccessResourceBadge');
+    expect(projectViewSource).not.toContain('updateDataSourceAccess(');
+  });
+
+  it('uses a data-specific empty state for the Activity Data Access filter', () => {
+    expect(activitySource).toContain("kindFilter === 'data'");
+    expect(activitySource).toContain("t('activity.page.emptyStateData')");
   });
 
   it('pins the visible safety facts in both locales', () => {
@@ -117,6 +131,9 @@ describe('Project Data Access UX contract', () => {
       expect(dict).toContain('enableConfirmDescription');
       expect(dict).toContain('Hidden from agents');
       expect(dict).toContain('Every read logged');
+      expect(dict).toContain('emptyStateData');
+      expect(dict).toContain('Agent read: On');
+      expect(dict).toContain('Agent read: Off');
     }
   });
 });
