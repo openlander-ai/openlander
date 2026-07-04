@@ -475,6 +475,92 @@ describe('Project-aware data inspector', () => {
     expect(auditCall?.metadata).toContain('[number]');
   });
 
+  it('does not re-run Postgres reader setup during bounded SQL reads', async () => {
+    vi.stubEnv('OPENLANDER_MASTER_KEY', '0'.repeat(64));
+    _resetCachedKey();
+    const pg = service({ id: 'svc-pg' });
+    const encrypted = encrypt('reader-secret');
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{\"id\":1}]',
+      stderr: '',
+    });
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: encrypted.encrypted,
+          reader_password_iv: encrypted.iv,
+        }),
+        insertActivityLog: vi.fn().mockResolvedValue({}),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-pg', {
+      operation: 'sql.query',
+      query: 'SELECT id FROM users',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'ok', count: 1 }));
+    expect(exec).toHaveBeenCalledTimes(1);
+    const command = JSON.stringify(exec.mock.calls[0]?.[1]);
+    expect(command).toContain('ol_reader_test');
+    expect(command).not.toMatch(/CREATE ROLE|ALTER ROLE|GRANT SELECT|ALTER DEFAULT PRIVILEGES/);
+  });
+
+  it('does not re-run Postgres reader setup during schema describe', async () => {
+    vi.stubEnv('OPENLANDER_MASTER_KEY', '0'.repeat(64));
+    _resetCachedKey();
+    const pg = service({ id: 'svc-pg' });
+    const encrypted = encrypt('reader-secret');
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout:
+        '[{\"table_name\":\"users\",\"column_name\":\"id\",\"data_type\":\"integer\",\"is_nullable\":\"NO\"}]',
+      stderr: '',
+    });
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: encrypted.encrypted,
+          reader_password_iv: encrypted.iv,
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await describeDataSource(appCtx, 'svc-pg');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        schemas: [
+          expect.objectContaining({
+            tables: [
+              expect.objectContaining({
+                table: 'users',
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(exec).toHaveBeenCalledTimes(1);
+    const command = JSON.stringify(exec.mock.calls[0]?.[1]);
+    expect(command).toContain('ol_reader_test');
+    expect(command).not.toMatch(/CREATE ROLE|ALTER ROLE|GRANT SELECT|ALTER DEFAULT PRIVILEGES/);
+  });
+
   it('runs Redis read operations through allowlisted commands and audits without values', async () => {
     const redis = service({
       id: 'svc-redis',
