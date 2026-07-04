@@ -84,6 +84,15 @@ function createProject(): ProjectRow {
   };
 }
 
+function createOwnerProject(): ProjectRow {
+  return {
+    ...createProject(),
+    id: 'target-group',
+    name: 'hotdeal',
+    display_name: 'hotdeal',
+  };
+}
+
 function createService(overrides: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: 'p1__svc',
@@ -147,6 +156,7 @@ function createEnvironment(): EnvironmentRow {
 
 function createMockDb(state: {
   project: ProjectRow;
+  ownerProject?: ProjectRow;
   service: ServiceRow;
   environment: EnvironmentRow;
 }): Database {
@@ -165,7 +175,11 @@ function createMockDb(state: {
   };
 
   return {
-    getProject: vi.fn(async (id: string) => (id === state.project.id ? state.project : undefined)),
+    getProject: vi.fn(async (id: string) => {
+      if (id === state.project.id) return state.project;
+      if (id === state.ownerProject?.id) return state.ownerProject;
+      return undefined;
+    }),
     getService: vi.fn(async (id: string) => (id === state.service.id ? state.service : undefined)),
     getDeployableForProject: vi.fn(async (id: string) =>
       id === state.project.id ? state.service : undefined,
@@ -264,7 +278,7 @@ function createMockDocker(options?: {
       return { State: { Running: true } };
     }),
     restartContainer: blueRestartMock,
-    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-demo-app'),
+    ensureProjectNetwork: vi.fn(async (projectName: string) => `ol-${projectName}`),
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     listManagedContainers: vi.fn().mockResolvedValue(options?.managedContainers ?? []),
   } as unknown as Docker;
@@ -279,7 +293,12 @@ describe('blue-green route target flip', () => {
   let docker: Docker;
   let env: EnvLike;
   let pipeline: DeployPipeline;
-  let state: { project: ProjectRow; service: ServiceRow; environment: EnvironmentRow };
+  let state: {
+    project: ProjectRow;
+    ownerProject?: ProjectRow;
+    service: ServiceRow;
+    environment: EnvironmentRow;
+  };
   const testConfig = {
     ai: { secretScan: { enabled: false } },
     traefik: { mode: 'managed' },
@@ -393,6 +412,40 @@ describe('blue-green route target flip', () => {
         headers: { Host: expect.stringMatching(/^demo-app\./) },
       }),
       expect.any(Function),
+    );
+  });
+
+  it('starts attached blue-green green containers on the owner project network', async () => {
+    state.ownerProject = createOwnerProject();
+    state.service.project_id = state.ownerProject.id;
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'hotdeal',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: expect.stringMatching(/^ol-demo-app-green-/),
+        network: 'ol-hotdeal',
+        aliases: ['demo-app-green'],
+        labels: expect.objectContaining({
+          'openlander.project': 'demo-app',
+          'openlander.blue_green.project_id': 'p1',
+          'openlander.blue_green.service_id': 'p1__svc',
+        }),
+      }),
     );
   });
 
@@ -517,6 +570,40 @@ describe('blue-green route target flip', () => {
     );
     expect(updateServiceMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
       mockHttpRequest.mock.invocationCallOrder[previousProbeCalls],
+    );
+  });
+
+  it('recreates attached runtime env on the owner project network', async () => {
+    state.ownerProject = createOwnerProject();
+    state.service.project_id = state.ownerProject.id;
+    (env.getAllForService as ReturnType<typeof vi.fn>).mockReturnValue({
+      DATABASE_URL: 'postgres://new-runtime',
+    });
+
+    const result = await pipeline.recreateServiceRuntime('p1__svc', {
+      lockSessionId: 'env-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      applyMode: 'same-image-recreate',
+      readiness: 'healthy',
+    });
+    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'hotdeal',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: expect.stringMatching(/^ol-demo-app-env-/),
+        network: 'ol-hotdeal',
+        aliases: [expect.stringMatching(/^demo-app-env-/)],
+        labels: expect.objectContaining({
+          'openlander.project': 'demo-app',
+          'openlander.service': 'p1__svc',
+        }),
+        volumeProjectName: 'demo-app',
+      }),
     );
   });
 
