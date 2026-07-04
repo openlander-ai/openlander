@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-07-04
+
+### Added
+
+- Add Project-aware read-only Data Inspector MCP actions for managed Postgres
+  and Redis, with bounded query execution, reader roles, Redis allowlists,
+  result caps, timeouts, and activity audit metadata.
+- Add Project Settings Data Access opt-in UI and `data_source_access`
+  persistence for agent read access.
+
+### Changed
+
+- Improve Data Access and AI Ops UX copy, empty states, read-access indicators,
+  Activity filtering, and audit readability.
+- Improve `recovery_receipt` readability for agent-primary verification with
+  compact action and check summary fields.
+- Update runtime dependencies, development tooling, and GitHub workflow
+  versions.
+
+### Fixed
+
+- Preserve the owner project Docker network for attached services during
+  redeploy, same-image runtime recreate, and blue-green candidate startup.
+- Make oversized Postgres Data Inspector reads fail closed with
+  `DATA_RESULT_TOO_LARGE`, and block Postgres `set_config()` queries before
+  execution.
+- Add feature-specific AI Ops briefing provider status to `/health`.
+- Pass the AI Ops briefing system prompt through the AI SDK `system` option.
+
+### Tests
+
+- Pin the Data Inspector reader setup boundary so bounded Postgres reads and
+  schema describe calls do not re-run reader role setup or admin grants.
+
 ## [0.2.1-rc.11] - 2026-07-04
 
 ### Fixed
