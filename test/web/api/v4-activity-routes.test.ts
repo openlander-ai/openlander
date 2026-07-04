@@ -127,7 +127,16 @@ describe('GET /api/activity v4 feed', () => {
               project_id: 'group-1',
               title: 'Agent data source read',
               description: 'sql.query on app-db',
-              metadata: JSON.stringify({ service_id: 'svc-1', operation: 'sql.query' }),
+              metadata: JSON.stringify({
+                service_id: 'svc-1',
+                kind: 'postgres',
+                operation: 'sql.query',
+                row_count: 2,
+                duration_ms: 17,
+                truncated: true,
+                preview: "SELECT $$sk_live_secret$$ FROM users WHERE email='person@example.com'",
+                query_hash: 'abcdef1234567890',
+              }),
               created_at: new Date().toISOString(),
             },
           ];
@@ -144,8 +153,17 @@ describe('GET /api/activity v4 feed', () => {
       kind: 'data_access_read',
       project: 'group-1',
       service: 'svc-1',
-      title: 'Agent data source read',
+      title: 'Data source read · sql.query',
       detail: 'sql.query on app-db',
+      dataAccess: {
+        operation: 'sql.query',
+        sourceKind: 'postgres',
+        rowCount: 2,
+        durationMs: 17,
+        truncated: true,
+        preview: "SELECT $[redacted]$ FROM users WHERE email='[redacted]'",
+        queryHash: 'abcdef1234567890',
+      },
     });
   });
 });

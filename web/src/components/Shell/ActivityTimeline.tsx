@@ -282,7 +282,42 @@ export function ActivityRow({
             {event.detail}
           </p>
         )}
+        {event.kind === 'data_access_read' && event.dataAccess && (
+          <DataAccessAuditStrip summary={event.dataAccess} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function DataAccessAuditStrip({ summary }: { summary: ActivityEvent['dataAccess'] }) {
+  if (!summary) return null;
+  const hash = summary.queryHash ? summary.queryHash.slice(0, 8) : null;
+  const chips = [
+    summary.sourceKind,
+    summary.rowCount != null ? `${String(summary.rowCount)} item(s)` : null,
+    summary.durationMs != null ? `${String(summary.durationMs)}ms` : null,
+    summary.truncated ? 'truncated' : null,
+    hash ? `hash ${hash}` : null,
+  ].filter((chip): chip is string => chip != null && chip.length > 0);
+
+  if (chips.length === 0 && !summary.preview) return null;
+
+  return (
+    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+      {chips.map((chip) => (
+        <span
+          key={chip}
+          className="rounded border border-[color:var(--ol-border-subtle)] px-1.5 py-0.5 text-[10.5px] text-[color:var(--ol-fg-muted)]"
+        >
+          {chip}
+        </span>
+      ))}
+      {summary.preview && (
+        <span className="ol-mono min-w-0 max-w-full truncate text-[10.5px] text-[color:var(--ol-fg-subtle)]">
+          {summary.preview}
+        </span>
+      )}
     </div>
   );
 }

@@ -821,27 +821,28 @@ returns passwords, connection strings, or raw credential fields.
 
 #### `describe_data_source`
 
-| Parameter    | Type   | Required | Description                          |
-| ------------ | ------ | -------- | ------------------------------------ |
-| `service_id` | string | Yes      | Managed Postgres/Redis service id    |
-| `database`   | string | No       | Postgres database name               |
-| `schema`     | string | No       | Postgres schema name, default public |
+| Parameter    | Type          | Required | Description                              |
+| ------------ | ------------- | -------- | ---------------------------------------- |
+| `service_id` | string        | Yes      | Managed Postgres/Redis service id        |
+| `database`   | string/number | No       | Postgres database name or Redis DB index |
+| `schema`     | string        | No       | Postgres schema name, default public     |
 
 For Postgres, returns schema/table/column metadata. For Redis, returns keyspace
-metadata, database size, and sample key names only.
+metadata, database size, and sample key names only. Managed Redis credentials
+are used internally; passwords and connection strings are never returned.
 
 #### `read_data_source`
 
-| Parameter    | Type   | Required | Description                        |
-| ------------ | ------ | -------- | ---------------------------------- |
-| `service_id` | string | Yes      | Managed Postgres/Redis service id  |
-| `operation`  | string | Yes      | `sql.query` or a Redis read op     |
-| `query`      | string | SQL only | Single SELECT/read-only WITH query |
-| `database`   | string | No       | Postgres database name             |
-| `limit`      | number | No       | Default 50, max 100                |
-| `key`        | string | Redis    | Key for get/type/ttl/hgetall       |
-| `keys`       | array  | Redis    | Keys for mget                      |
-| `pattern`    | string | Redis    | SCAN pattern, default `*`          |
+| Parameter    | Type          | Required | Description                              |
+| ------------ | ------------- | -------- | ---------------------------------------- |
+| `service_id` | string        | Yes      | Managed Postgres/Redis service id        |
+| `operation`  | string        | Yes      | `sql.query` or a Redis read op           |
+| `query`      | string        | SQL only | Single SELECT/read-only WITH query       |
+| `database`   | string/number | No       | Postgres database name or Redis DB index |
+| `limit`      | number        | No       | Default 50, max 100                      |
+| `key`        | string        | Redis    | Key for get/type/ttl/hgetall             |
+| `keys`       | array         | Redis    | Keys for mget                            |
+| `pattern`    | string        | Redis    | SCAN pattern, default `*`                |
 
 Postgres uses a dedicated read-only role created by OpenLander when Agent read
 access is enabled. SQL text checks are a UX guard only; the read-only database
@@ -852,6 +853,12 @@ blocked before execution. Redis does not accept arbitrary command strings; only
 `redis.scan` are expressible. If a Postgres result exceeds the response byte cap,
 `read_data_source` returns `DATA_RESULT_TOO_LARGE` instead of returning partial
 or malformed row data.
+
+Blocked responses are structured for agents. They include `report_to_user`,
+`safe_alternatives`, and `_agent_guidance.next_steps` so an agent can stop,
+explain what happened, and avoid retrying unsafe queries or asking for raw
+credentials. Redis auth failures return `DATA_REDIS_AUTH_FAILED`; invalid Redis
+DB indexes return `DATA_REDIS_DB_INVALID` before any container command runs.
 
 ### `get_service_logs`
 

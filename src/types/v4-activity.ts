@@ -22,6 +22,16 @@ export type ActivityKind =
   | 'mcp_connected'
   | 'mcp_disconnected';
 
+export interface DataAccessActivitySummary {
+  operation: string;
+  sourceKind?: string | undefined;
+  rowCount?: number | null;
+  durationMs?: number | null;
+  truncated?: boolean | undefined;
+  preview?: string | undefined;
+  queryHash?: string | undefined;
+}
+
 export interface V4ActivityEvent {
   id: string;
   actor: Actor;
@@ -45,4 +55,6 @@ export interface V4ActivityEvent {
   title: string;
   /** One-line detail / context. NOT a paragraph. */
   detail?: string;
+  /** Data Inspector audit metadata. Result values and credentials are never included. */
+  dataAccess?: DataAccessActivitySummary;
 }

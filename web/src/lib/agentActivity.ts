@@ -34,6 +34,16 @@ export type ActivityKind =
   | 'mcp_connected'
   | 'mcp_disconnected';
 
+export interface DataAccessActivitySummary {
+  operation: string;
+  sourceKind?: string | undefined;
+  rowCount?: number | null;
+  durationMs?: number | null;
+  truncated?: boolean | undefined;
+  preview?: string | undefined;
+  queryHash?: string | undefined;
+}
+
 export interface ActivityEvent {
   id: string;
   actor: Actor;
@@ -54,6 +64,8 @@ export interface ActivityEvent {
   title: string;
   /** One-line detail / context. NOT a paragraph. Contains build #, error class, etc. */
   detail?: string;
+  /** Data Inspector audit metadata. Result values and credentials are never included. */
+  dataAccess?: DataAccessActivitySummary;
 }
 
 /** Kind filter groups. Drives the compact tab strip at the top of the
