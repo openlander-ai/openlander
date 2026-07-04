@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Improve Project Data Access agent guidance, Redis authentication and database
+  selection, and Activity audit readability while keeping query results out of
+  persisted audit metadata.
+
 ## [0.2.1-rc.8] - 2026-07-04
 
 ### Changed
