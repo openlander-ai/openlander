@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Clarify Data Access UX surfaces by showing a dedicated Activity empty state
+  for data-read audits and read-only agent read-access indicators on Project
+  Resources.
+
+### Tests
+
+- Pin the Data Inspector reader setup boundary so bounded Postgres reads and
+  schema describe calls do not re-run reader role setup or admin grants.
+
 ## [0.2.1-rc.9] - 2026-07-04
 
 ### Changed
