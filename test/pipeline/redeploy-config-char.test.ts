@@ -359,6 +359,7 @@ describe('redeploy() config reconstruction characterization', () => {
     expect(capturedConfig.envVars).toBeUndefined();
     expect(capturedConfig.composeServices).toBeUndefined();
     expect(capturedConfig.trigger).toBeUndefined();
+    expect(capturedConfig._networkProjectName).toBeUndefined();
   });
 
   it('scenario 2: Compose project redeploy skips docker-specific fields', async () => {
@@ -509,6 +510,7 @@ describe('redeploy() config reconstruction characterization', () => {
     expect(capturedConfig).toMatchObject({
       _projectId: 'runtime-app',
       _serviceId: 'runtime-app__svc',
+      _networkProjectName: 'target-group',
       repoUrl: 'https://github.com/example/runtime-app',
       name: 'runtime-app',
     });

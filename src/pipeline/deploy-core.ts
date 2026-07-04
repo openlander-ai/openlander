@@ -2455,6 +2455,20 @@ export class DeployPipeline {
     return { ownerProject, runtimeProject };
   }
 
+  private getServiceNetworkProjectName(
+    ownerProject: ProjectRow,
+    runtimeProject: ProjectRow,
+  ): string {
+    return ownerProject.id === runtimeProject.id ? runtimeProject.name : ownerProject.name;
+  }
+
+  private getAttachedServiceNetworkProjectName(
+    ownerProject: ProjectRow,
+    runtimeProject: ProjectRow,
+  ): string | undefined {
+    return ownerProject.id === runtimeProject.id ? undefined : ownerProject.name;
+  }
+
   /** Compatibility wrapper. New service paths should call redeployService(serviceId). */
   async redeploy(projectId: string, options?: RedeployOptions): Promise<DeployResult> {
     const project = await this.db.getProject(projectId);
@@ -2536,6 +2550,7 @@ export class DeployPipeline {
       await this.assertProjectMutable(ownerProject);
     }
     await this.assertProjectMutable(project);
+    const networkProjectName = this.getServiceNetworkProjectName(ownerProject, project);
 
     const lockSession = options?.lockSessionId ?? `runtime-env-${nanoid(12)}`;
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
@@ -2591,7 +2606,7 @@ export class DeployPipeline {
       let tempContainerId = '';
       const tempRouteName = `${getRouteName(project.name)}-env-${nanoid(6)}`;
       const tempContainerName = projectContainerName(tempRouteName);
-      const projectNetwork = await this.runtime.ensureProjectNetwork(project.name);
+      const projectNetwork = await this.runtime.ensureProjectNetwork(networkProjectName);
       await ensureManagedTraefikNetwork(this.runtime, projectNetwork);
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
         projectId,
@@ -2853,6 +2868,7 @@ export class DeployPipeline {
       await this.assertProjectMutable(ownerProject);
     }
     await this.assertProjectMutable(project);
+    const networkProjectName = this.getAttachedServiceNetworkProjectName(ownerProject, project);
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
@@ -2918,6 +2934,7 @@ export class DeployPipeline {
           _preserveLiveContainerUntilRun: true,
           environment: 'production',
           trigger: options?.trigger,
+          ...(networkProjectName ? { _networkProjectName: networkProjectName } : {}),
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
         db: this.db,
@@ -3041,6 +3058,11 @@ export class DeployPipeline {
       const blueRecord = await loadServiceViewRecord(this.db, project);
       const blueDeployable = blueRecord.service;
       const blueView = blueRecord.view;
+      let networkProjectName = projectName;
+      if (blueDeployable) {
+        const { ownerProject } = await this.resolveRuntimeProjectForService(blueDeployable);
+        networkProjectName = this.getServiceNetworkProjectName(ownerProject, project);
+      }
       const storedHealthPath = blueDeployable
         ? explicitHealthCheckPath(blueView, options?.healthCheckPath)
         : undefined;
@@ -3178,7 +3200,7 @@ export class DeployPipeline {
         { env: this.env },
       );
       const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
-      const networkName = await this.runtime.ensureProjectNetwork(projectName);
+      const networkName = await this.runtime.ensureProjectNetwork(networkProjectName);
       await ensureManagedTraefikNetwork(this.runtime, networkName);
 
       const greenName = this.makeGreenContainerName(projectName);
