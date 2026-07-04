@@ -303,6 +303,8 @@ export const translations = {
         'Audit log — pick a tab to focus on deployments, MCP, system events, or config changes.',
       emptyState:
         'No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen.',
+      emptyStateData:
+        'No data reads yet. After Data Access is enabled, bounded agent database/cache reads appear here with audit metadata.',
     },
   },
   overview: {
@@ -737,6 +739,13 @@ export const translations = {
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
         'Compatibility id for the selected Application/Compose/Database/Cache/Storage resource. Pass this service_id to MCP follow-up actions.',
+    },
+    dataAccessIndicator: {
+      enabled: 'Agent read: On',
+      disabled: 'Agent read: Off',
+      external: 'Agent read: Setup required',
+      unsupported: 'Agent read: Unsupported',
+      settingsHint: 'Change read access for {name} in Project Settings → Data Access.',
     },
     domains: {
       empty: 'No domains attached yet.',

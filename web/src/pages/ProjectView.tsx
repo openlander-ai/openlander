@@ -48,6 +48,7 @@ import {
   type GroupService,
   type ProjectManagedService,
 } from '@/lib/api/services';
+import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
 
 type ProjectTabId = 'services' | 'ai' | 'settings';
@@ -180,6 +181,9 @@ export function ProjectView() {
   } = useProjectTopology(projectId || null);
   const [groupServiceNodes, setGroupServiceNodes] = useState<ServiceNode[] | null>(null);
   const [managedServiceNodes, setManagedServiceNodes] = useState<ServiceNode[]>([]);
+  const [dataAccessByServiceId, setDataAccessByServiceId] = useState<
+    Record<string, DataSourceAccessStatus>
+  >({});
   const [showArchivedServices, setShowArchivedServices] = useState(false);
   const [archivedServiceNodes, setArchivedServiceNodes] = useState<ServiceNode[]>([]);
   const [archivedServicesLoading, setArchivedServicesLoading] = useState(false);
@@ -276,6 +280,35 @@ export function ProjectView() {
         reportManagedServicesLoadFailure(err);
         if (active) setManagedServiceNodes([]);
       });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) {
+      setDataAccessByServiceId({});
+      return () => {
+        active = false;
+      };
+    }
+
+    listProjectDataSources(projectId)
+      .then((response) => {
+        if (!active) return;
+        const next: Record<string, DataSourceAccessStatus> = {};
+        for (const source of response.data_sources) {
+          if (source.service_id != null) {
+            next[source.service_id] = source.status;
+          }
+        }
+        setDataAccessByServiceId(next);
+      })
+      .catch(() => {
+        if (active) setDataAccessByServiceId({});
+      });
+
     return () => {
       active = false;
     };
@@ -556,6 +589,7 @@ export function ProjectView() {
             archivedCount={archivedServiceCount}
             onShowArchivedChange={setShowArchivedServices}
             archiveForced={isProjectArchived}
+            dataAccessByServiceId={dataAccessByServiceId}
           />
         </TabPanel>
         <TabPanel
@@ -641,6 +675,7 @@ function ServicesPanel({
   archivedCount,
   onShowArchivedChange,
   archiveForced,
+  dataAccessByServiceId,
 }: {
   services: ServiceNode[];
   onOpen: (service: ServiceNode) => void;
@@ -651,6 +686,7 @@ function ServicesPanel({
   archivedCount: number;
   onShowArchivedChange: (show: boolean) => void;
   archiveForced?: boolean;
+  dataAccessByServiceId: Record<string, DataSourceAccessStatus>;
 }) {
   const { t } = useLanguage();
   const toggleArchived = () => onShowArchivedChange(!showArchived);
@@ -735,6 +771,9 @@ function ServicesPanel({
           const KindIcon = isDataResourceKind(s.kind) ? Database : Box;
           const open = () => onOpen(s);
           const isArchived = s.archivedAt != null;
+          const dataAccessStatus = isDataResourceKind(s.kind)
+            ? dataAccessByServiceId[s.id]
+            : undefined;
           return (
             <li key={s.id}>
               <div
@@ -794,6 +833,9 @@ function ServicesPanel({
                   >
                     {t('projectDetail.servicesGuide.serviceId', { id: s.id })}
                   </div>
+                  {dataAccessStatus && (
+                    <DataAccessResourceBadge status={dataAccessStatus} resourceName={s.name} />
+                  )}
                 </div>
                 <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
                   {(hasRuntimeMetricValue(s.cpu) || hasRuntimeMetricValue(s.mem)) && (
@@ -822,6 +864,50 @@ function ServicesPanel({
       </ul>
     </div>
   );
+}
+
+function DataAccessResourceBadge({
+  status,
+  resourceName,
+}: {
+  status: DataSourceAccessStatus;
+  resourceName: string;
+}) {
+  const { t } = useLanguage();
+  const enabled = status === 'enabled';
+  return (
+    <span
+      className={cn(
+        'mt-2 inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10.5px] font-medium',
+        enabled
+          ? 'border-[color:var(--ol-success)]/30 bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]'
+          : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
+      )}
+      title={t('projectDetail.dataAccessIndicator.settingsHint', { name: resourceName })}
+    >
+      {t(dataAccessIndicatorLabelKey(status))}
+    </span>
+  );
+}
+
+function dataAccessIndicatorLabelKey(
+  status: DataSourceAccessStatus,
+):
+  | 'projectDetail.dataAccessIndicator.enabled'
+  | 'projectDetail.dataAccessIndicator.disabled'
+  | 'projectDetail.dataAccessIndicator.external'
+  | 'projectDetail.dataAccessIndicator.unsupported' {
+  switch (status) {
+    case 'enabled':
+      return 'projectDetail.dataAccessIndicator.enabled';
+    case 'external_requires_setup':
+      return 'projectDetail.dataAccessIndicator.external';
+    case 'unsupported':
+      return 'projectDetail.dataAccessIndicator.unsupported';
+    case 'disabled':
+    default:
+      return 'projectDetail.dataAccessIndicator.disabled';
+  }
 }
 
 function ServiceRoleBadge({ service }: { service: ServiceNode }) {

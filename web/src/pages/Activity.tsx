@@ -67,7 +67,11 @@ export function Activity() {
           projectFilter={projectFilter}
           onProjectFilterChange={(next) => updateSearchParam('project', next)}
           bucketed
-          emptyState={t('activity.page.emptyState')}
+          emptyState={
+            kindFilter === 'data'
+              ? t('activity.page.emptyStateData')
+              : t('activity.page.emptyState')
+          }
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
           onOpenDeployment={(deploymentId, projectId) =>
             navigate(`/projects/${projectId}/deployments/${deploymentId}`)
