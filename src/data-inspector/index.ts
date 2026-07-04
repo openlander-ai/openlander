@@ -15,13 +15,16 @@ const MAX_RESULT_BYTES = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const REDIS_MAX_ITEMS = 100;
 const REDIS_DEFAULT_ITEMS = 50;
+const REDIS_MAX_DB_INDEX = 15;
+
+const DEFAULT_DATA_ACCESS_NEXT_STEPS = [
+  'Do not ask for or expose raw database credentials.',
+  'Ask the user to enable Agent read access in Project Settings → Data Access if needed.',
+] as const;
 
 export type DataSourceKind = 'postgres' | 'redis' | 'external';
 export type DataSourceAccessStatus =
-  | 'enabled'
-  | 'disabled'
-  | 'external_requires_setup'
-  | 'unsupported';
+  'enabled' | 'disabled' | 'external_requires_setup' | 'unsupported';
 
 export interface DataSourceSummary {
   data_source_id: string;
@@ -80,10 +83,7 @@ export function dataAccessBlockedResponse(
   code: string,
   message: string,
   details: Record<string, unknown> = {},
-  nextSteps: string[] = [
-    'Do not ask for or expose raw database credentials.',
-    'Ask the user to enable Agent read access in Project Settings → Data Access if needed.',
-  ],
+  nextSteps: string[] = [...DEFAULT_DATA_ACCESS_NEXT_STEPS],
 ): Record<string, unknown> {
   return {
     status: 'blocked',
@@ -91,6 +91,12 @@ export function dataAccessBlockedResponse(
     code,
     message,
     details,
+    report_to_user: {
+      status: 'blocked',
+      code,
+      message,
+    },
+    safe_alternatives: nextSteps,
     _agent_guidance: {
       message,
       next_steps: nextSteps,
@@ -133,9 +139,32 @@ function clampLimit(value: unknown, defaultValue: number, maxValue: number): num
 
 function redactAuditPreview(value: string): string {
   return value
+    .replace(/\$[A-Za-z_][A-Za-z0-9_]*\$[\s\S]*?\$[A-Za-z_][A-Za-z0-9_]*\$/g, '$[redacted]$')
+    .replace(/\$\$[\s\S]*?\$\$/g, '$$[redacted]$$')
     .replace(/'(?:''|[^'])*'/g, "'[redacted]'")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted-token]')
+    .replace(
+      /\b(?:sk|pk|rk|ghp|gho|ghu|pat|xox[baprs]?)[_-][A-Za-z0-9_-]{8,}\b/gi,
+      '[redacted-token]',
+    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '[redacted-token]')
     .replace(/\b\d+(?:\.\d+)?\b/g, '[number]')
     .slice(0, 180);
+}
+
+function redisDatabaseFromConnectionString(
+  connectionString: string | undefined,
+): string | undefined {
+  if (!connectionString) return undefined;
+  try {
+    const url = new URL(connectionString);
+    if (!url.protocol.startsWith('redis')) return undefined;
+    const raw = url.pathname.replace(/^\//, '').trim();
+    return /^\d+$/.test(raw) ? raw : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function sourceFromManagedService(
@@ -157,7 +186,10 @@ function sourceFromManagedService(
     access_mode: accessMode ?? 'disabled',
     source: 'managed_service',
     host: service.container_name ?? undefined,
-    database: kind === 'postgres' ? credentials?.['database'] : undefined,
+    database:
+      kind === 'postgres'
+        ? credentials?.['database']
+        : redisDatabaseFromConnectionString(credentials?.['connectionString']),
   };
 }
 
@@ -279,7 +311,16 @@ export async function resolveManagedDataSource(
       error: dataAccessBlockedResponse(
         'DATA_ACCESS_NOT_ENABLED',
         'Agent read access is not enabled for this data source.',
-        { project_id: service.project_id, service_id: service.id },
+        {
+          project_id: service.project_id,
+          service_id: service.id,
+          enable_path: 'Project Settings → Data Access',
+        },
+        [
+          'Report that Agent read access is disabled for this data source.',
+          'Ask the user to enable Agent read access in Project Settings → Data Access.',
+          'After the user enables it, call list_data_sources again. Do not ask for raw credentials.',
+        ],
       ),
     };
   }
@@ -496,6 +537,135 @@ function isReaderCredentials(value: unknown): value is { username: string; passw
   );
 }
 
+type RedisCliInvocation =
+  | { ok: true; command: string[]; env: Record<string, string>; database?: number }
+  | { ok: false; response: Record<string, unknown> };
+
+function parseRedisDatabaseIndex(
+  value: unknown,
+  details: Record<string, unknown>,
+): { ok: true; database?: number } | { ok: false; response: Record<string, unknown> } {
+  if (value == null || value === '') return { ok: true };
+  const raw = typeof value === 'number' ? String(value) : typeof value === 'string' ? value : null;
+  const trimmed = raw?.trim();
+  if (!trimmed) return { ok: true };
+  if (!/^\d+$/.test(trimmed)) {
+    return {
+      ok: false,
+      response: dataAccessBlockedResponse(
+        'DATA_REDIS_DB_INVALID',
+        'Redis database must be an integer index.',
+        details,
+        [
+          'Retry with database set to an integer Redis DB index, for example "0".',
+          'Use describe_data_source without database if you are not sure which DB to inspect.',
+        ],
+      ),
+    };
+  }
+  const database = Number.parseInt(trimmed, 10);
+  if (database < 0 || database > REDIS_MAX_DB_INDEX) {
+    return {
+      ok: false,
+      response: dataAccessBlockedResponse(
+        'DATA_REDIS_DB_INVALID',
+        `Redis database must be between 0 and ${String(REDIS_MAX_DB_INDEX)}.`,
+        { ...details, max_database: REDIS_MAX_DB_INDEX },
+        [
+          `Retry with a Redis DB index from 0 to ${String(REDIS_MAX_DB_INDEX)}.`,
+          'Use describe_data_source without database if you are not sure which DB to inspect.',
+        ],
+      ),
+    };
+  }
+  return { ok: true, database };
+}
+
+function redisCliInvocation(
+  service: ServiceRow,
+  databaseInput: unknown,
+  args: string[],
+): RedisCliInvocation {
+  const credentials = parseCredentials(service);
+  const details = { service_id: service.id };
+  let username = credentials?.['username'] ?? credentials?.['user'];
+  let password = credentials?.['password'];
+  let defaultDatabase: number | undefined;
+  const connectionString = credentials?.['connectionString'];
+
+  if (connectionString) {
+    try {
+      const url = new URL(connectionString);
+      if (url.protocol.startsWith('redis')) {
+        if (!username && url.username) username = decodeURIComponent(url.username);
+        if (!password && url.password) password = decodeURIComponent(url.password);
+        const parsedDefault = parseRedisDatabaseIndex(url.pathname.replace(/^\//, ''), details);
+        if (!parsedDefault.ok) return { ok: false, response: parsedDefault.response };
+        defaultDatabase = parsedDefault.database;
+      }
+    } catch {
+      // A malformed connection string should not leak credentials or block local managed Redis
+      // instances that can still answer redis-cli on localhost.
+    }
+  }
+
+  const parsedInput = parseRedisDatabaseIndex(databaseInput, details);
+  if (!parsedInput.ok) return { ok: false, response: parsedInput.response };
+  const database = parsedInput.database ?? defaultDatabase;
+  const command = ['redis-cli', '--raw'];
+  if (username) command.push('--user', username);
+  if (database !== undefined) command.push('-n', String(database));
+  command.push(...args);
+  return {
+    ok: true,
+    command,
+    env: password ? { REDISCLI_AUTH: password } : {},
+    database,
+  };
+}
+
+function redisFailureResponse(service: ServiceRow, output: string): Record<string, unknown> {
+  const message = output.trim() || 'Redis read operation failed.';
+  if (/\b(?:NOAUTH|WRONGPASS|AUTH failed|invalid username-password)\b/i.test(message)) {
+    return dataAccessBlockedResponse(
+      'DATA_REDIS_AUTH_FAILED',
+      'Redis authentication failed for this managed data source.',
+      { service_id: service.id },
+      [
+        'Report that OpenLander could not authenticate to the managed Redis data source.',
+        'Ask the user to verify or recreate the managed Redis service credentials.',
+        'Do not ask the user to paste raw Redis credentials into the agent chat.',
+      ],
+    );
+  }
+  return dataAccessBlockedResponse('DATA_QUERY_FAILED', message);
+}
+
+function postgresDatabaseName(
+  value: unknown,
+  defaultDatabase: string,
+  serviceId: string,
+): { ok: true; database: string } | { ok: false; response: Record<string, unknown> } {
+  if (value == null || value === '') return { ok: true, database: defaultDatabase };
+  if (typeof value !== 'string') {
+    return {
+      ok: false,
+      response: dataAccessBlockedResponse(
+        'DATA_POSTGRES_DATABASE_INVALID',
+        'Postgres database must be a database name string.',
+        { service_id: serviceId },
+        [
+          'Retry with database set to a Postgres database name string.',
+          'Use describe_data_source without database to inspect the default database.',
+        ],
+      ),
+    };
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, database: defaultDatabase };
+  return { ok: true, database: trimmed };
+}
+
 async function getPostgresReaderCredentials(
   ctx: AppContext,
   service: ServiceRow,
@@ -520,15 +690,21 @@ async function getPostgresReaderCredentials(
 export async function describeDataSource(
   ctx: AppContext,
   serviceId: string,
-  options: { database?: string; schema?: string } = {},
+  options: { database?: string | number; schema?: string } = {},
 ): Promise<DataSourceDescribeResult | Record<string, unknown>> {
   const resolved = await resolveManagedDataSource(ctx, serviceId);
   if ('error' in resolved) return resolved.error;
   const { service, source } = resolved;
   const credentials = parseCredentials(service);
-  const database = options.database ?? credentials?.['database'] ?? 'postgres';
 
   if (source.kind === 'postgres') {
+    const postgresDatabase = postgresDatabaseName(
+      options.database,
+      credentials?.['database'] ?? 'postgres',
+      service.id,
+    );
+    if (!postgresDatabase.ok) return postgresDatabase.response;
+    const database = postgresDatabase.database;
     const reader = await getPostgresReaderCredentials(ctx, service);
     if (!isReaderCredentials(reader)) return reader;
     const schemaFilter = options.schema ?? 'public';
@@ -580,28 +756,35 @@ export async function describeDataSource(
     };
   }
 
+  const infoCommand = redisCliInvocation(service, options.database, ['INFO', 'keyspace']);
+  if (!infoCommand.ok) return infoCommand.response;
+  const dbsizeCommand = redisCliInvocation(service, options.database, ['DBSIZE']);
+  if (!dbsizeCommand.ok) return dbsizeCommand.response;
+  const scanCommand = redisCliInvocation(service, options.database, ['SCAN', '0', 'COUNT', '20']);
+  if (!scanCommand.ok) return scanCommand.response;
+
   const [info, dbsize, scan] = await Promise.all([
-    ctx.serviceManager.exec(service.id, ['redis-cli', 'INFO', 'keyspace'], {
+    ctx.serviceManager.exec(service.id, infoCommand.command, {
       throwOnNonZeroExit: false,
       timeoutMs: DEFAULT_TIMEOUT_MS,
       maxOutputBytes: 16 * 1024,
+      env: infoCommand.env,
     }),
-    ctx.serviceManager.exec(service.id, ['redis-cli', 'DBSIZE'], {
+    ctx.serviceManager.exec(service.id, dbsizeCommand.command, {
       throwOnNonZeroExit: false,
       timeoutMs: DEFAULT_TIMEOUT_MS,
       maxOutputBytes: 16 * 1024,
+      env: dbsizeCommand.env,
     }),
-    ctx.serviceManager.exec(service.id, ['redis-cli', '--raw', 'SCAN', '0', 'COUNT', '20'], {
+    ctx.serviceManager.exec(service.id, scanCommand.command, {
       throwOnNonZeroExit: false,
       timeoutMs: DEFAULT_TIMEOUT_MS,
       maxOutputBytes: 16 * 1024,
+      env: scanCommand.env,
     }),
   ]);
   if (info.exitCode !== 0 || dbsize.exitCode !== 0 || scan.exitCode !== 0) {
-    return dataAccessBlockedResponse(
-      'DATA_SOURCE_DESCRIBE_FAILED',
-      info.stderr || dbsize.stderr || scan.stderr,
-    );
+    return redisFailureResponse(service, info.stderr || dbsize.stderr || scan.stderr);
   }
   const scanLines = scan.stdout
     .split('\n')
@@ -643,13 +826,25 @@ export async function readDataSource(
     const query = typeof input['query'] === 'string' ? input['query'] : '';
     const normalized = normalizePostgresQuery(query);
     if (!normalized.ok) {
-      return dataAccessBlockedResponse('DATA_QUERY_BLOCKED', normalized.message);
+      return dataAccessBlockedResponse(
+        'DATA_QUERY_BLOCKED',
+        normalized.message,
+        { operation, service_id: service.id },
+        [
+          'Do not retry blocked write or mutation statements.',
+          'Use describe_data_source to inspect available tables and columns.',
+          'Retry read_data_source with one SELECT or read-only WITH query and a small limit.',
+        ],
+      );
     }
     const credentials = parseCredentials(service);
-    const database =
-      typeof input['database'] === 'string' && input['database'].trim()
-        ? input['database'].trim()
-        : (credentials?.['database'] ?? 'postgres');
+    const postgresDatabase = postgresDatabaseName(
+      input['database'],
+      credentials?.['database'] ?? 'postgres',
+      service.id,
+    );
+    if (!postgresDatabase.ok) return postgresDatabase.response;
+    const database = postgresDatabase.database;
     const reader = await getPostgresReaderCredentials(ctx, service);
     if (!isReaderCredentials(reader)) return reader;
     const limit = clampLimit(input['limit'], POSTGRES_DEFAULT_ROWS, POSTGRES_MAX_ROWS);
@@ -736,33 +931,36 @@ async function readRedisDataSource(
     : [];
   const pattern =
     typeof input['pattern'] === 'string' && input['pattern'].trim() ? input['pattern'].trim() : '*';
-  const command =
+  const commandArgs =
     operation === 'redis.get' && key
-      ? ['redis-cli', '--raw', 'GET', key]
+      ? ['GET', key]
       : operation === 'redis.mget' && keys.length > 0
-        ? ['redis-cli', '--raw', 'MGET', ...keys]
+        ? ['MGET', ...keys]
         : operation === 'redis.type' && key
-          ? ['redis-cli', '--raw', 'TYPE', key]
+          ? ['TYPE', key]
           : operation === 'redis.ttl' && key
-            ? ['redis-cli', '--raw', 'TTL', key]
+            ? ['TTL', key]
             : operation === 'redis.hgetall' && key
-              ? ['redis-cli', '--raw', 'HGETALL', key]
+              ? ['HGETALL', key]
               : operation === 'redis.scan'
-                ? ['redis-cli', '--raw', 'SCAN', '0', 'MATCH', pattern, 'COUNT', String(limit)]
+                ? ['SCAN', '0', 'MATCH', pattern, 'COUNT', String(limit)]
                 : null;
-  if (!command) {
+  if (!commandArgs) {
     return dataAccessBlockedResponse(
       'DATA_OPERATION_UNSUPPORTED',
       'Redis supports redis.get, redis.mget, redis.type, redis.ttl, redis.hgetall, and redis.scan with required key/keys params.',
     );
   }
-  const exec = await ctx.serviceManager.exec(service.id, command, {
+  const invocation = redisCliInvocation(service, input['database'], commandArgs);
+  if (!invocation.ok) return invocation.response;
+  const exec = await ctx.serviceManager.exec(service.id, invocation.command, {
     throwOnNonZeroExit: false,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxOutputBytes: MAX_RESULT_BYTES,
+    env: invocation.env,
   });
   if (exec.exitCode !== 0) {
-    return dataAccessBlockedResponse('DATA_QUERY_FAILED', exec.stderr.trim() || exec.stdout.trim());
+    return redisFailureResponse(service, exec.stderr.trim() || exec.stdout.trim());
   }
   const lines = exec.stdout
     .split('\n')

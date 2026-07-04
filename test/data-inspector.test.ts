@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  describeDataSource,
   enableDataSourceReadAccess,
   listProjectDataSources,
   readDataSource,
@@ -156,6 +157,12 @@ describe('Project-aware data inspector', () => {
       error: expect.objectContaining({
         code: 'DATA_ACCESS_NOT_ENABLED',
         status: 'blocked',
+        report_to_user: expect.objectContaining({
+          message: 'Agent read access is not enabled for this data source.',
+        }),
+        safe_alternatives: expect.arrayContaining([
+          'After the user enables it, call list_data_sources again. Do not ask for raw credentials.',
+        ]),
       }),
     });
   });
@@ -205,6 +212,12 @@ describe('Project-aware data inspector', () => {
       expect.objectContaining({
         code: 'DATA_QUERY_BLOCKED',
         status: 'blocked',
+        report_to_user: expect.objectContaining({
+          code: 'DATA_QUERY_BLOCKED',
+        }),
+        safe_alternatives: expect.arrayContaining([
+          'Retry read_data_source with one SELECT or read-only WITH query and a small limit.',
+        ]),
       }),
     );
     expect(exec).not.toHaveBeenCalled();
@@ -236,6 +249,68 @@ describe('Project-aware data inspector', () => {
     expect(result).toEqual(
       expect.objectContaining({
         code: 'DATA_QUERY_BLOCKED',
+        status: 'blocked',
+      }),
+    );
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('blocks numeric Postgres database params before container exec', async () => {
+    const pg = service({ id: 'svc-pg' });
+    const exec = vi.fn();
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: null,
+          reader_password_iv: null,
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-pg', {
+      operation: 'sql.query',
+      query: 'SELECT 1',
+      database: 3,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        code: 'DATA_POSTGRES_DATABASE_INVALID',
+        status: 'blocked',
+      }),
+    );
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('blocks numeric Postgres describe database params before container exec', async () => {
+    const pg = service({ id: 'svc-pg' });
+    const exec = vi.fn();
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: null,
+          reader_password_iv: null,
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await describeDataSource(appCtx, 'svc-pg', { database: 3 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        code: 'DATA_POSTGRES_DATABASE_INVALID',
         status: 'blocked',
       }),
     );
@@ -358,13 +433,11 @@ describe('Project-aware data inspector', () => {
     _resetCachedKey();
     const pg = service({ id: 'svc-pg' });
     const encrypted = encrypt('reader-secret');
-    const exec = vi
-      .fn()
-      .mockResolvedValue({
-        exitCode: 0,
-        stdout: '[{\"id\":1,\"email\":\"a@example.com\"}]',
-        stderr: '',
-      });
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{\"id\":1,\"email\":\"a@example.com\"}]',
+      stderr: '',
+    });
     const insertActivityLog = vi.fn().mockResolvedValue({});
     const appCtx = context({
       db: {
@@ -403,7 +476,12 @@ describe('Project-aware data inspector', () => {
   });
 
   it('runs Redis read operations through allowlisted commands and audits without values', async () => {
-    const redis = service({ id: 'svc-redis', name: 'cache', kind: 'redis' });
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({ connectionString: 'redis://ol-svc-redis:6379' }),
+    });
     const exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'bar\n', stderr: '' });
     const insertActivityLog = vi.fn().mockResolvedValue({});
     const appCtx = context({
@@ -442,5 +520,238 @@ describe('Project-aware data inspector', () => {
         metadata: expect.not.stringContaining('bar'),
       }),
     );
+  });
+
+  it('passes managed Redis auth through env and supports DB selection without exposing the password', async () => {
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({
+        connectionString: 'redis://:redis-secret@ol-svc-redis:6379/2',
+      }),
+    });
+    const exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'bar\n', stderr: '' });
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(redis),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-redis',
+          mode: 'read',
+        }),
+        insertActivityLog: vi.fn().mockResolvedValue({}),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-redis', {
+      operation: 'redis.get',
+      key: 'foo',
+      database: 3,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'ok', values: 'bar' }));
+    expect(exec).toHaveBeenCalledWith(
+      'svc-redis',
+      ['redis-cli', '--raw', '-n', '3', 'GET', 'foo'],
+      expect.objectContaining({
+        env: { REDISCLI_AUTH: 'redis-secret' },
+      }),
+    );
+    expect(JSON.stringify(exec.mock.calls[0])).not.toContain('-a');
+  });
+
+  it('passes managed Redis ACL usernames while keeping passwords out of argv', async () => {
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({
+        connectionString: 'redis://app-reader:redis-secret@ol-svc-redis:6379/2',
+      }),
+    });
+    const exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'bar\n', stderr: '' });
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(redis),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-redis',
+          mode: 'read',
+        }),
+        insertActivityLog: vi.fn().mockResolvedValue({}),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-redis', {
+      operation: 'redis.get',
+      key: 'foo',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'ok', values: 'bar' }));
+    expect(exec).toHaveBeenCalledWith(
+      'svc-redis',
+      ['redis-cli', '--raw', '--user', 'app-reader', '-n', '2', 'GET', 'foo'],
+      expect.objectContaining({
+        env: { REDISCLI_AUTH: 'redis-secret' },
+      }),
+    );
+    expect(exec.mock.calls[0]?.[1]).not.toContain('redis-secret');
+  });
+
+  it('blocks invalid Redis DB indexes before container exec', async () => {
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({ connectionString: 'redis://ol-svc-redis:6379' }),
+    });
+    const exec = vi.fn();
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(redis),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-redis',
+          mode: 'read',
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-redis', {
+      operation: 'redis.get',
+      key: 'foo',
+      database: '99',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'blocked',
+        code: 'DATA_REDIS_DB_INVALID',
+      }),
+    );
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('returns agent-readable guidance when managed Redis authentication fails', async () => {
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({ connectionString: 'redis://ol-svc-redis:6379' }),
+    });
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'NOAUTH Authentication required.',
+    });
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(redis),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-redis',
+          mode: 'read',
+        }),
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-redis', {
+      operation: 'redis.get',
+      key: 'foo',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'blocked',
+        code: 'DATA_REDIS_AUTH_FAILED',
+        report_to_user: expect.objectContaining({
+          message: 'Redis authentication failed for this managed data source.',
+        }),
+        safe_alternatives: expect.arrayContaining([
+          'Do not ask the user to paste raw Redis credentials into the agent chat.',
+        ]),
+      }),
+    );
+  });
+
+  it('redacts sensitive-looking Redis keys in audit previews', async () => {
+    const redis = service({
+      id: 'svc-redis',
+      name: 'cache',
+      kind: 'redis',
+      credentials: JSON.stringify({ connectionString: 'redis://ol-svc-redis:6379' }),
+    });
+    const exec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: 'bar\n', stderr: '' });
+    const insertActivityLog = vi.fn().mockResolvedValue({});
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(redis),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-redis',
+          mode: 'read',
+        }),
+        insertActivityLog,
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-redis', {
+      operation: 'redis.get',
+      key: 'session:user@example.com:abcdef0123456789abcdef0123456789',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'ok' }));
+    const auditCall = insertActivityLog.mock.calls[0]?.[0] as { metadata?: string } | undefined;
+    expect(auditCall?.metadata).toBeDefined();
+    expect(auditCall?.metadata).not.toContain('user@example.com');
+    expect(auditCall?.metadata).not.toContain('abcdef0123456789abcdef0123456789');
+    expect(auditCall?.metadata).toContain('[redacted-email]');
+    expect(auditCall?.metadata).toContain('[redacted-token]');
+  });
+
+  it('redacts SQL dollar-quoted literals and token-shaped values in audit previews', async () => {
+    vi.stubEnv('OPENLANDER_MASTER_KEY', '0'.repeat(64));
+    _resetCachedKey();
+    const pg = service({ id: 'svc-pg' });
+    const encrypted = encrypt('reader-secret');
+    const exec = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{\"ok\":true}]',
+      stderr: '',
+    });
+    const insertActivityLog = vi.fn().mockResolvedValue({});
+    const appCtx = context({
+      db: {
+        getService: vi.fn().mockResolvedValue(pg),
+        getDataSourceAccess: vi.fn().mockResolvedValue({
+          project_id: 'p1',
+          service_id: 'svc-pg',
+          mode: 'read',
+          reader_username: 'ol_reader_test',
+          reader_password_encrypted: encrypted.encrypted,
+          reader_password_iv: encrypted.iv,
+        }),
+        insertActivityLog,
+      },
+      serviceManager: { exec },
+    } as Partial<AppContext>);
+
+    const result = await readDataSource(appCtx, 'svc-pg', {
+      operation: 'sql.query',
+      query: 'SELECT $$sk_live_secret$$ as token, $$Bearer abcdefghijklmnop$$ as bearer',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ status: 'ok' }));
+    const auditCall = insertActivityLog.mock.calls[0]?.[0] as { metadata?: string } | undefined;
+    expect(auditCall?.metadata).toBeDefined();
+    expect(auditCall?.metadata).not.toContain('sk_live_secret');
+    expect(auditCall?.metadata).not.toContain('abcdefghijklmnop');
+    expect(auditCall?.metadata).toContain('[redacted]');
   });
 });

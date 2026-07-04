@@ -614,7 +614,10 @@ export const listDataSourcesSchema = z
 
 export const describeDataSourceSchema = z.object({
   service_id: z.string().min(1).describe('Managed Postgres/Redis service_id'),
-  database: z.string().min(1).optional().describe('Postgres database to inspect'),
+  database: z
+    .union([z.string().min(1), z.number().int().min(0).max(15)])
+    .optional()
+    .describe('Postgres database name or Redis DB index (0-15) to inspect'),
   schema: z.string().min(1).optional().describe('Postgres schema to inspect (default: public)'),
 });
 
@@ -632,7 +635,10 @@ export const readDataSourceSchema = z.object({
     ])
     .describe('Read-only data operation. Write operations are intentionally not expressible.'),
   query: z.string().optional().describe('Postgres SELECT or read-only WITH query'),
-  database: z.string().min(1).optional().describe('Postgres database'),
+  database: z
+    .union([z.string().min(1), z.number().int().min(0).max(15)])
+    .optional()
+    .describe('Postgres database name or Redis DB index (0-15)'),
   key: z.string().min(1).optional().describe('Redis key for get/type/ttl/hgetall'),
   keys: z.array(z.string().min(1)).optional().describe('Redis keys for mget'),
   pattern: z.string().optional().describe('Redis SCAN pattern'),

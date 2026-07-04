@@ -25,7 +25,12 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { getMcpSessionsSnapshot } from '../../mcp/server.js';
-import type { Actor, ActivityKind, V4ActivityEvent } from '../../types/v4-activity.js';
+import type {
+  Actor,
+  ActivityKind,
+  DataAccessActivitySummary,
+  V4ActivityEvent,
+} from '../../types/v4-activity.js';
 
 function relativeTime(ts: number, now: number): { at: string; relTs: number } {
   const diffMs = Math.max(0, now - ts);
@@ -129,6 +134,52 @@ function actorFromActivityLog(metadata: Record<string, unknown>, eventType: stri
   if (eventType.startsWith('env:')) return 'mcp';
   if (eventType.startsWith('data_access:')) return 'mcp';
   return 'system';
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string | undefined {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = metadata[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function redactDataAccessPreview(value: string): string {
+  return value
+    .replace(/\$[A-Za-z_][A-Za-z0-9_]*\$[\s\S]*?\$[A-Za-z_][A-Za-z0-9_]*\$/g, '$[redacted]$')
+    .replace(/\$\$[\s\S]*?\$\$/g, '$$[redacted]$$')
+    .replace(/'(?:''|[^'])*'/g, "'[redacted]'")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted-token]')
+    .replace(
+      /\b(?:sk|pk|rk|ghp|gho|ghu|pat|xox[baprs]?)[_-][A-Za-z0-9_-]{8,}\b/gi,
+      '[redacted-token]',
+    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '[redacted-token]')
+    .replace(/\b\d+(?:\.\d+)?\b/g, '[number]')
+    .slice(0, 180);
+}
+
+function dataAccessSummary(metadata: Record<string, unknown>): DataAccessActivitySummary {
+  const preview = metadataString(metadata, 'preview');
+  return {
+    operation: metadataString(metadata, 'operation') ?? 'read',
+    sourceKind: metadataString(metadata, 'kind'),
+    rowCount: metadataNumber(metadata, 'row_count'),
+    durationMs: metadataNumber(metadata, 'duration_ms'),
+    truncated: metadata['truncated'] === true,
+    preview: preview ? redactDataAccessPreview(preview) : undefined,
+    queryHash: metadataString(metadata, 'query_hash'),
+  };
+}
+
+function dataAccessDetail(
+  rowDescription: string | null,
+  summary: DataAccessActivitySummary,
+): string {
+  return rowDescription ?? `${summary.operation} read`;
 }
 
 export function createActivityRoutes(ctx: AppContext): Hono {
@@ -256,6 +307,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
       const actor = actorFromActivityLog(metadata, row.event_type);
+      const dataAccess = dataAccessSummary(metadata);
       events.push({
         id: `activity-${row.id}`,
         actor,
@@ -266,8 +318,9 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         service: serviceRef?.serviceId ?? null,
         projectName: projectNameById.get(projectId) ?? null,
         serviceName: serviceRef?.serviceName ?? null,
-        title: row.title,
-        detail: row.description,
+        title: `Data source read · ${dataAccess.operation}`,
+        detail: dataAccessDetail(row.description, dataAccess),
+        dataAccess,
       });
     }
 

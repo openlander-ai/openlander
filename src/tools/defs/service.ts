@@ -3,6 +3,7 @@ import { getAllIps } from '../../pipeline/traefik.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { ManagedServiceLinker } from '../../pipeline/managed-service-linker.js';
 import {
+  dataAccessBlockedResponse,
   describeDataSource,
   listProjectDataSources,
   readDataSource,
@@ -861,16 +862,16 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: listDataSourcesSchema,
     execute: async (args, { appCtx, identity }) => {
       if (identity?.mcpScopeKind === 'service') {
-        return {
-          status: 'blocked',
-          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          message: 'Data source discovery requires a Project-scoped or instance token.',
-          _agent_guidance: {
-            message:
-              'This service-scoped token cannot inspect Project data sources. Ask the user for a Project-scoped read token.',
-          },
-        };
+        return dataAccessBlockedResponse(
+          'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          'Data source discovery requires a Project-scoped or instance token.',
+          { required_scope: 'project_or_instance' },
+          [
+            'Report that this service-scoped token cannot inspect Project data sources.',
+            'Ask the user for a Project-scoped read token or an instance token.',
+            'Do not ask for or expose raw database credentials.',
+          ],
+        );
       }
       const projectTarget = await resolveOptionalProjectTarget(appCtx, args);
       if (!projectTarget.ok) {
@@ -913,19 +914,19 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: describeDataSourceSchema,
     execute: async (args, { appCtx, identity }) => {
       if (identity?.mcpScopeKind === 'service') {
-        return {
-          status: 'blocked',
-          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          message: 'Data source inspection requires a Project-scoped or instance token.',
-          _agent_guidance: {
-            message:
-              'This service-scoped token cannot inspect data sources. Ask the user for a Project-scoped read token.',
-          },
-        };
+        return dataAccessBlockedResponse(
+          'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          'Data source inspection requires a Project-scoped or instance token.',
+          { required_scope: 'project_or_instance' },
+          [
+            'Report that this service-scoped token cannot inspect data sources.',
+            'Ask the user for a Project-scoped read token or an instance token.',
+            'Do not ask for or expose raw database credentials.',
+          ],
+        );
       }
       return await describeDataSource(appCtx, args['service_id'] as string, {
-        database: args['database'] as string | undefined,
+        database: args['database'] as string | number | undefined,
         schema: args['schema'] as string | undefined,
       });
     },
@@ -941,16 +942,16 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: readDataSourceSchema,
     execute: async (args, { appCtx, identity }) => {
       if (identity?.mcpScopeKind === 'service') {
-        return {
-          status: 'blocked',
-          error: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          code: 'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
-          message: 'Data source reads require a Project-scoped or instance token.',
-          _agent_guidance: {
-            message:
-              'This service-scoped token cannot query data sources. Ask the user for a Project-scoped read token.',
-          },
-        };
+        return dataAccessBlockedResponse(
+          'DATA_ACCESS_REQUIRES_PROJECT_SCOPE',
+          'Data source reads require a Project-scoped or instance token.',
+          { required_scope: 'project_or_instance' },
+          [
+            'Report that this service-scoped token cannot query data sources.',
+            'Ask the user for a Project-scoped read token or an instance token.',
+            'Do not ask for or expose raw database credentials.',
+          ],
+        );
       }
       return await readDataSource(appCtx, args['service_id'] as string, args);
     },
