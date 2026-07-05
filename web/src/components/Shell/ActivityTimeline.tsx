@@ -291,32 +291,43 @@ export function ActivityRow({
 }
 
 function DataAccessAuditStrip({ summary }: { summary: ActivityEvent['dataAccess'] }) {
+  const { t } = useLanguage();
   if (!summary) return null;
   const hash = summary.queryHash ? summary.queryHash.slice(0, 8) : null;
   const chips = [
-    summary.sourceKind,
-    summary.rowCount != null ? `${String(summary.rowCount)} item(s)` : null,
-    summary.durationMs != null ? `${String(summary.durationMs)}ms` : null,
-    summary.truncated ? 'truncated' : null,
-    hash ? `hash ${hash}` : null,
+    t('activity.dataAccess.operation', { operation: summary.operation }),
+    summary.sourceKind ? t('activity.dataAccess.source', { kind: summary.sourceKind }) : null,
+    summary.rowCount != null ? t('activity.dataAccess.results', { count: summary.rowCount }) : null,
+    summary.durationMs != null
+      ? t('activity.dataAccess.duration', { duration: summary.durationMs })
+      : null,
+    summary.truncated ? t('activity.dataAccess.truncated') : null,
+    hash ? t('activity.dataAccess.hash', { hash }) : null,
   ].filter((chip): chip is string => chip != null && chip.length > 0);
 
   if (chips.length === 0 && !summary.preview) return null;
 
   return (
-    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-      {chips.map((chip) => (
-        <span
-          key={chip}
-          className="rounded border border-[color:var(--ol-border-subtle)] px-1.5 py-0.5 text-[10.5px] text-[color:var(--ol-fg-muted)]"
-        >
-          {chip}
-        </span>
-      ))}
+    <div className="mt-2 min-w-0 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-2.5 py-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {chips.map((chip) => (
+          <span
+            key={chip}
+            className="rounded border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)] px-1.5 py-0.5 text-[10.5px] text-[color:var(--ol-fg-muted)]"
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
       {summary.preview && (
-        <span className="ol-mono min-w-0 max-w-full truncate text-[10.5px] text-[color:var(--ol-fg-subtle)]">
-          {summary.preview}
-        </span>
+        <div className="mt-1.5 grid min-w-0 gap-1">
+          <span className="text-[10.5px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+            {t('activity.dataAccess.preview')}
+          </span>
+          <span className="ol-mono min-w-0 max-w-full truncate rounded bg-[color:var(--ol-panel)] px-2 py-1 text-[10.5px] text-[color:var(--ol-fg-subtle)]">
+            {summary.preview}
+          </span>
+        </div>
       )}
     </div>
   );

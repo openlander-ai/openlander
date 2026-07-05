@@ -306,6 +306,15 @@ export const translations = {
       emptyStateData:
         'No data reads yet. After Data Access is enabled, bounded agent database/cache reads appear here with audit metadata.',
     },
+    dataAccess: {
+      operation: 'Operation: {operation}',
+      source: 'Source: {kind}',
+      results: '{count} result(s)',
+      duration: '{duration}ms',
+      truncated: 'truncated',
+      hash: 'hash {hash}',
+      preview: 'Redacted query preview',
+    },
   },
   overview: {
     title: 'Overview',
@@ -923,11 +932,18 @@ export const translations = {
         'Off by default. Agents cannot inspect this source until a human enables read access.',
       enableWarning:
         'Enabling returns query results to the agent. Results are capped and not stored, but the agent can read every table/key this source exposes through allowed read operations.',
+      enableDecisionHint:
+        'Only enable this if the agent may inspect the whole source for this Project.',
       auditHint:
         'Agent reads are written to Activity with query hash, operation, row/item count, and duration.',
       viewAudit: 'View audit',
       factScopeLabel: 'Read scope',
       factScopeValue: 'Entire source',
+      readableScope: {
+        postgres: 'All public schema tables',
+        redis: 'Keyspace via read-only operations',
+        default: 'Entire source',
+      },
       factCredentialLabel: 'Credential',
       factCredentialValue: 'Hidden from agents',
       factAuditLabel: 'Audit',
