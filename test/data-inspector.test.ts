@@ -395,16 +395,24 @@ describe('Project-aware data inspector', () => {
 
     expect(result).toEqual(expect.objectContaining({ status: 'enabled', queryable: true }));
     expect(exec).toHaveBeenCalledTimes(2);
-    expect(exec.mock.calls[0]?.[1]).toEqual(
-      expect.arrayContaining([expect.stringContaining('CREATE ROLE')]),
+    expect(JSON.stringify(exec.mock.calls[0]?.[1])).not.toMatch(
+      /CREATE ROLE|current_setting|statement_timeout|secret/,
     );
-    expect(exec.mock.calls[0]?.[1]).toEqual(
-      expect.arrayContaining([expect.stringContaining('current_setting')]),
+    expect(exec.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        stdin: expect.stringContaining('CREATE ROLE'),
+      }),
     );
-    expect(exec.mock.calls[0]?.[1]).toEqual(
-      expect.arrayContaining([expect.stringContaining('statement_timeout')]),
+    expect(exec.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        stdin: expect.stringContaining('current_setting'),
+      }),
     );
-    expect(JSON.stringify(exec.mock.calls[0]?.[1])).not.toContain('secret');
+    expect(exec.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        stdin: expect.stringContaining('statement_timeout'),
+      }),
+    );
     expect(exec.mock.calls[0]?.[2]).toEqual(
       expect.objectContaining({
         env: expect.objectContaining({
@@ -413,8 +421,11 @@ describe('Project-aware data inspector', () => {
         }),
       }),
     );
-    expect(exec.mock.calls[1]?.[1]).toEqual(
-      expect.arrayContaining([expect.stringContaining('GRANT SELECT')]),
+    expect(JSON.stringify(exec.mock.calls[1]?.[1])).not.toContain('GRANT SELECT');
+    expect(exec.mock.calls[1]?.[2]).toEqual(
+      expect.objectContaining({
+        stdin: expect.stringContaining('GRANT SELECT'),
+      }),
     );
     expect(upsertDataSourceAccess).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -462,9 +473,12 @@ describe('Project-aware data inspector', () => {
 
     expect(result).toEqual(expect.objectContaining({ status: 'ok', count: 1 }));
     expect(exec).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(exec.mock.calls[0]?.[1])).not.toContain('a@example.com');
+    expect(JSON.stringify(exec.mock.calls[0]?.[1])).not.toContain('age=42');
     expect(exec.mock.calls[0]?.[2]).toEqual(
       expect.objectContaining({
         env: expect.objectContaining({ PGPASSWORD: 'reader-secret' }),
+        stdin: expect.stringContaining("email='a@example.com'"),
       }),
     );
     const auditCall = insertActivityLog.mock.calls[0]?.[0] as { metadata?: string } | undefined;

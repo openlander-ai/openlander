@@ -11,6 +11,7 @@ export interface ExecOptions {
   timeoutMs?: number;
   maxOutputBytes?: number;
   env?: Record<string, string>;
+  stdin?: string;
 }
 
 export async function execInServiceContainer(
@@ -38,8 +39,12 @@ export async function execInServiceContainer(
       const env = options?.env
         ? Object.entries(options.env).map(([key, value]) => `${key}=${value}`)
         : undefined;
-      const execPromise = env
-        ? runtime.execSimple(containerId, command, { env })
+      const runtimeOptions =
+        env || options?.stdin !== undefined
+          ? { ...(env ? { env } : {}), stdin: options?.stdin }
+          : undefined;
+      const execPromise = runtimeOptions
+        ? runtime.execSimple(containerId, command, runtimeOptions)
         : runtime.execSimple(containerId, command);
       execResult = await Promise.race([execPromise, timeoutPromise]);
     } finally {

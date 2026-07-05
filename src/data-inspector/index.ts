@@ -355,17 +355,17 @@ async function postgresExec(
     [
       'sh',
       '-c',
-      'psql -h 127.0.0.1 -v ON_ERROR_STOP=1 -X -q -t -A -U "$1" -d "$2" -c "$3"',
+      'psql -h 127.0.0.1 -v ON_ERROR_STOP=1 -X -q -t -A -U "$1" -d "$2" -f -',
       'openlander-data-inspector',
       user,
       database,
-      sql,
     ],
     {
       throwOnNonZeroExit: false,
       timeoutMs,
       maxOutputBytes: MAX_RESULT_BYTES,
       env: { PGPASSWORD: password, ...env },
+      stdin: sql,
     },
   );
 }

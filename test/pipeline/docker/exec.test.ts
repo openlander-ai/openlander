@@ -178,6 +178,44 @@ describe('execSimple', () => {
     expect(result.stdout).toBe('partial output');
     expect(result.stderr).toBe('warning: something wrong');
   });
+
+  it('passes optional stdin through a hijacked non-TTY exec stream', async () => {
+    const execStream = new PassThrough();
+    const writeSpy = vi.spyOn(execStream, 'write');
+    const endSpy = vi.spyOn(execStream, 'end');
+    const execInspect = vi.fn().mockResolvedValueOnce({ ExitCode: 0 });
+    const execStart = vi.fn().mockResolvedValueOnce(execStream);
+    const containerExec = vi.fn().mockResolvedValueOnce({
+      start: execStart,
+      inspect: execInspect,
+    });
+
+    mockGetContainer.mockReturnValueOnce({ exec: containerExec });
+    mockDemuxStream.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, stdout: PassThrough, stderr: PassThrough) => {
+        stdout.write(Buffer.from('1'));
+        stdout.end();
+        stderr.end();
+      },
+    );
+
+    setTimeout(() => execStream.emit('end'), 5);
+
+    const docker = new Docker();
+    const result = await docker.execSimple('c1', ['psql', '-f', '-'], { stdin: 'SELECT 1' });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('1');
+    expect(containerExec).toHaveBeenCalledWith({
+      Cmd: ['psql', '-f', '-'],
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+    expect(execStart).toHaveBeenCalledWith({ hijack: true, stdin: true });
+    expect(writeSpy).toHaveBeenCalledWith('SELECT 1');
+    expect(endSpy).toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
