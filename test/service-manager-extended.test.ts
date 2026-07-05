@@ -14,6 +14,7 @@ vi.mock('../src/lib/logger.js', () => ({
 }));
 
 import type { Database, ServiceConnectionRow, ServiceRow } from '../src/db/index.js';
+import { ORPHAN_MANAGED_GROUP_ID } from '../src/db/service-ids.js';
 import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
 
@@ -31,6 +32,7 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
   };
   return {
     id: partial.id ?? 'svc-1',
+    project_id: partial.project_id ?? ORPHAN_MANAGED_GROUP_ID,
     name: partial.name ?? 'shared-pg',
     type: legacyType,
     image: partial.image ?? 'postgres:16-alpine',
@@ -119,6 +121,112 @@ function createDbMock(
     }),
   } as unknown as Database;
 }
+
+describe('ServiceManager network reconciliation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('preserves runtime aliases when reconciling attached deployable services', async () => {
+    const connectContainerToNetwork = vi.fn(async () => undefined);
+    const disconnectContainerFromNetwork = vi.fn(async () => undefined);
+    const ensureProjectNetwork = vi.fn(async () => 'ol-hotdeal');
+
+    const service = createService({
+      id: 'worker-runtime__svc',
+      project_id: 'target-group',
+      name: 'hotdeal-worker__svc',
+      kind: 'git',
+      container_id: 'worker-container',
+      container_name: 'ol-hotdeal-worker',
+    });
+
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'container-worker',
+        State: { Running: true },
+        NetworkSettings: {
+          Networks: {
+            'ol-hotdeal': {
+              Aliases: ['hotdeal-worker'],
+            },
+          },
+        },
+      }),
+      ensureProjectNetwork,
+      connectContainerToNetwork,
+      disconnectContainerFromNetwork,
+    };
+    const db = {
+      listServices: vi.fn(() => [service]),
+      getProject: vi.fn(async () => ({ id: 'target-group', name: 'hotdeal' })),
+    };
+    const manager = new ServiceManager(
+      docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
+      db as unknown as Database,
+    );
+
+    await manager.reconcileServiceNetworks();
+
+    expect(ensureProjectNetwork).toHaveBeenCalledWith('hotdeal');
+    expect(disconnectContainerFromNetwork).toHaveBeenCalledWith('container-worker', 'ol-hotdeal');
+    expect(connectContainerToNetwork).toHaveBeenCalledWith('container-worker', 'ol-hotdeal', [
+      'hotdeal-worker',
+      'hotdeal-worker__svc',
+    ]);
+  });
+
+  it('does not reconnect attached deployable services when runtime and canonical aliases exist', async () => {
+    const connectContainerToNetwork = vi.fn(async () => undefined);
+    const disconnectContainerFromNetwork = vi.fn(async () => undefined);
+
+    const service = createService({
+      id: 'worker-runtime__svc',
+      project_id: 'target-group',
+      name: 'hotdeal-worker__svc',
+      kind: 'git',
+      container_id: 'worker-container',
+      container_name: 'ol-hotdeal-worker',
+    });
+
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'container-worker',
+        State: { Running: true },
+        NetworkSettings: {
+          Networks: {
+            'ol-hotdeal': {
+              Aliases: ['hotdeal-worker', 'hotdeal-worker__svc'],
+            },
+          },
+        },
+      }),
+      ensureProjectNetwork: vi.fn(async () => 'ol-hotdeal'),
+      connectContainerToNetwork,
+      disconnectContainerFromNetwork,
+    };
+    const db = {
+      listServices: vi.fn(() => [service]),
+      getProject: vi.fn(async () => ({ id: 'target-group', name: 'hotdeal' })),
+    };
+    const manager = new ServiceManager(
+      docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
+      db as unknown as Database,
+    );
+
+    await manager.reconcileServiceNetworks();
+
+    expect(connectContainerToNetwork).not.toHaveBeenCalledWith(
+      'container-worker',
+      'ol-hotdeal',
+      expect.anything(),
+    );
+    expect(disconnectContainerFromNetwork).not.toHaveBeenCalledWith(
+      'container-worker',
+      'ol-hotdeal',
+    );
+  });
+});
 
 describe('ServiceManager extended DB/user operations', () => {
   beforeEach(() => {

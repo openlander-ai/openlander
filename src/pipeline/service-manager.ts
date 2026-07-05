@@ -47,6 +47,8 @@ const log = createModuleLogger('service-manager');
 const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
 const DEFAULT_CONTAINERIZED_DATA_VOLUME = 'openlander-data';
 const CONTAINERIZED_DATA_MOUNT = '/openlander-data';
+const DEPLOYABLE_SERVICE_NAME_SUFFIX = '__svc';
+const DOCKER_NETWORK_ALIAS_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
 type ServiceCardSummary = ServiceRow & {
   summary: {
@@ -74,6 +76,24 @@ function isTruthyEnv(value: string | undefined): boolean {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function serviceNetworkAliases(service: ServiceRow): string[] {
+  const aliases = new Set<string>();
+  const isDeployableService =
+    service.kind === 'git' || service.kind === 'image' || service.kind === 'compose';
+  if (isDeployableService && service.name.endsWith(DEPLOYABLE_SERVICE_NAME_SUFFIX)) {
+    const runtimeAlias = service.name.slice(0, -DEPLOYABLE_SERVICE_NAME_SUFFIX.length);
+    if (DOCKER_NETWORK_ALIAS_PATTERN.test(runtimeAlias)) {
+      aliases.add(runtimeAlias);
+    }
+  }
+  aliases.add(service.name);
+  return [...aliases];
+}
+
+function mergeNetworkAliases(existingAliases: string[], requiredAliases: string[]): string[] {
+  return [...new Set([...existingAliases, ...requiredAliases])];
 }
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
@@ -363,10 +383,11 @@ export class ServiceManager {
         const aliases: string[] = Array.isArray(aliasesRaw)
           ? aliasesRaw.filter((alias): alias is string => typeof alias === 'string')
           : [];
-        const hasAlias = aliases.includes(service.name);
+        const requiredAliases = serviceNetworkAliases(service);
+        const hasRequiredAliases = requiredAliases.every((alias) => aliases.includes(alias));
 
         if (!serviceNetwork) {
-          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
+          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, requiredAliases);
           migrated += 1;
           log.info(
             {
@@ -374,10 +395,11 @@ export class ServiceManager {
               serviceName: service.name,
               containerId: info.Id,
               targetNetwork,
+              aliases: requiredAliases,
             },
             'Service network reconciled',
           );
-        } else if (hasAlias) {
+        } else if (hasRequiredAliases) {
           alreadyConnected += 1;
           log.info(
             {
@@ -385,12 +407,14 @@ export class ServiceManager {
               serviceName: service.name,
               containerId: info.Id,
               targetNetwork,
+              aliases,
             },
             'Service already connected to target network with alias',
           );
         } else {
+          const nextAliases = mergeNetworkAliases(aliases, requiredAliases);
           await this.runtime.disconnectContainerFromNetwork(info.Id, targetNetwork);
-          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
+          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, nextAliases);
           migrated += 1;
           log.info(
             {
@@ -398,6 +422,7 @@ export class ServiceManager {
               serviceName: service.name,
               containerId: info.Id,
               targetNetwork,
+              aliases: nextAliases,
             },
             'Service network alias reconciled',
           );
