@@ -1038,7 +1038,7 @@ export const translations = {
       // Chrome — section title, status labels, and buttons.
       title: 'Data Access',
       enable: 'Enable read access',
-      disable: 'Disable access',
+      disable: 'Disable read access',
       saving: 'Saving…',
       status: {
         enabled: 'Enabled',
@@ -1073,7 +1073,7 @@ export const translations = {
         redis: 'Read-only operation으로 keyspace 조회',
         default: 'Entire source',
       },
-      factCredentialLabel: 'Credential',
+      factCredentialLabel: 'Credentials',
       factCredentialValue: 'Hidden from agents',
       factAuditLabel: 'Audit',
       factAuditValue: 'Every read logged',
