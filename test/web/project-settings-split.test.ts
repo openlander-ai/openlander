@@ -99,6 +99,7 @@ describe('Project Data Access UX contract', () => {
   const projectSettingsSource = readRepoFile('web/src/components/project/SettingsTab.tsx');
   const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
   const activitySource = readRepoFile('web/src/pages/Activity.tsx');
+  const activityTimelineSource = readRepoFile('web/src/components/Shell/ActivityTimeline.tsx');
 
   it('keeps agent data access human-enabled from Project Settings', () => {
     expect(projectSettingsSource).toContain('ProjectDataAccessPanel');
@@ -125,6 +126,8 @@ describe('Project Data Access UX contract', () => {
     for (const locale of ['en', 'ko']) {
       const dict = readRepoFile(`web/src/i18n/${locale}.ts`);
       expect(dict).toContain(locale === 'en' ? 'Off by default' : '기본값은 꺼짐');
+      expect(dict).toContain(locale === 'en' ? 'All public schema tables' : '모든 table');
+      expect(dict).toContain(locale === 'en' ? 'Only enable this' : 'source 전체');
       expect(dict).toContain('factScopeLabel');
       expect(dict).toContain('factCredentialLabel');
       expect(dict).toContain('factAuditLabel');
@@ -135,5 +138,12 @@ describe('Project Data Access UX contract', () => {
       expect(dict).toContain('Agent read: On');
       expect(dict).toContain('Agent read: Off');
     }
+  });
+
+  it('keeps data-access audit rows readable without exposing result values', () => {
+    expect(activityTimelineSource).toContain('activity.dataAccess.operation');
+    expect(activityTimelineSource).toContain('activity.dataAccess.preview');
+    expect(activityTimelineSource).toContain('summary.preview');
+    expect(activityTimelineSource).toContain('queryHash.slice');
   });
 });

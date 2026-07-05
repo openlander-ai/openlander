@@ -336,6 +336,16 @@ export const translations = {
       emptyStateData:
         '아직 Data Access 기록이 없습니다. Data Access를 켠 뒤 agent가 제한된 database/cache read를 실행하면 audit metadata와 함께 여기에 표시됩니다.',
     },
+    dataAccess: {
+      // Content — compact audit row labels.
+      operation: 'Operation: {operation}',
+      source: 'Source: {kind}',
+      results: '결과 {count}개',
+      duration: '{duration}ms',
+      truncated: 'truncated',
+      hash: 'hash {hash}',
+      preview: 'Redacted query preview',
+    },
   },
   overview: {
     // Chrome — page title + KPI tile labels.
@@ -1052,11 +1062,17 @@ export const translations = {
         '기본값은 꺼짐입니다. 사람이 read access를 켜기 전까지 agent는 이 source를 조회할 수 없습니다.',
       enableWarning:
         '켜면 query result가 agent에게 반환됩니다. 결과는 cap이 걸리고 저장되지 않지만, 허용된 read operation으로 이 source가 노출하는 모든 table/key를 읽을 수 있습니다.',
+      enableDecisionHint: '이 Project의 agent가 source 전체를 조회해도 되는 경우에만 켜세요.',
       auditHint:
         'Agent read는 Activity에 query hash, operation, row/item count, duration과 함께 기록됩니다.',
       viewAudit: 'View audit',
       factScopeLabel: 'Read scope',
       factScopeValue: 'Entire source',
+      readableScope: {
+        postgres: 'Public schema의 모든 table',
+        redis: 'Read-only operation으로 keyspace 조회',
+        default: 'Entire source',
+      },
       factCredentialLabel: 'Credential',
       factCredentialValue: 'Hidden from agents',
       factAuditLabel: 'Audit',

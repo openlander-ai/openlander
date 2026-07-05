@@ -584,6 +584,12 @@ function ProjectDataAccessPanel({
     }
   };
 
+  const readableScopeLabel = (source: DataSourceSummary) => {
+    if (source.kind === 'postgres') return t('settings.data.readableScope.postgres');
+    if (source.kind === 'redis') return t('settings.data.readableScope.redis');
+    return t('settings.data.readableScope.default');
+  };
+
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
@@ -692,9 +698,7 @@ function ProjectDataAccessPanel({
                               <Database className="h-3.5 w-3.5 text-foreground/50" />
                               {t('settings.data.factScopeLabel')}
                             </div>
-                            <p className="mt-1 text-foreground/55">
-                              {t('settings.data.factScopeValue')}
-                            </p>
+                            <p className="mt-1 text-foreground/55">{readableScopeLabel(source)}</p>
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 font-medium text-foreground/80">
@@ -720,6 +724,11 @@ function ProjectDataAccessPanel({
                             ? t('settings.data.auditHint')
                             : t('settings.data.enableWarning')}
                         </p>
+                        {!enabled && (
+                          <p className="mt-1 max-w-xl text-[11.5px] leading-relaxed text-warning">
+                            {t('settings.data.enableDecisionHint')}
+                          </p>
+                        )}
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Link
                             to={`/activity?project=${encodeURIComponent(projectId)}&type=data`}
