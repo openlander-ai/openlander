@@ -944,7 +944,7 @@ export const translations = {
         redis: 'Keyspace via read-only operations',
         default: 'Entire source',
       },
-      factCredentialLabel: 'Credential',
+      factCredentialLabel: 'Credentials',
       factCredentialValue: 'Hidden from agents',
       factAuditLabel: 'Audit',
       factAuditValue: 'Every read logged',
@@ -964,7 +964,7 @@ export const translations = {
         deploying: 'Deploying',
       },
       enable: 'Enable read access',
-      disable: 'Disable access',
+      disable: 'Disable read access',
       saving: 'Saving…',
       status: {
         enabled: 'Enabled',
