@@ -12,17 +12,19 @@ export class ExecOps {
   async execSimple(
     containerId: string,
     cmd: string[],
-    opts?: { env?: string[] },
+    opts?: { env?: string[]; stdin?: string },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     const container = this.ctx.client.getContainer(containerId);
+    const hasStdin = opts?.stdin !== undefined;
     const exec = await container.exec({
       Cmd: cmd,
       ...(opts?.env ? { Env: opts.env } : {}),
+      ...(hasStdin ? { AttachStdin: true } : {}),
       AttachStdout: true,
       AttachStderr: true,
     });
 
-    const stream = await exec.start({ hijack: false, stdin: false });
+    const stream = await exec.start({ hijack: hasStdin, stdin: hasStdin });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     const stdoutStream = new PassThrough();
@@ -36,6 +38,10 @@ export class ExecOps {
     });
 
     this.ctx.client.modem.demuxStream(stream, stdoutStream, stderrStream);
+    if (hasStdin) {
+      stream.write(opts.stdin);
+      stream.end();
+    }
 
     await new Promise<void>((resolve, reject) => {
       stream.on('error', reject);
