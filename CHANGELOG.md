@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2-rc.1] - 2026-07-05
+
+### Changed
+
+- Clarify Project Data Access read-state copy and Activity affordances so
+  agent read access is easier to audit.
+
+### Fixed
+
+- Preserve existing runtime Docker network aliases while adding canonical
+  attached-service aliases during service network reconciliation.
+- Pass Data Inspector SQL through Docker exec stdin so shell-sensitive query
+  text is not mangled.
+
 ## [0.2.1] - 2026-07-04
 
 ### Added
