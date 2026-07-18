@@ -1,5 +1,6 @@
 import { getLogBuffer, type LogEntry } from '../../lib/log-buffer.js';
 import { isDockerNotFoundError } from '../../errors.js';
+import { redactRepoUrl } from '../../pipeline/git.js';
 import type {
   ActivityLogRow,
   DeployLogRow,
@@ -36,6 +37,7 @@ const SENSITIVE_CONFIG_KEYS = new Set([
   'gitCredentialId',
   'git_credential_id',
 ]);
+const REPO_URL_KEYS = new Set(['repoUrl', 'repo_url']);
 
 function safeProjectRow(row: ProjectRow) {
   return {
@@ -73,7 +75,7 @@ function safeServiceRow(row: ServiceRow) {
     build_context: row.build_context,
     build_method: row.build_method,
     source: row.source,
-    repo_url: row.repo_url,
+    repo_url: row.repo_url ? redactRepoUrl(row.repo_url) : row.repo_url,
     branch: row.branch,
     image_url: row.image_url,
     image_cmd: row.image_cmd,
@@ -152,7 +154,24 @@ function sanitizeDeployConfig(value: unknown): unknown {
 
   const safe: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    if (!SENSITIVE_CONFIG_KEYS.has(key)) safe[key] = sanitizeDeployConfig(entry);
+    if (SENSITIVE_CONFIG_KEYS.has(key)) continue;
+    if (key === 'config_json') {
+      if (typeof entry !== 'string') {
+        safe['config_parse_error'] = 'invalid_json';
+        continue;
+      }
+      try {
+        safe['config'] = sanitizeDeployConfig(JSON.parse(entry));
+      } catch {
+        safe['config_parse_error'] = 'invalid_json';
+      }
+      continue;
+    }
+    if (REPO_URL_KEYS.has(key) && typeof entry === 'string') {
+      safe[key] = redactRepoUrl(entry);
+      continue;
+    }
+    safe[key] = sanitizeDeployConfig(entry);
   }
   return safe;
 }
