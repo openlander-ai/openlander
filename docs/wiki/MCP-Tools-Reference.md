@@ -145,30 +145,37 @@ Composite catalog:
 
 Analyze a repository and create a deployment plan.
 
-| Parameter           | Type    | Required | Description                                       |
-| ------------------- | ------- | -------- | ------------------------------------------------- |
-| `repo_url`          | string  | No       | Git repository URL                                |
-| `branch`            | string  | No       | Branch to deploy                                  |
-| `name`              | string  | No       | Project name                                      |
-| `source`            | string  | No       | `'git'` or `'image'`                              |
-| `image`             | string  | No       | Docker image (if source=image)                    |
-| `cmd`               | string  | No       | Container command override                        |
-| `port`              | number  | No       | Container port                                    |
-| `health_check_path` | string  | No       | Health check path                                 |
-| `env_vars`          | object  | No       | Environment variables                             |
-| `prefer_dockerfile` | boolean | No       | Prefer existing Dockerfile                        |
-| `dockerfile_path`   | string  | No       | Relative Dockerfile path                          |
-| `docker_target`     | string  | No       | Docker build target stage                         |
-| `target_project_id` | string  | No       | Deploy first Application into an existing Project |
+| Parameter           | Type    | Required | Description                                         |
+| ------------------- | ------- | -------- | --------------------------------------------------- |
+| `repo_url`          | string  | No       | Git repository URL                                  |
+| `branch`            | string  | No       | Branch to deploy                                    |
+| `name`              | string  | No       | Project name                                        |
+| `source`            | string  | No       | `'git'` or `'image'`                                |
+| `image`             | string  | No       | Docker image (if source=image)                      |
+| `cmd`               | string  | No       | Container command override                          |
+| `port`              | number  | No       | Container port                                      |
+| `health_check_path` | string  | No       | Health check path                                   |
+| `env_vars`          | object  | No       | Environment variables                               |
+| `prefer_dockerfile` | boolean | No       | Prefer existing Dockerfile                          |
+| `dockerfile_path`   | string  | No       | Relative Dockerfile path                            |
+| `docker_target`     | string  | No       | Docker build target stage                           |
+| `traffic_service`   | string  | No       | Compose application used for representative traffic |
+| `target_project_id` | string  | No       | Deploy first Application into an existing Project   |
+
+For Compose plans, OpenLander auto-selects `traffic_service` when exactly one exposed application
+exists. Multiple exposed applications return `needs_input` with
+`build.traffic_service_candidates`; choose one with
+`update_deploy_plan({ updates: { traffic_service: "..." } })`. Resource/job-only stacks omit the
+representative HTTP probe.
 
 ### `update_deploy_plan`
 
 Update a deployment plan with missing values.
 
-| Parameter | Type   | Required | Description                            |
-| --------- | ------ | -------- | -------------------------------------- |
-| `plan_id` | string | Yes      | Plan ID                                |
-| `updates` | object | Yes      | JSON with env, dockerfile, or services |
+| Parameter | Type   | Required | Description                                             |
+| --------- | ------ | -------- | ------------------------------------------------------- |
+| `plan_id` | string | Yes      | Plan ID                                                 |
+| `updates` | object | Yes      | JSON with env, dockerfile, traffic_service, or services |
 
 ### `get_deploy_plan`
 
@@ -234,25 +241,26 @@ monorepo deploys; expose the service after attach if needed. Use `create_project
 first when a brand-new app needs a project-scoped Database/Cache/Storage resource before first
 boot.
 
-| Parameter           | Type    | Required | Description                                                     |
-| ------------------- | ------- | -------- | --------------------------------------------------------------- |
-| `service_id`        | string  | No       | Existing Application id                                         |
-| `service_name`      | string  | No       | Existing Application name                                       |
-| `project_name`      | string  | No       | Existing group lookup or service name scope                     |
-| `repo_url`          | string  | No       | Git repository URL for a new app                                |
-| `branch`            | string  | No       | Branch                                                          |
-| `name`              | string  | No       | New Project name, or existing project alias                     |
-| `source`            | string  | No       | `'git'` or `'image'`                                            |
-| `image`             | string  | No       | Docker image                                                    |
-| `cmd`               | string  | No       | Command override                                                |
-| `port`              | number  | No       | Container port                                                  |
-| `env_vars`          | object  | No       | Environment variables                                           |
-| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes |
-| `target_project_id` | string  | No       | Attach new single Application to an existing group              |
-| `strategy`          | string  | No       | Redeploy strategy for existing services                         |
-| `health_check_path` | string  | No       | Health check path                                               |
-| `wait`              | boolean | No       | Block until complete (default: true)                            |
-| `timeout`           | number  | No       | Max seconds to wait (default: 300)                              |
+| Parameter           | Type    | Required | Description                                                      |
+| ------------------- | ------- | -------- | ---------------------------------------------------------------- |
+| `service_id`        | string  | No       | Existing Application id                                          |
+| `service_name`      | string  | No       | Existing Application name                                        |
+| `project_name`      | string  | No       | Existing group lookup or service name scope                      |
+| `repo_url`          | string  | No       | Git repository URL for a new app                                 |
+| `branch`            | string  | No       | Branch                                                           |
+| `name`              | string  | No       | New Project name, or existing project alias                      |
+| `source`            | string  | No       | `'git'` or `'image'`                                             |
+| `image`             | string  | No       | Docker image                                                     |
+| `cmd`               | string  | No       | Command override                                                 |
+| `port`              | number  | No       | Container port                                                   |
+| `env_vars`          | object  | No       | Environment variables                                            |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes  |
+| `target_project_id` | string  | No       | Attach new single Application to an existing group               |
+| `strategy`          | string  | No       | Redeploy strategy for existing services                          |
+| `health_check_path` | string  | No       | Health check path                                                |
+| `traffic_service`   | string  | No       | Compose application used for readiness, URL, and traffic probing |
+| `wait`              | boolean | No       | Block until complete (default: true)                             |
+| `timeout`           | number  | No       | Max seconds to wait (default: 300)                               |
 
 ### `validate_deploy_plan`
 
@@ -1096,6 +1104,11 @@ apps depend on which databases/caches over MCP.
 
 If `path` is omitted, OpenLander uses a configured base path env such as
 `NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.
+
+Compose child diagnostics follow `runtime_role`: applications use HTTP/route checks, resources use
+Docker health or a known internal TCP port, and one-shot jobs use container exit code plus logs.
+Resource and job responses return `roleCheck` and intentionally omit application-only `httpCheck`
+and `route` fields.
 
 High-confidence deterministic findings add `diagnosis: { code, summary,
 confidence, evidence }` and, when a safe next operation exists, top-level

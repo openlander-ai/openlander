@@ -164,6 +164,8 @@ describe('compose network cleanup', () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.trafficService).toBe('web');
+    expect(result.trafficServiceProjectId).toBeDefined();
     expect(runComposeService).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-stack-web',
@@ -171,14 +173,14 @@ describe('compose network cleanup', () => {
         aliases: ['web'],
       }),
     );
-    expect([...db._projects.values()].find((project) => project.name === 'stack/web')).toMatchObject(
-      {
-        container_id: 'container-ol-stack-web',
-        container_name: 'ol-stack-web',
-        assigned_port: expect.any(Number),
-        container_port: 3000,
-      },
-    );
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/web'),
+    ).toMatchObject({
+      container_id: 'container-ol-stack-web',
+      container_name: 'ol-stack-web',
+      assigned_port: expect.any(Number),
+      container_port: 3000,
+    });
   });
 
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
@@ -567,6 +569,45 @@ describe('compose network cleanup', () => {
     });
   });
 
+  it('requires an explicit traffic target when multiple applications expose ports', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose: ["3000"]\n  api:\n    image: node:22\n    expose: ["4000"]\n`,
+      'utf8',
+    );
+    const pipeline = new ComposePipeline(createFakeDocker(), createFakeDb(), createEventBus());
+
+    await expect(
+      deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+      }),
+    ).rejects.toMatchObject({ code: 'TRAFFIC_SERVICE_REQUIRED' });
+  });
+
+  it('keeps an existing compose parent deployable when its traffic target is unresolved', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose: ["3000"]\n  api:\n    image: node:22\n    expose: ["4000"]\n`,
+      'utf8',
+    );
+    const pipeline = new ComposePipeline(createFakeDocker(), createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      _parentId: 'existing-parent',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.warnings).toContain('traffic_target_unresolved');
+    expect(result.trafficService).toBeUndefined();
+  });
+
   it('classifies completed dependencies before database image signatures', () => {
     const roles = inferComposeRuntimeRoles([
       { name: 'migrate', image: 'postgres:16' },
@@ -579,6 +620,10 @@ describe('compose network cleanup', () => {
       { name: 'db', image: 'pgvector/pgvector:pg17' },
     ]);
 
-    expect(Object.fromEntries(roles)).toEqual({ migrate: 'job', api: 'application', db: 'resource' });
+    expect(Object.fromEntries(roles)).toEqual({
+      migrate: 'job',
+      api: 'application',
+      db: 'resource',
+    });
   });
 });

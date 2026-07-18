@@ -308,6 +308,7 @@ export async function buildProject(
       commitSha,
       profiles: [],
       services: config.composeServices,
+      trafficService: config.trafficService,
       name: routeName,
       trigger,
       envVars: composeEnvVars,
@@ -341,6 +342,8 @@ export async function buildProject(
         projectName: result.parentName,
         buildDurationMs: result.buildDurationMs,
         error: result.error,
+        warnings: result.warnings,
+        port: result.trafficServicePort,
       },
       buildLog,
     };

@@ -183,13 +183,7 @@ describe('PlanEngine.updatePlan', () => {
           { key: 'STRIPE_API_KEY', source: 'required', required: true },
         ],
       },
-      missing: [
-        'APP_BASE_URL',
-        'EXCHANGE_API_KEY',
-        'S3_ACCESS_KEY',
-        'SMTP_HOST',
-        'STRIPE_API_KEY',
-      ],
+      missing: ['APP_BASE_URL', 'EXCHANGE_API_KEY', 'S3_ACCESS_KEY', 'SMTP_HOST', 'STRIPE_API_KEY'],
     });
 
     mockDb.getDeployPlan.mockReturnValue({
@@ -646,6 +640,29 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.build.context).toBe('./app');
     expect(updated.build.target).toBe('production');
     expect(updated.build.dockerfile).toBe('Dockerfile');
+  });
+
+  it('selects and validates the representative Compose traffic service', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        traffic_service_candidates: ['web', 'api'],
+      },
+    });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const updated = await engine.updatePlan(plan.plan_id, { traffic_service: 'api' });
+
+    expect(updated.status).toBe('ready');
+    expect(updated.build.traffic_service).toBe('api');
+
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    await expect(engine.updatePlan(plan.plan_id, { traffic_service: 'db' })).rejects.toMatchObject({
+      code: 'INVALID_TRAFFIC_SERVICE',
+    });
   });
 
   it('updates health check configuration', async () => {
