@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.2] - 2026-07-19
+
+### Fixed
+
+- Support ordered base-to-overlay Compose file sets in deploy plans, snapshots,
+  and redeploy execution while preserving the existing single-file contract.
+- Apply Compose `!reset` tags when merging production overlays so reset build
+  definitions and published ports are not treated as literal configuration.
+- Infer an application's internal port from its localhost healthcheck when a
+  production overlay removes published ports, without restoring source host
+  port bindings.
+
 ## [0.2.6-rc.1] - 2026-07-19
 
 ### Added
