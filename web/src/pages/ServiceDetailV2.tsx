@@ -355,28 +355,27 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // configuration tabs (Environment/Domains) so the high-signal data
   // is one click away. CCG round-0 (Codex + Gemini) both endorsed the
   // spec order over the previous config-first arrangement.
-  const tabs = useMemo<TabDef<ServiceTabId>[]>(
-    () =>
-      [
-        { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
-        { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
-        {
-          id: 'deployments',
-          label: t('services.detail.tabs.deployments'),
-          icon: Rocket,
-          count: deployments.length || undefined,
-        },
-        { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
-        { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
-        { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
-      ].filter(
-        (tab) =>
-          tab.id !== 'domains' ||
-          !resolvedService?.runtimeRole ||
-          resolvedService.runtimeRole === 'application',
-      ),
-    [deployments.length, resolvedService?.runtimeRole, t],
-  );
+  const tabs = useMemo<TabDef<ServiceTabId>[]>(() => {
+    const availableTabs: TabDef<ServiceTabId>[] = [
+      { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
+      { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
+      {
+        id: 'deployments',
+        label: t('services.detail.tabs.deployments'),
+        icon: Rocket,
+        count: deployments.length || undefined,
+      },
+      { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
+      { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
+      { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
+    ];
+    return availableTabs.filter(
+      (tab) =>
+        tab.id !== 'domains' ||
+        !resolvedService?.runtimeRole ||
+        resolvedService.runtimeRole === 'application',
+    );
+  }, [deployments.length, resolvedService?.runtimeRole, t]);
 
   if (!resolvedService || !project) {
     const safeId = id ?? '';
