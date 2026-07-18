@@ -62,9 +62,16 @@ describe('Day 13 M3: assertSafeRepoUrl SSRF guard', () => {
     // Token injection happens later, controlled by the daemon. Letting the
     // caller pass `https://attacker:token@github.com/...` would let them
     // overwrite our injection with their own redirect target.
-    expect(() => assertSafeRepoUrl('https://user:hunter2@github.com/foo/bar.git')).toThrow(
-      UnsafeRepoUrlError,
-    );
+    const repoUrl = 'https://user:hunter2@github.com/foo/bar.git';
+    expect(() => assertSafeRepoUrl(repoUrl)).toThrow(UnsafeRepoUrlError);
+    try {
+      assertSafeRepoUrl(repoUrl);
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain('hunter2');
+      expect(error).toMatchObject({
+        details: { repoUrl: 'https://***@github.com/foo/bar.git' },
+      });
+    }
   });
 
   it('throws with a descriptive 400 status code on UnsafeRepoUrlError', () => {

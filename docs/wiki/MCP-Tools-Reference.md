@@ -988,6 +988,12 @@ never included in MCP responses, deployment status payloads, or build-log
 guidance. Agents should pass the returned `clone_url`/`repo_url` as-is instead
 of embedding tokens in URLs.
 
+Clone failures caused by DNS resolution, connection timeouts, unreachable
+networks, connection resets, or an unreachable GitHub/SSH endpoint return the
+retryable `GIT_NETWORK_UNREACHABLE` error. Authentication, missing repository,
+and missing branch failures retain their existing error codes. Repository URL
+credentials and provider tokens are redacted from errors and logs.
+
 ---
 
 ## Monitoring & Logs

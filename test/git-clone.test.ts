@@ -24,6 +24,7 @@ import {
   GitBranchNotFoundError,
   GitCloneError,
   GitHubRepoAccessError,
+  GitNetworkUnreachableError,
   GitRepoNotFoundError,
 } from '../src/errors.js';
 
@@ -401,6 +402,119 @@ describeGitClone('cloneRepo — deterministic provider authentication', () => {
 });
 
 describeGitClone('cloneRepo — error classification', () => {
+  it.each([
+    'fatal: unable to access repo: Could not resolve host: github.com',
+    'ssh: connect to host github.com port 22: Network is unreachable',
+    'fatal: unable to access repo: Connection reset by peer',
+    'fatal: unable to access repo: Failed to connect to github.com port 443',
+  ])('classifies network failures separately: %s', async (message) => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error(message), { stdout: '', stderr: '' });
+      },
+    );
+
+    await expect(
+      cloneRepo({ repoUrl: 'git@github.com:org/private-repo.git' }),
+    ).rejects.toBeInstanceOf(GitNetworkUnreachableError);
+  });
+
+  it('returns redacted retryable details for provider network failures', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(
+          new Error(
+            'fatal: unable to access https://x-access-token:ghp_test_token_123@github.com/user/repo: Connection timed out',
+          ),
+          { stdout: '', stderr: '' },
+        );
+      },
+    );
+
+    await expect(cloneRepo({ repoUrl: 'https://github.com/user/repo' })).rejects.toMatchObject({
+      code: 'GIT_NETWORK_UNREACHABLE',
+      details: {
+        repoUrl: 'https://github.com/user/repo',
+        authMethod: 'pat',
+        retryable: true,
+      },
+      message: expect.not.stringContaining('ghp_test_token_123'),
+    });
+  });
+
+  it('preserves the configured OAuth method in network failure details', async () => {
+    mockLoadConfig.mockReturnValue({
+      gitProviders: {
+        github: { token: 'gho_test_token_123', authMethod: 'oauth' },
+      },
+    });
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('fatal: unable to access repo: Connection timed out'), {
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    await expect(cloneRepo({ repoUrl: 'https://github.com/user/repo' })).rejects.toMatchObject({
+      code: 'GIT_NETWORK_UNREACHABLE',
+      details: { authMethod: 'oauth', retryable: true },
+    });
+  });
+
+  it('redacts repository URL userinfo when rejecting unsafe clone input', async () => {
+    mockLoadConfig.mockReturnValue({ gitProviders: {} });
+
+    const result = cloneRepo({
+      repoUrl: 'https://private-user:private-token@git.example.com/team/repo.git',
+    });
+    await expect(result).rejects.toMatchObject({
+      code: 'UNSAFE_REPO_URL',
+      details: {
+        repoUrl: 'https://***@git.example.com/team/repo.git',
+      },
+    });
+    await expect(result).rejects.not.toSatisfy((error: unknown) =>
+      JSON.stringify(error).includes('private-token'),
+    );
+  });
+
+  it('classifies low-level socket error codes before authentication failures', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        const error = Object.assign(new Error('fatal: Authentication failed'), {
+          code: 'ETIMEDOUT',
+        });
+        cb?.(error, { stdout: '', stderr: '' });
+      },
+    );
+
+    await expect(
+      cloneRepo({ repoUrl: 'https://github.com/user/private-repo' }),
+    ).rejects.toMatchObject({ code: 'GIT_NETWORK_UNREACHABLE' });
+  });
+
   it('classifies "Authentication failed" as GitAuthError', async () => {
     mockExecFile.mockImplementationOnce(
       (

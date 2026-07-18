@@ -125,6 +125,19 @@ export class GitDeployKeyUnauthorizedError extends OpenLanderError {
   }
 }
 
+export type GitNetworkAuthMethod = 'deploy_key' | 'ssh' | 'oauth' | 'pat';
+
+export class GitNetworkUnreachableError extends OpenLanderError {
+  constructor(repoUrl: string, authMethod: GitNetworkAuthMethod) {
+    super('The Git repository endpoint could not be reached.', 'GIT_NETWORK_UNREACHABLE', 503, {
+      repoUrl,
+      authMethod,
+      retryable: true,
+    });
+    this.name = 'GitNetworkUnreachableError';
+  }
+}
+
 export class GitCredentialRepositoryMismatchError extends OpenLanderError {
   constructor(credentialId: string, credentialRepo: string, requestedRepo: string) {
     super(
