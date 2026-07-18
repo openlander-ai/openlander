@@ -265,6 +265,53 @@ describe('ProjectHealthMonitor', () => {
     });
   });
 
+  it('does not probe or mutate a Compose parent aggregate', async () => {
+    const project = createProject({
+      id: 'compose-stack',
+      name: 'compose-stack',
+      status: 'error',
+      assigned_port: null,
+      container_id: null,
+      build_method: 'compose',
+    });
+    const deployable = {
+      id: 'compose-stack__svc',
+      project_id: 'compose-stack',
+      name: 'compose-stack',
+      kind: 'compose',
+      source: 'git',
+      status: 'error',
+      assigned_port: null,
+      container_id: null,
+      container_name: null,
+      project_type: 'web',
+      health_check_strategy: null,
+      health_check_path: null,
+    } as ServiceRow;
+    const db = {
+      getProject: vi.fn().mockReturnValue(project),
+      listProjects,
+      getServices: listServices,
+      updateProject,
+      updateService,
+      getDeployableForProject: vi.fn().mockReturnValue(deployable),
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
+
+    const result = await monitor.checkProject('compose-stack');
+    await (monitor as unknown as MonitorInternals).runCheck('compose-stack');
+
+    expect(result).toEqual({
+      healthy: true,
+      responseTimeMs: 0,
+      consecutiveFailures: 0,
+    });
+    expect(mockRunProbe).not.toHaveBeenCalled();
+    expect(updateProject).not.toHaveBeenCalled();
+    expect(updateService).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it('emits health:degraded after the failure threshold is reached', async () => {
     monitor = createMonitor({ failureThreshold: 3 });
     mockRunProbe.mockResolvedValue({
