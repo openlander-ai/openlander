@@ -106,6 +106,18 @@ export class ProjectHealthMonitor {
       };
     }
 
+    // A Compose parent is an aggregate record, not a runnable container. Its status is
+    // owned by the Compose deployment pipeline and must not be inferred from an HTTP
+    // probe that has no port or container to target.
+    if (this.isComposeParent(record)) {
+      this.consecutiveFailures.set(projectId, 0);
+      return {
+        healthy: true,
+        responseTimeMs: 0,
+        consecutiveFailures: 0,
+      };
+    }
+
     const profile = resolveMonitoringProfile(project, record?.service ?? undefined);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
@@ -214,6 +226,14 @@ export class ProjectHealthMonitor {
       return;
     }
 
+    // Compose children are monitored independently. The parent itself has no
+    // container or route, so probing it would eventually overwrite the aggregate
+    // deployment status with a false error (or false recovery).
+    if (this.isComposeParent(record)) {
+      this.consecutiveFailures.set(projectId, 0);
+      return;
+    }
+
     const result = await this.checkProjectRows(projectId, project, record);
 
     await this.events.emit('monitor:healthcheck', {
@@ -273,6 +293,10 @@ export class ProjectHealthMonitor {
         reason: result.error ?? 'health check failed',
       });
     }
+  }
+
+  private isComposeParent(record: ServiceViewRecord | undefined): boolean {
+    return record?.service?.kind === 'compose';
   }
 
   private async updateProjectRuntimeStatus(
