@@ -234,6 +234,25 @@ describe('Tool Registry', () => {
     expect(valid.success).toBe(true);
   });
 
+  it('create_deploy_plan schema accepts ordered Compose overlays but rejects ambiguous selection', () => {
+    const { ctx } = createMockContext();
+    const createPlan = getTool(ctx, 'create_deploy_plan');
+
+    expect(
+      createPlan.inputSchema.safeParse({
+        repo_url: 'https://github.com/openlander-ai/openlander',
+        compose_files: ['docker-compose.yml', 'deploy/docker-compose.prod.yml'],
+      }).success,
+    ).toBe(true);
+    expect(
+      createPlan.inputSchema.safeParse({
+        repo_url: 'https://github.com/openlander-ai/openlander',
+        compose_file: 'docker-compose.yml',
+        compose_files: ['docker-compose.yml', 'deploy/docker-compose.prod.yml'],
+      }).success,
+    ).toBe(false);
+  });
+
   it('create_deploy_plan schema rejects missing required fields', () => {
     const { ctx } = createMockContext();
     const createPlan = getTool(ctx, 'create_deploy_plan');

@@ -20,6 +20,7 @@ describe('config-snapshot', () => {
     it('contains expected fields', () => {
       expect(PERSISTED_FIELDS).toContain('sshKeyPath');
       expect(PERSISTED_FIELDS).toContain('composeFile');
+      expect(PERSISTED_FIELDS).toContain('composeFiles');
       expect(PERSISTED_FIELDS).toContain('composeProfiles');
       expect(PERSISTED_FIELDS).toContain('composeServices');
       expect(PERSISTED_FIELDS).toContain('trafficService');
@@ -60,6 +61,7 @@ describe('config-snapshot', () => {
         repoUrl: 'https://github.com/user/repo',
         sshKeyPath: '/home/user/.ssh/id_rsa',
         composeFile: 'compose.production.yml',
+        composeFiles: ['compose.yml', 'compose.production.yml'],
         composeProfiles: ['production'],
         composeServices: ['web', 'db'],
         trafficService: 'web',
@@ -76,6 +78,7 @@ describe('config-snapshot', () => {
 
       expect(snapshot.sshKeyPath).toBe('/home/user/.ssh/id_rsa');
       expect(snapshot.composeFile).toBe('compose.production.yml');
+      expect(snapshot.composeFiles).toEqual(['compose.yml', 'compose.production.yml']);
       expect(snapshot.composeProfiles).toEqual(['production']);
       expect(snapshot.composeServices).toEqual(['web', 'db']);
       expect(snapshot.trafficService).toBe('web');

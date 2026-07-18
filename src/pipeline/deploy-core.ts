@@ -54,7 +54,7 @@ import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
 import { sleep } from '../lib/sleep.js';
-import { resolveComposeFilePath } from './compose-spec.js';
+import { resolveComposeFilePath, resolveComposeFilePaths } from './compose-spec.js';
 
 import {
   extractProjectName,
@@ -229,6 +229,8 @@ export interface ProjectConfig {
   composeServices?: string[];
   /** Repository-relative Compose file path. */
   composeFile?: string;
+  /** Ordered repository-relative Compose files, from base to overlays. */
+  composeFiles?: string[];
   /** Active Compose profiles. */
   composeProfiles?: string[];
   /** Compose application service used for representative public traffic. */
@@ -686,11 +688,19 @@ export class DeployPipeline {
       const hasExplicitDockerfilePath =
         typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
       const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
-      const composePath = preferDockerfile
-        ? null
-        : config.composeFile
-          ? resolveComposeFilePath(cloneResult.path, config.composeFile)
-          : this.composePipeline?.detectComposeFile(cloneResult.path);
+      const autoDetectedComposePath =
+        !preferDockerfile && !config.composeFiles && !config.composeFile
+          ? (this.composePipeline?.detectComposeFile(cloneResult.path) ?? null)
+          : null;
+      const composePaths = preferDockerfile
+        ? []
+        : config.composeFiles
+          ? resolveComposeFilePaths(cloneResult.path, config.composeFiles)
+          : config.composeFile
+            ? [resolveComposeFilePath(cloneResult.path, config.composeFile)]
+            : autoDetectedComposePath
+              ? [autoDetectedComposePath]
+              : [];
       const dockerfilePath = join(cloneResult.path, config.dockerfilePath ?? 'Dockerfile');
       const dockerfileExists = existsSync(dockerfilePath);
 
@@ -703,7 +713,7 @@ export class DeployPipeline {
           repoUrl: config.repoUrl,
           branch: config.branch,
           dockerfile: dockerfileExists ? (config.dockerfilePath ?? 'Dockerfile') : null,
-          composeDetected: !!composePath,
+          composeDetected: composePaths.length > 0,
           preferDockerfile,
           envVarsProvided: config.envVars ? Object.keys(config.envVars).length : 0,
           existingProject: !!(await this.db.getProjectByName(projectName)),

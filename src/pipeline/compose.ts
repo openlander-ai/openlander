@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'no
 import { classifyVar, parseEnvFile, formatEnvValue } from './env-inject.js';
 import { isAbsolute, join, dirname, relative, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parse as parseYaml } from 'yaml';
+import { parseDocument, type CollectionTag, type ScalarTag } from 'yaml';
 import { nanoid } from 'nanoid';
 import { createHash } from 'node:crypto';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
@@ -125,6 +125,7 @@ export interface ComposeEnvFile {
 export interface ComposeProject {
   services: ComposeService[];
   composePath: string;
+  composePaths?: string[];
   projectPath: string;
 }
 
@@ -139,6 +140,7 @@ export interface ComposeDeployConfig {
   clonePath: string;
   commitSha?: string;
   composePath: string;
+  composePaths?: string[];
   profiles?: string[];
   services?: string[];
   name?: string;
@@ -149,6 +151,98 @@ export interface ComposeDeployConfig {
   gitCredentialId?: string;
   trafficService?: string;
   previousServiceFingerprints?: Record<string, string>;
+}
+
+interface ComposeResetValue {
+  readonly __openlanderComposeReset: true;
+  readonly value: unknown;
+}
+
+const composeResetScalarTag: ScalarTag = {
+  tag: '!reset',
+  resolve: (value) => ({
+    __openlanderComposeReset: true,
+    value: value === 'null' ? null : value,
+  }),
+};
+
+const composeResetSequenceTag: CollectionTag = {
+  tag: '!reset',
+  collection: 'seq',
+  resolve: () => ({ __openlanderComposeReset: true, value: [] }),
+};
+
+const composeResetMapTag: CollectionTag = {
+  tag: '!reset',
+  collection: 'map',
+  resolve: () => ({ __openlanderComposeReset: true, value: {} }),
+};
+
+function isComposeResetValue(value: unknown): value is ComposeResetValue {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>)['__openlanderComposeReset'] === true
+  );
+}
+
+function mergeComposeValues(
+  base: unknown,
+  overlay: unknown,
+  path: readonly string[] = [],
+): unknown {
+  if (isComposeResetValue(overlay)) {
+    return overlay.value;
+  }
+
+  if (Array.isArray(base) && Array.isArray(overlay)) {
+    const key = path.at(-1);
+    if (
+      key === 'command' ||
+      key === 'entrypoint' ||
+      path.slice(-2).join('.') === 'healthcheck.test'
+    ) {
+      return overlay;
+    }
+    const mergedValues: unknown[] = [...(base as unknown[]), ...(overlay as unknown[])];
+    return mergedValues.filter(
+      (value, index, values) => values.findIndex((candidate) => candidate === value) === index,
+    );
+  }
+
+  if (
+    base &&
+    overlay &&
+    typeof base === 'object' &&
+    typeof overlay === 'object' &&
+    !Array.isArray(base) &&
+    !Array.isArray(overlay)
+  ) {
+    const merged = { ...(base as Record<string, unknown>) };
+    for (const [key, value] of Object.entries(overlay as Record<string, unknown>)) {
+      merged[key] = mergeComposeValues(merged[key], value, [...path, key]);
+    }
+    return merged;
+  }
+
+  return overlay;
+}
+
+function parseComposeDocument(composePath: string): Record<string, unknown> {
+  const document = parseDocument(readFileSync(composePath, 'utf8'), {
+    customTags: [composeResetScalarTag, composeResetSequenceTag, composeResetMapTag],
+  });
+  if (document.errors.length > 0) {
+    throw new ServiceConfigError('Invalid Compose YAML.', {
+      parserCode: document.errors[0]?.code ?? 'YAML_PARSE_FAILED',
+    });
+  }
+  const parsed = document.toJS() as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {};
+  }
+  return parsed as Record<string, unknown>;
 }
 
 /**
@@ -278,6 +372,18 @@ export function findComposeHostPortUsages(composeProject: ComposeProject): Compo
       }),
     }))
     .filter((usage) => usage.ports.length > 0);
+}
+
+/** Infer an application's internal HTTP port from a localhost healthcheck. */
+export function inferComposeHealthcheckPort(service: ComposeService): number | undefined {
+  const test = service.healthcheck?.test;
+  const command = Array.isArray(test) ? test.join(' ') : test;
+  if (!command) {
+    return undefined;
+  }
+  const match = command.match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d{1,5})/i);
+  const port = match?.[1] ? Number(match[1]) : NaN;
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
 }
 
 export interface ComposeDeployResult {
@@ -500,12 +606,29 @@ export class ComposePipeline {
     return errors;
   }
   parseComposeFile(composePath: string): ComposeProject {
-    const raw = readFileSync(composePath, 'utf8');
-    const parsed = parseYaml(raw) as Record<string, unknown> | null;
-    const servicesRaw = parsed?.['services'];
+    return this.parseComposeFiles([composePath]);
+  }
+
+  parseComposeFiles(composePaths: readonly string[]): ComposeProject {
+    const composePath = composePaths[0];
+    if (!composePath) {
+      throw new ServiceConfigError('At least one Compose file is required.');
+    }
+    const parsed = composePaths
+      .map((path) => parseComposeDocument(path))
+      .reduce<Record<string, unknown>>(
+        (merged, overlay) => mergeComposeValues(merged, overlay) as Record<string, unknown>,
+        {},
+      );
+    const servicesRaw = parsed['services'];
 
     if (!servicesRaw || typeof servicesRaw !== 'object' || Array.isArray(servicesRaw)) {
-      return { services: [], composePath, projectPath: dirname(composePath) };
+      return {
+        services: [],
+        composePath,
+        composePaths: [...composePaths],
+        projectPath: dirname(composePath),
+      };
     }
 
     const services: ComposeService[] = [];
@@ -695,6 +818,7 @@ export class ComposePipeline {
     return {
       services,
       composePath,
+      composePaths: [...composePaths],
       projectPath: dirname(composePath),
     };
   }
@@ -749,7 +873,7 @@ export class ComposePipeline {
     let buildLog = '';
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
-    const composeProject = this.parseComposeFile(config.composePath);
+    const composeProject = this.parseComposeFiles(config.composePaths ?? [config.composePath]);
     validateComposeProfiles(composeProject.services, config.profiles);
     const activeComposeProject: ComposeProject = {
       ...composeProject,
@@ -807,11 +931,13 @@ export class ComposePipeline {
             : undefined,
         })),
     };
-    const trafficCandidates = activeComposeProject.services
+    const trafficCandidates = filteredComposeProject.services
       .filter(
         (service) =>
           runtimeRoles.get(service.name) === 'application' &&
-          ((service.ports?.length ?? 0) > 0 || (service.expose?.length ?? 0) > 0),
+          ((service.ports?.length ?? 0) > 0 ||
+            (service.expose?.length ?? 0) > 0 ||
+            inferComposeHealthcheckPort(service) !== undefined),
       )
       .map((service) => service.name);
     if (config.trafficService && !trafficCandidates.includes(config.trafficService)) {
@@ -1144,9 +1270,7 @@ export class ComposePipeline {
                 deploymentByService.set(service.name, {
                   containerId: existing.container_id,
                   ports:
-                    hostPort != null && containerPort != null
-                      ? [{ hostPort, containerPort }]
-                      : [],
+                    hostPort != null && containerPort != null ? [{ hostPort, containerPort }] : [],
                 });
                 containerNameByService.set(
                   service.name,
@@ -1759,7 +1883,7 @@ export class ComposePipeline {
                 errorCode: failedPrerequisite.code,
                 details: failedPrerequisite.details,
               }
-          : {}),
+            : {}),
         ...(trafficService
           ? {
               trafficService,
@@ -1989,6 +2113,12 @@ export class ComposePipeline {
         containerPorts.push(parsed.containerPort);
       }
     }
+    if (containerPorts.length === 0) {
+      const healthcheckPort = inferComposeHealthcheckPort(service);
+      if (healthcheckPort !== undefined) {
+        containerPorts.push(healthcheckPort);
+      }
+    }
     return [...new Set(containerPorts)];
   }
 
@@ -2017,8 +2147,8 @@ export class ComposePipeline {
   }
 
   private filteredComposeProjectForConfig(
-    config: Pick<ComposeDeployConfig, 'composePath' | 'profiles' | 'services'>,
-    composeProject = this.parseComposeFile(config.composePath),
+    config: Pick<ComposeDeployConfig, 'composePath' | 'composePaths' | 'profiles' | 'services'>,
+    composeProject = this.parseComposeFiles(config.composePaths ?? [config.composePath]),
   ): ComposeProject {
     validateComposeProfiles(composeProject.services, config.profiles);
     const filtered: ComposeProject = {

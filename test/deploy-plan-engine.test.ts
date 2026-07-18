@@ -673,7 +673,7 @@ describe('PlanEngine.updatePlan', () => {
     });
     const composePipeline = {
       detectComposeFile: vi.fn(),
-      parseComposeFile: vi.fn().mockReturnValue({
+      parseComposeFiles: vi.fn().mockReturnValue({
         services: [
           {
             name: 'web',
@@ -701,7 +701,8 @@ describe('PlanEngine.updatePlan', () => {
         method: 'compose',
         dockerfile: 'Dockerfile',
         context: '.',
-        compose_file: 'docker-compose.runtime.yml',
+        compose_file: 'docker-compose.yml',
+        compose_files: ['docker-compose.yml', 'docker-compose.runtime.yml'],
         compose_services: [{ name: 'web' }, { name: 'dev' }],
       },
     });
@@ -712,6 +713,10 @@ describe('PlanEngine.updatePlan', () => {
     });
 
     expect(updated.build.compose_profiles).toEqual(['production']);
+    expect(updated.build.compose_files).toEqual([
+      'docker-compose.yml',
+      'docker-compose.runtime.yml',
+    ]);
     expect(updated.build.compose_services?.map((service) => service.name)).toEqual(['web']);
     expect(updated.build.traffic_service).toBe('web');
     const stored = JSON.stringify(updated);
@@ -1089,7 +1094,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('passes persisted Compose specification and deploy_only targets to the pipeline', async () => {
+  it('passes persisted Compose overlays and deploy_only targets to the pipeline', async () => {
     const fingerprints = {
       web: 'a'.repeat(64),
       api: 'b'.repeat(64),
@@ -1102,7 +1107,8 @@ describe('PlanEngine.executePlan', () => {
         method: 'compose',
         dockerfile: 'Dockerfile',
         context: '.',
-        compose_file: 'deploy/compose.production.yml',
+        compose_file: 'docker-compose.yml',
+        compose_files: ['docker-compose.yml', 'deploy/compose.production.yml'],
         compose_profiles: ['production'],
         compose_services: [{ name: 'web' }, { name: 'api' }],
         traffic_service: 'web',
@@ -1118,7 +1124,7 @@ describe('PlanEngine.executePlan', () => {
 
     expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
-        composeFile: 'deploy/compose.production.yml',
+        composeFiles: ['docker-compose.yml', 'deploy/compose.production.yml'],
         composeProfiles: ['production'],
         composeServices: ['web'],
         trafficService: 'web',

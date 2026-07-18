@@ -45,10 +45,11 @@ import {
   findComposeHostPortUsages,
   fingerprintComposeServices,
   inferComposeRuntimeRoles,
+  inferComposeHealthcheckPort,
   validateComposeProfiles,
   type ComposePipeline,
 } from '../compose.js';
-import { resolveComposeFilePath } from '../compose-spec.js';
+import { resolveComposeFilePath, resolveComposeFilePaths } from '../compose-spec.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import {
   InvalidTrafficServiceError,
@@ -83,6 +84,7 @@ export interface CreatePlanOptions {
   targetProjectId?: string;
   trafficService?: string;
   composeFile?: string;
+  composeFiles?: string[];
   composeProfiles?: string[];
 }
 
@@ -96,6 +98,7 @@ interface PlanExecutionContext {
   healthCheckPath?: string;
   targetProjectId?: string;
   composeFile?: string;
+  composeFiles?: string[];
   composeProfiles?: string[];
   composeServiceFingerprints?: Record<string, string>;
 }
@@ -104,6 +107,7 @@ export interface PlanUpdates {
   env?: { provided?: Record<string, string>; trusted?: string[] } | Record<string, string>;
   build?: Partial<DeployPlan['build']>;
   compose_file?: string;
+  compose_files?: string[];
   compose_profiles?: string[];
   traffic_service?: string;
   services?: PlanService[];
@@ -246,6 +250,7 @@ export class PlanEngine {
     userDockerfile: string;
     generatedDockerfile?: string;
     composeFilePath?: string;
+    composeFilePaths?: string[];
     composeBuildServices?: PlanBuildService[];
     composeServiceFingerprints?: Record<string, string>;
     trafficServiceCandidates?: string[];
@@ -274,30 +279,48 @@ export class PlanEngine {
 
     let buildMethod: 'dockerfile' | 'compose' = 'dockerfile';
     let composeFilePath: string | undefined;
+    let composeFilePaths: string[] | undefined;
     let composeBuildServices: PlanBuildService[] | undefined;
     let generatedDockerfile: string | undefined;
 
-    if (opts.composeFile && (opts.preferDockerfile || opts.dockerfilePath)) {
+    if (opts.composeFile && opts.composeFiles) {
+      throw new ServiceConfigError('compose_file and compose_files cannot be combined.');
+    }
+    if ((opts.composeFile || opts.composeFiles) && (opts.preferDockerfile || opts.dockerfilePath)) {
       throw new ServiceConfigError(
-        'compose_file cannot be combined with prefer_dockerfile or dockerfile_path.',
-        { composeFile: opts.composeFile },
+        'Compose file selection cannot be combined with prefer_dockerfile or dockerfile_path.',
+        { composeFile: opts.composeFile, composeFiles: opts.composeFiles },
       );
     }
-    if (opts.composeFile && !this.composePipeline) {
+    if ((opts.composeFile || opts.composeFiles) && !this.composePipeline) {
       throw new ServiceConfigError('Compose support is unavailable in this runtime.', {
         composeFile: opts.composeFile,
+        composeFiles: opts.composeFiles,
       });
     }
 
     let composeServiceFingerprints: Record<string, string> | undefined;
     if (!opts.preferDockerfile && !opts.dockerfilePath && this.composePipeline) {
-      const detectedComposeFile = opts.composeFile
-        ? resolveComposeFilePath(clonePath, opts.composeFile)
-        : this.composePipeline.detectComposeFile(clonePath);
+      const autoDetectedComposeFile =
+        !opts.composeFiles && !opts.composeFile
+          ? this.composePipeline.detectComposeFile(clonePath)
+          : null;
+      const detectedComposeFiles = opts.composeFiles
+        ? resolveComposeFilePaths(clonePath, opts.composeFiles)
+        : opts.composeFile
+          ? [resolveComposeFilePath(clonePath, opts.composeFile)]
+          : autoDetectedComposeFile
+            ? [autoDetectedComposeFile]
+            : [];
+      const detectedComposeFile = detectedComposeFiles[0];
       if (detectedComposeFile) {
         buildMethod = 'compose';
         composeFilePath = relative(clonePath, detectedComposeFile);
-        const parsed = this.composePipeline.parseComposeFile(detectedComposeFile);
+        composeFilePaths = detectedComposeFiles.map((path) => relative(clonePath, path));
+        const parsed =
+          detectedComposeFiles.length === 1
+            ? this.composePipeline.parseComposeFile(detectedComposeFile)
+            : this.composePipeline.parseComposeFiles(detectedComposeFiles);
         validateComposeProfiles(parsed.services, opts.composeProfiles);
         const activeServices = filterServicesByProfiles(parsed.services, opts.composeProfiles);
         const activeProject = { ...parsed, services: activeServices };
@@ -338,6 +361,7 @@ export class PlanEngine {
               port = parseInt(exposeMatch[1], 10);
             }
           }
+          port ??= inferComposeHealthcheckPort(svc);
 
           return {
             name: svc.name,
@@ -410,6 +434,7 @@ export class PlanEngine {
       userDockerfile,
       generatedDockerfile,
       composeFilePath,
+      composeFilePaths,
       composeBuildServices,
       composeServiceFingerprints,
       trafficServiceCandidates: composeBuildServices
@@ -561,6 +586,7 @@ export class PlanEngine {
       healthCheckPath: opts.healthCheckPath,
       targetProjectId: opts.targetProjectId,
       composeFile: opts.composeFile,
+      composeFiles: opts.composeFiles,
       composeProfiles: opts.composeProfiles,
     };
 
@@ -574,6 +600,7 @@ export class PlanEngine {
       !execution.healthCheckPath &&
       !execution.targetProjectId &&
       !execution.composeFile &&
+      !execution.composeFiles &&
       !execution.composeProfiles
     ) {
       return undefined;
@@ -971,6 +998,7 @@ export class PlanEngine {
     dockerTarget?: string;
     generatedDockerfile?: string;
     composeFilePath?: string;
+    composeFilePaths?: string[];
     composeProfiles?: string[];
     composeBuildServices?: PlanBuildService[];
     trafficService?: string;
@@ -1038,6 +1066,10 @@ export class PlanEngine {
         target: params.dockerTarget,
         generated_dockerfile: params.generatedDockerfile,
         compose_file: params.composeFilePath,
+        compose_files:
+          params.composeFilePaths && params.composeFilePaths.length > 1
+            ? params.composeFilePaths
+            : undefined,
         compose_profiles: params.composeProfiles,
         compose_services: composeBuildServicesWithUrls,
         traffic_service: params.trafficService,
@@ -1252,6 +1284,7 @@ export class PlanEngine {
       userDockerfile,
       generatedDockerfile,
       composeFilePath,
+      composeFilePaths,
       composeBuildServices,
       composeServiceFingerprints,
       trafficServiceCandidates,
@@ -1350,6 +1383,7 @@ export class PlanEngine {
       dockerTarget: opts.dockerTarget,
       generatedDockerfile,
       composeFilePath,
+      composeFilePaths,
       composeProfiles: opts.composeProfiles,
       composeBuildServices,
       trafficService,
@@ -1403,8 +1437,16 @@ export class PlanEngine {
     let refreshedComposeBuild: Partial<DeployPlan['build']> = {};
     let refreshedComposeExecution: Partial<PlanExecutionContext> = {};
     const requestedComposeFile = updates.compose_file ?? updates.build?.compose_file;
+    const requestedComposeFiles = updates.compose_files ?? updates.build?.compose_files;
     const requestedComposeProfiles = updates.compose_profiles ?? updates.build?.compose_profiles;
-    if (requestedComposeFile !== undefined || requestedComposeProfiles !== undefined) {
+    if (requestedComposeFile !== undefined && requestedComposeFiles !== undefined) {
+      throw new ServiceConfigError('compose_file and compose_files cannot be combined.');
+    }
+    if (
+      requestedComposeFile !== undefined ||
+      requestedComposeFiles !== undefined ||
+      requestedComposeProfiles !== undefined
+    ) {
       if (!plan.app.source.repo_url) {
         throw new ServiceConfigError('Compose settings require a Git repository plan.');
       }
@@ -1417,19 +1459,30 @@ export class PlanEngine {
       });
       const composeWarnings: string[] = [];
       const composeDetectedEnv: PlanEnvEntry[] = [];
+      const selectedComposeFiles =
+        requestedComposeFiles ??
+        (requestedComposeFile === undefined ? plan.build.compose_files : undefined);
+      const selectedComposeFile =
+        requestedComposeFile ?? (selectedComposeFiles ? undefined : plan.build.compose_file);
       const resolved = this.resolveBuildConfig(
         cloneResult.path,
         {
           repoUrl: plan.app.source.repo_url,
-          composeFile: requestedComposeFile ?? plan.build.compose_file,
+          composeFile: selectedComposeFile,
+          composeFiles: selectedComposeFiles,
           composeProfiles: requestedComposeProfiles ?? plan.build.compose_profiles,
         },
         composeWarnings,
         composeDetectedEnv,
       );
-      if (resolved.buildMethod !== 'compose' || !resolved.composeFilePath) {
+      if (
+        resolved.buildMethod !== 'compose' ||
+        !resolved.composeFilePath ||
+        !resolved.composeFilePaths
+      ) {
         throw new ServiceConfigError('The selected file is not a valid Compose deployment.', {
-          composeFile: requestedComposeFile ?? plan.build.compose_file,
+          composeFile: selectedComposeFile,
+          composeFiles: selectedComposeFiles,
         });
       }
       const candidates = resolved.trafficServiceCandidates ?? [];
@@ -1448,6 +1501,7 @@ export class PlanEngine {
       refreshedComposeBuild = {
         method: 'compose',
         compose_file: resolved.composeFilePath,
+        compose_files: resolved.composeFilePaths.length > 1 ? resolved.composeFilePaths : undefined,
         compose_profiles: requestedComposeProfiles ?? plan.build.compose_profiles,
         compose_services: resolved.composeBuildServices,
         traffic_service: trafficService,
@@ -1455,6 +1509,7 @@ export class PlanEngine {
       };
       refreshedComposeExecution = {
         composeFile: resolved.composeFilePath,
+        composeFiles: resolved.composeFilePaths.length > 1 ? resolved.composeFilePaths : undefined,
         composeProfiles: requestedComposeProfiles ?? plan.build.compose_profiles,
         composeServiceFingerprints: resolved.composeServiceFingerprints,
       };
@@ -1472,6 +1527,7 @@ export class PlanEngine {
         ...(updates.build || {}),
         ...refreshedComposeBuild,
         ...(updates.compose_file !== undefined ? { compose_file: updates.compose_file } : {}),
+        ...(updates.compose_files !== undefined ? { compose_files: updates.compose_files } : {}),
         ...(updates.compose_profiles !== undefined
           ? { compose_profiles: updates.compose_profiles }
           : {}),
@@ -2114,7 +2170,11 @@ export class PlanEngine {
         !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
       dockerTarget: plan.build.target,
       buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
-      ...(isCompose && plan.build.compose_file ? { composeFile: plan.build.compose_file } : {}),
+      ...(isCompose && plan.build.compose_files
+        ? { composeFiles: plan.build.compose_files }
+        : isCompose && plan.build.compose_file
+          ? { composeFile: plan.build.compose_file }
+          : {}),
       ...(isCompose && plan.build.compose_profiles
         ? { composeProfiles: plan.build.compose_profiles }
         : {}),

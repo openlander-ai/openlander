@@ -23,7 +23,7 @@ import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import { DockerfileNotFoundError } from '../../errors.js';
 import { containerName as projectContainerName } from '../helpers.js';
-import { resolveComposeFilePath } from '../compose-spec.js';
+import { resolveComposeFilePath, resolveComposeFilePaths } from '../compose-spec.js';
 import { resolveDockerfilePath } from './helpers.js';
 import { checkDeployConnectivity } from './connectivity-check.js';
 import type { BuildExecutor } from './build-step.js';
@@ -272,11 +272,20 @@ export async function buildProject(
   const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
 
   const composePipeline = deps.composePipeline;
-  const composePath = preferDockerfile
-    ? null
-    : config.composeFile
-      ? resolveComposeFilePath(clonePath, config.composeFile)
-      : composePipeline?.detectComposeFile(clonePath);
+  const autoDetectedComposePath =
+    !preferDockerfile && !config.composeFiles && !config.composeFile
+      ? (composePipeline?.detectComposeFile(clonePath) ?? null)
+      : null;
+  const composePaths = preferDockerfile
+    ? []
+    : config.composeFiles
+      ? resolveComposeFilePaths(clonePath, config.composeFiles)
+      : config.composeFile
+        ? [resolveComposeFilePath(clonePath, config.composeFile)]
+        : autoDetectedComposePath
+          ? [autoDetectedComposePath]
+          : [];
+  const composePath = composePaths[0] ?? null;
   const isCompose = Boolean(composePath && composePipeline);
   try {
     await deps.db.updateProject(projectId, {
@@ -304,7 +313,7 @@ export async function buildProject(
     { env: deps.env },
   );
   if (isCompose && composePath && composePipeline) {
-    log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
+    log.info({ composePaths }, 'Compose file(s) detected — delegating to ComposePipeline');
     const composeDeployable = config._serviceId
       ? await deps.db.getService(config._serviceId)
       : await deps.db.getDeployableForProject(projectId);
@@ -319,6 +328,7 @@ export async function buildProject(
       branch,
       clonePath,
       composePath,
+      composePaths,
       commitSha,
       profiles: config.composeProfiles,
       services: config.composeServices,
