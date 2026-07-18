@@ -330,10 +330,14 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       );
     }
     try {
-      ctx.coordinator.suppressProject(runtimeProject.id, 30_000);
-      await ctx.pipeline.stop(runtimeProject.id);
-      await ctx.pipeline.start(runtimeProject.id);
-      return c.json({ status: 'restarted', project: project.name, service: service.name });
+      const result = await ctx.pipeline.restartServiceRuntime(service.id);
+      return c.json({
+        status: result.status,
+        project: project.name,
+        service: service.name,
+        serviceId: service.id,
+        containerId: result.containerId,
+      });
     } finally {
       ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
     }

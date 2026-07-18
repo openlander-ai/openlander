@@ -36,6 +36,9 @@ import {
   PreflightCheckError,
   ProjectNotFoundError,
   ServiceConfigError,
+  ServiceContainerStateError,
+  ServiceNotFoundError,
+  ServiceOperationUnsupportedError,
   ServiceSelectionRequiredError,
   ServiceSourceMissingError,
   isDockerNotFoundError,
@@ -284,6 +287,13 @@ export interface RuntimeRecreateResult extends DeployResult {
   containerName?: string;
   previousContainerId?: string | null;
   previousContainerName?: string | null;
+}
+
+export interface RuntimeRestartResult {
+  status: 'restarted';
+  projectId: string;
+  serviceId: string;
+  containerId: string;
 }
 
 export type ManagedRouteVerificationResult =
@@ -2521,6 +2531,59 @@ export class DeployPipeline {
     }
 
     return await this.redeployResolvedService(service, options);
+  }
+
+  /** Restart an existing long-running container without clone, build, or replacement. */
+  async restartServiceRuntime(serviceId: string): Promise<RuntimeRestartResult> {
+    const service = await this.db.getService(serviceId);
+    if (!service) {
+      throw new ServiceNotFoundError(serviceId);
+    }
+    if (service.runtime_role === 'job') {
+      throw new ServiceOperationUnsupportedError('restart_service', 'job');
+    }
+
+    const { ownerProject, runtimeProject } = await this.resolveRuntimeProjectForService(service);
+    await this.assertProjectMutable(ownerProject);
+    if (runtimeProject.id !== ownerProject.id) {
+      await this.assertProjectMutable(runtimeProject);
+    }
+
+    const containerId = service.container_id ?? runtimeProject.container_id;
+    if (!containerId) {
+      throw new ServiceContainerStateError(
+        service.id,
+        'missing',
+        'The service has no existing container to restart.',
+      );
+    }
+
+    return withDeployLock(
+      this.db,
+      { projectId: ownerProject.id, sessionId: `restart-${nanoid(12)}` },
+      async () => {
+        this.coordinator?.suppressProject(runtimeProject.id, 30_000);
+        await this.runtime.restartContainer(containerId);
+        const inspection = await this.runtime.inspectContainer(containerId);
+        if (!inspection.State.Running) {
+          throw new ServiceContainerStateError(
+            service.id,
+            'not_running',
+            'Docker restart completed but the service container is not running.',
+          );
+        }
+        await this.transitionProjectState(runtimeProject.id, 'running', 'runtime-restarted');
+        if (service.status !== 'running') {
+          await this.db.updateService(service.id, { status: 'running' });
+        }
+        return {
+          status: 'restarted',
+          projectId: ownerProject.id,
+          serviceId: service.id,
+          containerId,
+        };
+      },
+    );
   }
 
   /**

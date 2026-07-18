@@ -128,7 +128,7 @@ describe('ContainerStateReconciler', () => {
       projectId: 'project-1',
       projectName: 'demo-project',
       containerId: 'container-1',
-      suggestion: 'Run restart_service to redeploy.',
+      suggestion: 'Run update_app with strategy="force" to recreate the missing runtime.',
     };
 
     await reconciler.reconcile();
