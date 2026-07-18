@@ -117,6 +117,12 @@ function makeRuntimeContext(
   const pipeline = {
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
+    restartServiceRuntime: vi.fn(async () => ({
+      status: 'restarted' as const,
+      projectId: group.id,
+      serviceId: service.id,
+      containerId: service.container_id ?? 'container-1',
+    })),
     redeploy: vi.fn(async () => ({ success: true, projectId: runtime.id })),
     redeployService: vi.fn(async () => ({ success: true, projectId: runtime.id })),
     getBlueGreenEligibility: vi.fn(async () => ({
@@ -243,7 +249,7 @@ describe('createServiceRuntimeRoutes', () => {
   });
 
   it('stops and restarts through the selected runtime project with suppression', async () => {
-    const { app, pipeline, coordinator, runtime } = makeRuntimeContext();
+    const { app, pipeline, coordinator, runtime, service } = makeRuntimeContext();
 
     const stop = await app.request('/api/projects/group-1/services/api__svc/stop', {
       method: 'POST',
@@ -257,7 +263,8 @@ describe('createServiceRuntimeRoutes', () => {
     expect(coordinator.suppressProject).toHaveBeenCalledWith(runtime.id, 60_000);
     expect(coordinator.suppressProject).toHaveBeenCalledWith(runtime.id, 30_000);
     expect(pipeline.stop).toHaveBeenCalledWith(runtime.id);
-    expect(pipeline.start).toHaveBeenCalledWith(runtime.id);
+    expect(pipeline.restartServiceRuntime).toHaveBeenCalledWith(service.id);
+    expect(pipeline.start).not.toHaveBeenCalled();
   });
 
   it('deploys the selected service runtime project', async () => {

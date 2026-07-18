@@ -66,6 +66,7 @@ import {
   archiveGroupService,
   deleteGroupService,
   managedServices,
+  revealServiceCredentials,
   unarchiveGroupService,
   updateGroupService,
   type ConnectedProject,
@@ -156,6 +157,12 @@ function groupServiceToDetailNode(service: GroupService): ServiceNode {
     imageCmd: service.imageCmd,
     containerPort: service.containerPort,
     gitCredential: service.gitCredential ?? null,
+    runtimeRole: service.runtimeRole,
+    lifecycle: service.lifecycle,
+    healthStrategy: service.healthStrategy,
+    isTrafficTarget: service.isTrafficTarget,
+    aggregateStatus: service.aggregateStatus,
+    lastDeploy: service.lastDeploy,
   };
 }
 
@@ -277,6 +284,10 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       imageUrl: serviceDetail.imageUrl ?? baseService.imageUrl,
       imageCmd: serviceDetail.imageCmd ?? baseService.imageCmd,
       containerPort: serviceDetail.containerPort ?? baseService.containerPort,
+      runtimeRole: serviceDetail.runtimeRole ?? baseService.runtimeRole,
+      lifecycle: serviceDetail.lifecycle ?? baseService.lifecycle,
+      healthStrategy: serviceDetail.healthStrategy ?? baseService.healthStrategy,
+      isTrafficTarget: serviceDetail.isTrafficTarget ?? baseService.isTrafficTarget,
       gitCredential: serviceDetail.gitCredential ?? null,
       archivedAt:
         serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : baseService.archivedAt,
@@ -292,7 +303,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // missing the route guard already redirects, and the hook itself
   // no-ops on null. The previous form was a paradox (it returned the
   // same value `service` was derived from).
-  const liveHealth = useServiceHealth(id ?? null);
+  const liveHealth = useServiceHealth(
+    resolvedService?.runtimeRole && resolvedService.runtimeRole !== 'application'
+      ? null
+      : (id ?? null),
+  );
   const effectiveHealth: ServiceHealth | undefined = liveHealth.health ?? resolvedService?.health;
 
   // Deployments are service-scoped. The top-level Deployments page is folded
@@ -341,20 +356,26 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // is one click away. CCG round-0 (Codex + Gemini) both endorsed the
   // spec order over the previous config-first arrangement.
   const tabs = useMemo<TabDef<ServiceTabId>[]>(
-    () => [
-      { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
-      { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
-      {
-        id: 'deployments',
-        label: t('services.detail.tabs.deployments'),
-        icon: Rocket,
-        count: deployments.length || undefined,
-      },
-      { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
-      { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
-      { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
-    ],
-    [deployments.length, t],
+    () =>
+      [
+        { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
+        { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
+        {
+          id: 'deployments',
+          label: t('services.detail.tabs.deployments'),
+          icon: Rocket,
+          count: deployments.length || undefined,
+        },
+        { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
+        { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
+        { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
+      ].filter(
+        (tab) =>
+          tab.id !== 'domains' ||
+          !resolvedService?.runtimeRole ||
+          resolvedService.runtimeRole === 'application',
+      ),
+    [deployments.length, resolvedService?.runtimeRole, t],
   );
 
   if (!resolvedService || !project) {
@@ -434,21 +455,23 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
                 Open
               </a>
             )}
-            <button
-              type="button"
-              onClick={handleDeploy}
-              disabled={deploying}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                deploying
-                  ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
-                  : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
-              )}
-              aria-disabled={deploying}
-            >
-              <Rocket className="h-3.5 w-3.5" />
-              {deploying ? 'Deploying…' : 'Deploy'}
-            </button>
+            {(!resolvedService.runtimeRole || resolvedService.runtimeRole === 'application') && (
+              <button
+                type="button"
+                onClick={handleDeploy}
+                disabled={deploying}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
+                  deploying
+                    ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
+                    : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
+                )}
+                aria-disabled={deploying}
+              >
+                <Rocket className="h-3.5 w-3.5" />
+                {deploying ? 'Deploying…' : 'Deploy'}
+              </button>
+            )}
           </>
         }
         bodyClassName="p-0"
@@ -2616,6 +2639,7 @@ function ManagedOverviewTab({
           <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
         </SubCard>
       </div>
+      <ManagedCredentialCard serviceId={service.id} />
       <ManagedOperationsSection
         service={service}
         connections={connections}
@@ -2629,21 +2653,80 @@ function ManagedOverviewTab({
   );
 }
 
-function getManagedServicePortLabel(service: Pick<Service, 'credentials' | 'port'>): string {
-  const port = service.port ?? getManagedServiceCredentialsPort(service.credentials);
-  return port == null ? '—' : String(port);
+function getManagedServicePortLabel(service: Pick<Service, 'port'>): string {
+  return service.port == null ? '—' : String(service.port);
 }
 
-function getManagedServiceCredentialsPort(credentials: string | null): number | null {
-  if (!credentials) return null;
-  try {
-    const parsed: unknown = JSON.parse(credentials);
-    if (!parsed || typeof parsed !== 'object' || !('port' in parsed)) return null;
-    const port = (parsed as { port?: unknown }).port;
-    return typeof port === 'number' && Number.isInteger(port) && port > 0 ? port : null;
-  } catch {
-    return null;
-  }
+function ManagedCredentialCard({ serviceId }: { serviceId: string }) {
+  const { t } = useLanguage();
+  const [revealed, setRevealed] = useState<Record<string, unknown> | null>(null);
+  const [revealedEnv, setRevealedEnv] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reveal = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await revealServiceCredentials(serviceId);
+      setRevealed(result.credentials);
+      setRevealedEnv(result.env_vars);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : t('services.managedDetail.credentials.error'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hide = () => {
+    setRevealed(null);
+    setRevealedEnv({});
+    setError(null);
+  };
+
+  const rows = [...Object.entries(revealed ?? {}), ...Object.entries(revealedEnv)];
+  const hasRevealed = revealed !== null || Object.keys(revealedEnv).length > 0;
+
+  return (
+    <SubCard
+      title={t('services.managedDetail.credentials.title')}
+      action={
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={loading}
+          onClick={() => void (hasRevealed ? hide() : reveal())}
+        >
+          {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          {hasRevealed
+            ? t('services.managedDetail.credentials.hide')
+            : t('services.managedDetail.credentials.reveal')}
+        </Button>
+      }
+    >
+      {error ? <p className="text-sm text-error">{error}</p> : null}
+      {!hasRevealed && !error ? (
+        <p className="text-sm text-[color:var(--ol-fg-muted)]">
+          {t('services.managedDetail.credentials.description')}
+        </p>
+      ) : null}
+      {hasRevealed ? (
+        rows.length > 0 ? (
+          <KvList
+            rows={rows.map(([key, value]) => [key, String(value)])}
+            valueClassName="ol-mono break-all text-[12px]"
+          />
+        ) : (
+          <p className="text-sm text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.credentials.empty')}
+          </p>
+        )
+      ) : null}
+    </SubCard>
+  );
 }
 
 function ManagedLogsTab({ serviceId }: { serviceId: string }) {

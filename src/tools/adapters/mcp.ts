@@ -7,7 +7,7 @@ import {
 import { z } from 'zod';
 
 import type { AppContext } from '../../app.js';
-import { OpenLanderError } from '../../errors.js';
+import { OpenLanderError, ScopeViolationError } from '../../errors.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
 import { maybeHandleMcpSafety } from '../../mcp/destructive-safety.js';
 import { getMcpInstanceContext, type McpInstanceContext } from '../../mcp/instance-identity.js';
@@ -280,6 +280,17 @@ export function registerCompositeMcpTools(
       }
 
       const context = { target: 'mcp' as const, appCtx, identity };
+      if (identity?.mcpScopeKind === 'project' || identity?.mcpScopeKind === 'service') {
+        throw new ScopeViolationError(
+          'Platform debug tools require an instance-wide MCP token or local stdio access.',
+          {
+            tool: def.name,
+            tokenScopeKind: identity.mcpScopeKind,
+            tokenScopeProjectId: identity.mcpScopeProjectId ?? null,
+            tokenScopeServiceId: identity.mcpScopeServiceId ?? null,
+          },
+        );
+      }
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);
       if (safetyResult !== undefined) {
         return successResponse(safetyResult, instance);

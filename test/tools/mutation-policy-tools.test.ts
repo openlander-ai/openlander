@@ -49,7 +49,20 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
       getDeployLockInfo: vi.fn(() => null),
     },
     pipeline: {
+      getBlueGreenEligibility: vi.fn().mockResolvedValue({
+        supported: true,
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        reasons: [],
+        fallback_strategy: 'force',
+      }),
       redeploy: vi.fn().mockResolvedValue({ success: true }),
+      redeployService: vi.fn().mockResolvedValue({ success: true }),
+      restartServiceRuntime: vi.fn().mockResolvedValue({
+        status: 'restarted',
+        projectId: project.id,
+        serviceId: service.id,
+        containerId: 'container-1',
+      }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
     },
@@ -213,10 +226,15 @@ describe('MCP service runtime mutation policy rejections', () => {
       expect(result).toMatchObject({ status: 'deploying', service: { name: 'rejected-api' } });
     });
 
-    it('restart_service returns restarting for a healthy service', async () => {
+    it('restart_service returns restarted for a healthy service', async () => {
       const ctx = createPolicyContext();
       const result = await getTool(ctx, 'restart_service').execute(serviceArgs, { target: 'mcp' });
-      expect(result).toMatchObject({ status: 'restarting', service: { name: 'rejected-api' } });
+      expect(result).toMatchObject({
+        status: 'restarted',
+        project_id: 'proj-1',
+        service_id: 'svc-1',
+        container_id: 'container-1',
+      });
     });
   });
 

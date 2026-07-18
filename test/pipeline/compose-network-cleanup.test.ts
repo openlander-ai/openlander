@@ -4,7 +4,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { SHARED_NETWORK_NAME } from '../../src/config/index.js';
-import { ComposePipeline, type ComposeDeployConfig } from '../../src/pipeline/compose.js';
+import {
+  ComposePipeline,
+  fingerprintComposeServices,
+  inferComposeRuntimeRoles,
+  type ComposeDeployConfig,
+} from '../../src/pipeline/compose.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/port.js';
 import type { EventBus } from '../../src/events/index.js';
@@ -20,6 +25,7 @@ type ProjectInput = {
   parentProjectId?: string;
   dockerfilePath?: string;
   buildMethod?: string;
+  runtimeRole?: 'application' | 'job' | 'resource';
 };
 
 type ProjectPatch = {
@@ -36,6 +42,7 @@ type ProjectPatch = {
 function createFakeDb() {
   const projects = new Map<string, ProjectRow>();
   const deployLogs: unknown[] = [];
+  const deployConfigs = new Map<string, { config_json: string }>();
 
   return {
     createProject: vi.fn(async (input: ProjectInput) => {
@@ -66,6 +73,9 @@ function createFakeDb() {
       if (patch.imageTag !== undefined) current.image_tag = patch.imageTag;
       if (patch.dockerfilePath !== undefined) current.dockerfile_path = patch.dockerfilePath;
       if (patch.buildMethod !== undefined) current.build_method = patch.buildMethod;
+      if (patch.runtimeRole !== undefined) {
+        (current as ProjectRow & { runtime_role: string }).runtime_role = patch.runtimeRole;
+      }
     }),
     getComposeChildProjects: vi.fn(async (parentId: string) =>
       [...projects.values()].filter((project) => project.parent_project_id === parentId),
@@ -76,9 +86,15 @@ function createFakeDb() {
       deployLogs.push(log);
     }),
     getUsedPorts: vi.fn(async () => []),
+    loadDeployConfigForService: vi.fn(async (serviceId: string) => deployConfigs.get(serviceId)),
     _projects: projects,
     _deployLogs: deployLogs,
-  } as unknown as Database & { _projects: Map<string, ProjectRow>; _deployLogs: unknown[] };
+    _deployConfigs: deployConfigs,
+  } as unknown as Database & {
+    _projects: Map<string, ProjectRow>;
+    _deployLogs: unknown[];
+    _deployConfigs: Map<string, { config_json: string }>;
+  };
 }
 
 function createFakeDocker(overrides: Partial<Docker> = {}): Docker {
@@ -152,6 +168,8 @@ describe('compose network cleanup', () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.trafficService).toBe('web');
+    expect(result.trafficServiceProjectId).toBeDefined();
     expect(runComposeService).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-stack-web',
@@ -159,14 +177,53 @@ describe('compose network cleanup', () => {
         aliases: ['web'],
       }),
     );
-    expect([...db._projects.values()].find((project) => project.name === 'stack/web')).toMatchObject(
-      {
-        container_id: 'container-ol-stack-web',
-        container_name: 'ol-stack-web',
-        assigned_port: expect.any(Number),
-        container_port: 3000,
-      },
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/web'),
+    ).toMatchObject({
+      container_id: 'container-ol-stack-web',
+      container_name: 'ol-stack-web',
+      assigned_port: expect.any(Number),
+      container_port: 3000,
+    });
+  });
+
+  it('requires an explicit traffic target when multiple applications expose ports', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose: ["3000"]\n  api:\n    image: node:22\n    expose: ["4000"]\n`,
+      'utf8',
     );
+    const pipeline = new ComposePipeline(createFakeDocker(), createFakeDb(), createEventBus());
+
+    await expect(
+      deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+      }),
+    ).rejects.toMatchObject({ code: 'TRAFFIC_SERVICE_REQUIRED' });
+  });
+
+  it('keeps an existing compose parent deployable when its traffic target is unresolved', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose: ["3000"]\n  api:\n    image: node:22\n    expose: ["4000"]\n`,
+      'utf8',
+    );
+    const pipeline = new ComposePipeline(createFakeDocker(), createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      _parentId: 'existing-parent',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.warnings).toContain('traffic_target_unresolved');
+    expect(result.trafficService).toBeUndefined();
   });
 
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
@@ -220,7 +277,7 @@ describe('compose network cleanup', () => {
     );
   });
 
-  it('replaces published ports, interpolates env defaults, and scopes named volumes', async () => {
+  it('keeps resource ports internal, interpolates env defaults, and scopes named volumes', async () => {
     writeFileSync(
       composePath,
       `services:
@@ -239,7 +296,8 @@ describe('compose network cleanup', () => {
       .fn()
       .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
     const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
-    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
 
     const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
@@ -252,12 +310,23 @@ describe('compose network cleanup', () => {
     expect(runComposeService).toHaveBeenCalledWith(
       expect.objectContaining({
         containerPort: 5432,
+        exposedPorts: [5432],
+        traefikLabels: {},
         envVars: expect.objectContaining({ POSTGRES_PASSWORD: 'local-password' }),
         extraBinds: ['ol-stack-volume-pgdata:/var/lib/postgresql/data'],
       }),
     );
-    const call = runComposeService.mock.calls[0]?.[0] as { port: number } | undefined;
-    expect(call?.port).not.toBe(5432);
+    const call = runComposeService.mock.calls[0]?.[0] as
+      { port?: number; additionalPorts?: unknown[] } | undefined;
+    expect(call?.port).toBeUndefined();
+    expect(call?.additionalPorts).toEqual([]);
+    expect([...db._projects.values()].find((project) => project.name === 'stack/db')).toMatchObject(
+      {
+        assigned_port: null,
+        container_port: 5432,
+        runtime_role: 'resource',
+      },
+    );
   });
 
   it('snapshots relative bind directories into managed volumes', async () => {
@@ -440,5 +509,284 @@ describe('compose network cleanup', () => {
         expect.objectContaining({ name: 'api', status: 'running' }),
       ]),
     );
+    const migrateCall = (docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([options]) => options.name === 'ol-stack-migrate',
+    )?.[0];
+    expect(migrateCall).toMatchObject({
+      restart: 'no',
+      traefikLabels: {},
+      additionalPorts: [],
+    });
+    expect(migrateCall).not.toHaveProperty('port');
+  });
+
+  it('classifies completed dependencies as jobs and database signatures as resources', () => {
+    const roles = inferComposeRuntimeRoles([
+      { name: 'web', image: 'nginx', dependsOn: ['api'] },
+      {
+        name: 'api',
+        image: 'app',
+        dependsOn: ['migrate', 'db'],
+        dependsOnConditions: { migrate: 'service_completed_successfully' },
+      },
+      { name: 'migrate', image: 'app' },
+      { name: 'db', image: 'pgvector/pgvector:pg17' },
+    ]);
+
+    expect(Object.fromEntries(roles)).toEqual({
+      web: 'application',
+      api: 'application',
+      migrate: 'job',
+      db: 'resource',
+    });
+  });
+
+  it('replaces only web while preserving api, logto, db, and skipping migrate', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: web:latest
+    expose: ["3000"]
+    depends_on: [api, logto]
+  api:
+    image: api:latest
+    expose: ["4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+  logto:
+    image: logto:latest
+    expose: ["3001"]
+  migrate:
+    image: api:latest
+    depends_on: [db]
+  db:
+    image: pgvector/pgvector:pg17
+`,
+      'utf8',
+    );
+    let sequence = 0;
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(
+        async (config: { name: string }) => `${config.name}-container-${String(++sequence)}`,
+      );
+    const docker = createFakeDocker({
+      runComposeService,
+      inspectContainer: vi.fn().mockImplementation(async (containerId: string) => ({
+        State: {
+          Running: !containerId.includes('migrate'),
+          ExitCode: 0,
+        },
+      })),
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'web',
+    });
+    expect(first.success).toBe(true);
+    const firstIds = Object.fromEntries(
+      [...db._projects.values()]
+        .filter((project) => project.parent_project_id === first.parentProjectId)
+        .map((project) => [project.name, project.container_id]),
+    );
+    runComposeService.mockClear();
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'web',
+      services: ['web'],
+      _parentId: first.parentProjectId,
+    });
+
+    expect(second.success, JSON.stringify(second)).toBe(true);
+    expect(runComposeService).toHaveBeenCalledTimes(1);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'ol-stack-web' }),
+    );
+    const secondIds = Object.fromEntries(
+      [...db._projects.values()]
+        .filter((project) => project.parent_project_id === first.parentProjectId)
+        .map((project) => [project.name, project.container_id]),
+    );
+    expect(secondIds['stack/web']).not.toBe(firstIds['stack/web']);
+    expect(secondIds['stack/api']).toBe(firstIds['stack/api']);
+    expect(secondIds['stack/logto']).toBe(firstIds['stack/logto']);
+    expect(secondIds['stack/db']).toBe(firstIds['stack/db']);
+    expect(secondIds['stack/migrate']).toBe(firstIds['stack/migrate']);
+  });
+
+  it('runs migrate before api and keeps the existing api when migration fails', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  api:
+    image: api:latest
+    expose: ["4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+  migrate:
+    image: api:latest
+    depends_on: [db]
+  db:
+    image: postgres:16
+`,
+      'utf8',
+    );
+    let sequence = 0;
+    let migrationExitCode = 0;
+    const callOrder: string[] = [];
+    const runComposeService = vi.fn().mockImplementation(async (config: { name: string }) => {
+      callOrder.push(config.name);
+      return `${config.name}-container-${String(++sequence)}`;
+    });
+    const docker = createFakeDocker({
+      runComposeService,
+      inspectContainer: vi.fn().mockImplementation(async (containerId: string) => ({
+        State: {
+          Running: containerId.includes('migrate') ? false : true,
+          ExitCode: containerId.includes('migrate') ? migrationExitCode : 0,
+        },
+      })),
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'api',
+    });
+    expect(first.success).toBe(true);
+    const apiBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/api',
+    )?.container_id;
+    migrationExitCode = 1;
+    callOrder.length = 0;
+    runComposeService.mockClear();
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'api',
+      services: ['api'],
+      _parentId: first.parentProjectId,
+    });
+
+    expect(second.success, JSON.stringify(second)).toBe(false);
+    expect(second.errorCode).toBe('COMPOSE_JOB_FAILED');
+    expect(callOrder).toContain('ol-stack-migrate');
+    expect(callOrder).not.toContain('ol-stack-api');
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/api')?.container_id,
+    ).toBe(apiBefore);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/migrate')?.container_id,
+    ).toContain('ol-stack-migrate-container');
+  });
+
+  it('preserves unchanged resources on full deploy and blocks resource changes or removal', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx:latest
+    expose: ["3000"]
+    depends_on: [db]
+  db:
+    image: postgres:16
+`,
+      'utf8',
+    );
+    let sequence = 0;
+    const docker = createFakeDocker({
+      runComposeService: vi
+        .fn()
+        .mockImplementation(
+          async (config: { name: string }) => `${config.name}-container-${String(++sequence)}`,
+        ),
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const initialConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'web',
+    };
+
+    const first = await deployWithEnv(pipeline, initialConfig);
+    expect(first.success).toBe(true);
+    const dbBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/db',
+    )?.container_id;
+    db._deployConfigs.set(`${first.parentProjectId}__svc`, {
+      config_json: JSON.stringify({
+        version: 2,
+        snapshot: {
+          composeServiceFingerprints: fingerprintComposeServices(
+            pipeline.parseComposeFile(composePath).services,
+          ),
+        },
+        savedAt: new Date().toISOString(),
+      }),
+    });
+
+    const unchanged = await deployWithEnv(pipeline, {
+      ...initialConfig,
+      _parentId: first.parentProjectId,
+    });
+    expect(unchanged.success).toBe(true);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/db')?.container_id,
+    ).toBe(dbBefore);
+
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx:latest
+    expose: ["3000"]
+  db:
+    image: postgres:17
+`,
+      'utf8',
+    );
+    await expect(
+      deployWithEnv(pipeline, { ...initialConfig, _parentId: first.parentProjectId }),
+    ).rejects.toMatchObject({ code: 'STATEFUL_SERVICE_CHANGE_BLOCKED' });
+
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx:latest
+    expose: ["3000"]
+`,
+      'utf8',
+    );
+    await expect(
+      deployWithEnv(pipeline, { ...initialConfig, _parentId: first.parentProjectId }),
+    ).rejects.toMatchObject({ code: 'STATEFUL_SERVICE_REMOVAL_BLOCKED' });
   });
 });

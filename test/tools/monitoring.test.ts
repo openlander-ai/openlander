@@ -855,6 +855,86 @@ describe('diagnose_host_resources tool', () => {
 });
 
 describe('diagnose_service tool', () => {
+  it.each([
+    {
+      role: 'resource' as const,
+      state: {
+        Running: true,
+        Status: 'running',
+        ExitCode: 0,
+        Health: { Status: 'healthy' },
+      },
+      expectedStrategy: 'docker_health',
+    },
+    {
+      role: 'job' as const,
+      state: { Running: false, Status: 'exited', ExitCode: 0 },
+      expectedStrategy: 'exit_code',
+    },
+  ])('uses role-specific diagnostics for $role without HTTP probes', async (fixture) => {
+    const project = { id: 'stack', name: 'stack', status: 'running', archived_at: null };
+    const service = {
+      id: `stack-${fixture.role}__svc`,
+      project_id: 'stack',
+      parent_service_id: 'stack__svc',
+      runtime_role: fixture.role,
+      name: fixture.role === 'resource' ? 'db' : 'migrate',
+      kind: 'compose-child',
+      source: 'git',
+      status: fixture.role === 'job' ? 'stopped' : 'running',
+      assigned_port: null,
+      container_id: `container-${fixture.role}`,
+      container_name: `ol-stack-${fixture.role}`,
+      container_port: fixture.role === 'resource' ? 5432 : null,
+      image_url: fixture.role === 'resource' ? 'postgres:16' : 'app:latest',
+      image_tag: null,
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => project),
+        getProjectByName: vi.fn(() => project),
+        getService: vi.fn(() => service),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({})),
+        getDeployLogs: vi.fn(async () => []),
+      },
+      pipeline: { getLogs: vi.fn(async () => 'role log') },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          Name: `/${service.container_name}`,
+          State: fixture.state,
+          Config: { Image: service.image_url },
+        })),
+        listManagedContainers: vi.fn(async () => [
+          { id: service.container_id, status: fixture.state.Running ? 'running' : 'stopped' },
+        ]),
+        execSimple: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: service.id },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result.service).toMatchObject({
+      runtimeRole: fixture.role,
+      healthStrategy: fixture.expectedStrategy,
+    });
+    expect(result.roleCheck).toMatchObject({
+      strategy: fixture.expectedStrategy,
+      healthy: true,
+    });
+    expect(result).not.toHaveProperty('httpCheck');
+    expect(result).not.toHaveProperty('route');
+  });
+
   it('summarizes masked env keys and flags runtime-only build-time errors', async () => {
     const jwtFixture = [
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',

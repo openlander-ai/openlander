@@ -133,11 +133,18 @@ export class ContainerOps {
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
-    const cPort = opts.containerPort ?? opts.port;
-    const portMappings = [
-      { hostPort: opts.port, containerPort: cPort },
-      ...(opts.additionalPorts ?? []),
-    ];
+    const primaryMapping =
+      opts.port !== undefined
+        ? [{ hostPort: opts.port, containerPort: opts.containerPort ?? opts.port }]
+        : [];
+    const portMappings = [...primaryMapping, ...(opts.additionalPorts ?? [])];
+    const exposedPorts = Array.from(
+      new Set([
+        ...(opts.containerPort !== undefined ? [opts.containerPort] : []),
+        ...(opts.exposedPorts ?? []),
+        ...portMappings.map(({ containerPort }) => containerPort),
+      ]),
+    );
     const extraHosts = await resolveExtraHosts(this.ctx.client, this.ctx.networkName);
     const secretBinds = writeSecretFiles(opts.name, opts.secretFiles ?? []);
     const projectName = stripContainerPrefix(opts.name);
@@ -193,20 +200,24 @@ export class ContainerOps {
         [DOCKER_LABELS.PROJECT]: stripContainerPrefix(opts.name),
         ...opts.traefikLabels,
       },
-      ExposedPorts: Object.fromEntries(
-        portMappings.map(({ containerPort }) => [`${String(containerPort)}/tcp`, {}]),
-      ),
+      ExposedPorts:
+        exposedPorts.length > 0
+          ? Object.fromEntries(exposedPorts.map((port) => [`${String(port)}/tcp`, {}]))
+          : undefined,
       Cmd: command,
       Entrypoint: opts.entrypoint,
       Healthcheck: healthcheck,
       NetworkingConfig: networkingConfig,
       HostConfig: {
-        PortBindings: Object.fromEntries(
-          portMappings.map(({ hostPort, containerPort }) => [
-            `${String(containerPort)}/tcp`,
-            [{ HostPort: String(hostPort) }],
-          ]),
-        ),
+        PortBindings:
+          portMappings.length > 0
+            ? Object.fromEntries(
+                portMappings.map(({ hostPort, containerPort }) => [
+                  `${String(containerPort)}/tcp`,
+                  [{ HostPort: String(hostPort) }],
+                ]),
+              )
+            : undefined,
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: networkMode,
         RestartPolicy: { Name: restartPolicyName },

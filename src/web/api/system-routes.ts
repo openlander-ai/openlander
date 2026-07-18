@@ -76,53 +76,72 @@ async function resolveManagedServiceTargetProject(
 }
 
 /**
- * Map a canonical ServiceRow to the legacy wire shape expected by the
- * frontend (Service interface in web/src/lib/api/services.ts).
- *
- * After Phase C of migration 0012 drops `type`, `image`, `port`, `env_vars`
- * from the services table, those fields are undefined on the row. The frontend
- * still reads them for infrastructure cards (ServiceDetailV2,
- * ServiceConnectionTab). This mapper fills the legacy fields from the canonical
- * post-0012 equivalents so the wire contract stays stable through 1.x.
- *
- * Canonical → legacy mapping:
- *   kind        → type   (discriminator string)
- *   image_url   → image
- *   assigned_port → port
- *   env_vars repo (JSON.stringify) → env_vars
+ * Public service DTO. Keep this as an explicit allowlist: ServiceRow contains
+ * credentials, access codes, and credential references that must never leak
+ * through ordinary list/detail responses.
  */
-type ServiceWire = Omit<ServiceRow, 'env_vars' | 'image' | 'port' | 'type'> & {
-  type: string;
-  image: string;
-  port: number | null;
-  env_vars: string | null;
-  scope: 'project' | 'global';
-  attached_project_id: string | null;
-};
-
-function toServiceWire(service: ServiceRow, envVars: Record<string, string>): ServiceWire {
+function toServiceWire(
+  service: ServiceRow & {
+    summary?: {
+      healthStatus: string | null;
+      uptimeSeconds: number | null;
+      restartCount: number | null;
+    };
+  },
+) {
   const isGlobal = service.project_id === ORPHAN_MANAGED_GROUP_ID;
   return {
-    ...service,
-    // v5.2: strip the internal `__svc` suffix so the wire-format name
-    // matches what the topology + project services endpoints already emit.
-    // The suffix is an artifact of the post-0009 service-id convention and
-    // never belongs in human-facing surfaces.
+    id: service.id,
+    project_id: service.project_id,
     name: service.name.replace(/__svc$/, ''),
+    kind: service.kind,
+    parent_service_id: service.parent_service_id,
+    runtime_role: service.runtime_role,
+    status: service.status,
+    visibility: service.visibility,
     type: service.type ?? kindToLegacyType(service.kind),
     image: service.image ?? service.image_url ?? '',
     port: service.port ?? service.assigned_port ?? null,
-    env_vars:
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-      service.env_vars !== undefined
-        ? // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          service.env_vars
-        : Object.keys(envVars).length > 0
-          ? JSON.stringify(envVars)
-          : null,
+    assigned_port: service.assigned_port,
+    container_id: service.container_id,
+    container_name: service.container_name,
+    container_port: service.container_port,
+    image_tag: service.image_tag,
+    previous_image_tag: service.previous_image_tag,
+    public_url: service.public_url,
+    dockerfile_path: service.dockerfile_path,
+    docker_target: service.docker_target,
+    build_context: service.build_context,
+    build_method: service.build_method,
+    source: service.source,
+    repo_url: service.repo_url,
+    branch: service.branch,
+    image_url: service.image_url,
+    image_cmd: service.image_cmd,
+    is_preview: service.is_preview,
+    pr_number: service.pr_number,
+    project_type: service.project_type,
+    health_check_strategy: service.health_check_strategy,
+    health_check_path: service.health_check_path,
+    created_at: service.created_at,
+    updated_at: service.updated_at,
+    archived_at: service.archived_at,
+    summary: service.summary,
     scope: isGlobal ? 'global' : 'project',
     attached_project_id: isGlobal ? null : service.project_id,
   };
+}
+
+function parseCredentialPayload(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createSystemRoutes(ctx: AppContext): Hono {
@@ -248,12 +267,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       const services = await ctx.serviceManager.listWithCardSummary({
         kindIn: MANAGED_SERVICE_KINDS,
       });
-      const wire = await Promise.all(
-        services.map(async (svc) => {
-          const envVars = await ctx.db.getEnvVarsForService(svc.project_id, svc.id);
-          return toServiceWire(svc, envVars);
-        }),
-      );
+      const wire = services.map((service) => toServiceWire(service));
       return c.json(wire);
     } catch (err) {
       log.debug({ err }, 'List services failed');
@@ -344,8 +358,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         envVars: body.env_vars,
         ...(network ? { network, aliases: [body.name] } : {}),
       });
-      const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
-      return c.json(toServiceWire(service, envVars));
+      return c.json(toServiceWire(service));
     } catch (err) {
       log.debug({ err }, 'Create resource failed');
       const detail = err instanceof Error ? err.message : String(err);
@@ -360,14 +373,49 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     const id = c.req.param('id');
     try {
       const service = await ctx.serviceManager.getDetail(id);
-      const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
-      return c.json(toServiceWire(service, envVars));
+      return c.json(toServiceWire(service));
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service detail failed');
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service detail' }, 500);
+    }
+  });
+
+  api.post('/services/:id/credentials/reveal', async (c) => {
+    const id = c.req.param('id');
+    c.header('Cache-Control', 'no-store');
+
+    try {
+      const service = await ctx.serviceManager.getDetail(id);
+      const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
+      await ctx.db.insertActivityLog({
+        event_type: 'credential:reveal',
+        activity_type: 'config',
+        severity: 'info',
+        project_id: service.project_id,
+        correlation_id: service.id,
+        title: 'Service credentials revealed',
+        description: `Credentials for ${service.name} were revealed in the Web UI`,
+        status: 'completed',
+        metadata: JSON.stringify({ service_id: service.id, source: 'web' }),
+      });
+
+      return c.json({
+        service_id: service.id,
+        credentials: parseCredentialPayload(service.credentials),
+        env_vars: envVars,
+      });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Reveal service credentials failed');
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
+      }
+      return c.json(
+        { error: 'INTERNAL_ERROR', message: 'Failed to reveal service credentials' },
+        500,
+      );
     }
   });
 
@@ -640,7 +688,10 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       if (message.includes('Invalid')) {
         return c.json({ error: 'INVALID_FIELD', message }, 400);
       }
-      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create resource database' }, 500);
+      return c.json(
+        { error: 'INTERNAL_ERROR', message: 'Failed to create resource database' },
+        500,
+      );
     }
   });
 

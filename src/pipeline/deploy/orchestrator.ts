@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { resolve, sep } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import { createModuleLogger } from '../../lib/logger.js';
@@ -21,7 +22,7 @@ import { scanForSecrets } from '../secret-scan.js';
 import { persistDeployConfig } from '../config-snapshot.js';
 import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
-import { DockerfileNotFoundError } from '../../errors.js';
+import { DockerfileNotFoundError, ServiceConfigError } from '../../errors.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { resolveDockerfilePath } from './helpers.js';
 import { checkDeployConnectivity } from './connectivity-check.js';
@@ -271,7 +272,26 @@ export async function buildProject(
   const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
 
   const composePipeline = deps.composePipeline;
-  const composePath = preferDockerfile ? null : composePipeline?.detectComposeFile(clonePath);
+  let composePath: string | null = null;
+  if (!preferDockerfile && composePipeline) {
+    if (config.composeFile) {
+      const root = resolve(clonePath);
+      const selected = resolve(root, config.composeFile);
+      if (selected !== root && !selected.startsWith(`${root}${sep}`)) {
+        throw new ServiceConfigError('Compose file must be a repository-relative path.', {
+          composeFile: config.composeFile,
+        });
+      }
+      if (!existsSync(selected)) {
+        throw new ServiceConfigError('Selected Compose file does not exist.', {
+          composeFile: config.composeFile,
+        });
+      }
+      composePath = selected;
+    } else {
+      composePath = composePipeline.detectComposeFile(clonePath);
+    }
+  }
   const isCompose = Boolean(composePath && composePipeline);
   try {
     await deps.db.updateProject(projectId, {
@@ -306,8 +326,9 @@ export async function buildProject(
       clonePath,
       composePath,
       commitSha,
-      profiles: [],
+      profiles: config.composeProfiles,
       services: config.composeServices,
+      trafficService: config.trafficService,
       name: routeName,
       trigger,
       envVars: composeEnvVars,
@@ -317,6 +338,7 @@ export async function buildProject(
     });
 
     if (result.success) {
+      config.composeServiceFingerprints = result.serviceFingerprints;
       await handlePostDeploy(deps, {
         projectId,
         environmentId,
@@ -341,6 +363,8 @@ export async function buildProject(
         projectName: result.parentName,
         buildDurationMs: result.buildDurationMs,
         error: result.error,
+        code: result.errorCode,
+        warnings: result.warnings,
       },
       buildLog,
     };

@@ -24,6 +24,7 @@ import {
   GitBranchNotFoundError,
   GitCloneError,
   GitHubRepoAccessError,
+  GitNetworkUnreachableError,
   GitRepoNotFoundError,
 } from '../src/errors.js';
 
@@ -401,6 +402,52 @@ describeGitClone('cloneRepo — deterministic provider authentication', () => {
 });
 
 describeGitClone('cloneRepo — error classification', () => {
+  it.each([
+    'fatal: unable to access repo: Could not resolve host: github.com',
+    'ssh: connect to host github.com port 22: Network is unreachable',
+    'fatal: unable to access repo: Connection reset by peer',
+    'fatal: unable to access repo: Failed to connect to github.com port 443',
+  ])('classifies network failures separately: %s', async (message) => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error(message), { stdout: '', stderr: '' });
+      },
+    );
+
+    await expect(
+      cloneRepo({ repoUrl: 'git@github.com:org/private-repo.git' }),
+    ).rejects.toBeInstanceOf(GitNetworkUnreachableError);
+  });
+
+  it('returns redacted retryable details for provider network failures', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('fatal: unable to access: Connection timed out'), {
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    await expect(cloneRepo({ repoUrl: 'https://github.com/user/repo' })).rejects.toMatchObject({
+      code: 'GIT_NETWORK_UNREACHABLE',
+      details: {
+        repoUrl: 'https://github.com/user/repo',
+        authMethod: 'pat',
+        retryable: true,
+      },
+    });
+  });
   it('classifies "Authentication failed" as GitAuthError', async () => {
     mockExecFile.mockImplementationOnce(
       (

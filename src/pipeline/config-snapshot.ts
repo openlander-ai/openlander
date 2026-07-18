@@ -6,7 +6,7 @@ import { buildResourceLimitConfig, type ResourceLimitConfig } from './docker/typ
  * Version of the config snapshot format.
  * Increment when the snapshot structure changes.
  */
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
 
 /**
  * Allowlisted fields that are persisted in the deploy_configs table.
@@ -15,6 +15,10 @@ export const CONFIG_VERSION = 1;
 export const PERSISTED_FIELDS = [
   'sshKeyPath',
   'composeServices',
+  'composeFile',
+  'composeProfiles',
+  'trafficService',
+  'composeServiceFingerprints',
   'preferDockerfile',
   'environment',
   'dockerfilePath',
@@ -35,6 +39,10 @@ export interface DeployConfigSnapshot {
   sshKeyPath?: string;
   /** Specific docker-compose services to deploy */
   composeServices?: string[];
+  composeFile?: string;
+  composeProfiles?: string[];
+  trafficService?: string;
+  composeServiceFingerprints?: Record<string, string>;
   /** Prefer Dockerfile over docker-compose */
   preferDockerfile?: boolean;
   /** Target environment (e.g., production, development) */
@@ -79,6 +87,12 @@ export function createSnapshot(config: ProjectConfig): DeployConfigSnapshot {
   }
   if (config.composeServices !== undefined) {
     snapshot.composeServices = config.composeServices;
+  }
+  if (config.composeFile !== undefined) snapshot.composeFile = config.composeFile;
+  if (config.composeProfiles !== undefined) snapshot.composeProfiles = config.composeProfiles;
+  if (config.trafficService !== undefined) snapshot.trafficService = config.trafficService;
+  if (config.composeServiceFingerprints !== undefined) {
+    snapshot.composeServiceFingerprints = config.composeServiceFingerprints;
   }
   if (config.preferDockerfile !== undefined) {
     snapshot.preferDockerfile = config.preferDockerfile;
@@ -146,7 +160,7 @@ export function deserializeConfig(json: string): StoredDeployConfig | null {
     }
 
     // Check version compatibility
-    if (obj.version !== CONFIG_VERSION) {
+    if (obj.version !== 1 && obj.version !== CONFIG_VERSION) {
       return null;
     }
 

@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { deployLogs, services } from '../schema.drizzle.js';
@@ -115,6 +115,18 @@ export class DeployLogRepo {
       .orderBy(desc(deployLogs.created_at), desc(deployLogs.id))
       .limit(1);
     return (row as DeployLogRow | undefined) ?? undefined;
+  }
+
+  async getLastDeployLogsForServices(
+    serviceIds: readonly string[],
+  ): Promise<Map<string, DeployLogRow>> {
+    if (serviceIds.length === 0) return new Map();
+    const rows = await this.db
+      .selectDistinctOn([deployLogs.service_id])
+      .from(deployLogs)
+      .where(inArray(deployLogs.service_id, [...serviceIds]))
+      .orderBy(deployLogs.service_id, desc(deployLogs.created_at), desc(deployLogs.id));
+    return new Map((rows as DeployLogRow[]).map((row) => [row.service_id, row]));
   }
 
   async updateRuntimeLog(deployId: string, runtimeLog: string): Promise<void> {

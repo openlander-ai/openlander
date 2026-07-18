@@ -705,6 +705,7 @@ export class ProjectRepo {
       parentProjectId: string | null;
       recoveringStartedAt: string | null;
       pendingFix: string | null;
+      runtimeRole: ServiceRow['runtime_role'];
       // Group metadata fields — live on projects.
       displayName: string;
       description: string | null;
@@ -761,6 +762,7 @@ export class ProjectRepo {
     if (updates.recoveringStartedAt !== undefined)
       svcSetValues.recovering_started_at = updates.recoveringStartedAt;
     if (updates.pendingFix !== undefined) svcSetValues.pending_fix = updates.pendingFix;
+    if (updates.runtimeRole !== undefined) svcSetValues.runtime_role = updates.runtimeRole;
 
     if (Object.keys(svcSetValues).length > 0) {
       await this.db

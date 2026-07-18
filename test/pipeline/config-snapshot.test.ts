@@ -11,8 +11,8 @@ import {
 
 describe('config-snapshot', () => {
   describe('CONFIG_VERSION', () => {
-    it('is set to 1', () => {
-      expect(CONFIG_VERSION).toBe(1);
+    it('is set to 2', () => {
+      expect(CONFIG_VERSION).toBe(2);
     });
   });
 
@@ -20,6 +20,10 @@ describe('config-snapshot', () => {
     it('contains expected fields', () => {
       expect(PERSISTED_FIELDS).toContain('sshKeyPath');
       expect(PERSISTED_FIELDS).toContain('composeServices');
+      expect(PERSISTED_FIELDS).toContain('composeFile');
+      expect(PERSISTED_FIELDS).toContain('composeProfiles');
+      expect(PERSISTED_FIELDS).toContain('trafficService');
+      expect(PERSISTED_FIELDS).toContain('composeServiceFingerprints');
       expect(PERSISTED_FIELDS).toContain('preferDockerfile');
       expect(PERSISTED_FIELDS).toContain('environment');
       expect(PERSISTED_FIELDS).toContain('dockerfilePath');
@@ -56,6 +60,10 @@ describe('config-snapshot', () => {
         repoUrl: 'https://github.com/user/repo',
         sshKeyPath: '/home/user/.ssh/id_rsa',
         composeServices: ['web', 'db'],
+        composeFile: 'compose.production.yml',
+        composeProfiles: ['production'],
+        trafficService: 'web',
+        composeServiceFingerprints: { web: 'sha256-web', db: 'sha256-db' },
         preferDockerfile: true,
         environment: 'production',
         dockerfilePath: 'docker/Dockerfile.prod',
@@ -68,6 +76,13 @@ describe('config-snapshot', () => {
 
       expect(snapshot.sshKeyPath).toBe('/home/user/.ssh/id_rsa');
       expect(snapshot.composeServices).toEqual(['web', 'db']);
+      expect(snapshot.composeFile).toBe('compose.production.yml');
+      expect(snapshot.composeProfiles).toEqual(['production']);
+      expect(snapshot.trafficService).toBe('web');
+      expect(snapshot.composeServiceFingerprints).toEqual({
+        web: 'sha256-web',
+        db: 'sha256-db',
+      });
       expect(snapshot.preferDockerfile).toBe(true);
       expect(snapshot.environment).toBe('production');
       expect(snapshot.dockerfilePath).toBe('docker/Dockerfile.prod');
@@ -271,6 +286,19 @@ describe('config-snapshot', () => {
       expect(result).toBeNull();
     });
 
+    it('continues to read version 1 snapshots', () => {
+      const result = deserializeConfig(
+        JSON.stringify({
+          version: 1,
+          snapshot: { composeServices: ['web'] },
+          savedAt: new Date().toISOString(),
+        }),
+      );
+
+      expect(result?.version).toBe(1);
+      expect(result?.snapshot.composeServices).toEqual(['web']);
+    });
+
     it('returns null when snapshot is missing', () => {
       const json = JSON.stringify({
         version: CONFIG_VERSION,
@@ -355,6 +383,10 @@ describe('config-snapshot', () => {
       const original = {
         sshKeyPath: '/home/user/.ssh/id_rsa',
         composeServices: ['web', 'db', 'cache'],
+        composeFile: 'compose.production.yml',
+        composeProfiles: ['production'],
+        trafficService: 'web',
+        composeServiceFingerprints: { web: 'sha256-web' },
         preferDockerfile: false,
         environment: 'staging',
         dockerfilePath: 'docker/Dockerfile.staging',

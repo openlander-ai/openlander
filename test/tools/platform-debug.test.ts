@@ -18,6 +18,7 @@ function createMockPlatformDebugContext() {
   const getDomainMappings = vi.fn<(projectId: string) => unknown[]>(() => []);
   const getWebhookConfigs = vi.fn<(projectId: string) => unknown[]>(() => []);
   const loadDeployConfig = vi.fn(() => undefined);
+  const findActivityLogRecent = vi.fn<() => unknown[]>(() => []);
 
   const ctx = {
     docker: {
@@ -35,6 +36,7 @@ function createMockPlatformDebugContext() {
       getDomainMappings,
       getWebhookConfigs,
       loadDeployConfig,
+      findActivityLogRecent,
     },
   } as unknown as AppContext;
 
@@ -55,6 +57,7 @@ function createMockPlatformDebugContext() {
       getDomainMappings,
       getWebhookConfigs,
       loadDeployConfig,
+      findActivityLogRecent,
     },
   };
 }
@@ -266,7 +269,97 @@ describe('platform-debug tools', () => {
 
     expect(result.table).toBe('projects');
     expect(result.count).toBe(1);
-    expect(result.rows).toEqual([{ id: 'p1', name: 'app-1' }]);
+    expect(result.rows[0]).toMatchObject({ id: 'p1', name: 'app-1' });
+  });
+
+  it('platform_db_inspect applies project scope and strips service secrets', async () => {
+    const { ctx, dbMocks } = createMockPlatformDebugContext();
+    dbMocks.listServices.mockReturnValueOnce([
+      {
+        id: 'svc-a',
+        project_id: 'p1',
+        name: 'db-a',
+        kind: 'postgres',
+        credentials: '{"password":"secret"}',
+        env_vars: '{"TOKEN":"secret"}',
+        access_code: 'secret',
+        access_code_iv: 'iv',
+        git_credential_id: 'credential-id',
+      },
+      { id: 'svc-b', project_id: 'p2', name: 'db-b', kind: 'postgres' },
+    ]);
+
+    const result = (await getTool('platform_db_inspect').execute(
+      { table: 'services', project_id: 'p1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as { rows: Array<Record<string, unknown>> };
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ id: 'svc-a', project_id: 'p1' });
+    expect(result.rows[0]).not.toHaveProperty('credentials');
+    expect(result.rows[0]).not.toHaveProperty('env_vars');
+    expect(result.rows[0]).not.toHaveProperty('access_code');
+    expect(result.rows[0]).not.toHaveProperty('access_code_iv');
+    expect(result.rows[0]).not.toHaveProperty('git_credential_id');
+  });
+
+  it('platform_db_inspect removes raw logs, webhook secrets, and unstructured metadata', async () => {
+    const { ctx, dbMocks } = createMockPlatformDebugContext();
+    dbMocks.getDeployLogs.mockReturnValueOnce([
+      { id: 'deploy-1', service_id: 'svc-a', build_log: 'TOKEN=secret', runtime_log: 'secret' },
+    ]);
+    dbMocks.getTimelineEvents.mockReturnValueOnce([
+      { id: 'event-1', project_id: 'p1', detail: '{"secret":"value"}' },
+    ]);
+    dbMocks.getWebhookConfigs.mockReturnValueOnce([
+      { id: 'hook-1', project_id: 'p1', secret: 'webhook-secret' },
+    ]);
+    dbMocks.findActivityLogRecent.mockReturnValueOnce([
+      { id: 'activity-1', project_id: 'p1', metadata: '{"credential":"secret"}' },
+    ]);
+
+    const tool = getTool('platform_db_inspect');
+    const context = { target: 'mcp' as const, appCtx: ctx };
+    const deploy = (await tool.execute({ table: 'deploy_logs', project_id: 'p1' }, context)) as {
+      rows: Array<Record<string, unknown>>;
+    };
+    const timeline = (await tool.execute(
+      { table: 'timeline_events', project_id: 'p1' },
+      context,
+    )) as { rows: Array<Record<string, unknown>> };
+    const webhooks = (await tool.execute(
+      { table: 'webhook_configs', project_id: 'p1' },
+      context,
+    )) as { rows: Array<Record<string, unknown>> };
+    const activity = (await tool.execute({ table: 'activity_log', project_id: 'p1' }, context)) as {
+      rows: Array<Record<string, unknown>>;
+    };
+
+    expect(deploy.rows[0]).not.toHaveProperty('build_log');
+    expect(deploy.rows[0]).not.toHaveProperty('runtime_log');
+    expect(timeline.rows[0]).not.toHaveProperty('detail');
+    expect(webhooks.rows[0]).not.toHaveProperty('secret');
+    expect(activity.rows[0]).not.toHaveProperty('metadata');
+  });
+
+  it('platform_db_inspect removes credential references from deploy config', async () => {
+    const { ctx, dbMocks } = createMockPlatformDebugContext();
+    dbMocks.loadDeployConfig.mockReturnValueOnce({
+      repoUrl: 'https://github.com/openlander-ai/openlander',
+      sshKeyPath: '/tmp/key',
+      gitCredentialId: 'credential-id',
+      nested: { env_vars: { TOKEN: 'secret' }, safe: true },
+    });
+
+    const result = (await getTool('platform_db_inspect').execute(
+      { table: 'deploy_configs', project_id: 'p1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as { rows: Array<{ config: Record<string, unknown> }> };
+
+    expect(result.rows[0]?.config).toEqual({
+      repoUrl: 'https://github.com/openlander-ai/openlander',
+      nested: { safe: true },
+    });
   });
 
   it('platform_db_inspect rejects forbidden tables at runtime', async () => {

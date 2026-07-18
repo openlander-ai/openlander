@@ -125,6 +125,19 @@ export class GitDeployKeyUnauthorizedError extends OpenLanderError {
   }
 }
 
+export type GitNetworkAuthMethod = 'deploy_key' | 'ssh' | 'oauth' | 'pat';
+
+export class GitNetworkUnreachableError extends OpenLanderError {
+  constructor(repoUrl: string, authMethod: GitNetworkAuthMethod) {
+    super('The Git repository endpoint could not be reached.', 'GIT_NETWORK_UNREACHABLE', 503, {
+      repoUrl,
+      authMethod,
+      retryable: true,
+    });
+    this.name = 'GitNetworkUnreachableError';
+  }
+}
+
 export class GitCredentialRepositoryMismatchError extends OpenLanderError {
   constructor(credentialId: string, credentialRepo: string, requestedRepo: string) {
     super(
@@ -388,6 +401,78 @@ export class ComposeHostPortsUnsupportedError extends OpenLanderError {
       },
     );
     this.name = 'ComposeHostPortsUnsupportedError';
+  }
+}
+
+export class TrafficServiceRequiredError extends OpenLanderError {
+  constructor(candidates: string[]) {
+    super(
+      'Multiple Compose applications can receive traffic. Select traffic_service explicitly.',
+      'TRAFFIC_SERVICE_REQUIRED',
+      400,
+      { candidates },
+    );
+    this.name = 'TrafficServiceRequiredError';
+  }
+}
+
+export class InvalidTrafficServiceError extends OpenLanderError {
+  constructor(trafficService: string, candidates: string[]) {
+    super(
+      `Compose traffic service '${trafficService}' is not an exposed application.`,
+      'INVALID_TRAFFIC_SERVICE',
+      400,
+      { trafficService, candidates },
+    );
+    this.name = 'InvalidTrafficServiceError';
+  }
+}
+
+export class ComposeJobFailedError extends OpenLanderError {
+  constructor(serviceName: string, exitCode: number | null, error?: string) {
+    super(
+      `Compose job '${serviceName}' did not complete successfully.`,
+      'COMPOSE_JOB_FAILED',
+      409,
+      { serviceName, exitCode, ...(error ? { error } : {}) },
+    );
+    this.name = 'ComposeJobFailedError';
+  }
+}
+
+export class ComposePrerequisiteUnhealthyError extends OpenLanderError {
+  constructor(serviceName: string) {
+    super(
+      `Compose prerequisite '${serviceName}' is unhealthy. It was not recreated.`,
+      'COMPOSE_PREREQUISITE_UNHEALTHY',
+      409,
+      { serviceName },
+    );
+    this.name = 'ComposePrerequisiteUnhealthyError';
+  }
+}
+
+export class StatefulServiceChangeBlockedError extends OpenLanderError {
+  constructor(serviceName: string) {
+    super(
+      `Stateful Compose service '${serviceName}' changed and requires an explicit migration.`,
+      'STATEFUL_SERVICE_CHANGE_BLOCKED',
+      409,
+      { serviceName },
+    );
+    this.name = 'StatefulServiceChangeBlockedError';
+  }
+}
+
+export class StatefulServiceRemovalBlockedError extends OpenLanderError {
+  constructor(serviceName: string) {
+    super(
+      `Stateful Compose service '${serviceName}' was removed from the specification. Automatic removal is blocked.`,
+      'STATEFUL_SERVICE_REMOVAL_BLOCKED',
+      409,
+      { serviceName },
+    );
+    this.name = 'StatefulServiceRemovalBlockedError';
   }
 }
 

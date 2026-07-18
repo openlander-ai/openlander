@@ -36,6 +36,7 @@ import * as traefikPipeline from '../../src/pipeline/traefik.js';
 function buildPreMigrationRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: 'svc-premigration-1',
+    project_id: 'proj-1',
     name: 'my-pg-legacy',
     // Legacy columns — source of truth for 0009-migrated rows
     type: 'postgresql',
@@ -65,6 +66,7 @@ function buildPreMigrationRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
 function buildCanonicalRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: 'svc-canonical-1',
+    project_id: 'proj-1',
     name: 'my-postgres',
     // Legacy `type` is NULL — post-0012 fresh-create rows won't have it populated.
     // Wire emission must derive the legacy vocabulary via kindToLegacyType(kind).
@@ -102,6 +104,10 @@ function createMcpContext(service: ServiceRow) {
   const ctx = {
     config: { git: { sshKeyPath: '' } },
     serviceManager,
+    db: {
+      listProjects: vi.fn().mockResolvedValue([{ id: service.project_id, name: 'my-project' }]),
+      insertActivityLog: vi.fn().mockResolvedValue(undefined),
+    },
   } as unknown as AppContext;
 
   return { ctx, serviceManager };
@@ -159,10 +165,10 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
     );
     expect(tool).toBeDefined();
 
-    const result = (await tool!.execute(
-      { service_name: 'my-postgres' },
-      { target: 'mcp' },
-    )) as { type: string; port: number };
+    const result = (await tool!.execute({ service_name: 'my-postgres' }, { target: 'mcp' })) as {
+      type: string;
+      port: number;
+    };
 
     // Wire contract: kind='postgres' + type=NULL → emit 'postgresql' (legacy vocabulary)
     expect(result.type).toBe('postgresql');
@@ -170,6 +176,16 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
     // Port comes from credentials blob first, which is 5432
     expect(result.port).toBe(5432);
     expect(result.port).not.toBe(9999);
+    expect(ctx.db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'credential:reveal',
+        project_id: row.project_id,
+        correlation_id: row.id,
+      }),
+    );
+    expect(
+      JSON.stringify((ctx.db.insertActivityLog as ReturnType<typeof vi.fn>).mock.calls),
+    ).not.toContain('secret');
   });
 
   it('list_services emits legacy type directly for 0009-migrated rows (type=postgresql, image_url=NULL, assigned_port=NULL)', async () => {

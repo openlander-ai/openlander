@@ -1250,10 +1250,13 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
+        composeFile: (args['compose_file'] as string | undefined) ?? undefined,
+        composeProfiles: (args['compose_profiles'] as string[] | undefined) ?? undefined,
+        environment: (args['environment'] as 'production' | 'development' | undefined) ?? undefined,
         targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
         trigger: deployTriggerForToolContext(context),
       });
-
       return deployPlanResponse(plan);
     },
   },
@@ -1721,9 +1724,14 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
+        composeFile: (args['compose_file'] as string | undefined) ?? undefined,
+        composeProfiles: (args['compose_profiles'] as string[] | undefined) ?? undefined,
+        environment: (args['environment'] as 'production' | 'development' | undefined) ?? undefined,
         targetProjectId,
         trigger: deployTriggerForToolContext(context),
       });
+      const planBuild = (plan as Partial<DeployPlan>).build;
 
       if (plan.status === 'needs_input') {
         const nextSteps = buildNeedsInputNextSteps(plan);
@@ -1901,8 +1909,18 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (!proj) return { extra, warnings };
           if (expose) {
             try {
-              if (proj.assigned_port) {
-                extra.public_url = await appCtx.pipeline.exposeTunnel(proj.id, proj.assigned_port);
+              let exposeProject = proj;
+              if (planBuild?.method === 'compose' && planBuild.traffic_service) {
+                const trafficService = planBuild.traffic_service;
+                const children = await appCtx.db.getComposeChildProjects(proj.id);
+                exposeProject =
+                  children.find((child) => child.name === `${proj.name}/${trafficService}`) ?? proj;
+              }
+              if (exposeProject.assigned_port) {
+                extra.public_url = await appCtx.pipeline.exposeTunnel(
+                  exposeProject.id,
+                  exposeProject.assigned_port,
+                );
               }
             } catch (err) {
               warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1958,12 +1976,35 @@ export const deployPlanToolDefs: ToolDef[] = [
                 return;
               }
 
-              const readiness = waitHealthy
-                ? await waitForProjectReadiness(appCtx, projectIdOverride ?? projectId, 30_000)
-                : await inspectProjectReadiness(appCtx, projectIdOverride ?? projectId);
+              const finalProjectId = projectIdOverride ?? projectId;
+              let diagnosticProjectId = finalProjectId;
+              if (planBuild?.method === 'compose' && planBuild.traffic_service) {
+                const parent = await appCtx.db.getProject(finalProjectId);
+                const children = await appCtx.db.getComposeChildProjects(finalProjectId);
+                const trafficChild = parent
+                  ? children.find(
+                      (child) =>
+                        child.name === `${parent.name}/${planBuild.traffic_service as string}`,
+                    )
+                  : undefined;
+                if (trafficChild) {
+                  diagnosticProjectId = trafficChild.id;
+                }
+              }
+              const hasRepresentativeTarget =
+                planBuild?.method !== 'compose' || Boolean(planBuild.traffic_service);
+              const readiness = hasRepresentativeTarget
+                ? waitHealthy
+                  ? await waitForProjectReadiness(appCtx, diagnosticProjectId, 30_000)
+                  : await inspectProjectReadiness(appCtx, diagnosticProjectId)
+                : {
+                    readiness: 'healthy' as const,
+                    ready: true,
+                    message: 'Compose project has no representative traffic service.',
+                  };
               const stability =
-                waitHealthy && readiness.ready
-                  ? await observeProjectStability(appCtx, projectIdOverride ?? projectId, readiness)
+                waitHealthy && readiness.ready && hasRepresentativeTarget
+                  ? await observeProjectStability(appCtx, diagnosticProjectId, readiness)
                   : undefined;
               const finalReadiness =
                 stability?.status === 'unstable' ? stability.result : readiness;
@@ -1983,10 +2024,10 @@ export const deployPlanToolDefs: ToolDef[] = [
                 : finalReadiness.readiness === 'unhealthy'
                   ? 'unhealthy'
                   : 'timeout';
-              const finalProjectId = projectIdOverride ?? projectId;
-              const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
-                () => undefined,
-              );
+              const serviceRecord = await loadProjectServiceRecord(
+                appCtx,
+                diagnosticProjectId,
+              ).catch(() => undefined);
               const attachedServiceId =
                 typeof targetAttach.fields['service_id'] === 'string'
                   ? targetAttach.fields['service_id']
@@ -1996,13 +2037,19 @@ export const deployPlanToolDefs: ToolDef[] = [
                   ? await appCtx.db.getService(attachedServiceId).catch(() => undefined)
                   : undefined;
 
+              const resolvedRouteService =
+                attachedService ??
+                (diagnosticProjectId !== finalProjectId ? serviceRecord?.service : undefined);
               const assignedPort =
-                attachedService?.assigned_port ?? serviceRecord?.view.assignedPort ?? undefined;
-              const routeService = attachedService
+                resolvedRouteService?.assigned_port ??
+                serviceRecord?.view.assignedPort ??
+                undefined;
+              const routeService = resolvedRouteService
                 ? {
-                    name: attachedService.name,
+                    name: resolvedRouteService.name,
                     assigned_port: assignedPort ?? null,
-                    public_url: attachedService.public_url ?? serviceRecord?.view.publicUrl ?? null,
+                    public_url:
+                      resolvedRouteService.public_url ?? serviceRecord?.view.publicUrl ?? null,
                   }
                 : null;
               const routeName = routeService
@@ -2016,7 +2063,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 getPreferredProjectUrl(routeName, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
               const representativeTraffic =
-                waitHealthy && finalReadiness.ready
+                waitHealthy && finalReadiness.ready && hasRepresentativeTarget
                   ? await observeRepresentativeTraffic(appCtx, routeName, '/').catch(
                       (err: unknown): RepresentativeTrafficObservation => ({
                         status: 'skipped',
@@ -2067,7 +2114,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                           service_id:
                             attachedServiceId ??
                             targetIdentityResolver.deployableServiceIdForRuntimeProject(
-                              finalProjectId,
+                              diagnosticProjectId,
                             ),
                         },
                       },

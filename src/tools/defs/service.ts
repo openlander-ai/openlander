@@ -1246,6 +1246,17 @@ export const serviceToolDefs: ToolDef[] = [
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const svcPort = service.assigned_port ?? service.port;
+      await appCtx.db.insertActivityLog({
+        event_type: 'credential:reveal',
+        activity_type: 'config',
+        severity: 'info',
+        project_id: service.project_id,
+        correlation_id: service.id,
+        title: 'Service credentials revealed',
+        description: `Credentials for ${service.name} were revealed through MCP`,
+        status: 'completed',
+        metadata: JSON.stringify({ service_id: service.id, source: 'mcp' }),
+      });
       return {
         service: serviceName,
         // Wire contract: emit legacy vocabulary (postgresql/mongodb).

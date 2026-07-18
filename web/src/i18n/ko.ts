@@ -846,6 +846,15 @@ export const translations = {
       serviceIdTooltip:
         '선택한 Application/Compose/Database/Cache/Storage 리소스의 호환 id입니다. MCP 후속 작업에는 이 service_id를 전달하세요.',
     },
+    composeService: {
+      role: {
+        application: '애플리케이션',
+        job: '작업',
+        resource: '리소스',
+      },
+      trafficTarget: '대표 트래픽 대상',
+      lastDeploy: '최근 배포: {status} · {time}',
+    },
     dataAccessIndicator: {
       enabled: 'Agent read: On',
       disabled: 'Agent read: Off',
@@ -1142,6 +1151,14 @@ export const translations = {
         loading: 'Loading…',
         empty: '이 리소스에 연결된 Project가 없습니다.',
         openProject: 'Open project',
+      },
+      credentials: {
+        title: '인증 정보',
+        description: '명시적으로 표시하기 전까지 인증 정보를 숨깁니다.',
+        reveal: '인증 정보 표시',
+        hide: '인증 정보 숨기기',
+        empty: '이 리소스에 저장된 인증 정보가 없습니다.',
+        error: '인증 정보를 표시하지 못했습니다',
       },
       settings: {
         lifecycle: 'Lifecycle',

@@ -12,8 +12,7 @@ interface MockServer {
   setRequestHandler: (
     schema: unknown,
     handler:
-      | ((request: { params: { name: string; arguments?: unknown } }) => unknown)
-      | (() => unknown),
+      ((request: { params: { name: string; arguments?: unknown } }) => unknown) | (() => unknown),
   ) => void;
 }
 
@@ -206,6 +205,38 @@ describe('registerCompositeMcpTools', () => {
         id: 'olinst_test',
         name: 'openlander-test',
         endpoint: 'http://localhost:10114/mcp',
+      },
+    });
+  });
+
+  it('rejects direct platform tools for project-scoped MCP tokens', async () => {
+    const server = createMockServer();
+    const execute = vi.fn(() => ({ exposed: true }));
+    const platformTool = createPlatformTool('platform_db_inspect', ['mcp']);
+    platformTool.execute = execute;
+
+    registerCompositeMcpTools(server, [], [platformTool], mockAppCtx, {
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-a',
+    });
+
+    const response = (await server.callHandler?.({
+      params: { name: 'platform_db_inspect', arguments: {} },
+    })) as {
+      content: Array<{ type: 'text'; text: string }>;
+      isError: true;
+    };
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.content[0]?.text ?? '{}')).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tool: 'platform_db_inspect',
+        tokenScopeKind: 'project',
+        tokenScopeProjectId: 'project-a',
       },
     });
   });

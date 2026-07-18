@@ -482,6 +482,7 @@ export function mapServiceForApi(
     id: service.id,
     name: deployableServiceIdToProjectId(service.name),
     kind: service.kind,
+    runtime_role: service.runtime_role,
     project_id: service.project_id,
     parent_service_id: service.parent_service_id,
     status: service.status,

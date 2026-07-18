@@ -791,10 +791,7 @@ function forceStrategyWarnings(
   explicit: boolean,
 ): string[] {
   if (action === 'restart_service') {
-    return [
-      'restart_service uses a force-style recreate path. It can replace the current runtime and is not the safe latest-code update path.',
-      'Do not report success until status_call is terminal and diagnose_service confirms the app is healthy.',
-    ];
+    return [];
   }
 
   return [
@@ -827,7 +824,7 @@ function forceStrategyMessage(params: {
   noCache: boolean;
 }): string {
   if (params.action === 'restart_service') {
-    return 'Runtime restart/recreate started with a force-style path. Poll get_deploy_status and diagnose_service before reporting success.';
+    return 'Existing runtime container restarted in place.';
   }
 
   const label = params.action === 'update_app' ? 'App update' : 'Deployment';
@@ -870,6 +867,24 @@ export async function runDeployableServiceAction(
   }
 
   const sourceMissingError = getRedeploySourceMissingError(service);
+  if (action === 'restart_service') {
+    if (service.runtime_role === 'job') {
+      throw new ServiceOperationUnsupportedError('restart_service', 'job');
+    }
+    const restarted = await context.appCtx.pipeline.restartServiceRuntime(service.id);
+    return {
+      status: restarted.status,
+      project_id: project.id,
+      service_id: service.id,
+      container_id: restarted.containerId,
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: service.id },
+      },
+    };
+  }
+
   if (sourceMissingError) {
     return {
       status: 'blocked',
@@ -891,9 +906,7 @@ export async function runDeployableServiceAction(
       ? context.appCtx.pipeline.getBlueGreenEligibility.bind(context.appCtx.pipeline)
       : undefined;
 
-  const isUpdateAction = action === 'redeploy_app' || action === 'update_app';
-
-  if (isUpdateAction && strategy === 'blue-green') {
+  if (strategy === 'blue-green') {
     if (!getBlueGreenEligibility) {
       return {
         status: 'blocked',
@@ -932,7 +945,7 @@ export async function runDeployableServiceAction(
         },
       };
     }
-  } else if (isUpdateAction && strategy === undefined) {
+  } else if (strategy === undefined) {
     if (!getBlueGreenEligibility) {
       return {
         status: 'blocked',
@@ -975,10 +988,6 @@ export async function runDeployableServiceAction(
       };
     }
   }
-  if (action === 'restart_service') {
-    strategy = 'force';
-  }
-
   const sessionId = `mcp-${action}-${nanoid(12)}`;
   const lockResult = await tryAcquireDeployLockOrResponse(runtimeProject.id, sessionId, context);
   if (lockResult) {
@@ -1078,7 +1087,7 @@ export async function runDeployableServiceAction(
     .finally(releaseDbLock);
 
   return {
-    status: action === 'restart_service' ? 'restarting' : 'deploying',
+    status: 'deploying',
     strategy,
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     ...(strategy === 'force'
@@ -1179,9 +1188,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'restart_service',
     riskLevel: 'medium',
     description:
-      'Advanced runtime recreate/restart for an Application/worker. This uses a force-style replacement path; for normal latest-code/config updates prefer update_app without strategy.',
+      'Restart the existing long-running Application/resource container in place. Does not clone, build, replace, or remove the container. Jobs are unsupported.',
     mcpDescription:
-      'Advanced runtime recreate/restart for an Application/worker. Prefer update_app for normal safe updates.',
+      'Restart the existing long-running Application/worker or resource container in place. The container ID remains unchanged; one-shot jobs are unsupported.',
     inputSchema: restartServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'restart_service'),
   },

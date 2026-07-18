@@ -494,6 +494,7 @@ export class Database implements AuthDatabase {
   listRecentDeployLogsAcrossProjects(limit = 100) { return this.deployLogRepo.listRecentAcrossProjects(limit); }
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getLastDeployLogForService(serviceId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLogForService(serviceId, environmentId); }
+  getLastDeployLogsForServices(serviceIds: readonly string[]) { return this.deployLogRepo.getLastDeployLogsForServices(serviceIds); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { return this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
   updateDeployLogRepresentativeTraffic(deployId: string, representativeTrafficJson: string) { return this.deployLogRepo.updateRepresentativeTraffic(deployId, representativeTrafficJson); }

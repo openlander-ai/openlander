@@ -749,6 +749,15 @@ export const translations = {
       serviceIdTooltip:
         'Compatibility id for the selected Application/Compose/Database/Cache/Storage resource. Pass this service_id to MCP follow-up actions.',
     },
+    composeService: {
+      role: {
+        application: 'Application',
+        job: 'Job',
+        resource: 'Resource',
+      },
+      trafficTarget: 'Traffic target',
+      lastDeploy: 'Last deploy: {status} · {time}',
+    },
     dataAccessIndicator: {
       enabled: 'Agent read: On',
       disabled: 'Agent read: Off',
@@ -1019,6 +1028,14 @@ export const translations = {
         loading: 'Loading…',
         empty: 'No Projects are connected to this resource.',
         openProject: 'Open project',
+      },
+      credentials: {
+        title: 'Credentials',
+        description: 'Credentials stay hidden until you explicitly reveal them.',
+        reveal: 'Reveal credentials',
+        hide: 'Hide credentials',
+        empty: 'No credentials are stored for this resource.',
+        error: 'Failed to reveal credentials',
       },
       settings: {
         lifecycle: 'Lifecycle',

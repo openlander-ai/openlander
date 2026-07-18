@@ -36,8 +36,10 @@ export interface Service {
   container_id: string | null;
   container_name: string;
   port: number | null;
-  env_vars: string | null;
-  credentials: string | null;
+  /** Sensitive values are absent from ordinary API responses. */
+  env_vars?: string | null;
+  /** Sensitive values are absent from ordinary API responses. */
+  credentials?: string | null;
   scope?: 'project' | 'global';
   attached_project_id?: string | null;
   project_id?: string | null;
@@ -117,6 +119,12 @@ export interface GroupService {
   createdAt?: string;
   updatedAt?: string;
   gitCredential?: GitCredentialSummary | null;
+  runtimeRole?: 'application' | 'job' | 'resource';
+  lifecycle?: 'long_running' | 'one_shot';
+  healthStrategy?: 'http' | 'tcp' | 'docker_health' | 'exit_code' | 'none';
+  isTrafficTarget?: boolean;
+  aggregateStatus?: 'running' | 'degraded' | 'error';
+  lastDeploy?: { status: 'success' | 'failed' | 'cancelled'; createdAt: string };
 }
 
 interface BackendGroupService {
@@ -147,6 +155,11 @@ interface BackendGroupService {
   created_at?: string;
   updated_at?: string;
   gitCredential?: GitCredentialSummary | null;
+  runtime_role?: GroupService['runtimeRole'];
+  lifecycle?: GroupService['lifecycle'];
+  health_strategy?: GroupService['healthStrategy'];
+  is_traffic_target?: boolean;
+  last_deploy?: { status: 'success' | 'failed' | 'cancelled'; created_at: string };
 }
 
 function normalizeGroupService(raw: BackendGroupService): GroupService {
@@ -174,6 +187,13 @@ function normalizeGroupService(raw: BackendGroupService): GroupService {
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     gitCredential: raw.gitCredential ?? null,
+    runtimeRole: raw.runtime_role,
+    lifecycle: raw.lifecycle,
+    healthStrategy: raw.health_strategy,
+    isTrafficTarget: raw.is_traffic_target,
+    lastDeploy: raw.last_deploy
+      ? { status: raw.last_deploy.status, createdAt: raw.last_deploy.created_at }
+      : undefined,
   };
 }
 
@@ -193,16 +213,29 @@ export interface UpdateGroupServiceInput {
 
 export async function listGroupServices(
   groupId: string,
-  options: { includeArchived?: boolean } = {},
+  options: { includeArchived?: boolean; includeComposeChildren?: boolean } = {},
 ): Promise<GroupService[]> {
   // P2 returns either a bare array or a `{ services }` envelope depending
   // on the route's serializer. Accept both shapes to stay forward-compat.
-  const query = options.includeArchived ? '?include_archived=true' : '';
-  const data = await apiGet<BackendGroupService[] | { services: BackendGroupService[] }>(
-    `/api/projects/${groupId}/services${query}`,
-  );
+  const params = new URLSearchParams();
+  if (options.includeArchived) params.set('include_archived', 'true');
+  if (options.includeComposeChildren) params.set('include_compose_children', 'true');
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  const data = await apiGet<
+    | BackendGroupService[]
+    | {
+        services: BackendGroupService[];
+        aggregate_status?: GroupService['aggregateStatus'];
+      }
+  >(`/api/projects/${groupId}/services${query}`);
   const services = Array.isArray(data) ? data : (data.services ?? []);
-  return services.map(normalizeGroupService);
+  const aggregateStatus = Array.isArray(data) ? undefined : data.aggregate_status;
+  return services.map((service) => {
+    const normalized = normalizeGroupService(service);
+    return normalized.kind === 'compose' && aggregateStatus
+      ? { ...normalized, aggregateStatus }
+      : normalized;
+  });
 }
 
 export async function getGroupService(groupId: string, serviceId: string): Promise<GroupService> {
@@ -349,6 +382,16 @@ export async function getServiceLogs(id: string, lines: number = 100): Promise<s
   if (!res.ok) throw new Error('Failed to fetch service logs');
   const data = await res.json();
   return data.logs;
+}
+
+export interface RevealedServiceCredentials {
+  service_id: string;
+  credentials: Record<string, unknown> | null;
+  env_vars: Record<string, string>;
+}
+
+export async function revealServiceCredentials(id: string): Promise<RevealedServiceCredentials> {
+  return apiPost<RevealedServiceCredentials>(`/api/services/${id}/credentials/reveal`, {});
 }
 
 export interface ServiceDatabase {

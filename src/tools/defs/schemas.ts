@@ -948,6 +948,24 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    traffic_service: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Compose application service that represents public traffic and the parent URL.'),
+    compose_file: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Repository-relative production Compose file path.'),
+    compose_profiles: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Compose profiles to activate and persist for redeploys.'),
+    environment: z
+      .enum(['production', 'development'])
+      .optional()
+      .describe('Deployment environment. Defaults to production.'),
     target_project_id: z
       .string()
       .optional()
@@ -999,7 +1017,7 @@ export const updateDeployPlanSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions). For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
+      'JSON object with plan updates. Supported fields: env, build, compose_file, compose_profiles, traffic_service, environment, services, and health. For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
     ),
 });
 
@@ -1155,6 +1173,24 @@ export const deploySchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    traffic_service: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Compose application service that represents public traffic and the parent URL.'),
+    compose_file: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Repository-relative production Compose file path.'),
+    compose_profiles: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Compose profiles to activate and persist for redeploys.'),
+    environment: z
+      .enum(['production', 'development'])
+      .optional()
+      .describe('Deployment environment. Defaults to production.'),
     wait: z
       .boolean()
       .optional()

@@ -230,6 +230,109 @@ describe('createDeployableServiceRoutes', () => {
     });
   });
 
+  it('returns compose child roles, aggregate status, deploy state, and stored traffic target opt-in', async () => {
+    const project = makeProjectRow({ id: 'stack', name: 'demo-stack' });
+    const parent = makeServiceRow({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'demo-stack__svc',
+      kind: 'compose',
+      build_method: 'compose',
+      assigned_port: null,
+    });
+    const web = makeServiceRow({
+      id: 'stack__web__svc',
+      project_id: 'stack',
+      name: 'demo-stack/web',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'application',
+      assigned_port: 10006,
+    });
+    const db = makeServiceRow({
+      id: 'stack__db__svc',
+      project_id: 'stack',
+      name: 'demo-stack/db',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'resource',
+      assigned_port: null,
+      container_port: 5432,
+      image_url: 'postgres:16',
+      health_check_strategy: null,
+    });
+    const migrate = makeServiceRow({
+      id: 'stack__migrate__svc',
+      project_id: 'stack',
+      name: 'demo-stack/migrate',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'job',
+      status: 'stopped',
+      assigned_port: null,
+      container_port: null,
+    });
+    const lastDeploys = new Map([
+      [
+        migrate.id,
+        {
+          id: 'deploy-migrate',
+          service_id: migrate.id,
+          status: 'success',
+          created_at: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    ]);
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [parent, web, db, migrate]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        getLastDeployLogsForServices: vi.fn(async () => lastDeploys),
+        loadDeployConfigForService: vi.fn(async () => ({
+          config_json: JSON.stringify({
+            version: 2,
+            snapshot: { trafficService: 'web' },
+            savedAt: '2026-01-02T00:00:00.000Z',
+          }),
+        })),
+      },
+    });
+
+    const res = await app.request('/api/projects/stack/services?include_compose_children=true');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      count: 4,
+      aggregate_status: 'running',
+      services: expect.arrayContaining([
+        expect.objectContaining({
+          id: web.id,
+          runtime_role: 'application',
+          lifecycle: 'long_running',
+          health_strategy: 'http',
+          is_traffic_target: true,
+        }),
+        expect.objectContaining({
+          id: db.id,
+          runtime_role: 'resource',
+          health_strategy: 'tcp',
+          is_traffic_target: false,
+        }),
+        expect.objectContaining({
+          id: migrate.id,
+          lifecycle: 'one_shot',
+          health_strategy: 'exit_code',
+          last_deploy: {
+            status: 'success',
+            created_at: '2026-01-02T00:00:00.000Z',
+          },
+        }),
+      ]),
+    });
+  });
+
   it('synthesizes advertised-host URLs for Project-level Compose resources', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];

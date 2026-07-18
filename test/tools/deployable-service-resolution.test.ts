@@ -102,6 +102,12 @@ function createDuplicateServiceContext(
       }),
       redeploy: vi.fn().mockResolvedValue({ success: true }),
       redeployService: vi.fn().mockResolvedValue({ success: true }),
+      restartServiceRuntime: vi.fn().mockResolvedValue({
+        status: 'restarted',
+        projectId: alpha.id,
+        serviceId: alphaService.id,
+        containerId: 'container-alpha',
+      }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       verifyManagedTraefikRoute: vi.fn().mockResolvedValue({
         ok: true,
@@ -663,7 +669,7 @@ describe('deployable service target resolution', () => {
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
-  it('blocks local OpenLander image tags before acquiring a deploy lock', async () => {
+  it('allows runtime restart even when the service has no reproducible source', async () => {
     const ctx = createDuplicateServiceContext({
       alphaService: {
         kind: 'image',
@@ -679,17 +685,15 @@ describe('deployable service target resolution', () => {
     );
 
     expect(result).toMatchObject({
-      status: 'blocked',
-      code: 'SERVICE_SOURCE_MISSING',
-      details: { missingField: 'image_url', source: 'image' },
-      service: { id: 'alpha__svc', projectId: 'alpha' },
-      _agent_guidance: {
-        message: expect.stringContaining('existing container was left untouched'),
-      },
+      status: 'restarted',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      container_id: 'container-alpha',
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.stop).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.restartServiceRuntime).toHaveBeenCalledWith('alpha__svc');
   });
 
   it('requires service_id when service_name matches a multi-deployable project group', async () => {

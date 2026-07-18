@@ -84,15 +84,21 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
 
 function groupServiceToNode(service: GroupService): ServiceNode {
   const health: ServiceHealth =
-    service.status === 'running'
-      ? 'healthy'
-      : service.status === 'building'
-        ? 'deploying'
-        : 'crashed';
+    service.aggregateStatus === 'error'
+      ? 'crashed'
+      : service.status === 'running' ||
+          (service.runtimeRole === 'job' && service.lastDeploy?.status === 'success')
+        ? 'healthy'
+        : service.status === 'building'
+          ? 'deploying'
+          : 'crashed';
 
   return {
     id: service.id,
-    name: service.name,
+    name:
+      service.kind === 'compose-child'
+        ? (service.name.split('/').pop() ?? service.name)
+        : service.name,
     kind: workloadResourceKind(service),
     // `service` is the frontend GroupService wire shape, not a DB service row.
     // eslint-disable-next-line openlander-internal/no-dropped-columns
@@ -116,6 +122,12 @@ function groupServiceToNode(service: GroupService): ServiceNode {
     imageUrl: service.imageUrl,
     imageCmd: service.imageCmd,
     containerPort: service.containerPort,
+    runtimeRole: service.runtimeRole,
+    lifecycle: service.lifecycle,
+    healthStrategy: service.healthStrategy,
+    isTrafficTarget: service.isTrafficTarget,
+    aggregateStatus: service.aggregateStatus,
+    lastDeploy: service.lastDeploy,
   };
 }
 
@@ -253,7 +265,7 @@ export function ProjectView() {
       return;
     }
     try {
-      const rows = await listGroupServices(projectId);
+      const rows = await listGroupServices(projectId, { includeComposeChildren: true });
       setGroupServiceNodes(rows.map(groupServiceToNode));
     } catch {
       setGroupServiceNodes(null);
@@ -417,7 +429,7 @@ export function ProjectView() {
         navigate(`/projects/${projectId}/infrastructure/${service.id}`);
         return;
       }
-      navigate(`/services/${service.id}?project=${projectId}`);
+      navigate(`/projects/${projectId}/services/${service.id}`);
     },
     [navigate, projectId],
   );
@@ -836,6 +848,14 @@ function ServicesPanel({
                   {dataAccessStatus && (
                     <DataAccessResourceBadge status={dataAccessStatus} resourceName={s.name} />
                   )}
+                  {s.lastDeploy && (
+                    <div className="mt-1 text-[11px] text-[color:var(--ol-fg-subtle)]">
+                      {t('projectDetail.composeService.lastDeploy', {
+                        status: s.lastDeploy.status,
+                        time: new Date(s.lastDeploy.createdAt).toLocaleString(),
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
                   {(hasRuntimeMetricValue(s.cpu) || hasRuntimeMetricValue(s.mem)) && (
@@ -855,6 +875,11 @@ function ServicesPanel({
                       <ExternalLink className="h-3 w-3" />
                       {s.url.replace(/^https?:\/\//, '')}
                     </a>
+                  )}
+                  {s.isTrafficTarget && (
+                    <div className="mt-1 text-[10.5px] font-medium text-[color:var(--ol-primary)]">
+                      {t('projectDetail.composeService.trafficTarget')}
+                    </div>
                   )}
                 </div>
               </div>
@@ -922,7 +947,9 @@ function ServiceRoleBadge({ service }: { service: ServiceNode }) {
           : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
       )}
     >
-      {t(resourceLabelKey(service))}
+      {service.runtimeRole
+        ? t(`projectDetail.composeService.role.${service.runtimeRole}`)
+        : t(resourceLabelKey(service))}
     </span>
   );
 }

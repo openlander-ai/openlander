@@ -38,6 +38,8 @@ import {
   ServiceConfigError,
   ServiceSelectionRequiredError,
   ServiceSourceMissingError,
+  ServiceContainerStateError,
+  ServiceOperationUnsupportedError,
   isDockerNotFoundError,
   isDockerBuildCancelledError,
 } from '../errors.js';
@@ -223,6 +225,12 @@ export interface ProjectConfig {
   _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
+  composeFile?: string;
+  composeProfiles?: string[];
+  /** Compose application service used for representative public traffic. */
+  trafficService?: string;
+  /** Secret-free normalized Compose service configuration hashes. */
+  composeServiceFingerprints?: Record<string, string>;
   /** Deployment source type (git or pre-built image) */
   source?: 'git' | 'image';
   /** Full Docker image reference (e.g., registry.example.com/app:latest) */
@@ -282,6 +290,13 @@ export interface RuntimeRecreateResult extends DeployResult {
   containerName?: string;
   previousContainerId?: string | null;
   previousContainerName?: string | null;
+}
+
+export interface RuntimeRestartResult {
+  status: 'restarted';
+  projectId: string;
+  serviceId: string;
+  containerId: string;
 }
 
 export type ManagedRouteVerificationResult =
@@ -2519,6 +2534,67 @@ export class DeployPipeline {
     }
 
     return await this.redeployResolvedService(service, options);
+  }
+
+  /** Restart the existing runtime container in place without clone, build, or replacement. */
+  async restartServiceRuntime(
+    serviceId: string,
+    options?: { lockSessionId?: string },
+  ): Promise<RuntimeRestartResult> {
+    const service = await this.db.getService(serviceId);
+    if (!service) {
+      throw new ServiceConfigError(`Service not found: ${serviceId}`, { serviceId });
+    }
+    if (service.runtime_role === 'job') {
+      throw new ServiceOperationUnsupportedError('restart_service', 'job');
+    }
+
+    const { ownerProject, runtimeProject } = await this.resolveRuntimeProjectForService(service);
+    await this.assertProjectMutable(ownerProject);
+    if (runtimeProject.id !== ownerProject.id) {
+      await this.assertProjectMutable(runtimeProject);
+    }
+
+    const containerId = service.container_id ?? runtimeProject.container_id;
+    if (!containerId) {
+      throw new ServiceContainerStateError(
+        serviceId,
+        'missing',
+        'The service has no existing container to restart.',
+      );
+    }
+
+    const restart = async (): Promise<RuntimeRestartResult> => {
+      this.coordinator?.suppressProject(runtimeProject.id, 30_000);
+      await this.runtime.restartContainer(containerId);
+      const inspection = await this.runtime.inspectContainer(containerId);
+      if (!inspection.State.Running) {
+        throw new ServiceContainerStateError(
+          serviceId,
+          'not_running',
+          'Docker restart completed but the service container is not running.',
+        );
+      }
+      await this.transitionProjectState(runtimeProject.id, 'running', 'runtime-restarted');
+      if (service.status !== 'running') {
+        await this.db.updateService(service.id, { status: 'running' });
+      }
+      return {
+        status: 'restarted',
+        projectId: ownerProject.id,
+        serviceId: service.id,
+        containerId,
+      };
+    };
+
+    if (options?.lockSessionId) {
+      return restart();
+    }
+    return withDeployLock(
+      this.db,
+      { projectId: runtimeProject.id, sessionId: `restart-${nanoid(12)}` },
+      restart,
+    );
   }
 
   /**
