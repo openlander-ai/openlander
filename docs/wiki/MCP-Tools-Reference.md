@@ -160,6 +160,7 @@ Analyze a repository and create a deployment plan.
 | `dockerfile_path`   | string   | No       | Relative Dockerfile path                            |
 | `docker_target`     | string   | No       | Docker build target stage                           |
 | `compose_file`      | string   | No       | Repository-relative Compose file                    |
+| `compose_files`     | string[] | No       | Ordered Compose files, from base to overlays        |
 | `compose_profiles`  | string[] | No       | Compose profiles to activate                        |
 | `traffic_service`   | string   | No       | Compose application used for representative traffic |
 | `environment`       | string   | No       | `production` (default) or `development`             |
@@ -171,14 +172,19 @@ exists. Multiple exposed applications return `needs_input` with
 `update_deploy_plan({ updates: { traffic_service: "..." } })`. Resource/job-only stacks omit the
 representative HTTP probe.
 
+Use either `compose_file` or `compose_files`, not both. Overlay files are merged in array order and
+support Compose `!reset`, for example
+`["docker-compose.yml", "deploy/docker-compose.prod.yml"]`. The first path remains available as
+`build.compose_file` for backward compatibility; multi-file plans also return `build.compose_files`.
+
 ### `update_deploy_plan`
 
 Update a deployment plan with missing values.
 
-| Parameter | Type   | Required | Description                                                        |
-| --------- | ------ | -------- | ------------------------------------------------------------------ |
-| `plan_id` | string | Yes      | Plan ID                                                            |
-| `updates` | object | Yes      | JSON with env, Compose file/profiles, traffic service, or services |
+| Parameter | Type   | Required | Description                                                           |
+| --------- | ------ | -------- | --------------------------------------------------------------------- |
+| `plan_id` | string | Yes      | Plan ID                                                               |
+| `updates` | object | Yes      | JSON with env, Compose file(s)/profiles, traffic service, or services |
 
 ### `get_deploy_plan`
 

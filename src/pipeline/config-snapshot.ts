@@ -15,6 +15,7 @@ export const CONFIG_VERSION = 2;
 export const PERSISTED_FIELDS = [
   'sshKeyPath',
   'composeFile',
+  'composeFiles',
   'composeProfiles',
   'composeServices',
   'trafficService',
@@ -39,6 +40,8 @@ export interface DeployConfigSnapshot {
   sshKeyPath?: string;
   /** Repository-relative Compose file selected for this deployment */
   composeFile?: string;
+  /** Ordered repository-relative Compose files, from base to overlays */
+  composeFiles?: string[];
   /** Active Compose profiles */
   composeProfiles?: string[];
   /** Specific docker-compose services to deploy */
@@ -91,6 +94,9 @@ export function createSnapshot(config: ProjectConfig): DeployConfigSnapshot {
   }
   if (config.composeFile !== undefined) {
     snapshot.composeFile = config.composeFile;
+  }
+  if (config.composeFiles !== undefined) {
+    snapshot.composeFiles = config.composeFiles;
   }
   if (config.composeProfiles !== undefined) {
     snapshot.composeProfiles = config.composeProfiles;

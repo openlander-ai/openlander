@@ -673,6 +673,52 @@ describe('PlanEngine.createPlan', () => {
     expect(storedJson).not.toContain('do-not-persist');
   });
 
+  it('uses ordered Compose files and exposes the backward-compatible primary file', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn(),
+      parseComposeFiles: vi.fn().mockReturnValue({
+        services: [
+          {
+            name: 'web',
+            image: 'acme/web:prod',
+            ports: [],
+            healthcheck: { test: ['CMD-SHELL', 'curl -f http://localhost:3000/health'] },
+          },
+        ],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+    mockCloneRepo.mockResolvedValue({ path: '/tmp/test-repo', commitSha: 'compose-overlays' });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-app',
+      composeFiles: ['docker-compose.yml', 'deploy/docker-compose.prod.yml'],
+    });
+
+    expect(mockComposePipeline.parseComposeFiles).toHaveBeenCalledWith([
+      '/tmp/test-repo/docker-compose.yml',
+      '/tmp/test-repo/deploy/docker-compose.prod.yml',
+    ]);
+    expect(plan.build.compose_file).toBe('docker-compose.yml');
+    expect(plan.build.compose_files).toEqual([
+      'docker-compose.yml',
+      'deploy/docker-compose.prod.yml',
+    ]);
+    expect(plan.build.compose_services?.[0]?.port).toBe(3000);
+    expect(plan.build.traffic_service).toBe('web');
+  });
+
   it('rejects Compose paths outside the repository and unknown profiles', async () => {
     const mockComposePipeline = {
       detectComposeFile: vi.fn(),

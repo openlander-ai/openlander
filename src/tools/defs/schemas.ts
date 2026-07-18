@@ -953,6 +953,11 @@ export const createDeployPlanSchema = z
       .min(1)
       .optional()
       .describe('Repository-relative production Compose file path.'),
+    compose_files: z
+      .array(z.string().min(1))
+      .min(1)
+      .optional()
+      .describe('Ordered repository-relative Compose files, from base to overlays.'),
     compose_profiles: z
       .array(z.string().min(1))
       .optional()
@@ -974,6 +979,13 @@ export const createDeployPlanSchema = z
       ),
   })
   .superRefine((data, ctx) => {
+    if (data.compose_file && data.compose_files) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['compose_files'],
+        message: 'compose_file and compose_files cannot be combined.',
+      });
+    }
     if (data.image && data.source !== 'image') {
       ctx.addIssue({
         code: 'custom',
@@ -985,7 +997,12 @@ export const createDeployPlanSchema = z
     }
 
     if (data.source === 'image') {
-      if (data.compose_file || data.compose_profiles || data.traffic_service) {
+      if (
+        data.compose_file ||
+        data.compose_files ||
+        data.compose_profiles ||
+        data.traffic_service
+      ) {
         ctx.addIssue({
           code: 'custom',
           path: ['compose_file'],
@@ -1024,7 +1041,7 @@ export const updateDeployPlanSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'JSON object with plan updates. Supported fields include env, build, compose_file, compose_profiles, traffic_service, services, and health. For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
+      'JSON object with plan updates. Supported fields include env, build, compose_file, compose_files, compose_profiles, traffic_service, services, and health. compose_files is ordered base-to-overlay and cannot be combined with compose_file. For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
     ),
 });
 

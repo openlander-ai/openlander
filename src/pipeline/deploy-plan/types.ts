@@ -171,6 +171,8 @@ export interface DeployPlan {
     target?: string;
     generated_dockerfile?: string;
     compose_file?: string;
+    /** Ordered Compose files, from base to overlays. */
+    compose_files?: string[];
     compose_profiles?: string[];
     selected_services?: string[];
     compose_services?: PlanBuildService[];
