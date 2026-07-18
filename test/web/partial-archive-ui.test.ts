@@ -60,7 +60,7 @@ describe('partial archive UI wiring', () => {
     const serviceDetailSource = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
     const apiSource = readRepoFile('web/src/lib/api/services.ts');
 
-    expect(apiSource).toContain('include_archived=true');
+    expect(apiSource).toContain("params.set('include_archived', 'true')");
     expect(settingsSource).toContain('listGroupServices(projectId, { includeArchived: true })');
     expect(settingsSource).toContain('service.archivedAt != null');
     expect(settingsSource).toContain('unarchiveGroupService(projectId, service.id)');

@@ -17,7 +17,7 @@ function extractDeployableTabsBlock(source: string): string {
   // Scope the regex to the `const tabs = useMemo(() => [ ... ], …)`
   // block so managed-service detail tabs cannot false-match this
   // deployable-service contract.
-  const match = source.match(/const tabs = useMemo<TabDef[\s\S]*?\(\) => \[([\s\S]*?)\]/);
+  const match = source.match(/const tabs = useMemo<TabDef[\s\S]*?\(\) =>\s*\[([\s\S]*?)\]\.filter/);
   expect(match?.[1]).toBeDefined();
   return match![1];
 }

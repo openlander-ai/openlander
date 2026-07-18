@@ -21,11 +21,16 @@ describe('Project resources IA', () => {
     expect(projectViewSource).toContain("t('projectDetail.addService.title')");
   });
 
-  it('uses canonical group-service rows for resource cards so Compose stays one card', () => {
+  it('opts into Compose children and replaces the parent card with runtime service rows', () => {
     expect(projectViewSource).toContain('const [groupServiceNodes, setGroupServiceNodes]');
-    expect(projectViewSource).toContain('listGroupServices(projectId)');
+    expect(projectViewSource).toContain(
+      'listGroupServices(projectId, { includeComposeChildren: true })',
+    );
     expect(projectViewSource).toContain(
       'const resourceServiceNodes = groupServiceNodes ?? services',
+    );
+    expect(projectViewSource).toContain(
+      "resourceServiceNodes.filter((service) => service.kind !== 'Compose')",
     );
     expect(projectViewSource).toContain(
       "service.kind === 'compose' || service.buildMethod === 'compose'",
@@ -33,7 +38,9 @@ describe('Project resources IA', () => {
   });
 
   it('maps resource badges to product nouns', () => {
-    expect(projectViewSource).toContain("? 'Compose' : 'Application'");
+    expect(projectViewSource).toContain("service.kind === 'compose'");
+    expect(projectViewSource).toContain("? 'Compose'");
+    expect(projectViewSource).toContain(": 'Application'");
     expect(projectViewSource).toContain("if (normalized === 'redis') return 'Cache'");
     expect(projectViewSource).toContain("if (normalized === 'minio') return 'Storage'");
     expect(projectViewSource).toContain("return 'Database'");

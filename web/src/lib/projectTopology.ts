@@ -61,6 +61,13 @@ export interface ServiceNode {
   imageCmd?: string[] | null;
   containerPort?: number | null;
   gitCredential?: GitCredentialSummary | null;
+  runtimeRole?: 'application' | 'job' | 'resource';
+  lifecycle?: 'long_running' | 'one_shot';
+  healthStrategy?: 'http' | 'tcp' | 'docker_health' | 'exit_code' | 'none';
+  isTrafficTarget?: boolean;
+  aggregateStatus?: 'running' | 'degraded' | 'error';
+  lastDeploy?: { status: 'success' | 'failed' | 'cancelled'; createdAt: string };
+  isComposeChild?: boolean;
 }
 
 export interface ProjectSummary {

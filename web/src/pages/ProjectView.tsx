@@ -84,7 +84,8 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
 
 function groupServiceToNode(service: GroupService): ServiceNode {
   const health: ServiceHealth =
-    service.status === 'running'
+    service.status === 'running' ||
+    (service.runtimeRole === 'job' && service.lastDeploy?.status === 'success')
       ? 'healthy'
       : service.status === 'building'
         ? 'deploying'
@@ -92,7 +93,10 @@ function groupServiceToNode(service: GroupService): ServiceNode {
 
   return {
     id: service.id,
-    name: service.name,
+    name:
+      service.kind === 'compose-child'
+        ? (service.name.split('/').pop() ?? service.name)
+        : service.name,
     kind: workloadResourceKind(service),
     // `service` is the frontend GroupService wire shape, not a DB service row.
     // eslint-disable-next-line openlander-internal/no-dropped-columns
@@ -116,6 +120,13 @@ function groupServiceToNode(service: GroupService): ServiceNode {
     imageUrl: service.imageUrl,
     imageCmd: service.imageCmd,
     containerPort: service.containerPort,
+    runtimeRole: service.runtimeRole,
+    lifecycle: service.lifecycle,
+    healthStrategy: service.healthStrategy,
+    isTrafficTarget: service.isTrafficTarget,
+    aggregateStatus: service.aggregateStatus,
+    lastDeploy: service.lastDeploy,
+    isComposeChild: service.kind === 'compose-child',
   };
 }
 
@@ -253,7 +264,7 @@ export function ProjectView() {
       return;
     }
     try {
-      const rows = await listGroupServices(projectId);
+      const rows = await listGroupServices(projectId, { includeComposeChildren: true });
       setGroupServiceNodes(rows.map(groupServiceToNode));
     } catch {
       setGroupServiceNodes(null);
@@ -350,9 +361,13 @@ export function ProjectView() {
 
   const projectServiceRows = useMemo(() => {
     const resourceServiceNodes = groupServiceNodes ?? services;
+    const hasComposeChildren = resourceServiceNodes.some((service) => service.isComposeChild);
+    const visibleRuntimeServices = hasComposeChildren
+      ? resourceServiceNodes.filter((service) => service.kind !== 'Compose')
+      : resourceServiceNodes;
     const deployableServices = showArchivedServiceList
       ? archivedServiceNodes
-      : resourceServiceNodes;
+      : visibleRuntimeServices;
     const serviceIds = new Set(deployableServices.map((service) => service.id));
     const connectedManagedServices = managedServiceNodes.filter(
       (service) => !serviceIds.has(service.id),
@@ -366,6 +381,10 @@ export function ProjectView() {
     showArchivedServiceList,
   ]);
   const crashedResourceCount = services.filter((service) => service.health === 'crashed').length;
+  const composeAggregateStatus = useMemo(
+    () => groupServiceNodes?.find((service) => service.aggregateStatus)?.aggregateStatus,
+    [groupServiceNodes],
+  );
   const resourceHealthById = useMemo(() => {
     const entries: Array<[string, ServiceHealth]> = [];
     for (const service of [...projectServiceRows, ...services]) {
@@ -417,7 +436,7 @@ export function ProjectView() {
         navigate(`/projects/${projectId}/infrastructure/${service.id}`);
         return;
       }
-      navigate(`/services/${service.id}?project=${projectId}`);
+      navigate(`/projects/${projectId}/services/${service.id}`);
     },
     [navigate, projectId],
   );
@@ -590,6 +609,7 @@ export function ProjectView() {
             onShowArchivedChange={setShowArchivedServices}
             archiveForced={isProjectArchived}
             dataAccessByServiceId={dataAccessByServiceId}
+            composeAggregateStatus={composeAggregateStatus}
           />
         </TabPanel>
         <TabPanel
@@ -676,6 +696,7 @@ function ServicesPanel({
   onShowArchivedChange,
   archiveForced,
   dataAccessByServiceId,
+  composeAggregateStatus,
 }: {
   services: ServiceNode[];
   onOpen: (service: ServiceNode) => void;
@@ -687,6 +708,7 @@ function ServicesPanel({
   onShowArchivedChange: (show: boolean) => void;
   archiveForced?: boolean;
   dataAccessByServiceId: Record<string, DataSourceAccessStatus>;
+  composeAggregateStatus?: 'running' | 'degraded' | 'error';
 }) {
   const { t } = useLanguage();
   const toggleArchived = () => onShowArchivedChange(!showArchived);
@@ -748,6 +770,25 @@ function ServicesPanel({
             <span className="ml-2 text-[color:var(--ol-error)]">
               {t('projectDetail.servicesGuide.archivedLoadError', { message: archivedError })}
             </span>
+          )}
+          {!showArchived && composeAggregateStatus && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  'rounded-full border px-2 py-0.5 text-[10.5px] font-semibold',
+                  composeAggregateStatus === 'running'
+                    ? 'border-[color:var(--ol-success)]/30 bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]'
+                    : composeAggregateStatus === 'degraded'
+                      ? 'border-[color:var(--ol-warning)]/30 bg-[color:var(--ol-warning-soft)] text-[color:var(--ol-warning)]'
+                      : 'border-[color:var(--ol-error)]/30 bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]',
+                )}
+              >
+                {t(`projectDetail.composeService.aggregate.${composeAggregateStatus}`)}
+              </span>
+              {composeAggregateStatus !== 'running' && (
+                <span>{t('projectDetail.composeService.aggregateHint')}</span>
+              )}
+            </div>
           )}
         </div>
         {canToggleArchived && (
@@ -836,6 +877,14 @@ function ServicesPanel({
                   {dataAccessStatus && (
                     <DataAccessResourceBadge status={dataAccessStatus} resourceName={s.name} />
                   )}
+                  {s.lastDeploy && (
+                    <div className="mt-1 text-[11px] text-[color:var(--ol-fg-subtle)]">
+                      {t('projectDetail.composeService.lastDeploy', {
+                        status: s.lastDeploy.status,
+                        time: new Date(s.lastDeploy.createdAt).toLocaleString(),
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
                   {(hasRuntimeMetricValue(s.cpu) || hasRuntimeMetricValue(s.mem)) && (
@@ -855,6 +904,11 @@ function ServicesPanel({
                       <ExternalLink className="h-3 w-3" />
                       {s.url.replace(/^https?:\/\//, '')}
                     </a>
+                  )}
+                  {s.isTrafficTarget && (
+                    <div className="mt-1 text-[10.5px] font-medium text-[color:var(--ol-primary)]">
+                      {t('projectDetail.composeService.trafficTarget')}
+                    </div>
                   )}
                 </div>
               </div>
@@ -922,7 +976,9 @@ function ServiceRoleBadge({ service }: { service: ServiceNode }) {
           : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
       )}
     >
-      {t(resourceLabelKey(service))}
+      {service.runtimeRole
+        ? t(`projectDetail.composeService.role.${service.runtimeRole}`)
+        : t(resourceLabelKey(service))}
     </span>
   );
 }

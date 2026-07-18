@@ -127,7 +127,8 @@ function isServiceTabId(value: string | null): value is ServiceTabId {
 
 function groupServiceToDetailNode(service: GroupService): ServiceNode {
   const health: ServiceHealth =
-    service.status === 'running'
+    service.status === 'running' ||
+    (service.runtimeRole === 'job' && service.lastDeploy?.status === 'success')
       ? 'healthy'
       : service.status === 'building'
         ? 'deploying'
@@ -135,7 +136,10 @@ function groupServiceToDetailNode(service: GroupService): ServiceNode {
 
   return {
     id: service.id,
-    name: service.name,
+    name:
+      service.kind === 'compose-child'
+        ? (service.name.split('/').pop() ?? service.name)
+        : service.name,
     kind: 'Application',
     port: service.port,
     image: service.image ?? service.imageUrl ?? service.kind,
@@ -157,6 +161,13 @@ function groupServiceToDetailNode(service: GroupService): ServiceNode {
     imageCmd: service.imageCmd,
     containerPort: service.containerPort,
     gitCredential: service.gitCredential ?? null,
+    runtimeRole: service.runtimeRole,
+    lifecycle: service.lifecycle,
+    healthStrategy: service.healthStrategy,
+    isTrafficTarget: service.isTrafficTarget,
+    aggregateStatus: service.aggregateStatus,
+    lastDeploy: service.lastDeploy,
+    isComposeChild: service.kind === 'compose-child',
   };
 }
 
@@ -278,6 +289,12 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       imageUrl: serviceDetail.imageUrl ?? baseService.imageUrl,
       imageCmd: serviceDetail.imageCmd ?? baseService.imageCmd,
       containerPort: serviceDetail.containerPort ?? baseService.containerPort,
+      runtimeRole: serviceDetail.runtimeRole ?? baseService.runtimeRole,
+      lifecycle: serviceDetail.lifecycle ?? baseService.lifecycle,
+      healthStrategy: serviceDetail.healthStrategy ?? baseService.healthStrategy,
+      isTrafficTarget: serviceDetail.isTrafficTarget ?? baseService.isTrafficTarget,
+      lastDeploy: serviceDetail.lastDeploy ?? baseService.lastDeploy,
+      isComposeChild: serviceDetail.kind === 'compose-child' || baseService.isComposeChild,
       gitCredential: serviceDetail.gitCredential ?? null,
       archivedAt:
         serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : baseService.archivedAt,
@@ -293,7 +310,9 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // missing the route guard already redirects, and the hook itself
   // no-ops on null. The previous form was a paradox (it returned the
   // same value `service` was derived from).
-  const liveHealth = useServiceHealth(id ?? null);
+  const supportsHttpRuntime =
+    !resolvedService?.runtimeRole || resolvedService.runtimeRole === 'application';
+  const liveHealth = useServiceHealth(supportsHttpRuntime ? (id ?? null) : null);
   const effectiveHealth: ServiceHealth | undefined = liveHealth.health ?? resolvedService?.health;
 
   // Deployments are service-scoped. The top-level Deployments page is folded
@@ -342,21 +361,36 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // is one click away. CCG round-0 (Codex + Gemini) both endorsed the
   // spec order over the previous config-first arrangement.
   const tabs = useMemo<TabDef<ServiceTabId>[]>(
-    () => [
-      { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
-      { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
-      {
-        id: 'deployments',
-        label: t('services.detail.tabs.deployments'),
-        icon: Rocket,
-        count: deployments.length || undefined,
-      },
-      { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
-      { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
-      { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
-    ],
-    [deployments.length, t],
+    () =>
+      [
+        { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
+        { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
+        {
+          id: 'deployments',
+          label: t('services.detail.tabs.deployments'),
+          icon: Rocket,
+          count: deployments.length || undefined,
+        },
+        { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
+        { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
+        { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
+      ].filter(
+        (tab) =>
+          (!resolvedService?.isComposeChild || tab.id !== 'environment') &&
+          (tab.id !== 'domains' || (supportsHttpRuntime && !resolvedService?.isComposeChild)),
+      ) as TabDef<ServiceTabId>[],
+    [deployments.length, resolvedService?.isComposeChild, supportsHttpRuntime, t],
   );
+
+  useEffect(() => {
+    if (
+      (resolvedService?.isComposeChild &&
+        (activeTab === 'environment' || activeTab === 'domains')) ||
+      (!supportsHttpRuntime && activeTab === 'domains')
+    ) {
+      setActiveTab('overview');
+    }
+  }, [activeTab, resolvedService?.isComposeChild, supportsHttpRuntime]);
 
   if (!resolvedService || !project) {
     const safeId = id ?? '';
@@ -395,6 +429,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             </span>
             <span>{resolvedService.name}</span>
             {effectiveHealth && <HealthBadge health={effectiveHealth} />}
+            {resolvedService.isComposeChild && (
+              <Badge variant="neutral" className="text-[10.5px]">
+                {t('serviceDetail.composeChild.observationOnly')}
+              </Badge>
+            )}
             {resolvedService.archivedAt && (
               <Badge variant="neutral" className="text-[10.5px] uppercase tracking-[0.06em]">
                 {t('projectDetail.serviceLifecycle.archivedBadge')}
@@ -435,21 +474,23 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
                 Open
               </a>
             )}
-            <button
-              type="button"
-              onClick={handleDeploy}
-              disabled={deploying}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                deploying
-                  ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
-                  : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
-              )}
-              aria-disabled={deploying}
-            >
-              <Rocket className="h-3.5 w-3.5" />
-              {deploying ? 'Deploying…' : 'Deploy'}
-            </button>
+            {!resolvedService.isComposeChild && (
+              <button
+                type="button"
+                onClick={handleDeploy}
+                disabled={deploying}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
+                  deploying
+                    ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
+                    : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
+                )}
+                aria-disabled={deploying}
+              >
+                <Rocket className="h-3.5 w-3.5" />
+                {deploying ? 'Deploying…' : 'Deploy'}
+              </button>
+            )}
           </>
         }
         bodyClassName="p-0"
@@ -498,19 +539,24 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
               service={resolvedService}
               projectId={project.id}
               onCredentialChanged={loadServiceDetail}
+              readOnly={resolvedService.isComposeChild === true}
             />
-            <ServiceResourceLimitsPanel
-              projectId={project.id}
-              serviceId={resolvedService.id}
-              isCompose={resolvedService.buildMethod === 'compose'}
-            />
-            <ServiceDangerZone
-              service={resolvedService}
-              projectId={projectId}
-              projectName={project?.name ?? undefined}
-              onServiceArchived={() => navigate(`/projects/${project.id}`)}
-              onServiceDeleted={() => navigate(`/projects/${project.id}`)}
-            />
+            {!resolvedService.isComposeChild && (
+              <>
+                <ServiceResourceLimitsPanel
+                  projectId={project.id}
+                  serviceId={resolvedService.id}
+                  isCompose={resolvedService.buildMethod === 'compose'}
+                />
+                <ServiceDangerZone
+                  service={resolvedService}
+                  projectId={projectId}
+                  projectName={project?.name ?? undefined}
+                  onServiceArchived={() => navigate(`/projects/${project.id}`)}
+                  onServiceDeleted={() => navigate(`/projects/${project.id}`)}
+                />
+              </>
+            )}
           </div>
         </TabPanel>
 
@@ -523,18 +569,20 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           <EnvironmentTab service={resolvedService} projectId={project?.id ?? null} />
         </TabPanel>
 
-        <TabPanel
-          active={activeTab === 'domains'}
-          panelId="servicepanel-domains"
-          labelledBy="service-domains"
-          className="p-5"
-        >
-          <DomainsTab
-            service={resolvedService}
-            projectId={project?.id ?? null}
-            projectName={project?.name ?? undefined}
-          />
-        </TabPanel>
+        {supportsHttpRuntime && (
+          <TabPanel
+            active={activeTab === 'domains'}
+            panelId="servicepanel-domains"
+            labelledBy="service-domains"
+            className="p-5"
+          >
+            <DomainsTab
+              service={resolvedService}
+              projectId={project?.id ?? null}
+              projectName={project?.name ?? undefined}
+            />
+          </TabPanel>
+        )}
 
         <TabPanel
           active={activeTab === 'deployments'}
@@ -573,7 +621,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-monitoring"
           className="p-5"
         >
-          <MonitoringTab service={resolvedService} />
+          <MonitoringTab service={resolvedService} showTraffic={supportsHttpRuntime} />
         </TabPanel>
       </OuterCard>
     </div>
@@ -586,10 +634,12 @@ function GeneralTab({
   service,
   projectId,
   onCredentialChanged,
+  readOnly,
 }: {
   service: ServiceNode;
   projectId: string;
   onCredentialChanged: () => Promise<void>;
+  readOnly: boolean;
 }) {
   const { t } = useLanguage();
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
@@ -645,7 +695,7 @@ function GeneralTab({
         <SubCard
           title={t('services.detail.section.source')}
           action={
-            service.repoUrl ? (
+            service.repoUrl && !readOnly ? (
               <button
                 type="button"
                 onClick={() => setCredentialDialogOpen(true)}
@@ -723,7 +773,7 @@ function GeneralTab({
           </div>
         )}
       </SubCard>
-      {service.repoUrl && (
+      {service.repoUrl && !readOnly && (
         <RepositoryAuthenticationDialog
           open={credentialDialogOpen}
           onOpenChange={setCredentialDialogOpen}
@@ -2003,7 +2053,7 @@ function ServiceDangerZone({
   );
 }
 
-function MonitoringTab({ service }: { service: ServiceNode }) {
+function MonitoringTab({ service, showTraffic }: { service: ServiceNode; showTraffic: boolean }) {
   const { t } = useLanguage();
   const [range, setRange] = useState<MetricsRange>('1h');
   const ranges: readonly MetricsRange[] = ['15m', '1h', '6h', '24h', '7d'] as const;
@@ -2068,20 +2118,24 @@ function MonitoringTab({ service }: { service: ServiceNode }) {
           data={memData}
           color="var(--ol-success)"
         />
-        <MetricCard
-          title={t('services.detail.charts.requestsPerSec')}
-          value={reqLatest != null ? `${reqLatest} rps` : '—'}
-          sub={t('services.detail.charts.p95Line', { value: p95Display, range })}
-          data={reqData}
-          color="var(--ol-actor-webhook)"
-        />
-        <MetricCard
-          title={t('services.detail.charts.errorRate')}
-          value={errLatest != null ? `${errLatest.toFixed(2)}%` : '—'}
-          sub={t('services.detail.charts.errorRateSub')}
-          data={errData}
-          color="var(--ol-error)"
-        />
+        {showTraffic && (
+          <>
+            <MetricCard
+              title={t('services.detail.charts.requestsPerSec')}
+              value={reqLatest != null ? `${reqLatest} rps` : '—'}
+              sub={t('services.detail.charts.p95Line', { value: p95Display, range })}
+              data={reqData}
+              color="var(--ol-actor-webhook)"
+            />
+            <MetricCard
+              title={t('services.detail.charts.errorRate')}
+              value={errLatest != null ? `${errLatest.toFixed(2)}%` : '—'}
+              sub={t('services.detail.charts.errorRateSub')}
+              data={errData}
+              color="var(--ol-error)"
+            />
+          </>
+        )}
       </div>
     </div>
   );
