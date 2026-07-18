@@ -121,6 +121,10 @@ export class ImageOps {
         {
           t: opts.tag,
           dockerfile,
+          // Compose Dockerfiles commonly use BuildKit-only features such as
+          // RUN --mount=type=cache. Docker's Engine API otherwise defaults to
+          // the deprecated classic builder (version 1).
+          version: '2',
           buildargs: opts.buildArgs,
           target: opts.target,
           nocache: opts.noCache === true,
