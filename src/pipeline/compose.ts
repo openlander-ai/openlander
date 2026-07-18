@@ -14,6 +14,7 @@ import type { OpenLanderEnv } from '../config/index.js';
 import { extractProjectName, composeContainerName, containerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
+import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
@@ -1432,7 +1433,7 @@ export class ComposePipeline {
           (status.status === 'stopped' && !completedJob);
         await this.db.createDeployLogForService({
           id: nanoid(12),
-          serviceId: childId,
+          serviceId: projectIdToDeployableServiceId(childId),
           status: childFailed ? 'failed' : 'success',
           trigger,
           commitSha: config.commitSha,

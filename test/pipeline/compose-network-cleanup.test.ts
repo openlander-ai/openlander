@@ -464,7 +464,7 @@ describe('compose network cleanup', () => {
     expect(db._deployLogs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          serviceId: migrateProject?.id,
+          serviceId: migrateProject?.service_id,
           status: 'success',
           buildLog: expect.stringContaining('exit_code=0'),
         }),
