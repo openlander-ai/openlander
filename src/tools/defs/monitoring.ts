@@ -56,7 +56,11 @@ import {
   representativeTrafficFailed,
 } from './representative-traffic.js';
 import { isUserOwnedExternalEnvDependency } from '../../monitor/user-owned-input.js';
-import { serviceHealthStrategy, serviceLifecycle } from '../../health/compose-runtime.js';
+import {
+  aggregateComposeStatus,
+  serviceHealthStrategy,
+  serviceLifecycle,
+} from '../../health/compose-runtime.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -203,6 +207,15 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
     deployables,
   );
   const nodeIds = new Set([...deployables, ...managedServices].map((service) => service.id));
+  const composeChildren = deployables.filter((service) => service.kind === 'compose-child');
+  const trafficCandidates = composeChildren.filter(
+    (service) => service.runtime_role === 'application' && service.assigned_port != null,
+  );
+  const trafficTargetId = trafficCandidates.length === 1 ? trafficCandidates[0]?.id : undefined;
+  const lastComposeDeploys =
+    composeChildren.length > 0
+      ? await appCtx.db.getLastDeployLogsForServices(composeChildren.map((service) => service.id))
+      : new Map<string, DeployLogRow>();
   const dependsOnMap = new Map<string, string[]>();
 
   for (const service of deployables) {
@@ -235,6 +248,10 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
       kind: topologyDeployableKind(service),
       source: service.source,
       status: service.status,
+      runtime_role: service.runtime_role,
+      lifecycle: serviceLifecycle(service),
+      health_strategy: serviceHealthStrategy(service),
+      is_traffic_target: service.id === trafficTargetId,
       project_id: project.id,
       port: service.assigned_port ?? null,
       image: service.image_url ?? service.image_tag ?? null,
@@ -247,6 +264,10 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
       kind: service.kind,
       type: service.type ?? kindToLegacyType(service.kind),
       status: service.status,
+      runtime_role: 'resource' as const,
+      lifecycle: 'long_running' as const,
+      health_strategy: 'docker_health' as const,
+      is_traffic_target: false,
       attached_project_id: project.id,
       attached_project_name: project.name,
       port: service.assigned_port ?? service.port ?? null,
@@ -258,6 +279,14 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
   return {
     project: { id: project.id, name: project.name },
     count: services.length,
+    ...(composeChildren.length > 0
+      ? {
+          aggregate_status: aggregateComposeStatus(
+            composeChildren,
+            new Map([...lastComposeDeploys].map(([id, deploy]) => [id, deploy.status])),
+          ),
+        }
+      : {}),
     services,
     edges: deployables.flatMap((service) =>
       (dependsOnMap.get(service.id) ?? []).map((targetServiceId) => ({

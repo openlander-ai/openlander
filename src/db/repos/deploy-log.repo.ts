@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { deployLogs, services } from '../schema.drizzle.js';
@@ -10,6 +10,20 @@ import { RepoPersistenceError } from '../../errors.js';
  * Post-0012: deploy_logs is service-scoped. Callers still pass `projectId`
  * for vocabulary continuity; the repo translates to the canonical service id.
  */
+
+interface CreateDeployLogInput {
+  id: string;
+  environmentId?: string;
+  status: DeployLogRow['status'];
+  trigger: DeployLogRow['trigger'];
+  triggerDetail?: string;
+  commitSha?: string;
+  commitMessage?: string;
+  buildLog?: string;
+  runtimeLog?: string;
+  representativeTrafficJson?: string;
+  durationMs?: number;
+}
 
 export class DeployLogRepo {
   constructor(
@@ -32,21 +46,7 @@ export class DeployLogRepo {
     return service.id;
   }
 
-  async createDeployLog(log: {
-    id: string;
-    projectId: string;
-    environmentId?: string;
-    status: DeployLogRow['status'];
-    trigger: DeployLogRow['trigger'];
-    triggerDetail?: string;
-    commitSha?: string;
-    commitMessage?: string;
-    buildLog?: string;
-    runtimeLog?: string;
-    representativeTrafficJson?: string;
-    durationMs?: number;
-  }): Promise<void> {
-    const serviceId = await this.resolveExistingCanonicalServiceId(log.projectId);
+  private async insertDeployLog(serviceId: string, log: CreateDeployLogInput): Promise<void> {
     await this.db.insert(deployLogs).values({
       id: log.id,
       service_id: serviceId,
@@ -61,6 +61,25 @@ export class DeployLogRepo {
       representative_traffic_json: log.representativeTrafficJson ?? null,
       duration_ms: log.durationMs ?? null,
     });
+  }
+
+  async createDeployLog(log: CreateDeployLogInput & { projectId: string }): Promise<void> {
+    const serviceId = await this.resolveExistingCanonicalServiceId(log.projectId);
+    await this.insertDeployLog(serviceId, log);
+  }
+
+  async createDeployLogForService(
+    log: CreateDeployLogInput & { serviceId: string },
+  ): Promise<void> {
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, log.serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', log.serviceId);
+    }
+    await this.insertDeployLog(service.id, log);
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
@@ -115,6 +134,18 @@ export class DeployLogRepo {
       .orderBy(desc(deployLogs.created_at), desc(deployLogs.id))
       .limit(1);
     return (row as DeployLogRow | undefined) ?? undefined;
+  }
+
+  async getLastDeployLogsForServices(
+    serviceIds: readonly string[],
+  ): Promise<Map<string, DeployLogRow>> {
+    if (serviceIds.length === 0) return new Map();
+    const rows = await this.db
+      .selectDistinctOn([deployLogs.service_id])
+      .from(deployLogs)
+      .where(inArray(deployLogs.service_id, [...serviceIds]))
+      .orderBy(deployLogs.service_id, desc(deployLogs.created_at), desc(deployLogs.id));
+    return new Map((rows as DeployLogRow[]).map((row) => [row.service_id, row]));
   }
 
   async updateRuntimeLog(deployId: string, runtimeLog: string): Promise<void> {

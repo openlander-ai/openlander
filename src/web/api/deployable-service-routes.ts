@@ -1,8 +1,14 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import type { DeployLogRow } from '../../db/types.js';
 import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { ProjectNotFoundError } from '../../errors.js';
+import {
+  aggregateComposeStatus,
+  serviceHealthStrategy,
+  serviceLifecycle,
+} from '../../health/compose-runtime.js';
 import {
   findService,
   resolveDeployableServiceForRoute,
@@ -36,6 +42,7 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id/services', async (c) => {
     const projectParam = c.req.param('id');
     const includeArchived = c.req.query('include_archived') === 'true';
+    const includeComposeChildren = c.req.query('include_compose_children') === 'true';
     const project = await resolveProject(ctx, projectParam);
     if (!project) {
       const err = new ProjectNotFoundError(projectParam);
@@ -49,28 +56,62 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const projectLevelDeployables = deployables.filter(
       (service) => service.kind !== 'compose-child',
     );
+    const selectedDeployables = includeComposeChildren ? deployables : projectLevelDeployables;
     const visibleDeployables = includeArchived
-      ? projectLevelDeployables
-      : projectLevelDeployables.filter((service) => !service.archived_at);
+      ? selectedDeployables
+      : selectedDeployables.filter((service) => !service.archived_at);
     const gitCredentialManager = (ctx as Partial<AppContext>).gitCredentials;
-    const [domainMappingsByService, credentials] = await Promise.all([
+    const lastDeploysPromise: Promise<Map<string, DeployLogRow>> = includeComposeChildren
+      ? ctx.db.getLastDeployLogsForServices(visibleDeployables.map((service) => service.id))
+      : Promise.resolve(new Map<string, DeployLogRow>());
+    const [domainMappingsByService, credentials, lastDeploys] = await Promise.all([
       loadDomainMappingsByService(ctx, visibleDeployables),
       gitCredentialManager ? gitCredentialManager.list() : Promise.resolve([]),
+      lastDeploysPromise,
     ]);
     const credentialsById = new Map(credentials.map((credential) => [credential.id, credential]));
+    const composeChildren = visibleDeployables.filter(
+      (service) => service.kind === 'compose-child',
+    );
+    const trafficCandidates = composeChildren.filter(
+      (service) => service.runtime_role === 'application' && service.assigned_port != null,
+    );
+    const trafficTargetId = trafficCandidates.length === 1 ? trafficCandidates[0]?.id : undefined;
+    const aggregateStatus = aggregateComposeStatus(
+      composeChildren,
+      new Map([...lastDeploys].map(([id, log]) => [id, log.status])),
+    );
 
     return c.json({
       count: visibleDeployables.length,
+      ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
       services: visibleDeployables.map((service) => {
         const credential = service.git_credential_id
           ? credentialsById.get(service.git_credential_id)
           : undefined;
+        const lastDeploy = lastDeploys.get(service.id);
         return {
           ...mapServiceForApi(service, environments, {
             domainMappings: domainMappingsByService.get(service.id),
             autoRouteName: getDeployableServiceAutoRouteName(project, service),
           }),
           gitCredential: credential ? gitCredentialSummary(credential) : null,
+          ...(includeComposeChildren && service.kind === 'compose-child'
+            ? {
+                runtime_role: service.runtime_role,
+                lifecycle: serviceLifecycle(service),
+                health_strategy: serviceHealthStrategy(service),
+                is_traffic_target: service.id === trafficTargetId,
+                ...(lastDeploy
+                  ? {
+                      last_deploy: {
+                        status: lastDeploy.status,
+                        created_at: lastDeploy.created_at,
+                      },
+                    }
+                  : {}),
+              }
+            : {}),
         };
       }),
     });
@@ -92,16 +133,30 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       ? await ctx.env.getAllForService(project.id, service.id)
       : await ctx.env.getAll(project.id);
     const gitCredentialManager = (ctx as Partial<AppContext>).gitCredentials;
-    const [environments, deployLogs, serviceRecords, domainMappingsByService, gitCredential] =
-      await Promise.all([
-        ctx.db.getEnvironmentsByProject(project.id),
-        ctx.db.getDeployLogs(project.id, 5),
-        loadServiceViewRecords(ctx.db, [project]),
-        loadDomainMappingsByService(ctx, service ? [service] : []),
-        service?.git_credential_id && gitCredentialManager
-          ? gitCredentialManager.get(service.git_credential_id)
-          : null,
-      ]);
+    const [
+      environments,
+      deployLogs,
+      serviceRecords,
+      domainMappingsByService,
+      gitCredential,
+      composeSiblings,
+    ] = await Promise.all([
+      ctx.db.getEnvironmentsByProject(project.id),
+      service ? ctx.db.getDeployLogsForService(service.id, 5) : ctx.db.getDeployLogs(project.id, 5),
+      loadServiceViewRecords(ctx.db, [project]),
+      loadDomainMappingsByService(ctx, service ? [service] : []),
+      service?.git_credential_id && gitCredentialManager
+        ? gitCredentialManager.get(service.git_credential_id)
+        : null,
+      service?.kind === 'compose-child' && service.parent_service_id
+        ? ctx.db.getComposeChildren(service.parent_service_id)
+        : Promise.resolve([]),
+    ]);
+    const detailTrafficCandidates = composeSiblings.filter(
+      (sibling) => sibling.runtime_role === 'application' && sibling.assigned_port != null,
+    );
+    const detailTrafficTargetId =
+      detailTrafficCandidates.length === 1 ? detailTrafficCandidates[0]?.id : undefined;
 
     return c.json({
       ...mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined),
@@ -112,6 +167,22 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
               autoRouteName: getDeployableServiceAutoRouteName(project, service),
             }),
             gitCredential: gitCredential ? gitCredentialSummary(gitCredential) : null,
+            ...(service.kind === 'compose-child'
+              ? {
+                  runtime_role: service.runtime_role,
+                  lifecycle: serviceLifecycle(service),
+                  health_strategy: serviceHealthStrategy(service),
+                  is_traffic_target: service.id === detailTrafficTargetId,
+                  ...(deployLogs[0]
+                    ? {
+                        last_deploy: {
+                          status: deployLogs[0].status,
+                          created_at: deployLogs[0].created_at,
+                        },
+                      }
+                    : {}),
+                }
+              : {}),
           }
         : null,
       environments: environments.map((env) => mapEnvironment(project.name, env)),

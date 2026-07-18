@@ -1416,6 +1416,36 @@ export class ComposePipeline {
         durationMs: Date.now() - startTime,
       });
 
+      for (const status of reconciledStatuses) {
+        const childId = childrenByService.get(status.name);
+        if (!childId) continue;
+        const jobFailure = jobFailures.get(status.name);
+        const rawExitCode = jobFailure?.details?.['exitCode'];
+        const exitCode =
+          typeof rawExitCode === 'number' || typeof rawExitCode === 'string'
+            ? rawExitCode
+            : 'unknown';
+        const completedJob = status.status === 'stopped' && completedServiceNames.has(status.name);
+        const childFailed =
+          status.status === 'error' ||
+          Boolean(jobFailure) ||
+          (status.status === 'stopped' && !completedJob);
+        await this.db.createDeployLogForService({
+          id: nanoid(12),
+          serviceId: childId,
+          status: childFailed ? 'failed' : 'success',
+          trigger,
+          commitSha: config.commitSha,
+          commitMessage,
+          buildLog: jobFailure
+            ? `[compose job ${status.name}] exit_code=${String(exitCode)} ${jobFailure.message}\n`
+            : completedJob
+              ? `[compose job ${status.name}] exit_code=0 completed\n`
+              : `[compose service ${status.name}] status=${status.status}\n`,
+          durationMs: Date.now() - startTime,
+        });
+      }
+
       const parentLogTail = hasError
         ? buildLog.split('\n').filter(Boolean).slice(-30).join('\n')
         : undefined;

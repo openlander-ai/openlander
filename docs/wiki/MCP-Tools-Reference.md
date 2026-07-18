@@ -1056,7 +1056,8 @@ state before reporting that the incident is fixed.
 
 Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Prefer
 `service_id` when chaining from `list_projects`. For migration or traceback failures, retry
-with `lines=500` or `lines=1000` if the default tail is not enough.
+with `lines=500` or `lines=1000` if the default tail is not enough. A completed or failed
+one-shot Compose job remains readable by `service_id` while its container is retained.
 
 ### `get_system_stats`
 
@@ -1088,7 +1089,9 @@ OOM, disk pressure, or Docker daemon instability.
 
 Read-only project service graph for agents. Returns Applications,
 connected Database/Cache/Storage resources, and `dependsOn`/`edges` so an agent can see which
-apps depend on which databases/caches over MCP.
+apps depend on which databases/caches over MCP. Compose children include `runtime_role`,
+`lifecycle`, `health_strategy`, and `is_traffic_target`; Compose projects also return an optional
+`aggregate_status` of `running`, `degraded`, or `error`.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
