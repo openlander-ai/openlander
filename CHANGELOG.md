@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.5-rc.1] - 2026-07-19
+
+### Added
+
+- Add opt-in Compose child observability to the Project services API, including
+  runtime role, lifecycle, health strategy, traffic target, and latest deploy.
+- Show Compose applications, jobs, and resources as individual Project rows
+  with role-aware status, traffic, recent deploy, log, and diagnostic links.
+- Add a shared aggregate status for Compose parents that treats successful
+  one-shot jobs as complete instead of degraded.
+
+### Changed
+
+- Record deploy logs for individual Compose children so Project and service
+  views can connect each runtime to its latest deployment and logs.
+- Extend MCP topology and diagnostics with runtime role, lifecycle, health
+  strategy, traffic-target, and aggregate-status metadata.
+- Make `restart_service` restart the existing long-running Docker container in
+  place without cloning, building, removing, or replacing it.
+- Keep Compose child detail screens observation-only and hide HTTP/domain
+  controls that do not apply to resources or one-shot jobs.
+
+### Fixed
+
+- Preserve the container ID during runtime restart, reject one-shot job
+  restarts, and enforce mutation policy, deploy locking, and post-restart state
+  validation at the pipeline boundary.
+- Allow logs from stopped one-shot job containers and direct child detail pages
+  to child-scoped deployment history instead of aggregate parent history.
+- Point missing-container recovery guidance to an explicit force update because
+  runtime restart cannot recreate a missing container.
+
 ## [0.2.4-rc.1] - 2026-07-19
 
 ### Added
