@@ -15,6 +15,10 @@ on:
         description: 'Optional runtime image to smoke, for example ghcr.io/openlander-ai/openlander:0.1.9-rc.1'
         type: string
         default: ''
+      rc_upgrade_from_image:
+        description: 'Optional previous runtime image to start and upgrade from before the RC smoke'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -81,6 +85,7 @@ jobs:
     if: ${{ inputs.rc_smoke }}
     env:
       OPENLANDER_IMAGE: ${{ inputs.rc_image || 'openlander:rc-smoke' }}
+      OPENLANDER_UPGRADE_FROM_IMAGE: ${{ inputs.rc_upgrade_from_image }}
       OPENLANDER_PORT: 10114
       OPENLANDER_PUBLIC_HOST: 127.0.0.1.sslip.io
       OPENLANDER_POSTGRES_PASSWORD: openlander-rc-smoke
@@ -116,8 +121,17 @@ jobs:
         if: ${{ inputs.rc_image != '' }}
         run: docker pull "$OPENLANDER_IMAGE"
 
+      - name: Pull previous runtime image
+        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        run: docker pull "$OPENLANDER_UPGRADE_FROM_IMAGE"
+
       - name: Start OpenLander runtime
-        run: docker compose -f docker-compose.runtime.yml up -d
+        run: |
+          if [[ -n "$OPENLANDER_UPGRADE_FROM_IMAGE" ]]; then
+            OPENLANDER_IMAGE="$OPENLANDER_UPGRADE_FROM_IMAGE" docker compose -f docker-compose.runtime.yml up -d
+          else
+            docker compose -f docker-compose.runtime.yml up -d
+          fi
 
       - name: Wait for OpenLander
         run: |
@@ -133,6 +147,39 @@ jobs:
           docker compose -f docker-compose.runtime.yml logs --no-color
           exit 1
 
+      - name: Seed previous-version state
+        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        env:
+          OPENLANDER_E2E_BASE_URL: http://localhost:10114
+        run: node scripts/rc-upgrade-state-smoke.mjs seed "$RUNNER_TEMP/openlander-upgrade-state.json"
+
+      - name: Upgrade OpenLander runtime
+        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        run: docker compose -f docker-compose.runtime.yml up -d --no-deps --force-recreate openlander
+
+      - name: Wait for upgraded OpenLander
+        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..90}; do
+            if curl -fsS "http://127.0.0.1:${OPENLANDER_PORT}/health" >/dev/null; then
+              actual_image="$(docker inspect --format '{{.Config.Image}}' openlander)"
+              test "$actual_image" = "$OPENLANDER_IMAGE"
+              exit 0
+            fi
+            echo "Upgraded OpenLander not ready yet (attempt ${attempt}/90)"
+            docker compose -f docker-compose.runtime.yml ps
+            sleep 2
+          done
+          docker compose -f docker-compose.runtime.yml logs --no-color
+          exit 1
+
+      - name: Verify upgraded state
+        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        env:
+          OPENLANDER_E2E_BASE_URL: http://localhost:10114
+        run: node scripts/rc-upgrade-state-smoke.mjs verify "$RUNNER_TEMP/openlander-upgrade-state.json"
+
       - name: Run RC cold-agent smoke
         env:
           OPENLANDER_E2E_BASE_URL: http://localhost:10114
@@ -147,4 +194,6 @@ jobs:
 
       - name: Stop OpenLander runtime
         if: always()
-        run: docker compose -f docker-compose.runtime.yml down -v --remove-orphans
+        run: |
+          rm -f "${RUNNER_TEMP}/openlander-upgrade-state.json"
+          docker compose -f docker-compose.runtime.yml down -v --remove-orphans
