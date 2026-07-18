@@ -1012,6 +1012,13 @@ export class ComposePipeline {
     const containerNameByService = new Map<string, string>();
     const reusedServiceNames = new Set<string>();
     const createdDeploymentServiceNames = new Set<string>();
+    const preparedImageTags = new Map<string, string>();
+    const existingReplacementByService = new Map(
+      [...deploymentSets.replaceTargets].flatMap((serviceName) => {
+        const existing = existingByName.get(`${parentName}/${serviceName}`);
+        return existing?.container_id ? [[serviceName, existing] as const] : [];
+      }),
+    );
     let projectNetwork: string | null = null;
     const sharedSecretFiles = this.env
       ? await this.env.getSecretFilesForDeploy(parentProjectId)
@@ -1062,12 +1069,37 @@ export class ComposePipeline {
         }
       }
 
+      // Build replacement images before running release hooks. Existing
+      // application containers and routes remain active during this phase.
+      for (const serviceName of deploymentSets.replaceTargets) {
+        const composeService = serviceByName.get(serviceName);
+        if (!composeService) continue;
+        const imageTag = this.resolveComposeServiceImageTag(composeService, projectName, envVars);
+        if (composeService.build) {
+          const { contextPath, dockerfile } = this.resolveBuildContext(
+            filteredComposeProject.projectPath,
+            composeService,
+          );
+          buildLog += `[compose build ${serviceName}] ${contextPath}\n`;
+          await this.docker.buildComposeService({
+            contextPath,
+            dockerfile,
+            tag: imageTag,
+            cacheFrom: [imageTag],
+          });
+        } else {
+          buildLog += `[compose pull ${serviceName}] ${imageTag}\n`;
+          await this.docker.pullImage(imageTag);
+        }
+        preparedImageTags.set(serviceName, imageTag);
+      }
+
       for (const service of filteredComposeProject.services) {
         const childName = `${parentName}/${service.name}`;
         const existing = existingByName.get(childName);
         const reusesExistingPrerequisite =
           deploymentSets.prerequisites.has(service.name) && Boolean(existing?.container_id);
-        if (reusesExistingPrerequisite) continue;
+        if (reusesExistingPrerequisite || deploymentSets.replaceTargets.has(service.name)) continue;
         const staleContainerName = composeContainerName(parentName, service.name);
         await this.cleanupComposeContainer(
           staleContainerName,
@@ -1149,30 +1181,35 @@ export class ComposePipeline {
           try {
             this.jobManager?.updatePhase(childId, 'building');
 
-            const imageTag = this.resolveComposeServiceImageTag(
-              composeService,
-              projectName,
-              envVars,
-            );
-            if (composeService.build) {
-              const { contextPath, dockerfile } = this.resolveBuildContext(
-                filteredComposeProject.projectPath,
-                composeService,
-              );
-              buildLog += `[compose build ${service.name}] ${contextPath}\n`;
-              await this.docker.buildComposeService({
-                contextPath,
-                dockerfile,
-                tag: imageTag,
-                cacheFrom: [imageTag],
-              });
-            } else {
-              buildLog += `[compose pull ${service.name}] ${imageTag}\n`;
-              await this.docker.pullImage(imageTag);
+            const preparedImageTag = preparedImageTags.get(service.name);
+            const imageTag =
+              preparedImageTag ??
+              this.resolveComposeServiceImageTag(composeService, projectName, envVars);
+            if (!preparedImageTag) {
+              if (composeService.build) {
+                const { contextPath, dockerfile } = this.resolveBuildContext(
+                  filteredComposeProject.projectPath,
+                  composeService,
+                );
+                buildLog += `[compose build ${service.name}] ${contextPath}\n`;
+                await this.docker.buildComposeService({
+                  contextPath,
+                  dockerfile,
+                  tag: imageTag,
+                  cacheFrom: [imageTag],
+                });
+              } else {
+                buildLog += `[compose pull ${service.name}] ${imageTag}\n`;
+                await this.docker.pullImage(imageTag);
+              }
             }
 
             this.jobManager?.updatePhase(childId, 'starting');
-            await this.docker.safeRemoveContainer(containerName);
+            await this.cleanupComposeContainer(
+              containerName,
+              this.composeNetworkNames(projectNetwork, envType),
+              'compose-service-replace',
+            );
 
             const declaredContainerPorts = this.resolveServiceContainerPorts(
               composeService,
@@ -1478,6 +1515,37 @@ export class ComposePipeline {
           };
         }
 
+        const preservedExisting = existingReplacementByService.get(service.name);
+        if (preservedExisting && !createdDeploymentServiceNames.has(service.name)) {
+          const ports =
+            preservedExisting.assigned_port != null && preservedExisting.container_port != null
+              ? [
+                  `${String(preservedExisting.assigned_port)}:${String(
+                    preservedExisting.container_port,
+                  )}`,
+                ]
+              : [];
+          return {
+            name: service.name,
+            status: 'running' as const,
+            ports,
+            containerId: preservedExisting.container_id ?? undefined,
+            ...(orchestrationEntry?.error ? { error: orchestrationEntry.error } : {}),
+          };
+        }
+
+        if (deployment && jobFailures.has(service.name)) {
+          return {
+            name: service.name,
+            status: 'error' as const,
+            ports: deployment.ports.map(
+              (mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`,
+            ),
+            containerId: deployment.containerId,
+            error: jobFailures.get(service.name)?.message,
+          };
+        }
+
         if (deployment && orchestrationStatus === 'deployed') {
           return {
             name: service.name,
@@ -1609,6 +1677,12 @@ export class ComposePipeline {
       });
 
       for (const status of reconciledStatuses) {
+        if (
+          existingReplacementByService.has(status.name) &&
+          !createdDeploymentServiceNames.has(status.name)
+        ) {
+          continue;
+        }
         const childId = childrenByService.get(status.name);
         if (!childId) continue;
         const jobFailure = jobFailures.get(status.name);
@@ -1731,9 +1805,21 @@ export class ComposePipeline {
 
       await this.transitionProjectStatus(parentProjectId, 'error', 'compose-orchestration-error');
       for (const service of filteredComposeProject.services) {
-        if (reusedServiceNames.has(service.name)) continue;
+        if (reusedServiceNames.has(service.name)) {
+          continue;
+        }
         const childId = childrenByService.get(service.name);
         if (!childId) continue;
+        const preservedExisting = existingReplacementByService.get(service.name);
+        if (preservedExisting && !createdDeploymentServiceNames.has(service.name)) {
+          await this.db.updateProject(childId, {
+            status: 'running',
+            containerId: preservedExisting.container_id,
+            assignedPort: preservedExisting.assigned_port ?? null,
+          });
+          this.jobManager?.updatePhase(childId, 'done');
+          continue;
+        }
         await this.db.updateProject(childId, {
           status: 'error',
           containerId: null,
