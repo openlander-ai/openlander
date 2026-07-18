@@ -18,7 +18,7 @@ import { cloneRepo, getCommitSubject, redactRepoUrl } from '../git.js';
 import { detectNewEnvKeys } from '../env-inject.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from '../diff-analysis.js';
 import { scanForSecrets } from '../secret-scan.js';
-import { persistDeployConfig } from '../config-snapshot.js';
+import { persistDeployConfig, validateStoredConfig } from '../config-snapshot.js';
 import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import { DockerfileNotFoundError } from '../../errors.js';
@@ -305,6 +305,15 @@ export async function buildProject(
   );
   if (isCompose && composePath && composePipeline) {
     log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
+    const composeDeployable = config._serviceId
+      ? await deps.db.getService(config._serviceId)
+      : await deps.db.getDeployableForProject(projectId);
+    const storedComposeConfig = composeDeployable
+      ? await deps.db.loadDeployConfigForService(composeDeployable.id)
+      : await deps.db.loadDeployConfig(projectId);
+    const previousServiceFingerprints = storedComposeConfig
+      ? validateStoredConfig(storedComposeConfig.config_json)?.snapshot.composeServiceFingerprints
+      : undefined;
     const result = await composePipeline.deployCompose({
       repoUrl,
       branch,
@@ -320,13 +329,17 @@ export async function buildProject(
       environmentType: params.environmentType,
       _parentId: projectId,
       gitCredentialId: config.gitCredentialId,
+      previousServiceFingerprints,
     });
 
     if (result.success) {
       await handlePostDeploy(deps, {
         projectId,
         environmentId,
-        config,
+        config: {
+          ...config,
+          composeServiceFingerprints: result.serviceFingerprints,
+        },
         repoUrl,
         trigger,
         startTime,
