@@ -232,6 +232,7 @@ export interface ServiceRow {
     | 'mongo'
     | 'minio';
   parent_service_id: string | null;
+  runtime_role: 'application' | 'job' | 'resource';
   status: 'running' | 'stopped' | 'error' | 'recovering' | null;
   visibility: 'internal' | 'quick-share' | 'shared' | 'production' | null;
   assigned_port: number | null;

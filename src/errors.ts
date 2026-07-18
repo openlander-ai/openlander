@@ -910,6 +910,18 @@ export class DeployLockedError extends OpenLanderError {
   }
 }
 
+export class ComposeJobFailedError extends OpenLanderError {
+  constructor(serviceName: string, exitCode: number | null, error?: string) {
+    super(
+      `Compose job '${serviceName}' did not complete successfully.`,
+      'COMPOSE_JOB_FAILED',
+      409,
+      { serviceName, exitCode, ...(error ? { error } : {}) },
+    );
+    this.name = 'ComposeJobFailedError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {

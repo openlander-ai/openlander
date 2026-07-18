@@ -89,7 +89,9 @@ export const composeToolDefs: ToolDef[] = [
         }
         return {
           ...result,
-          error: 'BUILD_FAILED',
+          error: result.errorCode ?? 'BUILD_FAILED',
+          code: result.errorCode ?? 'BUILD_FAILED',
+          details: result.details,
           message: result.error ?? 'Compose deploy failed.',
           composePath,
           composeContent,

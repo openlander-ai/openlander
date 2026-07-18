@@ -78,6 +78,13 @@
       "when": 1784343600000,
       "tag": "0010_git_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784386800000,
+      "tag": "0011_service_runtime_role",
+      "breakpoints": true
     }
   ]
 }

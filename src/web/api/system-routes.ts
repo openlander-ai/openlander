@@ -96,6 +96,7 @@ function toServiceWire(
     name: service.name.replace(/__svc$/, ''),
     kind: service.kind,
     parent_service_id: service.parent_service_id,
+    runtime_role: service.runtime_role,
     status: service.status,
     visibility: service.visibility,
     type: service.type ?? kindToLegacyType(service.kind),

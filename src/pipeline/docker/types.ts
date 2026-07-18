@@ -38,8 +38,9 @@ export interface RunContainerOptions {
 export interface RunComposeServiceOptions {
   imageTag: string;
   name: string;
-  port: number;
+  port?: number;
   containerPort?: number;
+  exposedPorts?: number[];
   additionalPorts?: Array<{ hostPort: number; containerPort: number }>;
   envVars: Record<string, string>;
   traefikLabels: Record<string, string>;
