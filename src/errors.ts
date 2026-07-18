@@ -391,6 +391,30 @@ export class ComposeHostPortsUnsupportedError extends OpenLanderError {
   }
 }
 
+export class TrafficServiceRequiredError extends OpenLanderError {
+  constructor(candidates: string[]) {
+    super(
+      'Multiple Compose applications can receive traffic. Select traffic_service explicitly.',
+      'TRAFFIC_SERVICE_REQUIRED',
+      400,
+      { candidates },
+    );
+    this.name = 'TrafficServiceRequiredError';
+  }
+}
+
+export class InvalidTrafficServiceError extends OpenLanderError {
+  constructor(trafficService: string, candidates: string[]) {
+    super(
+      `Compose traffic service '${trafficService}' is not an exposed application.`,
+      'INVALID_TRAFFIC_SERVICE',
+      400,
+      { trafficService, candidates },
+    );
+    this.name = 'InvalidTrafficServiceError';
+  }
+}
+
 // --- Tunnel errors ---
 
 export class TunnelStartError extends OpenLanderError {

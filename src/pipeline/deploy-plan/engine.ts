@@ -40,12 +40,18 @@ import type { Docker } from '../docker.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
-import { findComposeHostPortUsages, type ComposePipeline } from '../compose.js';
+import {
+  findComposeHostPortUsages,
+  inferComposeRuntimeRoles,
+  type ComposePipeline,
+} from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import {
+  InvalidTrafficServiceError,
   ProjectAlreadyExistsError,
   ProjectNotFoundError,
   ServiceConfigError,
+  TrafficServiceRequiredError,
 } from '../../errors.js';
 import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 
@@ -71,6 +77,7 @@ export interface CreatePlanOptions {
   dockerTarget?: string;
   projectId?: string;
   targetProjectId?: string;
+  trafficService?: string;
 }
 
 interface PlanExecutionContext {
@@ -87,6 +94,7 @@ interface PlanExecutionContext {
 export interface PlanUpdates {
   env?: { provided?: Record<string, string>; trusted?: string[] } | Record<string, string>;
   build?: Partial<DeployPlan['build']>;
+  traffic_service?: string;
   services?: PlanService[];
   health?: Partial<DeployPlan['health']>;
 }
@@ -228,6 +236,7 @@ export class PlanEngine {
     generatedDockerfile?: string;
     composeFilePath?: string;
     composeBuildServices?: PlanBuildService[];
+    trafficServiceCandidates?: string[];
     relativeDockerfiles: string[];
   } {
     const dockerfiles = findDockerfiles(clonePath);
@@ -262,6 +271,7 @@ export class PlanEngine {
         buildMethod = 'compose';
         composeFilePath = relative(clonePath, detectedComposeFile);
         const parsed = this.composePipeline.parseComposeFile(detectedComposeFile);
+        const runtimeRoles = inferComposeRuntimeRoles(parsed.services);
         const hostPortUsages = findComposeHostPortUsages(parsed);
         if (hostPortUsages.length > 0) {
           warnings.push(
@@ -285,9 +295,10 @@ export class PlanEngine {
 
           let port: number | undefined;
           if (svc.ports?.[0]) {
-            const portMatch = svc.ports[0].match(/:(\d+)/);
-            if (portMatch?.[1]) {
-              port = parseInt(portMatch[1], 10);
+            const value = svc.ports[0].split('/')[0] ?? '';
+            const target = value.split(':').at(-1);
+            if (target && /^\d+$/.test(target)) {
+              port = parseInt(target, 10);
             }
           }
           if (port === undefined && svc.expose?.[0]) {
@@ -299,6 +310,7 @@ export class PlanEngine {
 
           return {
             name: svc.name,
+            runtime_role: runtimeRoles.get(svc.name) ?? 'application',
             dockerfile,
             port,
             host_ports: svc.ports && svc.ports.length > 0 ? svc.ports : undefined,
@@ -368,6 +380,10 @@ export class PlanEngine {
       generatedDockerfile,
       composeFilePath,
       composeBuildServices,
+      trafficServiceCandidates: composeBuildServices
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanBuildService.port is Compose plan metadata, not a services DB row.
+        ?.filter((service) => service.runtime_role === 'application' && service.port !== undefined)
+        .map((service) => service.name),
       relativeDockerfiles,
     };
   }
@@ -604,8 +620,11 @@ export class PlanEngine {
     services: PlanService[],
     providedEnv: Record<string, string> = {},
     envIssues: EnvValueIssue[] = [],
+    trafficServiceRequired = false,
   ): DeployPlanStatus {
-    return missing.length > 0 || envIssues.some((issue) => issue.severity === 'fail')
+    return missing.length > 0 ||
+      envIssues.some((issue) => issue.severity === 'fail') ||
+      trafficServiceRequired
       ? 'needs_input'
       : this.hasSafeProposedResources(services, providedEnv)
         ? 'needs_approval'
@@ -917,6 +936,8 @@ export class PlanEngine {
     generatedDockerfile?: string;
     composeFilePath?: string;
     composeBuildServices?: PlanBuildService[];
+    trafficService?: string;
+    trafficServiceCandidates?: string[];
     relativeDockerfiles: string[];
     services: PlanService[];
     autoEnvVars: Record<string, string>;
@@ -934,6 +955,7 @@ export class PlanEngine {
 
     const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
       name: service.name,
+      runtime_role: service.runtime_role,
       dockerfile: service.dockerfile,
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       port: service.port,
@@ -979,6 +1001,11 @@ export class PlanEngine {
         generated_dockerfile: params.generatedDockerfile,
         compose_file: params.composeFilePath,
         compose_services: composeBuildServicesWithUrls,
+        traffic_service: params.trafficService,
+        traffic_service_candidates:
+          params.trafficServiceCandidates && params.trafficServiceCandidates.length > 1
+            ? params.trafficServiceCandidates
+            : undefined,
         dockerfiles_found:
           params.relativeDockerfiles.length > 0 ? params.relativeDockerfiles : undefined,
       },
@@ -1184,8 +1211,17 @@ export class PlanEngine {
       generatedDockerfile,
       composeFilePath,
       composeBuildServices,
+      trafficServiceCandidates,
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
+    let trafficService: string | undefined;
+    if (buildMethod === 'compose') {
+      const candidates = trafficServiceCandidates ?? [];
+      if (opts.trafficService && !candidates.includes(opts.trafficService)) {
+        throw new InvalidTrafficServiceError(opts.trafficService, candidates);
+      }
+      trafficService = opts.trafficService ?? (candidates.length === 1 ? candidates[0] : undefined);
+    }
     if (
       attachTargetProject &&
       (buildMethod === 'compose' ||
@@ -1251,6 +1287,7 @@ export class PlanEngine {
       services,
       envVars,
       envIssues,
+      (trafficServiceCandidates?.length ?? 0) > 1 && !trafficService,
     );
 
     const planBranch = cloneResult.branch;
@@ -1271,6 +1308,8 @@ export class PlanEngine {
       generatedDockerfile,
       composeFilePath,
       composeBuildServices,
+      trafficService,
+      trafficServiceCandidates,
       relativeDockerfiles,
       services,
       autoEnvVars,
@@ -1323,8 +1362,19 @@ export class PlanEngine {
       build: {
         ...plan.build,
         ...(updates.build || {}),
+        ...(updates.traffic_service !== undefined
+          ? { traffic_service: updates.traffic_service }
+          : {}),
       },
     };
+    const trafficCandidates = merged.build.traffic_service_candidates ?? [];
+    if (
+      merged.build.traffic_service &&
+      trafficCandidates.length > 0 &&
+      !trafficCandidates.includes(merged.build.traffic_service)
+    ) {
+      throw new InvalidTrafficServiceError(merged.build.traffic_service, trafficCandidates);
+    }
 
     if (updates.env) {
       const envUpdate = updates.env;
@@ -1389,6 +1439,7 @@ export class PlanEngine {
       merged.services,
       merged.env.provided,
       merged.env.issues,
+      trafficCandidates.length > 1 && !merged.build.traffic_service,
     );
     merged.updated_at = new Date().toISOString();
 
@@ -1411,6 +1462,10 @@ export class PlanEngine {
   }
 
   private assertPlanHasRequiredInput(plan: DeployPlan): void {
+    const trafficCandidates = plan.build.traffic_service_candidates ?? [];
+    if (trafficCandidates.length > 1 && !plan.build.traffic_service) {
+      throw new TrafficServiceRequiredError(trafficCandidates);
+    }
     if (plan.status !== 'needs_input') {
       return;
     }
@@ -1941,6 +1996,7 @@ export class PlanEngine {
       dockerTarget: plan.build.target,
       buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
       composeServices: isCompose ? deployOnly : undefined,
+      trafficService: isCompose ? plan.build.traffic_service : undefined,
       ...(execution.visibility ? { visibility: execution.visibility } : {}),
       ...(execution.environment ? { environment: execution.environment } : {}),
       ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),

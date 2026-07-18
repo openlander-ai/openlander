@@ -1324,6 +1324,178 @@ describe('deploy MCP guidance', () => {
     );
   });
 
+  it('probes the selected Compose child instead of the portless parent', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
+    const parent = {
+      id: 'stack',
+      name: 'stack',
+      status: 'running',
+      container_id: null,
+      assigned_port: null,
+      archived_at: null,
+    };
+    const child = {
+      id: 'stack-web',
+      name: 'stack/web',
+      status: 'running',
+      container_id: 'container-web',
+      assigned_port: 3100,
+      archived_at: null,
+    };
+    const service = {
+      id: 'stack-web__svc',
+      name: 'stack/web',
+      project_id: 'stack',
+      kind: 'compose-child',
+      source: 'git',
+      status: 'running',
+      container_id: 'container-web',
+      container_name: 'ol-stack-web',
+      container_port: 3000,
+      assigned_port: 3100,
+      public_url: null,
+      runtime_role: 'application',
+    };
+    const verifyManagedTraefikRoute = vi.fn(async () => ({
+      ok: true as const,
+      status: 200,
+      attempts: 1,
+      elapsedMs: 3,
+    }));
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      db: {
+        getProject: vi.fn((id: string) =>
+          id === parent.id ? parent : id === child.id ? child : undefined,
+        ),
+        getProjectByName: vi.fn((name: string) => (name === parent.name ? parent : undefined)),
+        getComposeChildProjects: vi.fn(async () => [child]),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+      jobManager: { getStatus: vi.fn(() => null) },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-compose',
+          status: 'ready',
+          app: { name: 'stack' },
+          project_id: 'stack',
+          build: {
+            method: 'compose',
+            dockerfile: 'Dockerfile',
+            context: '.',
+            traffic_service: 'web',
+          },
+          env: { required: [], auto: {}, provided: {}, detected: [], issues: [] },
+          services: [],
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(async () => ({
+          plan_id: 'plan-compose',
+          status: 'building',
+          project_name: 'stack',
+          project_id: 'stack',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    const pending = getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/stack',
+        name: 'stack',
+        traffic_service: 'web',
+        wait: true,
+      },
+      { target: 'mcp' },
+    );
+    await vi.waitFor(() => expect(eventBus.listenerCount('deploy:success')).toBeGreaterThan(0));
+    await eventBus.emit('deploy:success', {
+      projectId: 'stack',
+      url: 'http://stack.example.com',
+      totalDurationMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    const result = (await pending) as Record<string, unknown>;
+
+    expect(verifyManagedTraefikRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ projectName: 'stack-web', path: '/' }),
+    );
+    expect(result).toMatchObject({
+      status: 'done',
+      readiness: 'healthy',
+      preferred_url: expect.stringContaining('stack-web'),
+    });
+  });
+
+  it('skips representative HTTP probing when Compose has no traffic application', async () => {
+    const parent = { id: 'workers', name: 'workers', status: 'running', archived_at: null };
+    const verifyManagedTraefikRoute = vi.fn();
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      db: {
+        getProject: vi.fn((id: string) => (id === parent.id ? parent : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === parent.name ? parent : undefined)),
+        getComposeChildProjects: vi.fn(async () => []),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+      jobManager: { getStatus: vi.fn(() => null) },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-workers',
+          status: 'ready',
+          app: { name: 'workers' },
+          project_id: 'workers',
+          build: { method: 'compose', dockerfile: 'Dockerfile', context: '.' },
+          env: { required: [], auto: {}, provided: {}, detected: [], issues: [] },
+          services: [],
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(async () => ({
+          plan_id: 'plan-workers',
+          status: 'building',
+          project_name: 'workers',
+          project_id: 'workers',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    const pending = getTool(ctx, 'deploy_app').execute(
+      { repo_url: 'https://github.com/acme/workers', name: 'workers', wait: true },
+      { target: 'mcp' },
+    );
+    await vi.waitFor(() => expect(eventBus.listenerCount('deploy:success')).toBeGreaterThan(0));
+    await eventBus.emit('deploy:success', { projectId: 'workers', totalDurationMs: 1000 });
+
+    const result = (await pending) as Record<string, unknown>;
+
+    expect(verifyManagedTraefikRoute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'done', readiness: 'healthy' });
+    expect(result).not.toHaveProperty('representative_traffic');
+  });
+
   it('observes post-deploy stability and warns when a healthy app starts crashing', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const project = {

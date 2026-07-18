@@ -223,6 +223,8 @@ export interface ProjectConfig {
   _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
+  /** Compose application service used for representative public traffic. */
+  trafficService?: string;
   /** Deployment source type (git or pre-built image) */
   source?: 'git' | 'image';
   /** Full Docker image reference (e.g., registry.example.com/app:latest) */

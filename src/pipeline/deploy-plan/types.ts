@@ -131,6 +131,7 @@ export interface DryRunResult {
 
 export interface PlanBuildService {
   name: string;
+  runtime_role?: 'application' | 'job' | 'resource';
   dockerfile?: string;
   port?: number;
   host_ports?: string[];
@@ -171,6 +172,8 @@ export interface DeployPlan {
     generated_dockerfile?: string;
     compose_file?: string;
     compose_services?: PlanBuildService[];
+    traffic_service?: string;
+    traffic_service_candidates?: string[];
     dockerfiles_found?: string[];
   };
   services: PlanService[];

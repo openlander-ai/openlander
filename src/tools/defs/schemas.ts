@@ -948,6 +948,11 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    traffic_service: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Compose application service that represents public traffic.'),
     target_project_id: z
       .string()
       .optional()
@@ -1155,6 +1160,11 @@ export const deploySchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    traffic_service: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Compose application service that represents public traffic.'),
     wait: z
       .boolean()
       .optional()

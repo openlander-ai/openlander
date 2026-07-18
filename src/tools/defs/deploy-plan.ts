@@ -480,12 +480,23 @@ function buildPlanNeedsInputResponse(params: {
   inputRequirements?: PlanInputRequirement[];
   envIssues?: EnvValueIssue[];
   warnings?: string[];
+  trafficServiceCandidates?: string[];
   message: string;
   nextSteps: string[];
   error?: string;
 }): Record<string, unknown> {
-  const { planId, missing, inputRequirements, envIssues, warnings, message, nextSteps, error } =
-    params;
+  const {
+    planId,
+    missing,
+    inputRequirements,
+    envIssues,
+    warnings,
+    trafficServiceCandidates,
+    message,
+    nextSteps,
+    error,
+  } = params;
+  const needsTrafficService = (trafficServiceCandidates?.length ?? 0) > 1;
   return {
     plan_id: planId,
     status: 'needs_input',
@@ -495,12 +506,25 @@ function buildPlanNeedsInputResponse(params: {
       ? { input_requirements: inputRequirements }
       : {}),
     ...(envIssues && envIssues.length > 0 ? { env_issues: envIssues } : {}),
-    action_summary: buildNeedsInputActionSummary({
-      planId,
-      missing,
-      inputRequirements: inputRequirements ?? [],
-      envIssues: envIssues ?? [],
-    }),
+    action_summary: needsTrafficService
+      ? {
+          reason: 'traffic_service_required',
+          first_blocker: 'Select the Compose application that represents public traffic.',
+          required_action: 'update_deploy_plan',
+          candidates: trafficServiceCandidates,
+          update_payload_template: {
+            plan_id: planId,
+            updates: { traffic_service: trafficServiceCandidates?.[0] ?? '<service>' },
+          },
+          after_update: 'execute_deploy_plan',
+        }
+      : buildNeedsInputActionSummary({
+          planId,
+          missing,
+          inputRequirements: inputRequirements ?? [],
+          envIssues: envIssues ?? [],
+        }),
+    ...(needsTrafficService ? { traffic_service_candidates: trafficServiceCandidates } : {}),
     ...(warnings ? { warnings } : {}),
     suggested_call: updateDeployPlanSuggestedCall(planId),
     _agent_guidance: {
@@ -611,7 +635,11 @@ function buildNeedsInputActionSummary(params: {
   };
 }
 
-function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['env'] }): string[] {
+function buildNeedsInputNextSteps(plan: {
+  missing?: string[];
+  env?: DeployPlan['env'];
+  build?: DeployPlan['build'];
+}): string[] {
   const steps: string[] = [];
   const missing = plan.missing ?? [];
   if (missing.length > 0) {
@@ -633,6 +661,10 @@ function buildNeedsInputNextSteps(plan: { missing?: string[]; env?: DeployPlan['
     steps.push(
       'Use input_requirements[].requirement as value-shape guidance; ask the user for real secrets and reachable endpoints.',
     );
+  }
+  const trafficCandidates = plan.build?.traffic_service_candidates ?? [];
+  if (trafficCandidates.length > 1 && !plan.build?.traffic_service) {
+    steps.push(`Select traffic_service from: ${trafficCandidates.join(', ')}`);
   }
   steps.push('Call update_deploy_plan with corrected values, then call execute_deploy_plan.');
   return steps;
@@ -778,6 +810,7 @@ function deployPlanResponse(
         missing: plan.missing,
         inputRequirements: buildPlanInputRequirements(plan),
         envIssues: (plan as Partial<DeployPlan>).env?.issues,
+        trafficServiceCandidates: (plan as Partial<DeployPlan>).build?.traffic_service_candidates,
         message: 'Plan needs input before execution.',
         nextSteps: buildNeedsInputNextSteps(plan),
       }),
@@ -1250,10 +1283,10 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
         targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
         trigger: deployTriggerForToolContext(context),
       });
-
       return deployPlanResponse(plan);
     },
   },
@@ -1380,7 +1413,8 @@ export const deployPlanToolDefs: ToolDef[] = [
             missing: planData?.missing ?? [],
             inputRequirements: planData ? buildPlanInputRequirements(planData) : [],
             envIssues: planData?.env.issues,
-            message: 'The plan still needs environment input before execution.',
+            trafficServiceCandidates: planData?.build.traffic_service_candidates,
+            message: 'The plan still needs input before execution.',
             nextSteps: planData
               ? buildNeedsInputNextSteps(planData)
               : [
@@ -1721,9 +1755,11 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
         targetProjectId,
         trigger: deployTriggerForToolContext(context),
       });
+      const planBuild = (plan as Partial<DeployPlan>).build;
 
       if (plan.status === 'needs_input') {
         const nextSteps = buildNeedsInputNextSteps(plan);
@@ -1741,6 +1777,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           missing: plan.missing,
           inputRequirements: buildPlanInputRequirements(plan),
           envIssues: (plan as Partial<DeployPlan>).env?.issues,
+          trafficServiceCandidates: (plan as Partial<DeployPlan>).build?.traffic_service_candidates,
           warnings: plan.warnings,
           message: 'The generated deploy plan needs more input before execution.',
           nextSteps,
@@ -1901,8 +1938,19 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (!proj) return { extra, warnings };
           if (expose) {
             try {
-              if (proj.assigned_port) {
-                extra.public_url = await appCtx.pipeline.exposeTunnel(proj.id, proj.assigned_port);
+              let exposeProject = proj;
+              if (planBuild?.method === 'compose' && planBuild.traffic_service) {
+                const children = await appCtx.db.getComposeChildProjects(proj.id);
+                exposeProject =
+                  children.find(
+                    (child) => child.name === `${proj.name}/${planBuild.traffic_service as string}`,
+                  ) ?? proj;
+              }
+              if (exposeProject.assigned_port) {
+                extra.public_url = await appCtx.pipeline.exposeTunnel(
+                  exposeProject.id,
+                  exposeProject.assigned_port,
+                );
               }
             } catch (err) {
               warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1958,12 +2006,33 @@ export const deployPlanToolDefs: ToolDef[] = [
                 return;
               }
 
-              const readiness = waitHealthy
-                ? await waitForProjectReadiness(appCtx, projectIdOverride ?? projectId, 30_000)
-                : await inspectProjectReadiness(appCtx, projectIdOverride ?? projectId);
+              const finalProjectId = projectIdOverride ?? projectId;
+              let diagnosticProjectId = finalProjectId;
+              if (planBuild?.method === 'compose' && planBuild.traffic_service) {
+                const parent = await appCtx.db.getProject(finalProjectId);
+                const children = await appCtx.db.getComposeChildProjects(finalProjectId);
+                const trafficChild = parent
+                  ? children.find(
+                      (child) =>
+                        child.name === `${parent.name}/${planBuild.traffic_service as string}`,
+                    )
+                  : undefined;
+                if (trafficChild) diagnosticProjectId = trafficChild.id;
+              }
+              const hasRepresentativeTarget =
+                planBuild?.method !== 'compose' || Boolean(planBuild.traffic_service);
+              const readiness = hasRepresentativeTarget
+                ? waitHealthy
+                  ? await waitForProjectReadiness(appCtx, diagnosticProjectId, 30_000)
+                  : await inspectProjectReadiness(appCtx, diagnosticProjectId)
+                : {
+                    readiness: 'healthy' as const,
+                    ready: true,
+                    message: 'Compose project has no representative traffic service.',
+                  };
               const stability =
-                waitHealthy && readiness.ready
-                  ? await observeProjectStability(appCtx, projectIdOverride ?? projectId, readiness)
+                waitHealthy && readiness.ready && hasRepresentativeTarget
+                  ? await observeProjectStability(appCtx, diagnosticProjectId, readiness)
                   : undefined;
               const finalReadiness =
                 stability?.status === 'unstable' ? stability.result : readiness;
@@ -1983,10 +2052,10 @@ export const deployPlanToolDefs: ToolDef[] = [
                 : finalReadiness.readiness === 'unhealthy'
                   ? 'unhealthy'
                   : 'timeout';
-              const finalProjectId = projectIdOverride ?? projectId;
-              const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
-                () => undefined,
-              );
+              const serviceRecord = await loadProjectServiceRecord(
+                appCtx,
+                diagnosticProjectId,
+              ).catch(() => undefined);
               const attachedServiceId =
                 typeof targetAttach.fields['service_id'] === 'string'
                   ? targetAttach.fields['service_id']
@@ -1996,13 +2065,19 @@ export const deployPlanToolDefs: ToolDef[] = [
                   ? await appCtx.db.getService(attachedServiceId).catch(() => undefined)
                   : undefined;
 
+              const resolvedRouteService =
+                attachedService ??
+                (diagnosticProjectId !== finalProjectId ? serviceRecord?.service : undefined);
               const assignedPort =
-                attachedService?.assigned_port ?? serviceRecord?.view.assignedPort ?? undefined;
-              const routeService = attachedService
+                resolvedRouteService?.assigned_port ??
+                serviceRecord?.view.assignedPort ??
+                undefined;
+              const routeService = resolvedRouteService
                 ? {
-                    name: attachedService.name,
+                    name: resolvedRouteService.name,
                     assigned_port: assignedPort ?? null,
-                    public_url: attachedService.public_url ?? serviceRecord?.view.publicUrl ?? null,
+                    public_url:
+                      resolvedRouteService.public_url ?? serviceRecord?.view.publicUrl ?? null,
                   }
                 : null;
               const routeName = routeService
@@ -2014,9 +2089,12 @@ export const deployPlanToolDefs: ToolDef[] = [
               const portAwarePreferred =
                 (routeService ? getPreferredDeployableServiceUrl(routeService) : null) ??
                 getPreferredProjectUrl(routeName, assignedPort);
-              const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
+              const externalUrl =
+                planBuild?.method !== 'compose' && isExternalDeployUrl(payload.url)
+                  ? payload.url
+                  : undefined;
               const representativeTraffic =
-                waitHealthy && finalReadiness.ready
+                waitHealthy && finalReadiness.ready && hasRepresentativeTarget
                   ? await observeRepresentativeTraffic(appCtx, routeName, '/').catch(
                       (err: unknown): RepresentativeTrafficObservation => ({
                         status: 'skipped',

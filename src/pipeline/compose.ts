@@ -18,7 +18,13 @@ import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
-import { ComposeJobFailedError, ServiceConfigError, isDockerNotFoundError } from '../errors.js';
+import {
+  ComposeJobFailedError,
+  InvalidTrafficServiceError,
+  ServiceConfigError,
+  TrafficServiceRequiredError,
+  isDockerNotFoundError,
+} from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -136,6 +142,7 @@ export interface ComposeDeployConfig {
   environmentType?: OpenLanderEnv;
   _parentId?: string;
   gitCredentialId?: string;
+  trafficService?: string;
 }
 
 /**
@@ -233,6 +240,10 @@ export interface ComposeDeployResult {
   error?: string;
   errorCode?: string;
   details?: Record<string, unknown>;
+  trafficService?: string;
+  trafficServiceProjectId?: string;
+  trafficServicePort?: number;
+  warnings?: string[];
 }
 
 export interface ComposeServiceStatus {
@@ -691,6 +702,25 @@ export class ComposePipeline {
     const composeProject = this.parseComposeFile(config.composePath);
     const filteredComposeProject = this.filteredComposeProjectForConfig(config, composeProject);
     const runtimeRoles = inferComposeRuntimeRoles(filteredComposeProject.services);
+    const trafficCandidates = filteredComposeProject.services
+      .filter(
+        (service) =>
+          runtimeRoles.get(service.name) === 'application' &&
+          ((service.ports?.length ?? 0) > 0 || (service.expose?.length ?? 0) > 0),
+      )
+      .map((service) => service.name);
+    if (config.trafficService && !trafficCandidates.includes(config.trafficService)) {
+      throw new InvalidTrafficServiceError(config.trafficService, trafficCandidates);
+    }
+    const trafficService =
+      config.trafficService ?? (trafficCandidates.length === 1 ? trafficCandidates[0] : undefined);
+    const warnings: string[] = [];
+    if (!trafficService && trafficCandidates.length > 1) {
+      if (!config._parentId) {
+        throw new TrafficServiceRequiredError(trafficCandidates);
+      }
+      warnings.push('traffic_target_unresolved');
+    }
 
     const envVars = { ...(config.envVars ?? {}) };
     this.validateComposeInterpolation(filteredComposeProject, envVars);
@@ -1429,6 +1459,14 @@ export class ComposePipeline {
               details: failedJob.details,
             }
           : {}),
+        ...(trafficService
+          ? {
+              trafficService,
+              trafficServiceProjectId: childrenByService.get(trafficService),
+              trafficServicePort: deploymentByService.get(trafficService)?.ports[0]?.hostPort,
+            }
+          : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1493,6 +1531,8 @@ export class ComposePipeline {
         services: [],
         buildDurationMs: Date.now() - startTime,
         error: errorMsg,
+        ...(trafficService ? { trafficService } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     }
   }

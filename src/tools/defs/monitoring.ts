@@ -56,6 +56,7 @@ import {
   representativeTrafficFailed,
 } from './representative-traffic.js';
 import { isUserOwnedExternalEnvDependency } from '../../monitor/user-owned-input.js';
+import { serviceHealthStrategy, serviceLifecycle } from '../../health/compose-runtime.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -77,6 +78,10 @@ interface DiagnosticWarning {
   confidence: 'medium';
   summary: string;
   evidence: Record<string, unknown>;
+}
+
+function normalizeRuntimeRole(value: unknown): 'application' | 'job' | 'resource' {
+  return value === 'job' || value === 'resource' ? value : 'application';
 }
 
 async function resolveTopologyProject(
@@ -302,11 +307,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
       const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
       const status = args['status'] as
-        | 'open'
-        | 'acknowledged'
-        | 'resolved'
-        | 'unresolved'
-        | undefined;
+        'open' | 'acknowledged' | 'resolved' | 'unresolved' | undefined;
       const limit = (args['limit'] as number | undefined) ?? 20;
       const briefings = serviceId
         ? await appCtx.db.listAiOpsBriefingsByService(serviceId, { limit, status })
@@ -652,6 +653,80 @@ export const monitoringToolDefs: ToolDef[] = [
       const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
       const recentDeployment = summarizeRecentDeployments(deployLogs);
       const buildDiagnostics = diagnoseBuildTimeEnv(effectiveEnv, deployLogs);
+      const runtimeRole = normalizeRuntimeRole(service.runtime_role);
+
+      if (runtimeRole !== 'application') {
+        const dependencies =
+          runtimeRole === 'job'
+            ? {
+                count: 0,
+                checks: [],
+                skipped: true,
+                reason: 'one-shot jobs are diagnosed from exit code and logs',
+              }
+            : await probeEnvDependencies(
+                appCtx,
+                effectiveEnv,
+                timeoutMs,
+                service.container_id ?? undefined,
+                true,
+                { excludedHosts: await managedPublicDependencyHosts(appCtx, service) },
+              );
+        const roleCheck =
+          runtimeRole === 'job'
+            ? {
+                strategy: 'exit_code',
+                completed: container['present'] === true && container['running'] === false,
+                healthy: container['running'] === false && container['exitCode'] === 0,
+                exitCode: container['exitCode'] ?? null,
+              }
+            : await probeResourceService(appCtx, service, container, timeoutMs);
+        const healthStrategy =
+          typeof roleCheck['strategy'] === 'string'
+            ? roleCheck['strategy']
+            : serviceHealthStrategy({
+                runtime_role: runtimeRole,
+                container_port: service.container_port,
+                health_check_strategy: service.health_check_strategy,
+              });
+
+        return {
+          project: {
+            id: project.id,
+            name: project.name,
+            runtimeProjectId: runtimeProject.id,
+          },
+          service: {
+            id: service.id,
+            name: service.name,
+            kind: service.kind,
+            source: service.source,
+            runtimeRole,
+            lifecycle: serviceLifecycle({ runtime_role: runtimeRole }),
+            healthStrategy,
+            status: service.status,
+            image: service.image_url ?? service.image_tag ?? null,
+            containerPort: service.container_port,
+          },
+          env: summarizeEnvKeys(groupEnv, serviceEnv),
+          buildTimeEnv: buildDiagnostics,
+          recentDeployment,
+          container,
+          logs: runtimeLogs,
+          roleCheck,
+          dependencies,
+          _agent_guidance: {
+            message:
+              roleCheck['healthy'] === true
+                ? `${runtimeRole === 'job' ? 'Job completed successfully' : 'Resource is healthy'}.`
+                : `${runtimeRole === 'job' ? 'Job did not complete successfully' : 'Resource health check failed'}.`,
+            next_steps:
+              roleCheck['healthy'] === true
+                ? []
+                : ['Inspect logs and container state before replacing or recreating the service.'],
+          },
+        };
+      }
       const httpCheck = await probeServiceHttp(appCtx, service, probePath, timeoutMs, {
         internal,
       });
@@ -768,6 +843,9 @@ export const monitoringToolDefs: ToolDef[] = [
           name: service.name,
           kind: service.kind,
           source: service.source,
+          runtimeRole,
+          lifecycle: serviceLifecycle({ runtime_role: runtimeRole }),
+          healthStrategy: serviceHealthStrategy(service),
           status: service.status,
           repoUrl: sanitizeRepoUrl(service.repo_url),
           image: service.image_url ?? service.image_tag ?? null,
@@ -1715,6 +1793,7 @@ async function summarizeContainer(
   try {
     const rawInspect = asRecord(await appCtx.docker.inspectContainer(service.container_id)) ?? {};
     const state = getNestedRecord(rawInspect, 'State');
+    const health = getNestedRecord(state, 'Health');
     const config = getNestedRecord(rawInspect, 'Config');
     return {
       present: true,
@@ -1727,6 +1806,7 @@ async function summarizeContainer(
       startedAt: getString(state, 'StartedAt'),
       finishedAt: getString(state, 'FinishedAt'),
       restartCount: getNumber(rawInspect, 'RestartCount'),
+      healthStatus: getString(health, 'Status'),
       inspectName: getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
       image: sanitizeDiagnosticText(
         getString(config, 'Image') ?? service.image_tag ?? service.image_url,
@@ -1763,6 +1843,67 @@ async function readServiceLogs(
       error: sanitizeDiagnosticText(err instanceof Error ? err.message : String(err)),
     };
   }
+}
+
+function knownResourcePort(service: ServiceRow): number | null {
+  if (service.container_port) return service.container_port;
+  const signature = `${service.name} ${service.image_url ?? ''} ${service.image_tag ?? ''}`;
+  if (/(?:postgres|pgvector)/i.test(signature)) return 5432;
+  if (/(?:mysql|mariadb)/i.test(signature)) return 3306;
+  if (/redis/i.test(signature)) return 6379;
+  if (/mongo/i.test(signature)) return 27017;
+  if (/rabbitmq/i.test(signature)) return 5672;
+  if (/minio/i.test(signature)) return 9000;
+  return null;
+}
+
+async function probeResourceService(
+  appCtx: AppCtx,
+  service: ServiceRow,
+  container: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const healthStatus =
+    typeof container['healthStatus'] === 'string' ? container['healthStatus'] : null;
+  if (healthStatus) {
+    return {
+      strategy: 'docker_health',
+      healthy: healthStatus === 'healthy',
+      status: healthStatus,
+    };
+  }
+
+  if (container['running'] !== true || !service.container_id) {
+    return {
+      strategy: 'tcp',
+      healthy: false,
+      skipped: true,
+      reason: 'resource container is not running',
+    };
+  }
+
+  const port = knownResourcePort(service);
+  if (!port) {
+    return {
+      strategy: 'none',
+      healthy: true,
+      skipped: true,
+      reason: 'resource has no known internal port and no Docker healthcheck',
+    };
+  }
+
+  const result = await probeInternal(
+    appCtx,
+    'tcp',
+    '127.0.0.1',
+    port,
+    '/',
+    timeoutMs,
+    `tcp://127.0.0.1:${String(port)}`,
+    service.container_id,
+    true,
+  );
+  return { strategy: 'tcp', healthy: result['reachable'] === true, ...result };
 }
 
 function normalizeProbePath(value: string | null | undefined): string | null {
