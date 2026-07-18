@@ -104,7 +104,9 @@ describe('Service detail v0.1 tabs', () => {
   });
 
   it('renders Overview as the composite panel (General + Resources + Danger)', () => {
-    expect(source).toContain('<GeneralTab service={resolvedService} />');
+    expect(source).toContain('<GeneralTab');
+    expect(source).toContain('service={resolvedService}');
+    expect(source).toContain('onCredentialChanged={loadServiceDetail}');
     expect(source).toContain('<ServiceResourceLimitsPanel');
     expect(source).toContain('<ServiceDangerZone');
     expect(source).toContain('panelId="servicepanel-overview"');

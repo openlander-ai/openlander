@@ -19,6 +19,7 @@ export default defineConfig({
     'c4-danger-actions.spec.ts',
     'c5-opscenter.spec.ts',
     'c7-dashboard-list.spec.ts',
+    'repository-keys.spec.ts',
   ],
   workers: 1,
   fullyParallel: false,

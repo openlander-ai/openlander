@@ -1698,6 +1698,94 @@ export const translations = {
       comingLater: 'Planned after 0.2',
     },
   },
+  repositoryKeys: {
+    title: 'Repository Keys',
+    subtitle: 'Read-only GitHub Deploy Keys for repositories that OAuth cannot access.',
+    loading: 'Loading repository keys',
+    fields: {
+      repository: 'GitHub repository URL',
+      name: 'Display name (optional)',
+      namePlaceholder: 'Team API deploy key',
+    },
+    columns: {
+      repository: 'Repository',
+      status: 'Status',
+      fingerprint: 'Fingerprint',
+      activity: 'Activity',
+      services: 'Services',
+      actions: 'Actions',
+    },
+    status: { pending: 'Pending', verified: 'Verified', failed: 'Failed' },
+    activity: { verified: 'Verified', used: 'Last used' },
+    actions: {
+      add: 'Add repository key',
+      cancel: 'Cancel',
+      generate: 'Generate key',
+      copy: 'Copy public key',
+      copied: 'Copied',
+      openGitHub: 'Open GitHub Deploy Keys settings',
+      finishLater: 'Finish later',
+      verify: 'Verify connection',
+      done: 'Done',
+      retry: 'Retry',
+      delete: 'Delete',
+      createHere: 'Create a repository key',
+      change: 'Change',
+      unlink: 'Unlink',
+      save: 'Save authentication',
+    },
+    empty: {
+      title: 'No repository keys yet',
+      body: 'Generate a read-only key to deploy a private repository without broad account access.',
+    },
+    wizard: {
+      title: 'Add repository key',
+      step: 'Step {current} of {total}',
+      publicKey: 'Public key',
+      readOnlyWarning:
+        'In GitHub, leave “Allow write access” unchecked. OpenLander only needs read access to clone and deploy.',
+      verifiedTitle: 'Repository access verified',
+      verifiedBody: 'OpenLander can securely clone {repository}.',
+    },
+    delete: {
+      title: 'Delete repository key?',
+      body: 'This permanently removes “{name}” from OpenLander. Remove the public key from GitHub separately.',
+      inUse: 'Unlink this key from these services before deleting it.',
+    },
+    picker: {
+      title: 'Repository authentication',
+      automatic: 'Automatic (OAuth/PAT or public repository)',
+      matched: 'A verified repository key was selected automatically.',
+      multiple: 'Choose which verified key this service should use.',
+      selectionRequired:
+        'Select a repository key because more than one verified key matches this repository.',
+      pending: 'A key exists but is not verified yet.',
+      none: 'No matching repository key. OAuth/PAT or anonymous access will be used.',
+    },
+    source: {
+      title: 'Repository authentication',
+      currentDeployKey: 'Deploy Key · {name}',
+      automatic: 'Automatic · OAuth/PAT or public repository',
+      dialogTitle: 'Change repository authentication',
+      dialogDescription:
+        'Select a verified key for this exact repository, or unlink the current key.',
+    },
+    messages: {
+      verified: 'Repository key verified.',
+      deleted: 'Repository key deleted.',
+      saved: 'Repository authentication updated.',
+    },
+    errors: {
+      load: 'Failed to load repository keys.',
+      create: 'Failed to generate the repository key.',
+      copy: 'Could not copy the public key. Select and copy it manually.',
+      verify: 'Failed to verify repository access.',
+      notAuthorized:
+        'GitHub has not authorized this key yet. Check the repository Deploy Keys settings and try again.',
+      delete: 'Failed to delete the repository key.',
+      save: 'Failed to update repository authentication.',
+    },
+  },
   // Canonical OpenLander vocabulary. Kept in English across locales by
   // project policy (see CONTRIBUTING / agent memory); descriptive copy
   // around these terms still translates normally. Chrome that names the

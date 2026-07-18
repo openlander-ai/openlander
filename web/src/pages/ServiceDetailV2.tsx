@@ -67,11 +67,14 @@ import {
   deleteGroupService,
   managedServices,
   unarchiveGroupService,
+  updateGroupService,
   type ConnectedProject,
   type GroupService,
   type MetricsRange,
   type Service,
 } from '@/lib/api/services';
+import { listGitCredentials, type GitCredential } from '@/lib/api/git-credentials';
+import { GitCredentialWizard } from '@/components/git-credentials/GitCredentialWizard';
 import {
   buildDomainUrl,
   createServiceDomain,
@@ -89,6 +92,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -102,6 +106,7 @@ import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { isValidEnvKey } from '@/lib/env-key';
 import { parseEnvContent } from '@/lib/parse-env';
+import { toast } from 'sonner';
 
 type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
 type ManagedServiceTabId = 'overview' | 'logs' | 'connections';
@@ -150,6 +155,7 @@ function groupServiceToDetailNode(service: GroupService): ServiceNode {
     imageUrl: service.imageUrl,
     imageCmd: service.imageCmd,
     containerPort: service.containerPort,
+    gitCredential: service.gitCredential ?? null,
   };
 }
 
@@ -234,30 +240,25 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   const [serviceDetail, setServiceDetail] = useState<GroupService | null>(null);
   const [serviceDetailError, setServiceDetailError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadServiceDetail = useCallback(async () => {
     if (!projectId || !id) {
       setServiceDetail(null);
       setServiceDetailError(null);
       return;
     }
-    let cancelled = false;
-    void getGroupService(projectId, id)
-      .then((detail) => {
-        if (cancelled) return;
-        setServiceDetail(detail);
-        setServiceDetailError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setServiceDetail(null);
-        setServiceDetailError(
-          err instanceof Error ? err.message : 'Failed to load resource details',
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const detail = await getGroupService(projectId, id);
+      setServiceDetail(detail);
+      setServiceDetailError(null);
+    } catch (err) {
+      setServiceDetail(null);
+      setServiceDetailError(err instanceof Error ? err.message : 'Failed to load resource details');
+    }
   }, [projectId, id]);
+
+  useEffect(() => {
+    void loadServiceDetail();
+  }, [loadServiceDetail]);
 
   const resolvedService = useMemo<ServiceNode | undefined>(() => {
     const baseService = service ?? (serviceDetail ? groupServiceToDetailNode(serviceDetail) : null);
@@ -276,6 +277,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       imageUrl: serviceDetail.imageUrl ?? baseService.imageUrl,
       imageCmd: serviceDetail.imageCmd ?? baseService.imageCmd,
       containerPort: serviceDetail.containerPort ?? baseService.containerPort,
+      gitCredential: serviceDetail.gitCredential ?? null,
       archivedAt:
         serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : baseService.archivedAt,
       image: serviceDetail.image ?? baseService.image,
@@ -491,7 +493,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           className="p-5"
         >
           <div className="flex flex-col gap-5">
-            <GeneralTab service={resolvedService} />
+            <GeneralTab
+              service={resolvedService}
+              projectId={project.id}
+              onCredentialChanged={loadServiceDetail}
+            />
             <ServiceResourceLimitsPanel
               projectId={project.id}
               serviceId={resolvedService.id}
@@ -575,8 +581,17 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 
 // ─── Tab content ────────────────────────────────────────────────────────────
 
-function GeneralTab({ service }: { service: ServiceNode }) {
+function GeneralTab({
+  service,
+  projectId,
+  onCredentialChanged,
+}: {
+  service: ServiceNode;
+  projectId: string;
+  onCredentialChanged: () => Promise<void>;
+}) {
   const { t } = useLanguage();
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
 
   const handleCopyUrl = () => {
     if (!service.url) return;
@@ -604,6 +619,12 @@ function GeneralTab({ service }: { service: ServiceNode }) {
       sourceRows.push(['Deployed branch', service.deployedBranch]);
     }
     sourceRows.push(['Build path', formatBuildPath(service.buildContext)]);
+    sourceRows.push([
+      t('repositoryKeys.source.title'),
+      service.gitCredential
+        ? t('repositoryKeys.source.currentDeployKey', { name: service.gitCredential.name })
+        : t('repositoryKeys.source.automatic'),
+    ]);
   } else if (service.image) {
     sourceRows.push(['Source', 'Container image']);
     sourceRows.push(['Image', service.image]);
@@ -620,7 +641,21 @@ function GeneralTab({ service }: { service: ServiceNode }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <SubCard title={t('services.detail.section.source')}>
+        <SubCard
+          title={t('services.detail.section.source')}
+          action={
+            service.repoUrl ? (
+              <button
+                type="button"
+                onClick={() => setCredentialDialogOpen(true)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+              >
+                <Edit className="h-3 w-3" />
+                {t('repositoryKeys.actions.change')}
+              </button>
+            ) : undefined
+          }
+        >
           {sourceRows.length === 0 ? (
             <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
               {t('services.detail.source.empty')}
@@ -687,7 +722,142 @@ function GeneralTab({ service }: { service: ServiceNode }) {
           </div>
         )}
       </SubCard>
+      {service.repoUrl && (
+        <RepositoryAuthenticationDialog
+          open={credentialDialogOpen}
+          onOpenChange={setCredentialDialogOpen}
+          projectId={projectId}
+          service={service}
+          onChanged={onCredentialChanged}
+        />
+      )}
     </div>
+  );
+}
+
+function RepositoryAuthenticationDialog({
+  open,
+  onOpenChange,
+  projectId,
+  service,
+  onChanged,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  projectId: string;
+  service: ServiceNode;
+  onChanged: () => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [credentials, setCredentials] = useState<GitCredential[]>([]);
+  const [selectedId, setSelectedId] = useState(service.gitCredential?.id ?? '');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !service.repoUrl) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSelectedId(service.gitCredential?.id ?? '');
+    void listGitCredentials({ repoUrl: service.repoUrl })
+      .then((items) => {
+        if (!cancelled) setCredentials(items.filter((item) => item.status === 'verified'));
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : t('repositoryKeys.errors.load'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, service.gitCredential?.id, service.repoUrl, t]);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateGroupService(projectId, service.id, { gitCredentialId: selectedId || null });
+      await onChanged();
+      toast.success(t('repositoryKeys.messages.saved'));
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('repositoryKeys.errors.save'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-lg border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]">
+          <DialogHeader>
+            <DialogTitle>{t('repositoryKeys.source.dialogTitle')}</DialogTitle>
+            <DialogDescription>{t('repositoryKeys.source.dialogDescription')}</DialogDescription>
+          </DialogHeader>
+          {loading ? (
+            <div className="flex min-h-24 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <select
+                aria-label={t('repositoryKeys.picker.title')}
+                value={selectedId}
+                onChange={(event) => setSelectedId(event.target.value)}
+                className="h-10 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-bg)] px-3 text-[13px]"
+              >
+                <option value="">{t('repositoryKeys.picker.automatic')}</option>
+                {credentials.map((credential) => (
+                  <option key={credential.id} value={credential.id}>
+                    {credential.name} · {credential.fingerprint}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" variant="outline" onClick={() => setWizardOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t('repositoryKeys.actions.createHere')}
+              </Button>
+            </div>
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="rounded-md border border-[color:var(--ol-error)] bg-[color:var(--ol-error-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]"
+            >
+              {error}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t('repositoryKeys.actions.cancel')}
+            </Button>
+            <Button type="button" disabled={loading || saving} onClick={() => void save()}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {selectedId ? t('repositoryKeys.actions.save') : t('repositoryKeys.actions.unlink')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <GitCredentialWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        initialRepoUrl={service.repoUrl ?? ''}
+        onComplete={(credential) => {
+          setCredentials((current) => [
+            credential,
+            ...current.filter((item) => item.id !== credential.id),
+          ]);
+          setSelectedId(credential.id);
+        }}
+      />
+    </>
   );
 }
 

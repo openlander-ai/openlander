@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
-import { Github, Image, Layers, Loader2 } from 'lucide-react';
+import { Github, Image, KeyRound, Layers, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -15,6 +15,9 @@ import { useLanguage } from '@/i18n/context';
 import { deployService } from '@/lib/api';
 import { deriveServiceName } from '@/lib/service-name';
 import { cn } from '@/lib/utils';
+import { GitCredentialWizard } from '@/components/git-credentials/GitCredentialWizard';
+import { listGitCredentials, type GitCredential } from '@/lib/api/git-credentials';
+import { selectMatchingGitCredential } from '@/lib/git-credential-selection';
 
 type SourceKind = 'git' | 'image' | 'template';
 
@@ -47,11 +50,47 @@ export function AddServiceDialog({
   const [buildContext, setBuildContext] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [port, setPort] = useState('');
+  const [gitCredentialId, setGitCredentialId] = useState('');
+  const [matchingCredentials, setMatchingCredentials] = useState<GitCredential[]>([]);
+  const [credentialLoading, setCredentialLoading] = useState(false);
+  const [credentialWizardOpen, setCredentialWizardOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
   }, [open]);
+
+  useEffect(() => {
+    if (source !== 'git' || !repoUrl.trim()) {
+      setMatchingCredentials([]);
+      setGitCredentialId('');
+      setCredentialLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setCredentialLoading(true);
+      void listGitCredentials({ repoUrl: repoUrl.trim() })
+        .then((credentials) => {
+          if (cancelled) return;
+          setMatchingCredentials(credentials);
+          setGitCredentialId((current) => selectMatchingGitCredential(credentials, current));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setMatchingCredentials([]);
+            setGitCredentialId('');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setCredentialLoading(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [repoUrl, source]);
 
   const inferredName =
     source === 'git' ? deriveServiceName(repoUrl, 'git') : deriveServiceName(imageUrl, 'image');
@@ -71,6 +110,14 @@ export function AddServiceDialog({
     }
     if (source === 'git' && !repoUrl.trim()) {
       setError(t('projectDetail.addService.errorRepo'));
+      return;
+    }
+    if (
+      source === 'git' &&
+      matchingCredentials.filter((credential) => credential.status === 'verified').length > 1 &&
+      !gitCredentialId
+    ) {
+      setError(t('repositoryKeys.picker.selectionRequired'));
       return;
     }
     if (source === 'image' && !imageUrl.trim()) {
@@ -101,6 +148,7 @@ export function AddServiceDialog({
               dockerfilePath: dockerfilePath.trim() || undefined,
               dockerTarget: dockerTarget.trim() || undefined,
               buildContext: buildContext.trim() || undefined,
+              gitCredentialId: gitCredentialId || undefined,
             })
           : await deployService({
               source: 'image',
@@ -208,6 +256,61 @@ export function AddServiceDialog({
                         className="border-[color:var(--ol-border)] bg-[color:var(--ol-bg)] font-mono"
                       />
                     </Field>
+                    <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[12px] font-medium text-[color:var(--ol-fg)]">
+                          <KeyRound className="h-3.5 w-3.5" />
+                          {t('repositoryKeys.picker.title')}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!repoUrl.trim()}
+                          onClick={() => setCredentialWizardOpen(true)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          {t('repositoryKeys.actions.createHere')}
+                        </Button>
+                      </div>
+                      {credentialLoading ? (
+                        <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {t('repositoryKeys.loading')}
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            aria-label={t('repositoryKeys.picker.title')}
+                            value={gitCredentialId}
+                            onChange={(event) => setGitCredentialId(event.target.value)}
+                            className="h-9 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-bg)] px-3 text-[12px] text-[color:var(--ol-fg)]"
+                          >
+                            <option value="">{t('repositoryKeys.picker.automatic')}</option>
+                            {matchingCredentials
+                              .filter((credential) => credential.status === 'verified')
+                              .map((credential) => (
+                                <option key={credential.id} value={credential.id}>
+                                  {credential.name} · {credential.fingerprint}
+                                </option>
+                              ))}
+                          </select>
+                          <p className="mt-1.5 text-[11px] text-[color:var(--ol-fg-muted)]">
+                            {matchingCredentials.filter(
+                              (credential) => credential.status === 'verified',
+                            ).length === 1 && gitCredentialId
+                              ? t('repositoryKeys.picker.matched')
+                              : matchingCredentials.filter(
+                                    (credential) => credential.status === 'verified',
+                                  ).length > 1
+                                ? t('repositoryKeys.picker.multiple')
+                                : matchingCredentials.length > 0
+                                  ? t('repositoryKeys.picker.pending')
+                                  : t('repositoryKeys.picker.none')}
+                          </p>
+                        </>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Field label={t('projectDetail.addService.branch')}>
                         <Input
@@ -297,6 +400,18 @@ export function AddServiceDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <GitCredentialWizard
+        open={credentialWizardOpen}
+        onOpenChange={setCredentialWizardOpen}
+        initialRepoUrl={repoUrl.trim()}
+        onComplete={(credential) => {
+          setMatchingCredentials((current) => [
+            credential,
+            ...current.filter((item) => item.id !== credential.id),
+          ]);
+          setGitCredentialId(credential.id);
+        }}
+      />
     </Dialog>
   );
 }
