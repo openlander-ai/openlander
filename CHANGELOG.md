@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.3] - 2026-07-19
+
+### Fixed
+
+- Parse and sanitize serialized deployment snapshots before returning them from
+  `platform_db_inspect`, preventing nested Deploy Key paths, Git credential
+  identifiers, environment values, and repository URL userinfo from bypassing
+  the platform debug DTO redaction boundary.
+- Omit malformed serialized deployment configuration instead of returning its
+  raw contents.
+
 ## [0.2.6-rc.2] - 2026-07-19
 
 ### Fixed
