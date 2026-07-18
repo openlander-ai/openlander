@@ -288,12 +288,45 @@ describeGitClone('cloneRepo — deterministic provider authentication', () => {
         repoUrl: 'https://github.com/user/private-repo',
         sshKeyPath: '/home/user/.ssh/id_ed25519',
       }),
-    ).rejects.toBeInstanceOf(GitAuthError);
+    ).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: { reason: 'token_invalid' },
+    });
 
     expect(mockExecFile).toHaveBeenCalledTimes(1);
     const cloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
     expect(cloneArgs.join(' ')).toContain('x-access-token:ghp_test_token_123@github.com');
     expect(cloneArgs.join(' ')).not.toContain('git@github.com');
+  });
+
+  it('preserves a typed GitHub access error when clone follows an inconclusive preflight', async () => {
+    mockLoadConfig.mockReturnValue({
+      gitProviders: {
+        github: { token: 'ghp_test_token_123', authMethod: 'oauth' },
+      },
+    });
+    vi.mocked(global.fetch).mockRejectedValueOnce(new DOMException('Timed out', 'TimeoutError'));
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('remote: Repository not found.'), { stdout: '', stderr: '' });
+      },
+    );
+
+    await expect(
+      cloneRepo({ repoUrl: 'https://github.com/acme/private-repo' }),
+    ).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: {
+        reason: 'not_found_or_not_authorized',
+        repoUrl: 'https://github.com/acme/private-repo',
+        authMethod: 'oauth',
+      },
+    });
   });
 
   it('redacts provider tokens from clone failures', async () => {

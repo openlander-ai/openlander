@@ -157,6 +157,12 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const msg = sanitizeGitError(rawMessage, githubToken);
 
+    if (githubRepo && githubToken && msg.includes('Authentication failed')) {
+      throw githubAccessError(repoUrl, githubAuthMethod, { reason: 'token_invalid' });
+    }
+    if (githubRepo && githubToken && msg.includes('Permission denied')) {
+      throw githubAccessError(repoUrl, githubAuthMethod, { reason: 'permission_denied' });
+    }
     if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
       throw new GitAuthError(redactRepoUrl(repoUrl));
     }
@@ -164,6 +170,11 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
       throw new GitBranchNotFoundError(redactRepoUrl(repoUrl), branch ?? 'unknown');
     }
     if (isGitRepoNotFoundMessage(msg)) {
+      if (githubRepo && githubToken) {
+        throw githubAccessError(repoUrl, githubAuthMethod, {
+          reason: 'not_found_or_not_authorized',
+        });
+      }
       throw new GitRepoNotFoundError(redactRepoUrl(repoUrl));
     }
     throw new GitCloneError(redactRepoUrl(repoUrl), msg);
