@@ -29,6 +29,7 @@ import {
   isDockerNotFoundError,
 } from '../errors.js';
 import { planComposeDeploymentSets } from './compose-deployment-sets.js';
+import { assertComposeStatefulChangesSafe } from './compose-stateful-guard.js';
 
 const log = createModuleLogger('compose');
 
@@ -758,6 +759,7 @@ export class ComposePipeline {
     selectComposeServices(activeComposeProject.services, config.services);
     const runtimeRoles = inferComposeRuntimeRoles(activeComposeProject.services);
     const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
+    const existingChildServices = await this.db.getComposeChildren(`${parentProjectId}__svc`);
     const existingByName = new Map(existingChildren.map((child) => [child.name, child]));
     const existingServiceNames = new Set(
       existingChildren.flatMap((child) => {
@@ -766,6 +768,19 @@ export class ComposePipeline {
       }),
     );
     const currentServiceFingerprints = fingerprintComposeServices(activeComposeProject.services);
+    const childNamePrefix = `${parentName}/`;
+    assertComposeStatefulChangesSafe({
+      currentServiceNames: new Set(activeComposeProject.services.map((service) => service.name)),
+      currentRuntimeRoles: runtimeRoles,
+      existingServices: existingChildServices.map((service) => ({
+        name: service.name.startsWith(childNamePrefix)
+          ? service.name.slice(childNamePrefix.length)
+          : service.name,
+        runtimeRole: service.runtime_role,
+      })),
+      previousFingerprints: config.previousServiceFingerprints,
+      currentFingerprints: currentServiceFingerprints,
+    });
     const deploymentSets = planComposeDeploymentSets({
       services: activeComposeProject.services,
       runtimeRoles,

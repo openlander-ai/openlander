@@ -971,6 +971,30 @@ export class ComposePrerequisiteUnhealthyError extends OpenLanderError {
   }
 }
 
+export class StatefulServiceChangeBlockedError extends OpenLanderError {
+  constructor(serviceName: string) {
+    super(
+      `Stateful Compose service '${serviceName}' changed and cannot be recreated automatically.`,
+      'STATEFUL_SERVICE_CHANGE_BLOCKED',
+      409,
+      { serviceName },
+    );
+    this.name = 'StatefulServiceChangeBlockedError';
+  }
+}
+
+export class StatefulServiceRemovalBlockedError extends OpenLanderError {
+  constructor(serviceName: string) {
+    super(
+      `Stateful Compose service '${serviceName}' was removed and cannot be deleted automatically.`,
+      'STATEFUL_SERVICE_REMOVAL_BLOCKED',
+      409,
+      { serviceName },
+    );
+    this.name = 'StatefulServiceRemovalBlockedError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {
