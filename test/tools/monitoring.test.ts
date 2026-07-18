@@ -1151,6 +1151,7 @@ describe('diagnose_service tool', () => {
       kind: 'git',
       source: 'git',
       status: 'running',
+      runtime_role: 'application',
       assigned_port: 10001,
       container_id: 'abc123def4567890',
       container_name: 'ol-app',
@@ -1269,6 +1270,7 @@ describe('service-targeted monitoring tools', () => {
       kind: 'git',
       source: 'git',
       status: 'running',
+      runtime_role: 'application',
       assigned_port: 10001,
       container_id: 'service-container' as string | null,
       container_name: 'ol-app' as string | null,
@@ -1361,6 +1363,24 @@ describe('service-targeted monitoring tools', () => {
         id: service.id,
         name: service.name,
       },
+      logs: 'service logs',
+    });
+  });
+
+  it('get_logs reads a stopped one-shot Compose job by its retained container id', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    service.kind = 'compose-child';
+    service.runtime_role = 'job';
+    service.status = 'stopped';
+
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { service_id: service.id, lines: 200 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 200);
+    expect(result).toMatchObject({
+      service: { id: service.id },
       logs: 'service logs',
     });
   });
@@ -1497,7 +1517,9 @@ describe('service-targeted monitoring tools', () => {
       kind: 'git',
       source: 'git',
       status: 'running',
+      runtime_role: 'application',
       assigned_port: 10001,
+      container_port: 3000,
       image_url: 'app:latest',
     };
     const postgres = {
@@ -1555,6 +1577,9 @@ describe('service-targeted monitoring tools', () => {
         expect.objectContaining({
           id: 'app__svc',
           role: 'deployable',
+          runtime_role: 'application',
+          lifecycle: 'long_running',
+          health_strategy: 'http',
           dependsOn: ['svc-pg', 'svc-redis'],
         }),
         expect.objectContaining({
@@ -1585,6 +1610,7 @@ describe('service-targeted monitoring tools', () => {
       kind: 'compose',
       source: 'git',
       status: 'running',
+      runtime_role: 'application',
       assigned_port: null,
       image_url: 'demo-stack:latest',
     };
@@ -1595,7 +1621,9 @@ describe('service-targeted monitoring tools', () => {
       kind: 'compose-child',
       source: 'git',
       status: 'running',
+      runtime_role: 'application',
       assigned_port: 10001,
+      container_port: 3000,
       image_url: 'demo-stack-web:latest',
     };
     const postgres = {
@@ -1605,7 +1633,9 @@ describe('service-targeted monitoring tools', () => {
       kind: 'compose-child',
       source: 'git',
       status: 'running',
-      assigned_port: 10002,
+      runtime_role: 'resource',
+      assigned_port: null,
+      container_port: 5432,
       image_url: 'postgres:17-alpine',
     };
     const redis = {
@@ -1615,7 +1645,9 @@ describe('service-targeted monitoring tools', () => {
       kind: 'compose-child',
       source: 'git',
       status: 'running',
-      assigned_port: 10003,
+      runtime_role: 'resource',
+      assigned_port: null,
+      container_port: 6379,
       image_url: 'redis:8-alpine',
     };
     const ctx = {
@@ -1624,6 +1656,7 @@ describe('service-targeted monitoring tools', () => {
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
         getDeployablesByGroup: vi.fn(async () => [composeParent]),
         getComposeChildren: vi.fn(async () => [web, postgres, redis]),
+        getLastDeployLogsForServices: vi.fn(async () => new Map()),
         getServices: vi.fn(async () => []),
         listServiceConnectionsByProject: vi.fn(async () => []),
         listServices: vi.fn(async () => [composeParent, web, postgres, redis]),
@@ -1643,12 +1676,21 @@ describe('service-targeted monitoring tools', () => {
       { target: 'mcp' },
     )) as {
       count: number;
-      services: Array<{ id: string; kind: string; dependsOn: string[] }>;
+      aggregate_status?: string;
+      services: Array<{
+        id: string;
+        kind: string;
+        runtime_role: string;
+        health_strategy: string;
+        is_traffic_target: boolean;
+        dependsOn: string[];
+      }>;
       edges: Array<{ from: string; to: string }>;
     };
 
     expect(ctx.db.getComposeChildren).toHaveBeenCalledWith('stack__svc');
     expect(result.count).toBe(3);
+    expect(result.aggregate_status).toBe('running');
     expect(result.services.map((service) => service.id)).toEqual([
       'stack__web__svc',
       'stack__postgres__svc',
@@ -1659,7 +1701,16 @@ describe('service-targeted monitoring tools', () => {
         expect.objectContaining({
           id: 'stack__web__svc',
           kind: 'compose',
+          runtime_role: 'application',
+          health_strategy: 'http',
+          is_traffic_target: true,
           dependsOn: ['stack__postgres__svc', 'stack__redis__svc'],
+        }),
+        expect.objectContaining({
+          id: 'stack__postgres__svc',
+          runtime_role: 'resource',
+          health_strategy: 'tcp',
+          is_traffic_target: false,
         }),
       ]),
     );

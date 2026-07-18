@@ -489,11 +489,13 @@ export class Database implements AuthDatabase {
   resolveRuntimeIncident(id: string) { return this.runtimeIncidentRepo.resolveIncident(id); }
   updateRuntimeIncidentDiagnosis(id: string, diagnosis: string) { return this.runtimeIncidentRepo.updateDiagnosis(id, diagnosis); }
   createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { return this.deployLogRepo.createDeployLog(log); }
+  createDeployLogForService(log: Parameters<DeployLogRepo['createDeployLogForService']>[0]) { return this.deployLogRepo.createDeployLogForService(log); }
   getDeployLogs(projectId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogs(projectId, limit, environmentId); }
   getDeployLogsForService(serviceId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogsForService(serviceId, limit, environmentId); }
   listRecentDeployLogsAcrossProjects(limit = 100) { return this.deployLogRepo.listRecentAcrossProjects(limit); }
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getLastDeployLogForService(serviceId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLogForService(serviceId, environmentId); }
+  getLastDeployLogsForServices(serviceIds: readonly string[]) { return this.deployLogRepo.getLastDeployLogsForServices(serviceIds); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { return this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
   updateDeployLogRepresentativeTraffic(deployId: string, representativeTrafficJson: string) { return this.deployLogRepo.updateRepresentativeTraffic(deployId, representativeTrafficJson); }

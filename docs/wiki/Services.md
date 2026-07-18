@@ -16,6 +16,12 @@ connected through environment variables such as `DATABASE_URL` or `REDIS_URL`.
 MCP-created Database/Cache/Storage resources require a target project in v0.1. Cross-project
 shared Database/Cache/Storage resources and external TCP exposure are deferred.
 
+For a Compose project, `GET /api/projects/:projectId/services` keeps the project-level response
+by default. The dashboard can opt into child workloads with
+`include_compose_children=true`. Child rows include their runtime role, lifecycle, health
+strategy, traffic-target flag, and optional latest deploy summary; the response includes the
+optional parent `aggregate_status`.
+
 ## Available Templates
 
 | Template       | Image                 | Default Port | Use Case                     |

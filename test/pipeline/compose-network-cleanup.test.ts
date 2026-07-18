@@ -87,6 +87,9 @@ function createFakeDb() {
     createDeployLog: vi.fn(async (log: unknown) => {
       deployLogs.push(log);
     }),
+    createDeployLogForService: vi.fn(async (log: unknown) => {
+      deployLogs.push(log);
+    }),
     getUsedPorts: vi.fn(async () => []),
     _projects: projects,
     _deployLogs: deployLogs,
@@ -437,7 +440,8 @@ describe('compose network cleanup', () => {
       State: { Running: false, ExitCode: 0 },
     });
     const docker = createFakeDocker({ inspectContainer } as Partial<Docker>);
-    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
 
     const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
@@ -452,6 +456,18 @@ describe('compose network cleanup', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'migrate', status: 'stopped' }),
         expect.objectContaining({ name: 'api', status: 'running' }),
+      ]),
+    );
+    const migrateProject = [...db._projects.values()].find(
+      (project) => project.name === 'stack/migrate',
+    );
+    expect(db._deployLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          serviceId: migrateProject?.id,
+          status: 'success',
+          buildLog: expect.stringContaining('exit_code=0'),
+        }),
       ]),
     );
   });

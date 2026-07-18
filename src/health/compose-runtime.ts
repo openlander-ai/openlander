@@ -2,6 +2,7 @@ import type { ServiceRow } from '../db/types.js';
 
 export type ServiceLifecycle = 'long_running' | 'one_shot';
 export type ServiceHealthStrategy = 'http' | 'tcp' | 'docker_health' | 'exit_code' | 'none';
+export type ComposeAggregateStatus = 'running' | 'degraded' | 'error';
 
 export function serviceLifecycle(service: Pick<ServiceRow, 'runtime_role'>): ServiceLifecycle {
   return service.runtime_role === 'job' ? 'one_shot' : 'long_running';
@@ -16,4 +17,27 @@ export function serviceHealthStrategy(
     return service.container_port == null ? 'none' : 'tcp';
   }
   return service.container_port == null ? 'none' : 'http';
+}
+
+export function aggregateComposeStatus(
+  children: ReadonlyArray<Pick<ServiceRow, 'id' | 'runtime_role' | 'status'>>,
+  lastDeployStatus: ReadonlyMap<string, 'success' | 'failed' | 'cancelled'> = new Map(),
+): ComposeAggregateStatus | undefined {
+  if (children.length === 0) return undefined;
+
+  if (children.some((child) => child.status === 'error')) {
+    return 'error';
+  }
+
+  const jobs = children.filter((child) => child.runtime_role === 'job');
+  if (jobs.some((job) => ['failed', 'cancelled'].includes(lastDeployStatus.get(job.id) ?? ''))) {
+    return 'error';
+  }
+
+  const longRunning = children.filter((child) => child.runtime_role !== 'job');
+  const longRunningHealthy = longRunning.every((child) => child.status === 'running');
+  const jobsCompleted = jobs.every(
+    (job) => job.status === 'stopped' && lastDeployStatus.get(job.id) === 'success',
+  );
+  return longRunningHealthy && jobsCompleted ? 'running' : 'degraded';
 }
