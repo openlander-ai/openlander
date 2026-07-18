@@ -25,7 +25,9 @@ type ProjectInput = {
 type ProjectPatch = {
   status?: ProjectRow['status'];
   containerId?: string | null;
+  containerName?: string | null;
   assignedPort?: number | null;
+  containerPort?: number | null;
   imageTag?: string;
   dockerfilePath?: string;
   buildMethod?: string;
@@ -58,7 +60,9 @@ function createFakeDb() {
       if (!current) return;
       if (patch.status !== undefined) current.status = patch.status;
       if (patch.containerId !== undefined) current.container_id = patch.containerId;
+      if (patch.containerName !== undefined) current.container_name = patch.containerName;
       if (patch.assignedPort !== undefined) current.assigned_port = patch.assignedPort;
+      if (patch.containerPort !== undefined) current.container_port = patch.containerPort;
       if (patch.imageTag !== undefined) current.image_tag = patch.imageTag;
       if (patch.dockerfilePath !== undefined) current.dockerfile_path = patch.dockerfilePath;
       if (patch.buildMethod !== undefined) current.build_method = patch.buildMethod;
@@ -126,12 +130,18 @@ describe('compose network cleanup', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('passes original compose service names as Docker network aliases', async () => {
+  it('persists routable runtime identity and passes the service name as a network alias', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
+      'utf8',
+    );
     const runComposeService = vi
       .fn()
       .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
     const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
-    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
 
     const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
@@ -148,6 +158,14 @@ describe('compose network cleanup', () => {
         networks: ['stack-network'],
         aliases: ['web'],
       }),
+    );
+    expect([...db._projects.values()].find((project) => project.name === 'stack/web')).toMatchObject(
+      {
+        container_id: 'container-ol-stack-web',
+        container_name: 'ol-stack-web',
+        assigned_port: expect.any(Number),
+        container_port: 3000,
+      },
     );
   });
 

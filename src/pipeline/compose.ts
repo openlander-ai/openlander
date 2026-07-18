@@ -1034,7 +1034,9 @@ export class ComposePipeline {
             await this.db.updateProject(childId, {
               status: 'running',
               containerId,
+              containerName,
               assignedPort: primaryPort.hostPort,
+              containerPort: primaryPort.containerPort,
               imageTag,
             });
 
