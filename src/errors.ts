@@ -85,6 +85,52 @@ export class GitAuthError extends OpenLanderError {
   }
 }
 
+export type GitHubRepoAccessReason =
+  | 'token_invalid'
+  | 'sso_required'
+  | 'rate_limited'
+  | 'permission_denied'
+  | 'not_found_or_not_authorized'
+  | 'unreachable';
+
+export class GitHubRepoAccessError extends OpenLanderError {
+  constructor(
+    repoUrl: string,
+    authMethod: 'oauth' | 'pat',
+    reason: GitHubRepoAccessReason,
+    options?: { authorizeUrl?: string; retryAt?: string },
+  ) {
+    const statusCode =
+      reason === 'token_invalid'
+        ? 401
+        : reason === 'rate_limited'
+          ? 429
+          : reason === 'not_found_or_not_authorized'
+            ? 404
+            : reason === 'unreachable'
+              ? 503
+              : 403;
+    const messages: Record<GitHubRepoAccessReason, string> = {
+      token_invalid: 'The connected GitHub token is invalid or expired.',
+      sso_required: 'GitHub SSO authorization is required for this repository.',
+      rate_limited: 'GitHub API rate limit exceeded while checking repository access.',
+      permission_denied: 'The connected GitHub credential cannot access this repository.',
+      not_found_or_not_authorized:
+        'The GitHub repository was not found or the connected credential is not authorized to access it.',
+      unreachable: 'GitHub could not be reached to verify repository access.',
+    };
+
+    super(messages[reason], 'GITHUB_REPO_ACCESS_DENIED', statusCode, {
+      reason,
+      repoUrl,
+      authMethod,
+      ...(options?.authorizeUrl ? { authorizeUrl: options.authorizeUrl } : {}),
+      ...(options?.retryAt ? { retryAt: options.retryAt } : {}),
+    });
+    this.name = 'GitHubRepoAccessError';
+  }
+}
+
 /**
  * Day 13 M3 (SSRF): refused to clone or fetch a repository because the URL
  * targets an internal/loopback host or uses a non-network scheme. The agent

@@ -14,7 +14,7 @@ import { ensureDockerfile, detectFramework, parseDockerfileExposePort } from '..
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { resolveEnvVars, resolveEnvVarsForBuild } from '../resolve-env.js';
 import { createDependencyCacheKey } from '../build-cache.js';
-import { cloneRepo, getCommitSubject } from '../git.js';
+import { cloneRepo, getCommitSubject, redactRepoUrl } from '../git.js';
 import { detectNewEnvKeys } from '../env-inject.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from '../diff-analysis.js';
 import { scanForSecrets } from '../secret-scan.js';
@@ -125,7 +125,7 @@ export async function cloneAndAnalyze(
     commitSha: cloneResult.commitSha,
   });
 
-  buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+  buildLog += `[clone] ${redactRepoUrl(repoUrl)} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
   const pendingFixFile = await deps.applyPendingFix(projectId, cloneResult.path);
   if (pendingFixFile) {

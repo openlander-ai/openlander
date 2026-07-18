@@ -11,6 +11,13 @@
 import { apiGet } from './client';
 
 export type GitHubAuthMethod = 'oauth' | 'pat';
+export type GitHubValidationReason =
+  | 'token_invalid'
+  | 'sso_required'
+  | 'rate_limited'
+  | 'permission_denied'
+  | 'not_found_or_not_authorized'
+  | 'unreachable';
 
 export interface GitHubProviderStatus {
   /** True when a token is configured (independent of liveness). */
@@ -41,6 +48,9 @@ export interface GitHubProviderStatus {
   lastSyncAt: string | null;
   /** Set when the live validation call returned an explicit error. */
   validationError: string | null;
+  validationReason: GitHubValidationReason | null;
+  authorizeUrl: string | null;
+  retryAt: string | null;
 }
 
 export async function getGitHubProviderStatus(): Promise<GitHubProviderStatus> {

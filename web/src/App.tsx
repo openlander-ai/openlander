@@ -12,7 +12,6 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
-import { SettingsPage } from '@/pages/SettingsPage';
 import { Home } from '@/pages/Home';
 import { Activity } from '@/pages/Activity';
 import { MCPServer } from '@/pages/MCPServer';
@@ -323,13 +322,12 @@ function App() {
                       Built-in AI Ops surfaces are disabled in 0.1; passive
                       backend ops history can remain for activity/status data.
                       Stale bookmarks land on /home via the catch-all redirect. */}
-                  {/* /settings is now a single-tab GitHub-only host —
-                      the destination of the `Re-authorize` and
-                      `Connect GitHub` CTAs on /settings/git-providers
-                      until the device flow is inlined there directly.
-                      Stale ?tab=system / ?tab=proxy params are
-                      silently ignored. */}
-                  <Route path="/settings" element={<SettingsPage />} />
+                  {/* The retired tabbed Settings host redirects to the
+                      canonical Git Providers page for stale bookmarks. */}
+                  <Route
+                    path="/settings"
+                    element={<Navigate to="/settings/git-providers" replace />}
+                  />
                   <Route path="/agent" element={<Navigate to="/home" replace />} />
                 </Route>
               </Route>

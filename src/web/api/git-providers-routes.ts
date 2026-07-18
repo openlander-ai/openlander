@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { updateConfig } from '../../config/index.js';
+import type { GitHubRepoAccessReason } from '../../errors.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
@@ -44,6 +45,30 @@ export interface GitHubProviderStatus {
   connectedAt: string | null;
   lastSyncAt: string | null;
   validationError: string | null;
+  validationReason: GitHubRepoAccessReason | null;
+  authorizeUrl: string | null;
+  retryAt: string | null;
+}
+
+const GITHUB_ACCESS_REASONS = new Set<GitHubRepoAccessReason>([
+  'token_invalid',
+  'sso_required',
+  'rate_limited',
+  'permission_denied',
+  'not_found_or_not_authorized',
+  'unreachable',
+]);
+
+function githubAccessDetail(
+  details: Record<string, unknown> | undefined,
+  key: 'reason' | 'authorizeUrl' | 'retryAt',
+): string | null {
+  const value = details?.[key];
+  if (typeof value !== 'string') return null;
+  if (key === 'reason') {
+    return GITHUB_ACCESS_REASONS.has(value as GitHubRepoAccessReason) ? value : null;
+  }
+  return value;
 }
 
 /**
@@ -103,8 +128,11 @@ export function classifyValidationError(message: string): 'rejected' | 'unreacha
   // 403 / 404 — see src/git-providers/github.ts. Any 4xx is "GitHub said no";
   // 5xx + non-status messages collapse into "we couldn't ask GitHub".
   if (/Invalid or expired/i.test(message)) return 'rejected';
+  if (/token is invalid or expired/i.test(message)) return 'rejected';
   if (/lacks required permissions/i.test(message)) return 'rejected';
+  if (/credential cannot access|SSO authorization is required/i.test(message)) return 'rejected';
   if (/resource not found/i.test(message)) return 'rejected';
+  if (/was not found or the connected credential/i.test(message)) return 'rejected';
   const apiStatus = /API error (\d{3})/i.exec(message);
   if (apiStatus) {
     const statusCode = apiStatus[1];
@@ -181,6 +209,9 @@ export function createGitProvidersRoutes(ctx: AppContext): Hono {
         connectedAt: null,
         lastSyncAt: null,
         validationError: null,
+        validationReason: null,
+        authorizeUrl: null,
+        retryAt: null,
       };
       return c.json(empty);
     }
@@ -188,6 +219,9 @@ export function createGitProvidersRoutes(ctx: AppContext): Hono {
     let scopes: string[] = [];
     let tokenValid: boolean | null = null;
     let validationError: string | null = null;
+    let validationReason: GitHubRepoAccessReason | null = null;
+    let authorizeUrl: string | null = null;
+    let retryAt: string | null = null;
     try {
       const provider = createGitProvider('github', ghConfig);
       const validation = await provider.validateToken();
@@ -201,6 +235,12 @@ export function createGitProvidersRoutes(ctx: AppContext): Hono {
       } else {
         const errMsg = validation.error ?? 'Token validation failed';
         validationError = errMsg;
+        validationReason = githubAccessDetail(
+          validation.errorDetails,
+          'reason',
+        ) as GitHubRepoAccessReason | null;
+        authorizeUrl = githubAccessDetail(validation.errorDetails, 'authorizeUrl');
+        retryAt = githubAccessDetail(validation.errorDetails, 'retryAt');
         // Discriminate "GitHub said no" from "we couldn't ask GitHub".
         // The GitHubProvider wrapper swallows network errors and returns
         // valid=false, so without this classifier a DNS / 5xx outage
@@ -225,6 +265,9 @@ export function createGitProvidersRoutes(ctx: AppContext): Hono {
       connectedAt: ctx.config.gitProviders.github.connectedAt ?? null,
       lastSyncAt: ctx.config.gitProviders.github.lastSyncAt ?? null,
       validationError,
+      validationReason,
+      authorizeUrl,
+      retryAt,
     };
     return c.json(status);
   });

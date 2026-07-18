@@ -58,6 +58,9 @@ export interface TokenValidation {
   /** OAuth scopes or permission level */
   scopes: string[];
   error?: string;
+  /** Stable provider error code/details, when the provider exposes them. */
+  errorCode?: string;
+  errorDetails?: Record<string, unknown>;
 }
 
 // --- List/Search options ---
@@ -82,6 +85,8 @@ export interface ListReposResult {
 export interface SearchReposResult {
   repos: GitRepo[];
   total: number;
+  /** True when the accessible-repository scan stopped at its safety cap. */
+  truncated?: boolean;
 }
 
 // --- Provider types ---

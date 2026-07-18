@@ -23,6 +23,7 @@ import {
   GitAuthError,
   GitBranchNotFoundError,
   GitCloneError,
+  GitHubRepoAccessError,
   GitRepoNotFoundError,
   ImageNotFoundError,
   ImagePullError,
@@ -108,6 +109,10 @@ describe('classifyByErrorName — typed first-party errors win before regex', ()
   it.each([
     ['GitAuthError', new GitAuthError('https://github.com/x/y')],
     ['GitCloneError', new GitCloneError('https://github.com/x/y', 'network down')],
+    [
+      'GitHubRepoAccessError',
+      new GitHubRepoAccessError('https://github.com/x/y', 'oauth', 'permission_denied'),
+    ],
     ['GitRepoNotFoundError', new GitRepoNotFoundError('https://github.com/x/y')],
     ['GitBranchNotFoundError', new GitBranchNotFoundError('https://github.com/x/y', 'feat')],
     ['UnsafeRepoUrlError', new UnsafeRepoUrlError('http://10.0.0.1', 'private network')],

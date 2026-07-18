@@ -36,6 +36,7 @@ import {
   GitAuthError,
   GitBranchNotFoundError,
   GitCloneError,
+  GitHubRepoAccessError,
   GitRepoNotFoundError,
   ImageNotFoundError,
   ImagePullError,
@@ -223,6 +224,7 @@ export function classifyByErrorName(err: unknown): ErrorClass | null {
   // Git access ---------------------------------------------------------------
   if (
     err instanceof GitAuthError ||
+    err instanceof GitHubRepoAccessError ||
     err instanceof GitCloneError ||
     err instanceof GitRepoNotFoundError ||
     err instanceof GitBranchNotFoundError ||

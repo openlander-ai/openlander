@@ -164,6 +164,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     return c.json({
       total: result.total,
       repos: result.repos,
+      ...(result.truncated ? { truncated: true } : {}),
     });
   });
 

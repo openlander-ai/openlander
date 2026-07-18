@@ -18,10 +18,11 @@ describe('Git Providers page v0.1', () => {
   it('replaces the PR3 stub with the spec-aligned Git Providers surface', () => {
     expect(pageSource).not.toContain('PR3 ships this page as a chrome stub');
     // The new page wires the aggregator endpoint instead of pointing the
-    // user at the legacy stub copy. The connect / re-authorize flow still
-    // hands off to /settings?tab=github because the device-flow UI lives
-    // there; that handoff is intentional, not a stub.
+    // user at the legacy stub copy. Connect and re-authorize render inline
+    // on the canonical Git Providers route.
     expect(pageSource).toContain('getGitHubProviderStatus');
+    expect(pageSource).toContain('<GithubSettingsTab');
+    expect(pageSource).not.toContain('/settings?tab=github');
   });
 
   it('renders the GitHub identity card with status pip + auth-method badge', () => {
@@ -65,7 +66,7 @@ describe('Git Providers page v0.1', () => {
     // The empty-state and loading/error cards must not surface the
     // "pending first sync" hint — it's specific to a configured-but-
     // unsynced provider, not a not-yet-connected one.
-    const emptyCardMatch = /function GitHubEmptyCard\(\)[\s\S]*?return \(/.exec(pageSource);
+    const emptyCardMatch = /function GitHubEmptyCard\([^)]*\)[\s\S]*?return \(/.exec(pageSource);
     expect(emptyCardMatch).not.toBeNull();
     if (emptyCardMatch) {
       const start = emptyCardMatch.index + emptyCardMatch[0].length;
@@ -95,6 +96,28 @@ describe('Git Providers page v0.1', () => {
     expect(pageSource).toContain("t('gitProviders.github.disconnectConfirm.title')");
     expect(pageSource).toContain("t('gitProviders.github.disconnectConfirm.description')");
     expect(pageSource).not.toMatch(/window\.confirm\(/);
+    expect(enSource).toContain("refreshRepoList: 'Check connection'");
+    expect(koSource).toContain("refreshRepoList: '연결 확인'");
+    expect(enSource).toContain("reposLinked: 'Used by OpenLander'");
+    expect(koSource).toContain("reposLinked: 'OpenLander에서 사용 중'");
+  });
+
+  it('shows reason-specific GitHub access guidance and safe settings links', () => {
+    expect(pageSource).toContain('validationGuidance');
+    expect(pageSource).toContain("case 'token_invalid'");
+    expect(pageSource).toContain("case 'sso_required'");
+    expect(pageSource).toContain("case 'rate_limited'");
+    expect(pageSource).toContain("case 'permission_denied'");
+    expect(pageSource).toContain('https://github.com/settings/tokens');
+    expect(pageSource).toContain('https://github.com/settings/applications');
+    expect(apiSource).toMatch(/validationReason:\s*GitHubValidationReason \| null/);
+    for (const dict of [enSource, koSource]) {
+      expect(dict).toMatch(/guidance:\s*\{/);
+      expect(dict).toMatch(/tokenInvalid:/);
+      expect(dict).toMatch(/ssoRequired:/);
+      expect(dict).toMatch(/rateLimited:/);
+      expect(dict).toMatch(/repositoryAccess:/);
+    }
   });
 
   it('renders the spec empty state with a single Connect GitHub CTA', () => {

@@ -1033,6 +1033,18 @@ export const translations = {
       generateToken: 'Generate a token →',
       // Content — description.
       description: '비공개 레포지토리를 배포하려면 GitHub 계정을 연결하세요.',
+      connectionTitle: 'GitHub 연결',
+      reauthorizeTitle: 'GitHub 다시 인증',
+      reauthorizeDescription: '새 인증이 성공하기 전까지 현재 GitHub 연결은 그대로 유지됩니다.',
+      cancel: '취소',
+      connectedAs: '{username} 계정으로 연결됨',
+      disconnect: '연결 해제',
+      openGithub: 'GitHub 열기',
+      copied: '복사됨',
+      copyCode: '코드 복사',
+      or: '또는',
+      connectToken: '토큰으로 연결',
+      checkStatus: '상태 확인',
     },
     data: {
       // Chrome — section title, status labels, and buttons.
@@ -1853,7 +1865,7 @@ export const translations = {
       manageOnGithub: 'Manage on GitHub',
       moreActionsLabel: 'More actions',
       reauthorize: 'Re-authorize',
-      refreshRepoList: 'Refresh repo list',
+      refreshRepoList: '연결 확인',
       disconnect: 'Disconnect',
       // Content — confirmation prose.
       disconnectConfirm: {
@@ -1877,7 +1889,7 @@ export const translations = {
       },
       stats: {
         // Chrome — KPI labels.
-        reposLinked: 'Repos linked',
+        reposLinked: 'OpenLander에서 사용 중',
         lastSync: 'Last sync',
         connectedOn: 'Connected on',
         scopes: 'OAuth scopes',
@@ -1898,6 +1910,13 @@ export const translations = {
       // Content — error messages with context.
       validationError: 'GitHub가 이 토큰을 거부했습니다: {message}',
       validationUnreachable: '토큰 검증을 위해 GitHub에 연결할 수 없습니다: {message}',
+      guidance: {
+        tokenInvalid: 'GitHub 설정에서 인증 정보를 확인하거나 교체하세요.',
+        ssoRequired: '조직 SSO에서 이 인증 정보를 승인하세요.',
+        rateLimited: 'GitHub 요청 한도 안내를 확인하고 잠시 후 다시 시도하세요.',
+        repositoryAccess: 'GitHub 설정에서 저장소와 조직 접근 권한을 확인하세요.',
+        unreachable: 'GitHub 서비스 상태를 확인하세요.',
+      },
       loading: 'GitHub 상태를 불러오는 중…',
       loadFailed: 'GitHub 상태를 불러오지 못했습니다.',
       // Chrome — retry button.

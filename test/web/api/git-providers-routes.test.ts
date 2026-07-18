@@ -116,4 +116,34 @@ describe('createGitProvidersRoutes', () => {
     });
     expect(updateConfig).not.toHaveBeenCalled();
   });
+
+  it('returns structured GitHub validation guidance without provider response text', async () => {
+    const ctx = createCtx();
+    vi.mocked(createGitProvider).mockReturnValue({
+      validateToken: vi.fn(async () => ({
+        valid: false,
+        user: null,
+        scopes: [],
+        error: 'GitHub SSO authorization is required for this repository.',
+        errorCode: 'GITHUB_REPO_ACCESS_DENIED',
+        errorDetails: {
+          reason: 'sso_required',
+          authorizeUrl: 'https://github.com/orgs/acme/sso?authorization_request=abc',
+          providerMessage: 'must not cross the API boundary',
+        },
+      })),
+    } as unknown as ReturnType<typeof createGitProvider>);
+
+    const res = await createGitProvidersRoutes(ctx).request('/git-providers/github');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      tokenValid: false,
+      validationReason: 'sso_required',
+      authorizeUrl: 'https://github.com/orgs/acme/sso?authorization_request=abc',
+      retryAt: null,
+    });
+    expect(JSON.stringify(body)).not.toContain('must not cross the API boundary');
+  });
 });
