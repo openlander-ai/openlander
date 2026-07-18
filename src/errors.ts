@@ -959,6 +959,18 @@ export class ComposeJobFailedError extends OpenLanderError {
   }
 }
 
+export class ComposePrerequisiteUnhealthyError extends OpenLanderError {
+  constructor(serviceName: string, reason?: string) {
+    super(
+      `Compose prerequisite '${serviceName}' is unhealthy; the requested services were not replaced.`,
+      'COMPOSE_PREREQUISITE_UNHEALTHY',
+      409,
+      { serviceName, ...(reason ? { reason } : {}) },
+    );
+    this.name = 'ComposePrerequisiteUnhealthyError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {

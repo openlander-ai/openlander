@@ -22,11 +22,13 @@ import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
 import {
   ComposeJobFailedError,
+  ComposePrerequisiteUnhealthyError,
   InvalidTrafficServiceError,
   ServiceConfigError,
   TrafficServiceRequiredError,
   isDockerNotFoundError,
 } from '../errors.js';
+import { planComposeDeploymentSets } from './compose-deployment-sets.js';
 
 const log = createModuleLogger('compose');
 
@@ -145,6 +147,7 @@ export interface ComposeDeployConfig {
   _parentId?: string;
   gitCredentialId?: string;
   trafficService?: string;
+  previousServiceFingerprints?: Record<string, string>;
 }
 
 /**
@@ -289,6 +292,7 @@ export interface ComposeDeployResult {
   trafficServiceProjectId?: string;
   trafficServicePort?: number;
   warnings?: string[];
+  serviceFingerprints?: Record<string, string>;
 }
 
 export interface ComposeServiceStatus {
@@ -745,9 +749,50 @@ export class ComposePipeline {
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFile(config.composePath);
-    const filteredComposeProject = this.filteredComposeProjectForConfig(config, composeProject);
-    const runtimeRoles = inferComposeRuntimeRoles(filteredComposeProject.services);
-    const trafficCandidates = filteredComposeProject.services
+    validateComposeProfiles(composeProject.services, config.profiles);
+    const activeComposeProject: ComposeProject = {
+      ...composeProject,
+      services: filterServicesByProfiles(composeProject.services, config.profiles),
+    };
+    // Validate requested names before computing dependency semantics.
+    selectComposeServices(activeComposeProject.services, config.services);
+    const runtimeRoles = inferComposeRuntimeRoles(activeComposeProject.services);
+    const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
+    const existingByName = new Map(existingChildren.map((child) => [child.name, child]));
+    const existingServiceNames = new Set(
+      existingChildren.flatMap((child) => {
+        const prefix = `${parentName}/`;
+        return child.name.startsWith(prefix) ? [child.name.slice(prefix.length)] : [];
+      }),
+    );
+    const currentServiceFingerprints = fingerprintComposeServices(activeComposeProject.services);
+    const deploymentSets = planComposeDeploymentSets({
+      services: activeComposeProject.services,
+      runtimeRoles,
+      selectedServices: config.services,
+      existingServices: existingServiceNames,
+      previousFingerprints: config.previousServiceFingerprints,
+      currentFingerprints: currentServiceFingerprints,
+    });
+    const filteredComposeProject: ComposeProject = {
+      ...activeComposeProject,
+      services: activeComposeProject.services
+        .filter((service) => deploymentSets.includedServices.has(service.name))
+        .map((service) => ({
+          ...service,
+          dependsOn: service.dependsOn?.filter((dependency) =>
+            deploymentSets.includedServices.has(dependency),
+          ),
+          dependsOnConditions: service.dependsOnConditions
+            ? Object.fromEntries(
+                Object.entries(service.dependsOnConditions).filter(([dependency]) =>
+                  deploymentSets.includedServices.has(dependency),
+                ),
+              )
+            : undefined,
+        })),
+    };
+    const trafficCandidates = activeComposeProject.services
       .filter(
         (service) =>
           runtimeRoles.get(service.name) === 'application' &&
@@ -806,9 +851,12 @@ export class ComposePipeline {
     });
 
     const childrenByService = new Map<string, string>();
-    // PR 2: fetch existing children via services.parent_service_id.
-    const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
-    const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
+    for (const child of existingChildren) {
+      const prefix = `${parentName}/`;
+      if (child.name.startsWith(prefix)) {
+        childrenByService.set(child.name.slice(prefix.length), child.id);
+      }
+    }
 
     for (const service of filteredComposeProject.services) {
       const childName = `${parentName}/${service.name}`;
@@ -832,8 +880,12 @@ export class ComposePipeline {
       await this.db.updateProject(childId, {
         runtimeRole: runtimeRoles.get(service.name) ?? 'application',
       });
-      await this.transitionProjectStatus(childId, 'building', 'compose-build-start');
-      this.jobManager?.trackJob(childId, childName);
+      const isExistingPrerequisite =
+        deploymentSets.prerequisites.has(service.name) && Boolean(existing?.container_id);
+      if (!isExistingPrerequisite) {
+        await this.transitionProjectStatus(childId, 'building', 'compose-build-start');
+        this.jobManager?.trackJob(childId, childName);
+      }
     }
 
     // Persist compose `depends_on` into project_dependencies so the
@@ -943,6 +995,8 @@ export class ComposePipeline {
       }
     >();
     const containerNameByService = new Map<string, string>();
+    const reusedServiceNames = new Set<string>();
+    const createdDeploymentServiceNames = new Set<string>();
     let projectNetwork: string | null = null;
     const sharedSecretFiles = this.env
       ? await this.env.getSecretFilesForDeploy(parentProjectId)
@@ -981,6 +1035,7 @@ export class ComposePipeline {
       const servicesRequiringSuccessfulCompletion = new Set<string>();
       const completedServiceNames = new Set<string>();
       const jobFailures = new Map<string, ComposeJobFailedError>();
+      const prerequisiteFailures = new Map<string, ComposePrerequisiteUnhealthyError>();
       for (const service of topology.services) {
         for (const dependency of service.dependsOn) {
           if (
@@ -993,6 +1048,11 @@ export class ComposePipeline {
       }
 
       for (const service of filteredComposeProject.services) {
+        const childName = `${parentName}/${service.name}`;
+        const existing = existingByName.get(childName);
+        const reusesExistingPrerequisite =
+          deploymentSets.prerequisites.has(service.name) && Boolean(existing?.container_id);
+        if (reusesExistingPrerequisite) continue;
         const staleContainerName = composeContainerName(parentName, service.name);
         await this.cleanupComposeContainer(
           staleContainerName,
@@ -1023,6 +1083,51 @@ export class ComposePipeline {
           const containerName = composeContainerName(parentName, service.name);
           containerNameByService.set(service.name, containerName);
           const runtimeRole = runtimeRoles.get(service.name) ?? 'application';
+
+          if (deploymentSets.prerequisites.has(service.name)) {
+            const existing = existingByName.get(`${parentName}/${service.name}`);
+            if (existing?.container_id) {
+              try {
+                const inspected = await this.docker.inspectContainer(existing.container_id);
+                if (!inspected.State.Running) {
+                  await this.docker.startContainer(existing.container_id);
+                }
+                const hostPort = existing.assigned_port;
+                const containerPort = existing.container_port;
+                deploymentByService.set(service.name, {
+                  containerId: existing.container_id,
+                  ports:
+                    hostPort != null && containerPort != null
+                      ? [{ hostPort, containerPort }]
+                      : [],
+                });
+                containerNameByService.set(
+                  service.name,
+                  composeContainerName(parentName, service.name),
+                );
+                reusedServiceNames.add(service.name);
+                await this.db.updateProject(childId, { status: 'running' });
+                buildLog += `[compose reuse ${service.name}] ${existing.container_id.slice(0, 12)}\n`;
+                return { success: true, projectId: childId };
+              } catch (error) {
+                if (!isDockerNotFoundError(error)) {
+                  const reason = error instanceof Error ? error.message : String(error);
+                  const prerequisiteError = new ComposePrerequisiteUnhealthyError(
+                    service.name,
+                    reason,
+                  );
+                  prerequisiteFailures.set(service.name, prerequisiteError);
+                  return {
+                    success: false,
+                    projectId: childId,
+                    error: prerequisiteError.message,
+                  };
+                }
+                // The database row is stale. A missing prerequisite may be
+                // created, but an existing unhealthy resource is never removed.
+              }
+            }
+          }
 
           let allocatedPortMappings: Array<{ hostPort: number; containerPort: number }> = [];
 
@@ -1171,6 +1276,7 @@ export class ComposePipeline {
               containerId,
               ports: portMappings,
             });
+            createdDeploymentServiceNames.add(service.name);
 
             await this.db.updateProject(childId, {
               status: 'running',
@@ -1267,12 +1373,24 @@ export class ComposePipeline {
             return { healthy: true };
           }
 
+          if (deploymentSets.prerequisites.has(service.name)) {
+            const prerequisiteError = new ComposePrerequisiteUnhealthyError(
+              service.name,
+              healthResult.error,
+            );
+            prerequisiteFailures.set(service.name, prerequisiteError);
+            return { healthy: false, error: prerequisiteError.message };
+          }
+
           return {
             healthy: false,
             error: healthResult.error ?? `Service ${service.name} failed its health check`,
           };
         },
         rollbackService: async (service) => {
+          if (reusedServiceNames.has(service.name)) {
+            return;
+          }
           const deployment = deploymentByService.get(service.name);
           const containerName = containerNameByService.get(service.name);
           const childId = childrenByService.get(service.name);
@@ -1333,6 +1451,18 @@ export class ComposePipeline {
         const orchestrationEntry = orchestrationByService.get(service.name);
         const orchestrationStatus = orchestrationEntry?.status;
 
+        if (deployment && reusedServiceNames.has(service.name)) {
+          return {
+            name: service.name,
+            status: orchestrationStatus === 'failed' ? ('error' as const) : ('running' as const),
+            ports: deployment.ports.map(
+              (mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`,
+            ),
+            containerId: deployment.containerId,
+            ...(orchestrationEntry?.error ? { error: orchestrationEntry.error } : {}),
+          };
+        }
+
         if (deployment && orchestrationStatus === 'deployed') {
           return {
             name: service.name,
@@ -1391,6 +1521,7 @@ export class ComposePipeline {
       });
 
       for (const status of reconciledStatuses) {
+        if (reusedServiceNames.has(status.name)) continue;
         const childId = childrenByService.get(status.name);
         if (!childId) {
           continue;
@@ -1439,6 +1570,7 @@ export class ComposePipeline {
         failedOrchestration.length > 0 ||
         partialStateServices.length > 0;
       const failedJob = jobFailures.values().next().value;
+      const failedPrerequisite = prerequisiteFailures.values().next().value;
       const errorMessage =
         failedOrchestration.length > 0 || partialStateServices.length > 0
           ? `One or more services failed to start (${[...failedOrchestration, ...partialStateServices].join('; ')})`
@@ -1533,20 +1665,30 @@ export class ComposePipeline {
               errorCode: failedJob.code,
               details: failedJob.details,
             }
+          : failedPrerequisite
+            ? {
+                errorCode: failedPrerequisite.code,
+                details: failedPrerequisite.details,
+              }
           : {}),
         ...(trafficService
           ? {
               trafficService,
               trafficServiceProjectId: childrenByService.get(trafficService),
-              trafficServicePort: deploymentByService.get(trafficService)?.ports[0]?.hostPort,
+              trafficServicePort:
+                deploymentByService.get(trafficService)?.ports[0]?.hostPort ??
+                existingByName.get(`${parentName}/${trafficService}`)?.assigned_port ??
+                undefined,
             }
           : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
+        serviceFingerprints: currentServiceFingerprints,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
       for (const [serviceName, deployment] of deploymentByService.entries()) {
+        if (!createdDeploymentServiceNames.has(serviceName)) continue;
         try {
           await this.docker.stopContainer(deployment.containerId);
         } catch (stopError) {
@@ -1573,7 +1715,10 @@ export class ComposePipeline {
       }
 
       await this.transitionProjectStatus(parentProjectId, 'error', 'compose-orchestration-error');
-      for (const childId of childrenByService.values()) {
+      for (const service of filteredComposeProject.services) {
+        if (reusedServiceNames.has(service.name)) continue;
+        const childId = childrenByService.get(service.name);
+        if (!childId) continue;
         await this.db.updateProject(childId, {
           status: 'error',
           containerId: null,
@@ -1608,6 +1753,7 @@ export class ComposePipeline {
         error: errorMsg,
         ...(trafficService ? { trafficService } : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
+        serviceFingerprints: currentServiceFingerprints,
       };
     }
   }

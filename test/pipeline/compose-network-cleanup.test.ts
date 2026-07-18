@@ -107,6 +107,7 @@ function createFakeDocker(overrides: Partial<Docker> = {}): Docker {
       .mockImplementation(async (config: { name: string }) => `container-${config.name}`),
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
     inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true, ExitCode: 0 } }),
+    startContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
@@ -184,6 +185,105 @@ describe('compose network cleanup', () => {
       assigned_port: expect.any(Number),
       container_port: 3000,
     });
+  });
+
+  it('replaces only the selected application and reuses dependency containers', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres:16\n  api:\n    image: example/api\n    depends_on:\n      - db\n  web:\n    image: example/web\n    expose:\n      - "3000"\n    depends_on:\n      - api\n`,
+      'utf8',
+    );
+    let runSequence = 0;
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) =>
+        `container-${config.name}-${String(++runSequence)}`,
+      );
+    const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    };
+
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+    const firstContainers = Object.fromEntries(
+      [...db._projects.values()]
+        .filter((project) => project.name.startsWith('stack/'))
+        .map((project) => [project.name.slice('stack/'.length), project.container_id]),
+    );
+
+    const second = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['web'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+
+    expect(second.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledTimes(4);
+    expect(runComposeService.mock.calls[3]?.[0]).toEqual(
+      expect.objectContaining({ name: 'ol-stack-web' }),
+    );
+    const secondContainers = Object.fromEntries(
+      [...db._projects.values()]
+        .filter((project) => project.name.startsWith('stack/'))
+        .map((project) => [project.name.slice('stack/'.length), project.container_id]),
+    );
+    expect(secondContainers['db']).toBe(firstContainers['db']);
+    expect(secondContainers['api']).toBe(firstContainers['api']);
+    expect(secondContainers['web']).not.toBe(firstContainers['web']);
+  });
+
+  it('blocks selected replacement when a reused resource is unhealthy', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres:16\n  web:\n    image: example/web\n    expose:\n      - "3000"\n    depends_on:\n      - db\n`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const waitForHealthy = vi.fn().mockResolvedValue({ healthy: true });
+    const docker = createFakeDocker({
+      runComposeService,
+      waitForHealthy,
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+    expect(first.success).toBe(true);
+    const callsAfterFirstDeploy = runComposeService.mock.calls.length;
+    waitForHealthy.mockResolvedValueOnce({ healthy: false, error: 'database is unhealthy' });
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+      _parentId: first.parentProjectId,
+      services: ['web'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+
+    expect(second.success).toBe(false);
+    expect(second.errorCode).toBe('COMPOSE_PREREQUISITE_UNHEALTHY');
+    expect(runComposeService).toHaveBeenCalledTimes(callsAfterFirstDeploy);
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-ol-stack-db',
+    );
   });
 
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
