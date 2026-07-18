@@ -287,10 +287,8 @@ function App() {
                   <Route path="/settings/web-server" element={<WebServerSettings />} />
                   <Route path="/settings/git-providers" element={<GitProvidersSettings />} />
                   <Route path="/settings/ai-providers" element={<AiProvidersSettings />} />
-                  {/* SSH Keys + Notifications are hidden in the v0.1
-                      sidebar but the routes stay mounted: the SSH Keys
-                      page is a deliberate "lands in v0.2" stub (the file
-                      docstring pins this), and Notifications has a live
+                  {/* Repository Keys is now a first-class settings route.
+                      Notifications stays mounted: it has a live
                       backend at `/api/settings/notifications/webhook`
                       that v0.2 will resurface. Direct-URL bookmarks keep
                       working. */}

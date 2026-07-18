@@ -24,6 +24,7 @@
  * canonical kind drives routing/handler dispatch.
  */
 import type { ActivityEvent } from './agentActivity';
+import type { GitCredentialSummary } from './api/git-credentials';
 
 export type ServiceHealth = 'healthy' | 'crashed' | 'deploying';
 
@@ -59,6 +60,7 @@ export interface ServiceNode {
   imageUrl?: string | null;
   imageCmd?: string[] | null;
   containerPort?: number | null;
+  gitCredential?: GitCredentialSummary | null;
 }
 
 export interface ProjectSummary {

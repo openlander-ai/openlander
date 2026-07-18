@@ -4,7 +4,7 @@
  * v0.1 final design lock (post-tab fold):
  *
  *   Workspace (6):  Home · Your Agent · Projects · Activity · Monitoring · Web Server
- *   Settings (1):   Git Providers
+ *   Settings: Git Providers · Repository Keys · AI Providers
  *   Account footer: admin → popover (Change password · Sign out)
  *
  * Deployments is no longer a top-level nav item — it was a saved
@@ -12,8 +12,8 @@
  * tabs inside the Activity page. Old `/activity?type=deploy` URLs
  * still route to the same view; the sidebar entry is just gone.
  *
- * Removed in v0.1: Logs (lives only inside resource detail), SSH Keys (→ v0.2),
- * Notifications (→ v0.2). MCP Server item folded into Workspace as "Your Agent"
+ * Removed in v0.1: Logs (lives only inside resource detail), Notifications (→ v0.2).
+ * MCP Server item folded into Workspace as "Your Agent"
  * pointing at /mcp-server. Cloudflare Tunnel surface deferred to v0.2.
  */
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -26,6 +26,7 @@ import {
   Bot,
   Code2,
   BrainCircuit,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -120,6 +121,13 @@ const SECTIONS: NavSection[] = [
         icon: Code2,
         to: '/settings/git-providers',
         matches: startsWith('/settings/git-providers'),
+      },
+      {
+        id: 'repository-keys',
+        label: 'Repository Keys',
+        icon: KeyRound,
+        to: '/settings/ssh-keys',
+        matches: startsWith('/settings/ssh-keys'),
       },
       {
         id: 'ai-providers',

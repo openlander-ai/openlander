@@ -100,6 +100,7 @@ export type DeployServiceInput =
       dockerfilePath?: string;
       dockerTarget?: string;
       buildContext?: string;
+      gitCredentialId?: string;
     }
   | {
       source: 'image';
@@ -131,6 +132,7 @@ export async function deployService(input: DeployServiceInput): Promise<DeploySe
     body.dockerfile_path = input.dockerfilePath;
     body.docker_target = input.dockerTarget;
     body.build_context = input.buildContext;
+    body.git_credential_id = input.gitCredentialId;
   } else {
     body.image_url = input.imageUrl;
     body.port = input.port;

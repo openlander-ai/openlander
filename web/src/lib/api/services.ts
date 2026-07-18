@@ -1,6 +1,7 @@
 import type { ServiceHealth } from '../projectTopology';
 import { apiGet, apiPost, apiPostVoid, apiPatch, apiDelete } from './client';
 import { fetchWithAuth } from './auth';
+import type { GitCredentialSummary } from './git-credentials';
 
 export interface ServiceTemplate {
   id: string;
@@ -115,6 +116,7 @@ export interface GroupService {
   containerPort?: number | null;
   createdAt?: string;
   updatedAt?: string;
+  gitCredential?: GitCredentialSummary | null;
 }
 
 interface BackendGroupService {
@@ -144,6 +146,7 @@ interface BackendGroupService {
   container_port?: number | null;
   created_at?: string;
   updated_at?: string;
+  gitCredential?: GitCredentialSummary | null;
 }
 
 function normalizeGroupService(raw: BackendGroupService): GroupService {
@@ -170,6 +173,7 @@ function normalizeGroupService(raw: BackendGroupService): GroupService {
     containerPort: raw.containerPort ?? raw.container_port ?? null,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
+    gitCredential: raw.gitCredential ?? null,
   };
 }
 
@@ -184,6 +188,7 @@ export interface UpdateGroupServiceInput {
   imageUrl?: string | null;
   imageCmd?: string | string[] | null;
   containerPort?: number | null;
+  gitCredentialId?: string | null;
 }
 
 export async function listGroupServices(
