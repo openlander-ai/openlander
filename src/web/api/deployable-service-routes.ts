@@ -133,18 +133,30 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       ? await ctx.env.getAllForService(project.id, service.id)
       : await ctx.env.getAll(project.id);
     const gitCredentialManager = (ctx as Partial<AppContext>).gitCredentials;
-    const [environments, deployLogs, serviceRecords, domainMappingsByService, gitCredential] =
-      await Promise.all([
-        ctx.db.getEnvironmentsByProject(project.id),
-        service
-          ? ctx.db.getDeployLogsForService(service.id, 5)
-          : ctx.db.getDeployLogs(project.id, 5),
-        loadServiceViewRecords(ctx.db, [project]),
-        loadDomainMappingsByService(ctx, service ? [service] : []),
-        service?.git_credential_id && gitCredentialManager
-          ? gitCredentialManager.get(service.git_credential_id)
-          : null,
-      ]);
+    const [
+      environments,
+      deployLogs,
+      serviceRecords,
+      domainMappingsByService,
+      gitCredential,
+      composeSiblings,
+    ] = await Promise.all([
+      ctx.db.getEnvironmentsByProject(project.id),
+      service ? ctx.db.getDeployLogsForService(service.id, 5) : ctx.db.getDeployLogs(project.id, 5),
+      loadServiceViewRecords(ctx.db, [project]),
+      loadDomainMappingsByService(ctx, service ? [service] : []),
+      service?.git_credential_id && gitCredentialManager
+        ? gitCredentialManager.get(service.git_credential_id)
+        : null,
+      service?.kind === 'compose-child' && service.parent_service_id
+        ? ctx.db.getComposeChildren(service.parent_service_id)
+        : Promise.resolve([]),
+    ]);
+    const detailTrafficCandidates = composeSiblings.filter(
+      (sibling) => sibling.runtime_role === 'application' && sibling.assigned_port != null,
+    );
+    const detailTrafficTargetId =
+      detailTrafficCandidates.length === 1 ? detailTrafficCandidates[0]?.id : undefined;
 
     return c.json({
       ...mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined),
@@ -155,6 +167,22 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
               autoRouteName: getDeployableServiceAutoRouteName(project, service),
             }),
             gitCredential: gitCredential ? gitCredentialSummary(gitCredential) : null,
+            ...(service.kind === 'compose-child'
+              ? {
+                  runtime_role: service.runtime_role,
+                  lifecycle: serviceLifecycle(service),
+                  health_strategy: serviceHealthStrategy(service),
+                  is_traffic_target: service.id === detailTrafficTargetId,
+                  ...(deployLogs[0]
+                    ? {
+                        last_deploy: {
+                          status: deployLogs[0].status,
+                          created_at: deployLogs[0].created_at,
+                        },
+                      }
+                    : {}),
+                }
+              : {}),
           }
         : null,
       environments: environments.map((env) => mapEnvironment(project.name, env)),

@@ -546,6 +546,57 @@ describe('createDeployableServiceRoutes', () => {
     });
   });
 
+  it('returns Compose child runtime metadata on service detail', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({
+      id: 'group-1__db__svc',
+      name: 'workspace/db',
+      kind: 'compose-child',
+      parent_service_id: 'group-1__svc',
+      runtime_role: 'resource',
+      health_check_strategy: 'tcp',
+      assigned_port: null,
+      container_port: 5432,
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getService: vi.fn(async () => service),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        getDeployLogsForService: vi.fn(async () => [
+          {
+            id: 'deploy-db',
+            status: 'success',
+            created_at: '2026-01-02T00:00:00.000Z',
+          },
+        ]),
+        getComposeChildren: vi.fn(async () => [service]),
+        getServices: vi.fn(async () => [service]),
+      },
+      env: {
+        getAllForService: vi.fn(async () => []),
+      },
+    });
+
+    const res = await app.request(`/api/projects/${project.id}/services/${service.id}`);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      service: {
+        id: service.id,
+        runtime_role: 'resource',
+        lifecycle: 'long_running',
+        health_strategy: 'tcp',
+        is_traffic_target: false,
+        last_deploy: {
+          status: 'success',
+          created_at: '2026-01-02T00:00:00.000Z',
+        },
+      },
+    });
+  });
+
   it('updates service source/build fields', async () => {
     const project = makeProjectRow();
     const original = makeServiceRow();
