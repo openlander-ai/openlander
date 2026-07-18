@@ -217,6 +217,20 @@ describe('GitCredentialManager', () => {
     expect(db.used).toEqual([created.id]);
   });
 
+  it('disables SSH IP QoS for Deploy Key clones', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(created.id, { status: 'verified' });
+
+    const gitSshCommand = await manager.runWithCloneCredential(
+      { repoUrl: created.repository_url, credentialId: created.id },
+      async (auth) => auth?.gitSshCommand,
+    );
+
+    expect(gitSshCommand).toContain('-o IPQoS=none');
+  });
+
   it('prefers an existing service binding and requires explicit selection for ambiguous matches', async () => {
     const db = new MemoryGitCredentialDb();
     const manager = new GitCredentialManager(db, MASTER_KEY);

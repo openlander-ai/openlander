@@ -146,8 +146,8 @@ export type VerifyGitRemote = (
   paths: { keyPath: string; knownHostsPath: string },
 ) => Promise<{ stdout: string }>;
 
-const verifyGitRemote: VerifyGitRemote = async (sshUrl, { keyPath, knownHostsPath }) => {
-  const sshCommand = [
+function buildGitSshCommand(keyPath: string, knownHostsPath: string): string {
+  return [
     'ssh',
     '-F',
     '/dev/null',
@@ -158,10 +158,16 @@ const verifyGitRemote: VerifyGitRemote = async (sshUrl, { keyPath, knownHostsPat
     '-o',
     'IdentitiesOnly=yes',
     '-o',
+    'IPQoS=none',
+    '-o',
     'StrictHostKeyChecking=yes',
     '-o',
     `UserKnownHostsFile=${shellQuote(knownHostsPath)}`,
   ].join(' ');
+}
+
+const verifyGitRemote: VerifyGitRemote = async (sshUrl, { keyPath, knownHostsPath }) => {
+  const sshCommand = buildGitSshCommand(keyPath, knownHostsPath);
   return await execFile('git', ['ls-remote', '--symref', sshUrl, 'HEAD'], {
     timeout: COMMAND_TIMEOUT_MS,
     maxBuffer: 1024 * 1024,
@@ -315,21 +321,7 @@ export class GitCredentialManager {
       this.masterKey,
     );
     const result = await withPrivateKey(privateKey, async ({ keyPath, knownHostsPath }) => {
-      const gitSshCommand = [
-        'ssh',
-        '-F',
-        '/dev/null',
-        '-i',
-        shellQuote(keyPath),
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        'IdentitiesOnly=yes',
-        '-o',
-        'StrictHostKeyChecking=yes',
-        '-o',
-        `UserKnownHostsFile=${shellQuote(knownHostsPath)}`,
-      ].join(' ');
+      const gitSshCommand = buildGitSshCommand(keyPath, knownHostsPath);
       return await callback({
         credentialId: selected.id,
         cloneUrl: repository.sshUrl,
