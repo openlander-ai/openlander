@@ -697,6 +697,7 @@ export class ProjectRepo {
       dockerfilePath: string | null;
       dockerTarget: string | null;
       imageCmd: string | null;
+      healthCheckStrategy: ServiceRow['health_check_strategy'];
       healthCheckPath: string | null;
       isPreview: number | null;
       prNumber: number | null;
@@ -705,6 +706,7 @@ export class ProjectRepo {
       parentProjectId: string | null;
       recoveringStartedAt: string | null;
       pendingFix: string | null;
+      runtimeRole: ServiceRow['runtime_role'];
       // Group metadata fields — live on projects.
       displayName: string;
       description: string | null;
@@ -746,6 +748,8 @@ export class ProjectRepo {
     if (updates.dockerfilePath !== undefined) svcSetValues.dockerfile_path = updates.dockerfilePath;
     if (updates.dockerTarget !== undefined) svcSetValues.docker_target = updates.dockerTarget;
     if (updates.imageCmd !== undefined) svcSetValues.image_cmd = updates.imageCmd;
+    if (updates.healthCheckStrategy !== undefined)
+      svcSetValues.health_check_strategy = updates.healthCheckStrategy;
     if (updates.healthCheckPath !== undefined)
       svcSetValues.health_check_path = updates.healthCheckPath;
     if (updates.isPreview !== undefined) svcSetValues.is_preview = updates.isPreview;
@@ -761,6 +765,7 @@ export class ProjectRepo {
     if (updates.recoveringStartedAt !== undefined)
       svcSetValues.recovering_started_at = updates.recoveringStartedAt;
     if (updates.pendingFix !== undefined) svcSetValues.pending_fix = updates.pendingFix;
+    if (updates.runtimeRole !== undefined) svcSetValues.runtime_role = updates.runtimeRole;
 
     if (Object.keys(svcSetValues).length > 0) {
       await this.db

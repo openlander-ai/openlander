@@ -182,6 +182,7 @@ export class ServiceRepo {
         project_id: projectId,
         name: service.name,
         kind: normalizeKind(service.type),
+        runtime_role: 'resource',
         source: 'image',
         image_url: service.image,
         assigned_port: service.port,
@@ -213,6 +214,7 @@ export class ServiceRepo {
         project_id: ORPHAN_MANAGED_GROUP_ID,
         name: service.name,
         kind: normalizeKind(service.kind),
+        runtime_role: 'resource',
         image_url: service.imageUrl,
         assigned_port: service.assignedPort ?? null,
         container_id: service.containerId,
@@ -334,6 +336,7 @@ export class ServiceRepo {
       repoUrl: string | null;
       branch: string | null;
       kind: ServiceRow['kind'];
+      runtimeRole: ServiceRow['runtime_role'];
       source: string;
       dockerfilePath: string | null;
       dockerTarget: string | null;
@@ -342,6 +345,7 @@ export class ServiceRepo {
       containerPort: number | null;
       imageCmd: string | null;
       gitCredentialId: string | null;
+      healthCheckStrategy: ServiceRow['health_check_strategy'];
     }>,
   ): Promise<void> {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -379,11 +383,17 @@ export class ServiceRepo {
     if (updates.gitCredentialId !== undefined) {
       setValues.git_credential_id = updates.gitCredentialId;
     }
+    if (updates.healthCheckStrategy !== undefined) {
+      setValues.health_check_strategy = updates.healthCheckStrategy;
+    }
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;
     }
     if (updates.kind !== undefined) {
       setValues.kind = updates.kind;
+    }
+    if (updates.runtimeRole !== undefined) {
+      setValues.runtime_role = updates.runtimeRole;
     }
     if (updates.source !== undefined) {
       setValues.source = updates.source;

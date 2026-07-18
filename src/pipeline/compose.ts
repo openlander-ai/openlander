@@ -18,7 +18,7 @@ import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
-import { ServiceConfigError, isDockerNotFoundError } from '../errors.js';
+import { ComposeJobFailedError, ServiceConfigError, isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -61,6 +61,46 @@ export interface ComposeService {
     retries?: number;
     start_period?: string;
   };
+}
+
+export type ComposeRuntimeRole = 'application' | 'job' | 'resource';
+
+const RESOURCE_SIGNATURES: ReadonlyArray<{ pattern: RegExp; port: number }> = [
+  { pattern: /(?:postgres|pgvector)/i, port: 5432 },
+  { pattern: /(?:mysql|mariadb)/i, port: 3306 },
+  { pattern: /redis/i, port: 6379 },
+  { pattern: /mongo/i, port: 27017 },
+  { pattern: /rabbitmq/i, port: 5672 },
+  { pattern: /minio/i, port: 9000 },
+];
+
+export function inferComposeRuntimeRoles(
+  services: readonly ComposeService[],
+): Map<string, ComposeRuntimeRole> {
+  const jobs = new Set<string>();
+  for (const service of services) {
+    for (const dependency of service.dependsOn ?? []) {
+      if (service.dependsOnConditions?.[dependency] === 'service_completed_successfully') {
+        jobs.add(dependency);
+      }
+    }
+  }
+
+  return new Map(
+    services.map((service) => {
+      if (jobs.has(service.name)) return [service.name, 'job'] as const;
+      const signature = `${service.name} ${service.image ?? ''}`;
+      const role = RESOURCE_SIGNATURES.some(({ pattern }) => pattern.test(signature))
+        ? 'resource'
+        : 'application';
+      return [service.name, role] as const;
+    }),
+  );
+}
+
+export function knownComposeResourcePort(service: ComposeService): number | null {
+  const signature = `${service.name} ${service.image ?? ''}`;
+  return RESOURCE_SIGNATURES.find(({ pattern }) => pattern.test(signature))?.port ?? null;
 }
 
 export type ComposeDependencyCondition =
@@ -191,6 +231,8 @@ export interface ComposeDeployResult {
   services: ComposeServiceStatus[];
   buildDurationMs: number;
   error?: string;
+  errorCode?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface ComposeServiceStatus {
@@ -648,6 +690,7 @@ export class ComposePipeline {
 
     const composeProject = this.parseComposeFile(config.composePath);
     const filteredComposeProject = this.filteredComposeProjectForConfig(config, composeProject);
+    const runtimeRoles = inferComposeRuntimeRoles(filteredComposeProject.services);
 
     const envVars = { ...(config.envVars ?? {}) };
     this.validateComposeInterpolation(filteredComposeProject, envVars);
@@ -711,6 +754,9 @@ export class ComposePipeline {
       }
 
       childrenByService.set(service.name, childId);
+      await this.db.updateProject(childId, {
+        runtimeRole: runtimeRoles.get(service.name) ?? 'application',
+      });
       await this.transitionProjectStatus(childId, 'building', 'compose-build-start');
       this.jobManager?.trackJob(childId, childName);
     }
@@ -859,6 +905,7 @@ export class ComposePipeline {
 
       const servicesRequiringSuccessfulCompletion = new Set<string>();
       const completedServiceNames = new Set<string>();
+      const jobFailures = new Map<string, ComposeJobFailedError>();
       for (const service of topology.services) {
         for (const dependency of service.dependsOn) {
           if (
@@ -900,6 +947,7 @@ export class ComposePipeline {
 
           const containerName = composeContainerName(parentName, service.name);
           containerNameByService.set(service.name, containerName);
+          const runtimeRole = runtimeRoles.get(service.name) ?? 'application';
 
           let allocatedPortMappings: Array<{ hostPort: number; containerPort: number }> = [];
 
@@ -931,25 +979,34 @@ export class ComposePipeline {
             this.jobManager?.updatePhase(childId, 'starting');
             await this.docker.safeRemoveContainer(containerName);
 
-            let portMappings = await this.allocateComposePortMappings(
+            const declaredContainerPorts = this.resolveServiceContainerPorts(
               composeService,
               envVars,
-              envType,
             );
+            const shouldExposeApplication =
+              runtimeRole === 'application' && declaredContainerPorts.length > 0;
+            let portMappings = shouldExposeApplication
+              ? await this.allocateComposePortMappings(composeService, envVars, envType)
+              : [];
             allocatedPortMappings = portMappings;
             let primaryPort = portMappings[0];
-            if (!primaryPort) {
-              throw new Error(`Failed to allocate a port for Compose service ${service.name}`);
-            }
+            const internalContainerPort =
+              runtimeRole === 'job'
+                ? null
+                : (primaryPort?.containerPort ??
+                  declaredContainerPorts[0] ??
+                  (runtimeRole === 'resource' ? knownComposeResourcePort(composeService) : null));
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
-            const traefikLabels = buildTraefikLabels(
-              routeName,
-              primaryPort.containerPort,
-              undefined,
-              envType,
-              activeProjectNetwork,
-              this.routeProvider,
-            );
+            const traefikLabels = primaryPort
+              ? buildTraefikLabels(
+                  routeName,
+                  primaryPort.containerPort,
+                  undefined,
+                  envType,
+                  activeProjectNetwork,
+                  this.routeProvider,
+                )
+              : {};
             const resolvedEnvVars = this.resolveComposeServiceEnvVars(
               composeService,
               envVars,
@@ -970,15 +1027,24 @@ export class ComposePipeline {
                 containerId = await this.docker.runComposeService({
                   imageTag,
                   name: containerName,
-                  port: primaryPort.hostPort,
-                  containerPort: primaryPort.containerPort,
+                  ...(primaryPort
+                    ? {
+                        port: primaryPort.hostPort,
+                        containerPort: primaryPort.containerPort,
+                      }
+                    : internalContainerPort
+                      ? {
+                          containerPort: internalContainerPort,
+                          exposedPorts: [internalContainerPort],
+                        }
+                      : {}),
                   additionalPorts: portMappings.slice(1),
                   envVars: resolvedEnvVars,
                   traefikLabels,
                   secretFiles: sharedSecretFiles,
                   command: composeService.command,
                   entrypoint: composeService.entrypoint,
-                  restart: composeService.restart,
+                  restart: runtimeRole === 'job' ? 'no' : composeService.restart,
                   healthcheck,
                   networks: [activeProjectNetwork],
                   aliases: [service.name],
@@ -1035,9 +1101,22 @@ export class ComposePipeline {
               status: 'running',
               containerId,
               containerName,
-              assignedPort: primaryPort.hostPort,
-              containerPort: primaryPort.containerPort,
+              assignedPort: primaryPort?.hostPort ?? null,
+              containerPort: internalContainerPort,
               imageTag,
+              runtimeRole,
+              healthCheckStrategy:
+                runtimeRole === 'job'
+                  ? 'none'
+                  : runtimeRole === 'resource'
+                    ? composeService.healthcheck
+                      ? 'exec'
+                      : internalContainerPort
+                        ? 'tcp'
+                        : 'none'
+                    : primaryPort
+                      ? 'http'
+                      : 'none',
             });
 
             // Release reservation AFTER the DB write so subsequent allocatePort
@@ -1088,10 +1167,18 @@ export class ComposePipeline {
             };
           }
 
-          if (servicesRequiringSuccessfulCompletion.has(service.name)) {
+          if (
+            runtimeRoles.get(service.name) === 'job' ||
+            servicesRequiringSuccessfulCompletion.has(service.name)
+          ) {
             const completion = await this.waitForComposeJob(deployment.containerId, 120_000);
             if (completion.healthy) {
               completedServiceNames.add(service.name);
+            } else {
+              jobFailures.set(
+                service.name,
+                new ComposeJobFailedError(service.name, completion.exitCode, completion.error),
+              );
             }
             return completion;
           }
@@ -1276,6 +1363,7 @@ export class ComposePipeline {
         reconciledStatuses.some((status) => status.status === 'error') ||
         failedOrchestration.length > 0 ||
         partialStateServices.length > 0;
+      const failedJob = jobFailures.values().next().value;
       const errorMessage =
         failedOrchestration.length > 0 || partialStateServices.length > 0
           ? `One or more services failed to start (${[...failedOrchestration, ...partialStateServices].join('; ')})`
@@ -1335,6 +1423,12 @@ export class ComposePipeline {
         services: reconciledStatuses,
         buildDurationMs: Date.now() - startTime,
         error: hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
+        ...(failedJob
+          ? {
+              errorCode: failedJob.code,
+              details: failedJob.details,
+            }
+          : {}),
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1689,27 +1783,32 @@ export class ComposePipeline {
   private async waitForComposeJob(
     containerId: string,
     timeoutMs: number,
-  ): Promise<{ healthy: boolean; error?: string }> {
+  ): Promise<{ healthy: boolean; error?: string; exitCode: number | null }> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       try {
         const info = await this.docker.inspectContainer(containerId);
         if (!info.State.Running) {
           return info.State.ExitCode === 0
-            ? { healthy: true }
+            ? { healthy: true, exitCode: 0 }
             : {
                 healthy: false,
                 error: `Compose job exited with code ${String(info.State.ExitCode)}`,
+                exitCode: info.State.ExitCode,
               };
         }
       } catch (error) {
         if (isDockerNotFoundError(error)) {
-          return { healthy: false, error: 'Compose job container not found' };
+          return { healthy: false, error: 'Compose job container not found', exitCode: null };
         }
       }
       await sleep(500);
     }
-    return { healthy: false, error: 'Compose job did not complete before timeout' };
+    return {
+      healthy: false,
+      error: 'Compose job did not complete before timeout',
+      exitCode: null,
+    };
   }
 
   private async resolveComposeServiceBinds(

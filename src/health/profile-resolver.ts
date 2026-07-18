@@ -7,6 +7,20 @@ export function resolveMonitoringProfile(
   deployable?: ServiceRow | null,
 ): MonitoringProfile {
   const view = serviceViewFromRows(project, deployable);
+  const runtimeRole = deployable?.runtime_role ?? 'application';
+  if (runtimeRole === 'job' || runtimeRole === 'resource') {
+    return {
+      projectType: 'worker',
+      exposeViaTraefik: false,
+      health: {
+        strategy: 'none',
+        timeoutMs: 5000,
+        intervalMs: 30000,
+        failureThreshold: 3,
+        dockerHealthPolicy: 'prefer',
+      },
+    };
+  }
   const projectType = view.projectType ?? 'web';
 
   const defaultsByType: Record<

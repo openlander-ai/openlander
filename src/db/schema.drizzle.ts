@@ -330,6 +330,11 @@ export const services = pgTable(
     parent_service_id: text('parent_service_id').references((): AnyPgColumn => services.id, {
       onDelete: 'cascade',
     }),
+    runtime_role: text('runtime_role', {
+      enum: ['application', 'job', 'resource'],
+    })
+      .notNull()
+      .default('application'),
     // Deployable-specific (NULL for managed)
     status: text('status', { enum: ['running', 'stopped', 'error', 'recovering'] }).default(
       'stopped',
@@ -388,6 +393,11 @@ export const services = pgTable(
     index('idx_services_project').on(table.project_id),
     index('idx_services_kind').on(table.kind),
     index('idx_services_parent').on(table.parent_service_id),
+    index('idx_services_runtime_role').on(table.runtime_role),
+    check(
+      'services_runtime_role_check',
+      sql`${table.runtime_role} IN ('application', 'job', 'resource')`,
+    ),
     index('idx_services_git_credential').on(table.git_credential_id),
   ],
 );

@@ -289,4 +289,31 @@ describe('Docker sandbox race prevention', () => {
       Container: 'ctr-compose',
     });
   });
+
+  it('runComposeService supports internal-only containers without host port bindings', async () => {
+    const container = { id: 'ctr-resource', start: vi.fn().mockResolvedValue(undefined) };
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const docker = new Docker('/var/run/docker.sock', 'openlander');
+    await docker.runComposeService({
+      imageTag: 'postgres:16',
+      name: 'ol-demo-stack-db',
+      containerPort: 5432,
+      exposedPorts: [5432],
+      envVars: {},
+      traefikLabels: {},
+      networks: ['ol-demo-stack'],
+      aliases: ['db'],
+    });
+
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ExposedPorts: { '5432/tcp': {} },
+        HostConfig: expect.objectContaining({
+          PortBindings: undefined,
+          NetworkMode: 'ol-demo-stack',
+        }),
+      }),
+    );
+  });
 });

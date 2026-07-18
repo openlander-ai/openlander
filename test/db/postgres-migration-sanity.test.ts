@@ -263,6 +263,7 @@ describe('Postgres migration sanity gate', () => {
       '0008_ai_ops_pending_inputs',
       '0009_data_source_access',
       '0010_git_credentials',
+      '0011_service_runtime_role',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -276,6 +277,7 @@ describe('Postgres migration sanity gate', () => {
       '0008_ai_ops_pending_inputs.sql',
       '0009_data_source_access.sql',
       '0010_git_credentials.sql',
+      '0011_service_runtime_role.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -401,6 +403,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 12 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -421,7 +430,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 12 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 13 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

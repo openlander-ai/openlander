@@ -209,4 +209,23 @@ describe('resolveMonitoringProfile', () => {
     expect(profile.health.strategy).toBe('exec');
     expect(profile.health.path).toBeUndefined();
   });
+
+  it.each(['job', 'resource'] as const)(
+    'disables HTTP routing and probes for %s services',
+    (runtimeRole) => {
+      const project = makeProject({ project_type: 'web' });
+      const service = makeService({
+        runtime_role: runtimeRole,
+        project_type: 'web',
+        health_check_strategy: 'http',
+      });
+
+      const profile = resolveMonitoringProfile(project, service);
+
+      expect(profile.projectType).toBe('worker');
+      expect(profile.exposeViaTraefik).toBe(false);
+      expect(profile.health.strategy).toBe('none');
+      expect(profile.health.dockerHealthPolicy).toBe('prefer');
+    },
+  );
 });

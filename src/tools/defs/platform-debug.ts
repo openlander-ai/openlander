@@ -58,6 +58,7 @@ function safeServiceRow(row: ServiceRow) {
     name: row.name,
     kind: row.kind,
     parent_service_id: row.parent_service_id,
+    runtime_role: row.runtime_role,
     status: row.status,
     visibility: row.visibility,
     assigned_port: row.assigned_port,
