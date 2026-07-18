@@ -749,6 +749,21 @@ export const translations = {
       serviceIdTooltip:
         'Compatibility id for the selected Application/Compose/Database/Cache/Storage resource. Pass this service_id to MCP follow-up actions.',
     },
+    composeService: {
+      role: {
+        application: 'Application',
+        job: 'Job',
+        resource: 'Resource',
+      },
+      trafficTarget: 'Traffic target',
+      lastDeploy: 'Last deploy: {status} · {time}',
+      aggregate: {
+        running: 'Compose running',
+        degraded: 'Compose degraded',
+        error: 'Compose error',
+      },
+      aggregateHint: 'Check the unhealthy service or failed job below.',
+    },
     dataAccessIndicator: {
       enabled: 'Agent read: On',
       disabled: 'Agent read: Off',
@@ -1815,6 +1830,9 @@ export const translations = {
     infrastructureService: 'Database/Cache/Storage resource',
   },
   serviceDetail: {
+    composeChild: {
+      observationOnly: 'Compose child · observation only',
+    },
     runtime: {
       cpuSub: 'Current usage',
       memorySub: 'Current usage',

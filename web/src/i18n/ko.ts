@@ -846,6 +846,21 @@ export const translations = {
       serviceIdTooltip:
         '선택한 Application/Compose/Database/Cache/Storage 리소스의 호환 id입니다. MCP 후속 작업에는 이 service_id를 전달하세요.',
     },
+    composeService: {
+      role: {
+        application: '애플리케이션',
+        job: '작업',
+        resource: '리소스',
+      },
+      trafficTarget: '대표 트래픽 대상',
+      lastDeploy: '최근 배포: {status} · {time}',
+      aggregate: {
+        running: 'Compose 정상',
+        degraded: 'Compose 성능 저하',
+        error: 'Compose 오류',
+      },
+      aggregateHint: '아래의 비정상 서비스 또는 실패한 작업을 확인하세요.',
+    },
     dataAccessIndicator: {
       enabled: 'Agent read: On',
       disabled: 'Agent read: Off',
@@ -2046,6 +2061,9 @@ export const translations = {
     infrastructureService: 'Database/Cache/Storage resource',
   },
   serviceDetail: {
+    composeChild: {
+      observationOnly: 'Compose 자식 · 관찰 전용',
+    },
     runtime: {
       cpuSub: '현재 사용량',
       memorySub: '현재 사용량',
