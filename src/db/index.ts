@@ -39,6 +39,7 @@ import { ActivityLogRepo } from './repos/activity-log.repo.js';
 import { ServiceMetricRepo } from './repos/service-metric.repo.js';
 import { SettingsRepo } from './repos/settings.repo.js';
 import { PatTokenRepo } from './repos/pat-token.repo.js';
+import { GitCredentialRepo } from './repos/git-credential.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -73,6 +74,9 @@ export type {
   CircuitBreakerRow,
   ActivityLogRow,
   PatTokenRow,
+  GitCredentialRow,
+  GitCredentialStatus,
+  GitCredentialServiceUsage,
 } from './types.js';
 
 const log = createModuleLogger('db-migration');
@@ -283,6 +287,7 @@ export class Database implements AuthDatabase {
   private readonly serviceMetricRepo: ServiceMetricRepo;
   private readonly settingsRepo: SettingsRepo;
   private readonly patTokenRepo: PatTokenRepo;
+  private readonly gitCredentialRepo: GitCredentialRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -320,6 +325,7 @@ export class Database implements AuthDatabase {
     this.serviceMetricRepo = new ServiceMetricRepo(this.db, this.client);
     this.settingsRepo = new SettingsRepo(this.db, this.client);
     this.patTokenRepo = new PatTokenRepo(this.db, this.client);
+    this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -418,6 +424,14 @@ export class Database implements AuthDatabase {
   getSecretFilesForDeploy(projectId: string) { return this.secretFileRepo.getSecretFilesForDeploy(projectId); }
   upsertSecretFile(projectId: string | null, filename: string, encryptedContent: string, iv: string, mountPath: string = '/run/secrets') { return this.secretFileRepo.upsertSecretFile(projectId, filename, encryptedContent, iv, mountPath); }
   deleteSecretFile(projectId: string | null, filename: string) { return this.secretFileRepo.deleteSecretFile(projectId, filename); }
+  createGitCredential(input: Parameters<GitCredentialRepo['create']>[0]) { return this.gitCredentialRepo.create(input); }
+  getGitCredential(id: string) { return this.gitCredentialRepo.getById(id); }
+  listGitCredentials(filters?: Parameters<GitCredentialRepo['list']>[0]) { return this.gitCredentialRepo.list(filters); }
+  setGitCredentialVerification(id: string, result: Parameters<GitCredentialRepo['setVerification']>[1]) { return this.gitCredentialRepo.setVerification(id, result); }
+  markGitCredentialUsed(id: string) { return this.gitCredentialRepo.markUsed(id); }
+  listGitCredentialUsages(ids: readonly string[]) { return this.gitCredentialRepo.listUsages(ids); }
+  deleteGitCredential(id: string) { return this.gitCredentialRepo.delete(id); }
+  countGitCredentialsForRepository(repositoryKey: string) { return this.gitCredentialRepo.countForRepository(repositoryKey); }
   createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
   adoptService(service: Parameters<ServiceRepo['adoptService']>[0]) { return this.serviceRepo.adoptService(service); }
   getService(id: string) { return this.serviceRepo.getService(id); }

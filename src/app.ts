@@ -53,6 +53,7 @@ import { createModuleLogger } from './lib/logger.js';
 import type { AgentPool } from './_ai-ops/agent-pool.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
 import type { OpsAgent } from './_ai-ops/ops-agent.js';
+import { GitCredentialManager } from './git-credentials/manager.js';
 
 const log = createModuleLogger('app');
 
@@ -161,6 +162,7 @@ export function setupRecoveryPostmortemAutomation({
 export interface AppContext {
   config: OpenLanderConfig;
   db: Database;
+  gitCredentials: GitCredentialManager;
   eventBus: EventBus;
   docker: Docker;
   runtime: RuntimeBackend;
@@ -298,6 +300,7 @@ export async function createAppContext(
   databaseUrl: string,
 ): Promise<AppContext> {
   const db = await Database.connect(databaseUrl);
+  const gitCredentials = new GitCredentialManager(db);
   await migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const runtime: RuntimeBackend = docker;
@@ -490,6 +493,7 @@ export async function createAppContext(
   const partialCtx = {
     config,
     db,
+    gitCredentials,
     eventBus,
     docker,
     runtime,

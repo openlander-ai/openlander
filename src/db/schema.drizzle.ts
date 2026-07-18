@@ -255,6 +255,49 @@ export const globalSecrets = pgTable(
   (table) => [index('idx_global_secrets_key').on(table.key)],
 );
 
+export const gitCredentials = pgTable(
+  'git_credentials',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    provider: text('provider', { enum: ['github'] })
+      .notNull()
+      .default('github'),
+    auth_type: text('auth_type', { enum: ['deploy_key'] })
+      .notNull()
+      .default('deploy_key'),
+    repository_url: text('repository_url').notNull(),
+    repository_key: text('repository_key').notNull(),
+    public_key: text('public_key').notNull(),
+    fingerprint: text('fingerprint').notNull().unique(),
+    encrypted_private_key: text('encrypted_private_key').notNull(),
+    private_key_iv: text('private_key_iv').notNull(),
+    status: text('status', { enum: ['pending', 'verified', 'failed'] })
+      .notNull()
+      .default('pending'),
+    default_branch: text('default_branch'),
+    last_error_code: text('last_error_code'),
+    verified_at: text('verified_at'),
+    last_used_at: text('last_used_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('git_credentials_provider_check', sql`${table.provider} = 'github'`),
+    check('git_credentials_auth_type_check', sql`${table.auth_type} = 'deploy_key'`),
+    check(
+      'git_credentials_status_check',
+      sql`${table.status} IN ('pending', 'verified', 'failed')`,
+    ),
+    index('idx_git_credentials_repository_key').on(table.repository_key),
+    index('idx_git_credentials_status').on(table.status),
+  ],
+);
+
 /**
  * Post-0012 `services` table — unified deployable + managed services.
  *
@@ -307,6 +350,9 @@ export const services = pgTable(
     // and repo_url/branch stay NULL; image_url points at the backing image.
     source: text('source').notNull().default('git'),
     repo_url: text('repo_url'),
+    git_credential_id: text('git_credential_id').references(() => gitCredentials.id, {
+      onDelete: 'set null',
+    }),
     // Nullable by design: NULL means repo default branch for git/compose
     // services, and "not applicable" for image/managed services.
     branch: text('branch'),
@@ -342,6 +388,7 @@ export const services = pgTable(
     index('idx_services_project').on(table.project_id),
     index('idx_services_kind').on(table.kind),
     index('idx_services_parent').on(table.parent_service_id),
+    index('idx_services_git_credential').on(table.git_credential_id),
   ],
 );
 
@@ -1173,6 +1220,7 @@ export const drizzleSchema = {
   oauthTokens,
   webhookConfigs,
   globalSecrets,
+  gitCredentials,
   services,
   serviceConnections,
   runtimeIncidents,

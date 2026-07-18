@@ -177,6 +177,34 @@ export interface WebhookConfigRow {
   created_at: string;
 }
 
+export type GitCredentialStatus = 'pending' | 'verified' | 'failed';
+
+export interface GitCredentialRow {
+  id: string;
+  name: string;
+  provider: 'github';
+  auth_type: 'deploy_key';
+  repository_url: string;
+  repository_key: string;
+  public_key: string;
+  fingerprint: string;
+  encrypted_private_key: string;
+  private_key_iv: string;
+  status: GitCredentialStatus;
+  default_branch: string | null;
+  last_error_code: string | null;
+  verified_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitCredentialServiceUsage {
+  service_id: string;
+  service_name: string;
+  project_id: string;
+}
+
 /**
  * Post-0012 ServiceRow — unified deployable + managed services.
  *
@@ -219,6 +247,7 @@ export interface ServiceRow {
   build_method: 'dockerfile' | 'compose' | null;
   source: string;
   repo_url: string | null;
+  git_credential_id: string | null;
   branch: string | null;
   image_url: string | null;
   image_cmd: string | null;

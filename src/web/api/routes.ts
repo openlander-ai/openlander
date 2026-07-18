@@ -12,6 +12,7 @@ import { createDeploymentRoutes } from './deployment-routes.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createDeployableServiceRoutes } from './deployable-service-routes.js';
 import { createGitProvidersRoutes } from './git-providers-routes.js';
+import { createGitCredentialRoutes } from './git-credential-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
 import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectGroupRoutes } from './project-group-routes.js';
@@ -73,8 +74,7 @@ function readApprovalActionName(actionRun: { approval_tool: string | null; plan:
 }
 type TraefikHttpService = { loadBalancer: { servers: Array<{ url: string }> } };
 type TraefikHttpMiddleware =
-  | { stripPrefix: { prefixes: string[] } }
-  | { addPrefix: { prefix: string } };
+  { stripPrefix: { prefixes: string[] } } | { addPrefix: { prefix: string } };
 
 const MANAGED_SERVICE_KINDS = new Set(['postgres', 'mysql', 'redis', 'mongo', 'minio']);
 
@@ -547,6 +547,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createNotificationsRoutes(ctx));
   api.route('/', createWebServerRoutes(ctx));
   api.route('/', createGitProvidersRoutes(ctx));
+  api.route('/', createGitCredentialRoutes(ctx));
 
   return api;
 }
