@@ -132,14 +132,17 @@ export class ContainerOps {
   }
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
-    // TODO v1.1.0: compose resource limits — RunComposeServiceOptions will need memoryLimitBytes/cpuShares fields added back when implemented
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = opts.containerPort ?? opts.port;
+    const portMappings = [
+      { hostPort: opts.port, containerPort: cPort },
+      ...(opts.additionalPorts ?? []),
+    ];
     const extraHosts = await resolveExtraHosts(this.ctx.client, this.ctx.networkName);
     const secretBinds = writeSecretFiles(opts.name, opts.secretFiles ?? []);
     const projectName = stripContainerPrefix(opts.name);
     const volumeBinds = await getProjectVolumeBinds(this.ctx.client, projectName);
-    const binds = [...secretBinds, ...volumeBinds];
+    const binds = [...secretBinds, ...volumeBinds, ...(opts.extraBinds ?? [])];
     const networkMode = opts.network ?? opts.networks?.[0] ?? this.ctx.networkName;
     const aliases = Array.from(new Set([projectName, ...(opts.aliases ?? [])]));
     const networkingConfig = {
@@ -190,21 +193,31 @@ export class ContainerOps {
         [DOCKER_LABELS.PROJECT]: stripContainerPrefix(opts.name),
         ...opts.traefikLabels,
       },
-      ExposedPorts: {
-        [`${String(cPort)}/tcp`]: {},
-      },
+      ExposedPorts: Object.fromEntries(
+        portMappings.map(({ containerPort }) => [`${String(containerPort)}/tcp`, {}]),
+      ),
       Cmd: command,
       Entrypoint: opts.entrypoint,
       Healthcheck: healthcheck,
       NetworkingConfig: networkingConfig,
       HostConfig: {
-        PortBindings: {
-          [`${String(cPort)}/tcp`]: [{ HostPort: String(opts.port) }],
-        },
+        PortBindings: Object.fromEntries(
+          portMappings.map(({ hostPort, containerPort }) => [
+            `${String(containerPort)}/tcp`,
+            [{ HostPort: String(hostPort) }],
+          ]),
+        ),
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: networkMode,
         RestartPolicy: { Name: restartPolicyName },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+        ...(opts.memoryLimitBytes
+          ? {
+              Memory: opts.memoryLimitBytes,
+              MemorySwap: opts.memoryLimitBytes,
+              MemoryReservation: Math.floor(opts.memoryLimitBytes * 0.5),
+            }
+          : {}),
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
     });

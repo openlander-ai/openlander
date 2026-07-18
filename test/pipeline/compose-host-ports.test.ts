@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import { ComposePipeline, findComposeHostPortUsages } from '../../src/pipeline/compose.js';
+import {
+  ComposePipeline,
+  findComposeHostPortUsages,
+  interpolateComposeValue,
+  selectComposeServices,
+} from '../../src/pipeline/compose.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import type { Database } from '../../src/db/index.js';
 import { EventBus } from '../../src/events/index.js';
@@ -57,31 +62,60 @@ describe('compose host port guard', () => {
     expect(dbService?.expose).toEqual(['5432']);
   });
 
-  it('rejects compose host ports before project/container mutation', async () => {
+  it('preserves long-form dependency conditions', () => {
     const composePath = writeCompose(`services:
-  web:
-    image: nginx
-    ports:
-      - "3000:3000"
+  db:
+    image: postgres:16
+  migrate:
+    image: app
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    image: app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 `);
     const pipeline = new ComposePipeline({} as Docker, {} as Database, new EventBus());
+    const parsed = pipeline.parseComposeFile(composePath);
 
-    await expect(
-      pipeline.deployCompose({
-        repoUrl: 'https://github.com/example/stack',
-        clonePath: tmpDir,
-        composePath,
-        name: 'stack',
-      }),
-    ).rejects.toMatchObject({
-      code: 'COMPOSE_HOST_PORTS_UNSUPPORTED',
-      details: {
-        mappings: [{ service: 'web', ports: ['3000:3000'] }],
-      },
+    expect(parsed.services.find((service) => service.name === 'migrate')).toMatchObject({
+      dependsOn: ['db'],
+      dependsOnConditions: { db: 'service_healthy' },
+    });
+    expect(parsed.services.find((service) => service.name === 'api')).toMatchObject({
+      dependsOn: ['migrate'],
+      dependsOnConditions: { migrate: 'service_completed_successfully' },
     });
   });
 
-  it('validate_deploy_plan reports compose host ports as a blocking issue', async () => {
+  it('resolves compose interpolation defaults and required values', () => {
+    expect(interpolateComposeValue('${PORT:-3000}:3000', {})).toBe('3000:3000');
+    expect(interpolateComposeValue('${PORT:-3000}:3000', { PORT: '8080' })).toBe('8080:3000');
+    expect(interpolateComposeValue('$${UNCHANGED}', {})).toBe('${UNCHANGED}');
+    expect(() => interpolateComposeValue('${API_KEY:?Set API_KEY}', {})).toThrow('Set API_KEY');
+  });
+
+  it('includes transitive dependencies when specific services are selected', () => {
+    const selected = selectComposeServices(
+      [
+        { name: 'db' },
+        { name: 'migrate', dependsOn: ['db'] },
+        { name: 'api', dependsOn: ['db', 'migrate'] },
+        { name: 'web', dependsOn: ['api'] },
+        { name: 'testdb' },
+      ],
+      ['web'],
+    );
+
+    expect(selected.map((service) => service.name)).toEqual(['db', 'migrate', 'api', 'web']);
+    expect(() => selectComposeServices(selected, ['missing'])).toThrow(
+      'Unknown Compose service(s): missing',
+    );
+  });
+
+  it('validate_deploy_plan reports compose host ports as informational', async () => {
     const plan: DeployPlan = {
       plan_id: 'plan_host_ports',
       status: 'ready',
@@ -126,12 +160,12 @@ describe('compose host port guard', () => {
     );
 
     expect(result).toMatchObject({
-      valid: false,
+      valid: true,
       checks: expect.arrayContaining([
         expect.objectContaining({
           name: 'compose_ports',
-          status: 'fail',
-          message: expect.stringContaining('Compose `ports:` host mappings are not supported'),
+          status: 'info',
+          message: expect.stringContaining('OpenLander ports'),
         }),
       ]),
     });

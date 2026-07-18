@@ -40,7 +40,7 @@ import type { Docker } from '../docker.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
-import type { ComposePipeline } from '../compose.js';
+import { findComposeHostPortUsages, type ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import {
   ProjectAlreadyExistsError,
@@ -130,7 +130,7 @@ const SERVICE_APPROVAL: Record<string, PlanService['approval']> = {
  * compose-declared service during the compose cross-check.
  */
 const COMPOSE_TYPE_TOKENS: Record<string, string[]> = {
-  postgresql: ['postgres', 'postgresql'],
+  postgresql: ['postgres', 'postgresql', 'pgvector'],
   mysql: ['mysql', 'mariadb'],
   redis: ['redis'],
   mongodb: ['mongo'],
@@ -262,6 +262,15 @@ export class PlanEngine {
         buildMethod = 'compose';
         composeFilePath = relative(clonePath, detectedComposeFile);
         const parsed = this.composePipeline.parseComposeFile(detectedComposeFile);
+        const hostPortUsages = findComposeHostPortUsages(parsed);
+        if (hostPortUsages.length > 0) {
+          warnings.push(
+            'Compose host ports will be replaced with OpenLander-managed ports: ' +
+              hostPortUsages
+                .map((usage) => `${usage.service} (${usage.ports.join(', ')})`)
+                .join('; '),
+          );
+        }
 
         composeBuildServices = parsed.services.map((svc) => {
           let dockerfile: string | undefined;
@@ -308,7 +317,12 @@ export class PlanEngine {
             for (const envFileRef of svc.envFile) {
               const fullPath = join(clonePath, envFileRef.path);
               if (!existsSync(fullPath)) {
-                detectedEnv.push(...scanEnvTemplate(clonePath, envFileRef.path, detectedEnv));
+                const templateEntries = scanEnvTemplate(clonePath, envFileRef.path, detectedEnv);
+                detectedEnv.push(
+                  ...(envFileRef.required
+                    ? templateEntries
+                    : templateEntries.map((entry) => ({ ...entry, required: false }))),
+                );
                 if (envFileRef.required) {
                   warnings.push(
                     `Service "${svc.name}" requires env_file "${envFileRef.path}" but file not in repo`,
