@@ -82,6 +82,18 @@ function createFakeDb() {
     getComposeChildProjects: vi.fn(async (parentId: string) =>
       [...projects.values()].filter((project) => project.parent_project_id === parentId),
     ),
+    getComposeChildren: vi.fn(async (parentServiceId: string) => {
+      const parentId = parentServiceId.replace(/__svc$/, '');
+      return [...projects.values()]
+        .filter((project) => project.parent_project_id === parentId)
+        .map((project) => ({
+          id: `${project.id}__svc`,
+          name: project.name,
+          runtime_role:
+            (project as ProjectRow & { runtime_role?: 'application' | 'job' | 'resource' })
+              .runtime_role ?? 'application',
+        }));
+    }),
     deleteProjectDependenciesByProject: vi.fn(async () => undefined),
     createProjectDependency: vi.fn(async () => undefined),
     createDeployLog: vi.fn(async (log: unknown) => {
@@ -281,6 +293,48 @@ describe('compose network cleanup', () => {
     expect(second.success).toBe(false);
     expect(second.errorCode).toBe('COMPOSE_PREREQUISITE_UNHEALTHY');
     expect(runComposeService).toHaveBeenCalledTimes(callsAfterFirstDeploy);
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-ol-stack-db',
+    );
+  });
+
+  it('blocks changed and removed resource definitions without removing the container', async () => {
+    const initialCompose = `services:\n  db:\n    image: postgres:16\n  web:\n    image: example/web\n    expose:\n      - "3000"\n    depends_on:\n      - db\n`;
+    writeFileSync(composePath, initialCompose, 'utf8');
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    };
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+
+    writeFileSync(composePath, initialCompose.replace('postgres:16', 'postgres:17'), 'utf8');
+    await expect(
+      deployWithEnv(pipeline, {
+        ...baseConfig,
+        _parentId: first.parentProjectId,
+        previousServiceFingerprints: first.serviceFingerprints,
+      }),
+    ).rejects.toMatchObject({ code: 'STATEFUL_SERVICE_CHANGE_BLOCKED' });
+
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: example/web\n    expose:\n      - "3000"\n`,
+      'utf8',
+    );
+    await expect(
+      deployWithEnv(pipeline, {
+        ...baseConfig,
+        _parentId: first.parentProjectId,
+        previousServiceFingerprints: first.serviceFingerprints,
+      }),
+    ).rejects.toMatchObject({ code: 'STATEFUL_SERVICE_REMOVAL_BLOCKED' });
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
       'container-ol-stack-db',
     );
