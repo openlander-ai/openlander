@@ -618,7 +618,47 @@ describe('PlanEngine.createPlan', () => {
 
     expect(plan.build.method).toBe('compose');
     expect(plan.build.compose_services?.[0]?.host_ports).toEqual(['3000:3000']);
+    expect(plan.build.traffic_service).toBe('web');
     expect(mockComposePipeline.detectComposeFile).toHaveBeenCalled();
+  });
+
+  it('requires an explicit traffic service when multiple applications expose ports', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [
+          { name: 'web', build: './web', ports: ['3000:3000'] },
+          { name: 'api', build: './api', ports: ['4000:4000'] },
+          { name: 'db', image: 'postgres:16' },
+        ],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'compose-traffic-test',
+    });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('needs_input');
+    expect(plan.build.traffic_service).toBeUndefined();
+    expect(plan.build.traffic_service_candidates).toEqual(['web', 'api']);
   });
 
   it('does not require empty template values from an optional compose env_file', async () => {

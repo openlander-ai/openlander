@@ -648,6 +648,79 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.build.dockerfile).toBe('Dockerfile');
   });
 
+  it('updates persisted Compose selection and environment fields', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        compose_file: 'compose.yml',
+        traffic_service_candidates: ['web', 'api'],
+      },
+      environment: 'production',
+      production: true,
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      compose_file: 'compose.production.yml',
+      compose_profiles: ['production'],
+      traffic_service: 'api',
+      environment: 'development',
+    });
+
+    expect(updated.status).toBe('ready');
+    expect(updated.build).toMatchObject({
+      compose_file: 'compose.production.yml',
+      compose_profiles: ['production'],
+      traffic_service: 'api',
+    });
+    expect(updated.environment).toBe('development');
+    expect(updated.production).toBe(false);
+    expect(mockDb.updateDeployPlan).toHaveBeenCalledWith(
+      plan.plan_id,
+      expect.objectContaining({
+        status: 'ready',
+        planJson: expect.any(String),
+      }),
+    );
+
+    const persisted = JSON.parse(mockDb.updateDeployPlan.mock.calls.at(-1)?.[1].planJson);
+    expect(persisted.build.compose_file).toBe('compose.production.yml');
+    expect(persisted.build.compose_profiles).toEqual(['production']);
+    expect(persisted.build.traffic_service).toBe('api');
+    expect(persisted.environment).toBe('development');
+    expect(persisted.production).toBe(false);
+  });
+
+  it('rejects a traffic service outside the exposed application candidates', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        traffic_service_candidates: ['web', 'api'],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    await expect(
+      engine.updatePlan(plan.plan_id, {
+        traffic_service: 'db',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRAFFIC_SERVICE' });
+
+    expect(mockDb.updateDeployPlan).not.toHaveBeenCalled();
+  });
+
   it('updates health check configuration', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',

@@ -187,6 +187,35 @@ describe('compose network cleanup', () => {
     });
   });
 
+  it('uses the selected development environment port policy', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const pipeline = new ComposePipeline(
+      createFakeDocker({ runComposeService } as Partial<Docker>),
+      createFakeDb(),
+      createEventBus(),
+    );
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      environmentType: 'development',
+    });
+
+    expect(result.success).toBe(true);
+    const runConfig = runComposeService.mock.calls[0]?.[0] as { port?: number } | undefined;
+    expect(runConfig?.port).toBeGreaterThanOrEqual(20_001);
+    expect(runConfig?.port).toBeLessThanOrEqual(20_999);
+  });
+
   it('requires an explicit traffic target when multiple applications expose ports', async () => {
     writeFileSync(
       composePath,
@@ -327,6 +356,32 @@ describe('compose network cleanup', () => {
         runtime_role: 'resource',
       },
     );
+  });
+
+  it('fingerprints environment value changes without persisting the raw values', () => {
+    const initial = fingerprintComposeServices([
+      {
+        name: 'db',
+        image: 'postgres:16',
+        environment: {
+          POSTGRES_DB: 'app',
+          POSTGRES_PASSWORD: 'do-not-store-this-secret',
+        },
+      },
+    ]);
+    const changed = fingerprintComposeServices([
+      {
+        name: 'db',
+        image: 'postgres:16',
+        environment: {
+          POSTGRES_DB: 'app_v2',
+          POSTGRES_PASSWORD: 'do-not-store-this-secret',
+        },
+      },
+    ]);
+
+    expect(changed.db).not.toBe(initial.db);
+    expect(JSON.stringify(initial)).not.toContain('do-not-store-this-secret');
   });
 
   it('snapshots relative bind directories into managed volumes', async () => {
@@ -702,6 +757,101 @@ describe('compose network cleanup', () => {
     expect(
       [...db._projects.values()].find((project) => project.name === 'stack/migrate')?.container_id,
     ).toContain('ol-stack-migrate-container');
+
+    migrationExitCode = 0;
+    callOrder.length = 0;
+    runComposeService.mockClear();
+    const third = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'api',
+      services: ['api'],
+      _parentId: first.parentProjectId,
+    });
+
+    expect(third.success, JSON.stringify(third)).toBe(true);
+    expect(callOrder.indexOf('ol-stack-migrate')).toBeGreaterThanOrEqual(0);
+    expect(callOrder.indexOf('ol-stack-migrate')).toBeLessThan(callOrder.indexOf('ol-stack-api'));
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/api')?.container_id,
+    ).not.toBe(apiBefore);
+  });
+
+  it('blocks before replacing a selected application when a preserved resource is unhealthy', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  api:
+    image: api:latest
+    expose: ["4000"]
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+`,
+      'utf8',
+    );
+    let sequence = 0;
+    let resourceHealthy = true;
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(
+        async (config: { name: string }) => `${config.name}-container-${String(++sequence)}`,
+      );
+    const docker = createFakeDocker({
+      runComposeService,
+      waitForHealthy: vi.fn().mockImplementation(async (containerId: string) => ({
+        healthy: resourceHealthy || !containerId.includes('db'),
+        ...(resourceHealthy || !containerId.includes('db')
+          ? {}
+          : { error: 'db prerequisite is unhealthy' }),
+      })),
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'api',
+    });
+    expect(first.success).toBe(true);
+    const apiBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/api',
+    )?.container_id;
+    const dbBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/db',
+    )?.container_id;
+
+    resourceHealthy = false;
+    runComposeService.mockClear();
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'api',
+      services: ['api'],
+      _parentId: first.parentProjectId,
+    });
+
+    expect(second.success).toBe(false);
+    expect(second.errorCode).toBe('COMPOSE_PREREQUISITE_UNHEALTHY');
+    expect(runComposeService).not.toHaveBeenCalled();
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/api')?.container_id,
+    ).toBe(apiBefore);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/db')?.container_id,
+    ).toBe(dbBefore);
+    expect([...db._projects.values()].find((project) => project.name === 'stack/db')?.status).toBe(
+      'error',
+    );
   });
 
   it('preserves unchanged resources on full deploy and blocks resource changes or removal', async () => {

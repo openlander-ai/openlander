@@ -118,9 +118,28 @@ export function fingerprintComposeServices(
 ): Record<string, string> {
   return Object.fromEntries(
     services.map((service) => {
-      const environmentKeys = Array.isArray(service.environment)
-        ? service.environment.map((entry) => entry.split('=', 1)[0] ?? '').sort()
-        : Object.keys(service.environment ?? {}).sort();
+      const environment = Array.isArray(service.environment)
+        ? service.environment
+            .map((entry) => {
+              const separator = entry.indexOf('=');
+              const key = (separator >= 0 ? entry.slice(0, separator) : entry).trim();
+              const value = separator >= 0 ? entry.slice(separator + 1) : undefined;
+              return {
+                key,
+                ...(value !== undefined
+                  ? {
+                      valueHash: createHash('sha256').update(value).digest('hex'),
+                    }
+                  : {}),
+              };
+            })
+            .sort((left, right) => left.key.localeCompare(right.key))
+        : Object.entries(service.environment ?? {})
+            .map(([key, value]) => ({
+              key,
+              valueHash: createHash('sha256').update(value).digest('hex'),
+            }))
+            .sort((left, right) => left.key.localeCompare(right.key));
       const normalized = {
         name: service.name,
         // eslint-disable-next-line openlander-internal/no-dropped-columns -- ComposeService.image is YAML metadata, not a services DB row.
@@ -129,7 +148,7 @@ export function fingerprintComposeServices(
         ports: service.ports,
         expose: service.expose,
         profiles: service.profiles,
-        environmentKeys,
+        environment,
         envFiles: service.envFile?.map((entry) => ({ path: entry.path, required: entry.required })),
         dependsOn: service.dependsOn,
         dependsOnConditions: service.dependsOnConditions,
@@ -733,7 +752,7 @@ export class ComposePipeline {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
-    const envType: OpenLanderEnv = 'production';
+    const envType: OpenLanderEnv = config.environmentType ?? 'production';
     let buildLog = '';
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
@@ -1536,6 +1555,20 @@ export class ComposePipeline {
           };
         }
 
+        if (deployment && preservedServices.has(service.name)) {
+          return {
+            name: service.name,
+            status: unhealthyPrerequisites.has(service.name)
+              ? ('error' as const)
+              : ('running' as const),
+            ports: deployment.ports.map(
+              (mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`,
+            ),
+            containerId: deployment.containerId,
+            error: orchestrationEntry?.error,
+          };
+        }
+
         // F1 (Day 9 Bug #5 follow-up): rollback policy / generic-error paths
         // mean the container is STILL RUNNING despite the orchestration as a
         // whole failing. Preserve `running` + container metadata so downstream
@@ -1967,10 +2000,16 @@ export class ComposePipeline {
       return [];
     }
 
+    const policy = getPolicy(envType);
     const mappings: Array<{ hostPort: number; containerPort: number }> = [];
     try {
       for (const containerPort of containerPorts) {
-        const hostPort = await allocatePort(this.db, this.docker, {}, envType);
+        const hostPort = await allocatePort(
+          this.db,
+          this.docker,
+          { rangeStart: policy.portRangeStart, rangeEnd: policy.portRangeEnd },
+          envType,
+        );
         mappings.push({ hostPort, containerPort });
       }
       return mappings;

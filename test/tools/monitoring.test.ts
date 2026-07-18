@@ -1273,6 +1273,7 @@ describe('service-targeted monitoring tools', () => {
       branch: 'main',
       image_tag: 'app:latest' as string | null,
       image_url: null as string | null,
+      runtime_role: 'application' as 'application' | 'job' | 'resource',
     };
     const ctx = {
       db: {
@@ -1357,6 +1358,25 @@ describe('service-targeted monitoring tools', () => {
         name: service.name,
       },
       logs: 'service logs',
+    });
+  });
+
+  it('get_logs reads a stopped one-shot job container by service_id', async () => {
+    const { ctx, project, service } = createServiceTargetContext();
+    project.status = 'stopped';
+    service.status = 'stopped';
+    service.runtime_role = 'job';
+
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { service_id: service.id, lines: 50 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 50);
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      logs: 'service logs',
+      returned_lines: 1,
     });
   });
 
