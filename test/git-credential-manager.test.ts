@@ -325,4 +325,47 @@ describe('GitCredentialManager', () => {
       ]);
     }
   });
+
+  it('classifies a selected Deploy Key endpoint failure as retryable network failure', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(created.id, { status: 'verified' });
+    const fakeBin = await mkdtemp(`${tmpdir()}/openlander-fake-git-`);
+    const workspace = await mkdtemp(`${tmpdir()}/openlander-clone-test-`);
+    const gitPath = `${fakeBin}/git`;
+    await writeFile(
+      gitPath,
+      '#!/bin/sh\necho "ssh: connect to host github.com port 22: Network is unreachable" >&2\nexit 128\n',
+    );
+    await chmod(gitPath, 0o755);
+    const previousPath = process.env['PATH'];
+    const previousWorkspace = process.env['OPENLANDER_WORKSPACE_DIR'];
+    process.env['PATH'] = `${fakeBin}:${previousPath ?? ''}`;
+    process.env['OPENLANDER_WORKSPACE_DIR'] = workspace;
+    setActiveGitCredentialManager(manager);
+    try {
+      await expect(
+        cloneRepo({ repoUrl: created.repository_url, gitCredentialId: created.id }),
+      ).rejects.toMatchObject({
+        code: 'GIT_NETWORK_UNREACHABLE',
+        details: {
+          repoUrl: created.repository_url,
+          authMethod: 'deploy_key',
+          retryable: true,
+        },
+      });
+      expect(db.used).toEqual([]);
+    } finally {
+      setActiveGitCredentialManager(null);
+      if (previousPath === undefined) delete process.env['PATH'];
+      else process.env['PATH'] = previousPath;
+      if (previousWorkspace === undefined) delete process.env['OPENLANDER_WORKSPACE_DIR'];
+      else process.env['OPENLANDER_WORKSPACE_DIR'] = previousWorkspace;
+      await Promise.all([
+        rm(fakeBin, { recursive: true, force: true }),
+        rm(workspace, { recursive: true, force: true }),
+      ]);
+    }
+  });
 });

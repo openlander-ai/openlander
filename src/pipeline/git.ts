@@ -13,6 +13,8 @@ import {
   UnsafeRepoUrlError,
   GitHubRepoAccessError,
   GitDeployKeyUnauthorizedError,
+  GitNetworkUnreachableError,
+  type GitNetworkAuthMethod,
 } from '../errors.js';
 import { loadConfig } from '../config/index.js';
 import { GitHubProvider, type GitHubRepoAccessFailure } from '../git-providers/github.js';
@@ -196,16 +198,29 @@ async function cloneRepoWithAuth(
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const msg = sanitizeGitError(rawMessage, githubToken);
+    const networkAuthMethod: GitNetworkAuthMethod = deployKeyAuth
+      ? 'deploy_key'
+      : normalizedUrl.startsWith('git@') || normalizedUrl.startsWith('ssh://')
+        ? 'ssh'
+        : githubToken
+          ? githubAuthMethod
+          : 'pat';
 
     if (deployKeyAuth) {
       if (isGitBranchNotFoundMessage(msg)) {
         throw new GitBranchNotFoundError(redactRepoUrl(repoUrl), branch ?? 'unknown');
+      }
+      if (isGitNetworkFailure(error, msg)) {
+        throw new GitNetworkUnreachableError(redactRepoUrl(repoUrl), networkAuthMethod);
       }
       throw new GitDeployKeyUnauthorizedError(
         deployKeyAuth.credentialId,
         redactRepoUrl(repoUrl),
         'clone_failed',
       );
+    }
+    if (isGitNetworkFailure(error, msg)) {
+      throw new GitNetworkUnreachableError(redactRepoUrl(repoUrl), networkAuthMethod);
     }
     if (githubRepo && githubToken && msg.includes('Authentication failed')) {
       throw githubAccessError(repoUrl, githubAuthMethod, { reason: 'token_invalid' });
@@ -368,7 +383,7 @@ export function assertSafeRepoUrl(repoUrl: string): void {
     allowUserInfo: true,
   });
   if (!result.ok) {
-    throw new UnsafeRepoUrlError(repoUrl, result.reason ?? 'unsafe URL');
+    throw new UnsafeRepoUrlError(redactRepoUrl(repoUrl), result.reason ?? 'unsafe URL');
   }
 }
 
@@ -379,5 +394,30 @@ function isGitBranchNotFoundMessage(message: string): boolean {
 function isGitRepoNotFoundMessage(message: string): boolean {
   return (
     message.includes('not found') || message.includes('does not exist') || message.includes('404')
+  );
+}
+
+function isGitNetworkFailure(error: unknown, message: string): boolean {
+  const rawCode =
+    error && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  const code = typeof rawCode === 'string' || typeof rawCode === 'number' ? String(rawCode) : '';
+  if (
+    [
+      'ETIMEDOUT',
+      'ENETUNREACH',
+      'EHOSTUNREACH',
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+    ].includes(code)
+  ) {
+    return true;
+  }
+
+  return /(?:could not resolve (?:host|hostname)|temporary failure in name resolution|name or service not known|connection (?:timed out|reset by peer|refused)|operation timed out|network is unreachable|no route to host|failed to connect|ssh: connect to host .* port \d+|kex_exchange_identification:.*(?:closed|reset)|connection closed by remote host)/i.test(
+    message,
   );
 }
