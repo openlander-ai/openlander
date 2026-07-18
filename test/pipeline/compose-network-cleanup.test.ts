@@ -340,6 +340,135 @@ describe('compose network cleanup', () => {
     );
   });
 
+  it('builds api before migration and keeps the existing api when migration fails', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres:16\n  migrate:\n    image: example/migrate\n    depends_on:\n      db:\n        condition: service_healthy\n  api:\n    build: ./api\n    expose:\n      - "3000"\n    depends_on:\n      migrate:\n        condition: service_completed_successfully\n      db:\n        condition: service_healthy\n`,
+      'utf8',
+    );
+    mkdirSync(join(tmpDir, 'api'), { recursive: true });
+    const actions: string[] = [];
+    let runSequence = 0;
+    let failMigration = false;
+    let failBuild = false;
+    const buildComposeService = vi.fn().mockImplementation(async () => {
+      actions.push('build:api');
+      if (failBuild) throw new Error('api image build failed');
+    });
+    const pullImage = vi.fn().mockImplementation(async (image: string) => {
+      actions.push(`pull:${image}`);
+    });
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => {
+        actions.push(`run:${config.name}`);
+        return `container-${config.name}-${String(++runSequence)}`;
+      });
+    const safeRemoveContainer = vi.fn().mockImplementation(async (containerRef: string) => {
+      actions.push(`remove:${containerRef}`);
+    });
+    const inspectContainer = vi.fn().mockImplementation(async (containerRef: string) => ({
+      State: {
+        Running: containerRef.includes('migrate') ? false : true,
+        ExitCode: containerRef.includes('migrate') && failMigration ? 1 : 0,
+      },
+    }));
+    const docker = createFakeDocker({
+      buildComposeService,
+      pullImage,
+      runComposeService,
+      safeRemoveContainer,
+      inspectContainer,
+    } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    };
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+    const apiBefore = [...db._projects.values()].find((project) => project.name === 'stack/api');
+    expect(apiBefore?.container_id).toBeTruthy();
+    const apiContainerBefore = apiBefore?.container_id;
+    actions.length = 0;
+    failMigration = true;
+
+    const second = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['api'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+
+    expect(second.success).toBe(false);
+    expect(second.errorCode).toBe('COMPOSE_JOB_FAILED');
+    expect(actions.indexOf('build:api')).toBeLessThan(actions.indexOf('run:ol-stack-migrate'));
+    expect(actions).not.toContain('remove:ol-stack-api');
+    expect(actions).not.toContain('run:ol-stack-api');
+    const apiAfter = [...db._projects.values()].find((project) => project.name === 'stack/api');
+    const migrationAfter = [...db._projects.values()].find(
+      (project) => project.name === 'stack/migrate',
+    );
+    expect(apiAfter).toMatchObject({
+      status: 'running',
+      container_id: apiContainerBefore,
+    });
+    expect(migrationAfter).toMatchObject({
+      status: 'error',
+      container_id: expect.stringContaining('container-ol-stack-migrate-'),
+    });
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({
+        serviceId: `${migrationAfter?.id ?? ''}__svc`,
+        status: 'failed',
+        buildLog: expect.stringContaining('exit_code=1'),
+      }),
+    );
+
+    actions.length = 0;
+    failMigration = false;
+    const third = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['api'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+    expect(third.success).toBe(true);
+    expect(actions.indexOf('build:api')).toBeLessThan(actions.indexOf('run:ol-stack-migrate'));
+    expect(actions.indexOf('run:ol-stack-migrate')).toBeLessThan(
+      actions.indexOf('remove:ol-stack-api'),
+    );
+    expect(actions.indexOf('remove:ol-stack-api')).toBeLessThan(
+      actions.indexOf('run:ol-stack-api'),
+    );
+    const apiAfterSuccess = [...db._projects.values()].find(
+      (project) => project.name === 'stack/api',
+    );
+    expect(apiAfterSuccess?.container_id).not.toBe(apiContainerBefore);
+
+    const apiContainerAfterSuccess = apiAfterSuccess?.container_id;
+    actions.length = 0;
+    failBuild = true;
+    const fourth = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['api'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+    expect(fourth.success).toBe(false);
+    expect(actions).toEqual(['build:api']);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/api'),
+    ).toMatchObject({
+      status: 'running',
+      container_id: apiContainerAfterSuccess,
+    });
+  });
+
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
     const runComposeService = vi
       .fn()
