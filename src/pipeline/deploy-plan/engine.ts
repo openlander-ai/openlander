@@ -1766,6 +1766,13 @@ export class PlanEngine {
     }> = [];
 
     for (const planService of plan.services) {
+      // The dependency is provided by the Compose stack itself. Its connection
+      // env is resolved inside Compose, so executePlan must not treat it as an
+      // external/managed resource that requires an explicit URL.
+      if (planService.resolution === 'compose_service') {
+        continue;
+      }
+
       const envVarName = this.serviceEnvVarName(planService);
       if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
         if (envVarName) {
@@ -1784,8 +1791,7 @@ export class PlanEngine {
           approvedSafeResources.has(this.proposedResourceIdentifier(planService));
 
         if (!isApprovedSafeProposal) {
-          // compose_service / not_auto_creatable / unapproved: fail fast,
-          // create nothing.
+          // not_auto_creatable / unapproved: fail fast, create nothing.
           throw new ServiceConfigError(
             `Database/Cache resource ${planService.type} requires an explicit ${envVarName} value before deploy.`,
             {
