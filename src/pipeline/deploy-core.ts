@@ -54,6 +54,7 @@ import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
 import { sleep } from '../lib/sleep.js';
+import { resolveComposeFilePath } from './compose-spec.js';
 
 import {
   extractProjectName,
@@ -226,8 +227,14 @@ export interface ProjectConfig {
   _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
+  /** Repository-relative Compose file path. */
+  composeFile?: string;
+  /** Active Compose profiles. */
+  composeProfiles?: string[];
   /** Compose application service used for representative public traffic. */
   trafficService?: string;
+  /** Hashes of normalized Compose service definitions. */
+  composeServiceFingerprints?: Record<string, string>;
   /** Deployment source type (git or pre-built image) */
   source?: 'git' | 'image';
   /** Full Docker image reference (e.g., registry.example.com/app:latest) */
@@ -681,7 +688,9 @@ export class DeployPipeline {
       const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
       const composePath = preferDockerfile
         ? null
-        : this.composePipeline?.detectComposeFile(cloneResult.path);
+        : config.composeFile
+          ? resolveComposeFilePath(cloneResult.path, config.composeFile)
+          : this.composePipeline?.detectComposeFile(cloneResult.path);
       const dockerfilePath = join(cloneResult.path, config.dockerfilePath ?? 'Dockerfile');
       const dockerfileExists = existsSync(dockerfilePath);
 

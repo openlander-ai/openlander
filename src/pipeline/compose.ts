@@ -5,6 +5,7 @@ import { isAbsolute, join, dirname, relative, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
+import { createHash } from 'node:crypto';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import { buildTraefikLabels, ensureManagedTraefikNetwork } from './traefik.js';
@@ -181,6 +182,49 @@ export function filterServicesByProfiles(
         : undefined,
     };
   });
+}
+
+export function validateComposeProfiles(
+  services: readonly ComposeService[],
+  activeProfiles?: readonly string[],
+): void {
+  const resolvedProfiles = activeProfiles ?? [];
+  const availableProfiles = new Set(services.flatMap((service) => service.profiles ?? []));
+  const unknownProfiles = resolvedProfiles.filter((profile) => !availableProfiles.has(profile));
+  if (unknownProfiles.length > 0) {
+    throw new ServiceConfigError(`Unknown Compose profile(s): ${unknownProfiles.join(', ')}`, {
+      requested: resolvedProfiles,
+      available: [...availableProfiles].sort(),
+    });
+  }
+}
+
+function normalizeComposeFingerprintValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeComposeFingerprintValue);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, normalizeComposeFingerprintValue(entry)]),
+  );
+}
+
+/** Hash normalized service definitions without persisting env/secret plaintext. */
+export function fingerprintComposeServices(
+  services: readonly ComposeService[],
+): Record<string, string> {
+  return Object.fromEntries(
+    services.map((service) => [
+      service.name,
+      createHash('sha256')
+        .update(JSON.stringify(normalizeComposeFingerprintValue(service)))
+        .digest('hex'),
+    ]),
+  );
 }
 
 /**
@@ -696,7 +740,7 @@ export class ComposePipeline {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
-    const envType: OpenLanderEnv = 'production';
+    const envType: OpenLanderEnv = config.environmentType ?? 'production';
     let buildLog = '';
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
@@ -1729,6 +1773,7 @@ export class ComposePipeline {
     config: Pick<ComposeDeployConfig, 'composePath' | 'profiles' | 'services'>,
     composeProject = this.parseComposeFile(config.composePath),
   ): ComposeProject {
+    validateComposeProfiles(composeProject.services, config.profiles);
     const filtered: ComposeProject = {
       ...composeProject,
       services: filterServicesByProfiles(composeProject.services, config.profiles),

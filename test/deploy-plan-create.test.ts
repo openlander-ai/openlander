@@ -622,6 +622,93 @@ describe('PlanEngine.createPlan', () => {
     expect(mockComposePipeline.detectComposeFile).toHaveBeenCalled();
   });
 
+  it('uses an explicit repository Compose file and profile and stores only fingerprints', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn(),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [
+          {
+            name: 'web',
+            image: 'acme/web:prod',
+            profiles: ['production'],
+            ports: ['3000:3000'],
+            environment: { API_SECRET: 'do-not-persist' },
+          },
+          { name: 'dev', image: 'acme/web:dev', profiles: ['development'], ports: ['3001:3001'] },
+        ],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+    mockCloneRepo.mockResolvedValue({ path: '/tmp/test-repo', commitSha: 'compose-prod' });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-app',
+      composeFile: 'deploy/compose.production.yml',
+      composeProfiles: ['production'],
+      environment: 'production',
+    });
+
+    expect(mockComposePipeline.detectComposeFile).not.toHaveBeenCalled();
+    expect(mockComposePipeline.parseComposeFile).toHaveBeenCalledWith(
+      '/tmp/test-repo/deploy/compose.production.yml',
+    );
+    expect(plan.build.compose_file).toBe('deploy/compose.production.yml');
+    expect(plan.build.compose_profiles).toEqual(['production']);
+    expect(plan.build.compose_services?.map((service) => service.name)).toEqual(['web']);
+    expect(plan.environment).toBe('production');
+    expect(plan.production).toBe(true);
+    const storedJson = String(mockDb.createDeployPlan.mock.calls.at(-1)?.[0]?.planJson);
+    expect(storedJson).toMatch(/"composeServiceFingerprints":\{"web":"[a-f0-9]{64}"\}/);
+    expect(storedJson).not.toContain('do-not-persist');
+  });
+
+  it('rejects Compose paths outside the repository and unknown profiles', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn(),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [{ name: 'web', profiles: ['production'], ports: ['3000:3000'] }],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+    mockCloneRepo.mockResolvedValue({ path: '/tmp/test-repo', commitSha: 'compose-invalid' });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+
+    await expect(
+      engineWithCompose.createPlan({
+        repoUrl: 'https://github.com/test/compose-app',
+        composeFile: '../compose.yml',
+      }),
+    ).rejects.toMatchObject({ code: 'SERVICE_CONFIG_INVALID' });
+
+    await expect(
+      engineWithCompose.createPlan({
+        repoUrl: 'https://github.com/test/compose-app',
+        composeFile: 'compose.yml',
+        composeProfiles: ['development'],
+      }),
+    ).rejects.toMatchObject({ code: 'SERVICE_CONFIG_INVALID' });
+  });
+
   it('requires an explicit traffic service when multiple applications expose ports', async () => {
     const mockComposePipeline = {
       detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),

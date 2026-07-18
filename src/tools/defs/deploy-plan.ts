@@ -798,6 +798,8 @@ function deployPlanResponse(
     },
     missing: plan.missing,
     warnings: plan.warnings,
+    environment: plan.environment ?? 'production',
+    production: plan.production ?? plan.environment !== 'development',
     internal_url: plan.internal_url,
     internal_url_note: plan.internal_url_note,
   };
@@ -1283,7 +1285,10 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        composeFile: (args['compose_file'] as string | undefined) ?? undefined,
+        composeProfiles: (args['compose_profiles'] as string[] | undefined) ?? undefined,
         trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
+        environment: (args['environment'] as 'production' | 'development' | undefined) ?? undefined,
         targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
         trigger: deployTriggerForToolContext(context),
       });
@@ -1330,9 +1335,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'update_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input". Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
+      'Update a deployment plan with missing values, including env vars, Dockerfile selection, Compose file/profiles, traffic service, and service config. Call after create_deploy_plan when status is "needs_input". Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     mcpDescription:
-      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). For user-owned external env that the user supplied or confirmed, use env:{provided:{KEY:"..."},trusted:["KEY"]}. Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
+      'Update a deployment plan with missing values. Pass updates as a JSON string with fields such as env, build, compose_file, compose_profiles, traffic_service, or services. For user-owned external env that the user supplied or confirmed, use env:{provided:{KEY:"..."},trusted:["KEY"]}. Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     inputSchema: updateDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

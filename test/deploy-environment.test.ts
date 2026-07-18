@@ -452,6 +452,7 @@ describe('DeployPipeline deployEnvironment', () => {
         composePath: join(clonePath, 'docker-compose.yml'),
         name: 'compose-app',
         trigger: 'api',
+        environmentType: 'development',
       }),
     );
     expect(docker.buildImage as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();

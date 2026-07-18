@@ -171,6 +171,8 @@ export interface DeployPlan {
     target?: string;
     generated_dockerfile?: string;
     compose_file?: string;
+    compose_profiles?: string[];
+    selected_services?: string[];
     compose_services?: PlanBuildService[];
     traffic_service?: string;
     traffic_service_candidates?: string[];
@@ -182,6 +184,8 @@ export interface DeployPlan {
   health: PlanHealth;
   missing: string[];
   warnings: string[];
+  environment?: 'production' | 'development';
+  production?: boolean;
   dry_run_result?: DryRunResult;
   created_at: string;
   updated_at: string;

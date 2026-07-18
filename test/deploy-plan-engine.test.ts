@@ -665,6 +665,60 @@ describe('PlanEngine.updatePlan', () => {
     });
   });
 
+  it('revalidates Compose file and profiles when updating a plan', async () => {
+    const { cloneRepo } = await import('../src/pipeline/git.js');
+    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      path: process.cwd(),
+      commitSha: 'updated-compose',
+    });
+    const composePipeline = {
+      detectComposeFile: vi.fn(),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [
+          {
+            name: 'web',
+            image: 'acme/web:production',
+            profiles: ['production'],
+            ports: ['3000:3000'],
+            environment: { API_SECRET: 'hash-only' },
+          },
+          { name: 'dev', image: 'acme/web:dev', profiles: ['development'] },
+        ],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: composePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        compose_file: 'docker-compose.runtime.yml',
+        compose_services: [{ name: 'web' }, { name: 'dev' }],
+      },
+    });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const updated = await engineWithCompose.updatePlan(plan.plan_id, {
+      compose_profiles: ['production'],
+    });
+
+    expect(updated.build.compose_profiles).toEqual(['production']);
+    expect(updated.build.compose_services?.map((service) => service.name)).toEqual(['web']);
+    expect(updated.build.traffic_service).toBe('web');
+    const stored = JSON.stringify(updated);
+    expect(stored).toMatch(/"composeServiceFingerprints":\{"web":"[a-f0-9]{64}"\}/);
+    expect(stored).not.toContain('hash-only');
+  });
+
   it('updates health check configuration', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
@@ -1033,6 +1087,74 @@ describe('PlanEngine.executePlan', () => {
         envVars: expect.not.objectContaining({ DATABASE_URL: expect.anything() }),
       }),
     );
+  });
+
+  it('passes persisted Compose specification and deploy_only targets to the pipeline', async () => {
+    const fingerprints = {
+      web: 'a'.repeat(64),
+      api: 'b'.repeat(64),
+    };
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      environment: 'production',
+      production: true,
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        compose_file: 'deploy/compose.production.yml',
+        compose_profiles: ['production'],
+        compose_services: [{ name: 'web' }, { name: 'api' }],
+        traffic_service: 'web',
+      },
+      execution: { composeServiceFingerprints: fingerprints },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    await engine.executePlan(plan.plan_id, ['web']);
+
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        composeFile: 'deploy/compose.production.yml',
+        composeProfiles: ['production'],
+        composeServices: ['web'],
+        trafficService: 'web',
+        composeServiceFingerprints: fingerprints,
+        environment: 'production',
+      }),
+    );
+    const executingUpdate = mockDb.updateDeployPlan.mock.calls.find(
+      (call: any) => call[1].status === 'executing',
+    );
+    expect(JSON.parse(String(executingUpdate?.[1].planJson)).build.selected_services).toEqual([
+      'web',
+    ]);
+  });
+
+  it('rejects deploy_only values that are absent from the selected Compose specification', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        compose_file: 'compose.yml',
+        compose_services: [{ name: 'web' }],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    await expect(engine.executePlan(plan.plan_id, ['missing'])).rejects.toMatchObject({
+      code: 'SERVICE_CONFIG_INVALID',
+      details: { requested: ['missing'], available: ['web'] },
+    });
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
   it('injects same-project reusable service credentials into environment variables', async () => {

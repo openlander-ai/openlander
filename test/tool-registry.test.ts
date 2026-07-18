@@ -219,6 +219,21 @@ describe('Tool Registry', () => {
     expect(valid.success).toBe(true);
   });
 
+  it('create_deploy_plan schema accepts explicit Compose deployment settings', () => {
+    const { ctx } = createMockContext();
+    const createPlan = getTool(ctx, 'create_deploy_plan');
+
+    const valid = createPlan.inputSchema.safeParse({
+      repo_url: 'https://github.com/openlander-ai/openlander',
+      compose_file: 'deploy/compose.production.yml',
+      compose_profiles: ['production'],
+      traffic_service: 'web',
+      environment: 'production',
+    });
+
+    expect(valid.success).toBe(true);
+  });
+
   it('create_deploy_plan schema rejects missing required fields', () => {
     const { ctx } = createMockContext();
     const createPlan = getTool(ctx, 'create_deploy_plan');
