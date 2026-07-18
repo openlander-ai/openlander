@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3-rc.2] - 2026-07-18
+
+### Fixed
+
+- Persist Compose child container names and internal ports after deployment so
+  the HTTP provider can generate working routes for multi-service stacks.
+- Skip health probes for aggregate Compose parent records so child monitoring
+  cannot incorrectly overwrite the stack deployment status.
+
 ## [0.2.3-rc.1] - 2026-07-18
 
 ### Added
