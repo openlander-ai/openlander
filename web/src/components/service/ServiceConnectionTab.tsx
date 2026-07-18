@@ -58,8 +58,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
     void copy(text, fieldId);
   };
 
-  const creds = parseRecordJson(service.credentials);
-  const parsedEnv = parseRecordJson(service.env_vars);
+  const creds = parseRecordJson(service.credentials ?? null);
+  const parsedEnv = parseRecordJson(service.env_vars ?? null);
 
   const hasDetails = creds || (parsedEnv && Object.keys(parsedEnv).length > 0);
 

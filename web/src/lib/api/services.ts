@@ -36,8 +36,10 @@ export interface Service {
   container_id: string | null;
   container_name: string;
   port: number | null;
-  env_vars: string | null;
-  credentials: string | null;
+  /** Sensitive values are absent from ordinary API responses. */
+  env_vars?: string | null;
+  /** Sensitive values are absent from ordinary API responses. */
+  credentials?: string | null;
   scope?: 'project' | 'global';
   attached_project_id?: string | null;
   project_id?: string | null;
@@ -349,6 +351,16 @@ export async function getServiceLogs(id: string, lines: number = 100): Promise<s
   if (!res.ok) throw new Error('Failed to fetch service logs');
   const data = await res.json();
   return data.logs;
+}
+
+export interface RevealedServiceCredentials {
+  service_id: string;
+  credentials: Record<string, unknown> | null;
+  env_vars: Record<string, string>;
+}
+
+export async function revealServiceCredentials(id: string): Promise<RevealedServiceCredentials> {
+  return apiPost<RevealedServiceCredentials>(`/api/services/${id}/credentials/reveal`, {});
 }
 
 export interface ServiceDatabase {

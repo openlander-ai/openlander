@@ -117,6 +117,7 @@ function createMockContext(
         },
       ]),
       createProjectDependency: vi.fn(async () => undefined),
+      insertActivityLog: vi.fn(async () => undefined),
     },
     env: {
       getAll: vi.fn(async () => ({})),
@@ -262,12 +263,12 @@ describe('MCP service tools (Task 8)', () => {
         { host: '10.0.0.10', port: 5432, type: 'lan' },
         { host: '100.100.100.10', port: 5432, type: 'vpn' },
       ],
-	      _agent_guidance: {
-	        next_steps: [
-	          'Connection env was saved automatically on the target Application/Compose workload.',
-	          'Call update_app for the target service/project to apply it.',
-	        ],
-	      },
+      _agent_guidance: {
+        next_steps: [
+          'Connection env was saved automatically on the target Application/Compose workload.',
+          'Call update_app for the target service/project to apply it.',
+        ],
+      },
     });
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
@@ -345,10 +346,10 @@ describe('MCP service tools (Task 8)', () => {
       suggested_env: [
         { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app' },
       ],
-	      auto_injected_env_keys: ['DATABASE_URL'],
-	      _agent_guidance: {
-	        next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
-	      },
+      auto_injected_env_keys: ['DATABASE_URL'],
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
+      },
     });
   });
 
@@ -522,12 +523,12 @@ describe('MCP service tools (Task 8)', () => {
         { host: '10.0.0.10', port: 3306, type: 'lan' },
         { host: '100.100.100.10', port: 3306, type: 'vpn' },
       ],
-	      _agent_guidance: {
-	        next_steps: [
-	          'Connection env was saved automatically on the target Application/Compose workload.',
-	          'Call update_app for the target service/project to apply it.',
-	        ],
-	      },
+      _agent_guidance: {
+        next_steps: [
+          'Connection env was saved automatically on the target Application/Compose workload.',
+          'Call update_app for the target service/project to apply it.',
+        ],
+      },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({
       name: 'shared-mysql',
@@ -581,12 +582,12 @@ describe('MCP service tools (Task 8)', () => {
         { host: '10.0.0.10', port: 6379, type: 'lan' },
         { host: '100.100.100.10', port: 6379, type: 'vpn' },
       ],
-	      _agent_guidance: {
-	        next_steps: [
-	          'Connection env was saved automatically on the target Application/Compose workload.',
-	          'Call update_app for the target service/project to apply it.',
-	        ],
-	      },
+      _agent_guidance: {
+        next_steps: [
+          'Connection env was saved automatically on the target Application/Compose workload.',
+          'Call update_app for the target service/project to apply it.',
+        ],
+      },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({
       name: 'shared-redis',
@@ -754,6 +755,13 @@ describe('MCP service tools (Task 8)', () => {
         ],
         externalConnectionStrings: [],
       },
+    );
+    expect(ctx.db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'credential:reveal',
+        project_id: 'proj-1',
+        correlation_id: 'svc-pg',
+      }),
     );
     expect(await credentialsTool.execute({ service_id: 'svc-pg' }, { target: 'mcp' })).toEqual(
       expect.objectContaining({
