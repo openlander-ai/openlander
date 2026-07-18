@@ -435,11 +435,16 @@ request.
 Update or restart an Application. Use `update_app` for the normal "ship the
 latest stored source/image/config" intent on an existing app. `redeploy_app`
 remains as a compatibility/advanced alias over the same deploy primitive.
-`restart_service` is an advanced force-style runtime recreate path, not the
-normal safe update path.
+`restart_service` runs Docker restart against the existing long-running
+Application/resource container. It does not clone, build, replace, or remove the
+container, and the container ID stays the same. One-shot jobs return
+`SERVICE_OPERATION_UNSUPPORTED`; use `update_app(strategy="force")` when an image
+replacement is actually required.
 Project-level runtime actions have been removed. Git-based dependency installs
 get a targeted dependency-layer refresh; `no_cache=true` remains the manual
-full-cache bypass.
+full-cache bypass for update/redeploy. The legacy `restart_service.no_cache`
+input remains accepted for compatibility but is ignored because restart does
+not build an image.
 
 | Parameter           | Type    | Required | Description                                                                                              |
 | ------------------- | ------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -452,6 +457,10 @@ full-cache bypass.
 | `env_vars`          | object  | No       | Inline env vars to save before update/redeploy; user-input-gated fields can return `USER_INPUT_REQUIRED` |
 
 Provide either `service_id` or `service_name`.
+
+A successful `restart_service` returns `status: "restarted"`, `project_id`,
+`service_id`, the unchanged `container_id`, and a `diagnostic_call` for
+`diagnose_service`.
 
 `strategy="blue-green"` is conditional. It is rejected with
 `BLUE_GREEN_UNSUPPORTED` when requested explicitly for compose stacks, services

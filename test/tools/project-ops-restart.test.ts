@@ -26,11 +26,19 @@ function createContext() {
     source: 'git',
     repo_url: 'https://github.com/acme/demo-app',
     image_url: null,
+    runtime_role: 'application',
+    container_id: 'container-1',
   };
 
   const stop = vi.fn(async () => undefined);
   const redeploy = vi.fn(async () => ({ deployId: 'deploy-1' }));
   const redeployService = vi.fn(async () => ({ deployId: 'deploy-1' }));
+  const restartServiceRuntime = vi.fn(async () => ({
+    status: 'restarted' as const,
+    projectId: project.id,
+    serviceId: service.id,
+    containerId: service.container_id,
+  }));
 
   const ctx = {
     db: {
@@ -50,81 +58,49 @@ function createContext() {
       stop,
       redeploy,
       redeployService,
+      restartServiceRuntime,
     },
     deployQueue: {
       acquire: vi.fn().mockResolvedValue(() => {}),
     },
   } as unknown as AppContext;
 
-  return { ctx, stop, redeploy, redeployService };
+  return { ctx, stop, redeploy, redeployService, restartServiceRuntime, service };
 }
 
-describe('deployable restart_service non-blocking', () => {
-  it('returns immediately without awaiting redeploy', async () => {
-    const { ctx, stop, redeploy, redeployService } = createContext();
-    redeployService.mockImplementationOnce(() => new Promise(() => undefined));
-
-    const result = await Promise.race([
-      getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' }),
-      new Promise((resolve) => setTimeout(() => resolve('timeout'), 25)),
-    ]);
-
-    expect(result).not.toBe('timeout');
-    expect(stop).not.toHaveBeenCalled();
-    expect(redeployService).toHaveBeenCalledWith('service-1', {
-      noCache: false,
-      strategy: 'force',
-      healthCheckPath: undefined,
-      cmd: undefined,
-      lockSessionId: expect.any(String),
-      trigger: 'chat',
-    });
-    expect(redeploy).not.toHaveBeenCalled();
-  });
-
-  it('does not stop the live container before redeploy source validation', async () => {
-    const { ctx, stop, redeploy, redeployService } = createContext();
-
-    await getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' });
-
-    expect(stop).not.toHaveBeenCalled();
-    expect(redeployService).toHaveBeenCalledWith(
-      'service-1',
-      expect.objectContaining({
-        lockSessionId: expect.any(String),
-        trigger: 'chat',
-      }),
-    );
-    expect(redeploy).not.toHaveBeenCalled();
-  });
-
-  it('returns status restarting with polling message', async () => {
-    const { ctx, redeploy, redeployService } = createContext();
+describe('deployable restart_service runtime semantics', () => {
+  it('restarts the existing container without clone, build, or redeploy', async () => {
+    const { ctx, stop, redeploy, redeployService, restartServiceRuntime } = createContext();
 
     const result = await getRestartServiceTool(ctx).execute(
-      {
-        service_name: 'demo-app',
-        no_cache: true,
-      },
+      { service_name: 'demo-app', no_cache: true },
       { target: 'mcp' },
     );
 
-    expect(redeployService).toHaveBeenCalledWith('service-1', {
-      noCache: true,
-      strategy: 'force',
-      healthCheckPath: undefined,
-      cmd: undefined,
-      lockSessionId: expect.any(String),
-      trigger: 'chat',
-    });
+    expect(stop).not.toHaveBeenCalled();
+    expect(restartServiceRuntime).toHaveBeenCalledWith('service-1');
+    expect(redeployService).not.toHaveBeenCalled();
     expect(redeploy).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      status: 'restarting',
-      strategy: 'force',
-      warnings: expect.arrayContaining([
-        expect.stringContaining('restart_service uses a force-style recreate path'),
-      ]),
-      service: { name: 'demo-app', projectId: 'project-1', projectName: 'demo-group' },
+    expect(result).toEqual({
+      status: 'restarted',
+      project_id: 'project-1',
+      service_id: 'service-1',
+      container_id: 'container-1',
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'service-1' },
+      },
     });
+  });
+
+  it('rejects one-shot jobs before Docker restart', async () => {
+    const { ctx, service, restartServiceRuntime } = createContext();
+    service.runtime_role = 'job';
+
+    await expect(
+      getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' }),
+    ).rejects.toMatchObject({ code: 'SERVICE_OPERATION_UNSUPPORTED' });
+    expect(restartServiceRuntime).not.toHaveBeenCalled();
   });
 });

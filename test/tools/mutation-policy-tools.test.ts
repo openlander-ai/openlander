@@ -31,6 +31,8 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
     source: 'git',
     repo_url: 'https://github.com/openlander/rejected-api.git',
     image_url: null,
+    runtime_role: 'application',
+    container_id: 'container-1',
     archived_at: opts.serviceArchived ? '2026-02-01T00:00:00.000Z' : null,
   };
   return {
@@ -52,6 +54,18 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
       redeploy: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
+      getBlueGreenEligibility: vi.fn().mockResolvedValue({
+        supported: true,
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        reasons: [],
+        fallback_strategy: 'force',
+      }),
+      restartServiceRuntime: vi.fn().mockResolvedValue({
+        status: 'restarted',
+        projectId: project.id,
+        serviceId: service.id,
+        containerId: service.container_id,
+      }),
     },
     deployQueue: {
       acquire: vi.fn().mockResolvedValue(() => {}),
@@ -213,10 +227,15 @@ describe('MCP service runtime mutation policy rejections', () => {
       expect(result).toMatchObject({ status: 'deploying', service: { name: 'rejected-api' } });
     });
 
-    it('restart_service returns restarting for a healthy service', async () => {
+    it('restart_service returns restarted for a healthy service', async () => {
       const ctx = createPolicyContext();
       const result = await getTool(ctx, 'restart_service').execute(serviceArgs, { target: 'mcp' });
-      expect(result).toMatchObject({ status: 'restarting', service: { name: 'rejected-api' } });
+      expect(result).toMatchObject({
+        status: 'restarted',
+        project_id: 'proj-1',
+        service_id: 'svc-1',
+        container_id: 'container-1',
+      });
     });
   });
 

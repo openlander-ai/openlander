@@ -43,7 +43,7 @@ describe('ContainerAlertHandler — container missing', () => {
       projectId: 'project-1',
       projectName: 'project-1',
       containerId: 'missing-container-1',
-      suggestion: 'Run restart_service to redeploy.',
+      suggestion: 'Run update_app with strategy="force" to recreate the missing runtime.',
     });
 
     const alert = alertMonitor
@@ -61,7 +61,7 @@ describe('ContainerAlertHandler — container missing', () => {
       projectId: 'project-1',
       projectName: 'project-1',
       containerId: 'missing-container-1',
-      suggestion: 'Run restart_service to redeploy.',
+      suggestion: 'Run update_app with strategy="force" to recreate the missing runtime.',
     });
 
     const alert = alertMonitor

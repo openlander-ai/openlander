@@ -20,6 +20,8 @@ function createDuplicateServiceContext(
     kind: 'git',
     source: 'git',
     status: 'running',
+    runtime_role: 'application',
+    container_id: 'alpha-container',
     repo_url: 'https://github.com/acme/alpha.git',
     image_url: null,
     ...options.alphaService,
@@ -31,6 +33,8 @@ function createDuplicateServiceContext(
     kind: 'git',
     source: 'git',
     status: 'running',
+    runtime_role: 'application',
+    container_id: 'beta-container',
     repo_url: 'https://github.com/acme/beta.git',
     image_url: null,
     ...options.betaService,
@@ -110,6 +114,12 @@ function createDuplicateServiceContext(
         elapsedMs: 1,
       }),
       stop: vi.fn().mockResolvedValue(undefined),
+      restartServiceRuntime: vi.fn(async (serviceId: string) => ({
+        status: 'restarted',
+        projectId: serviceId.split('__')[0],
+        serviceId,
+        containerId: `${serviceId.split('__')[0]}-container`,
+      })),
     },
     deployQueue: {
       acquire: vi.fn().mockResolvedValue(() => {}),
@@ -663,7 +673,7 @@ describe('deployable service target resolution', () => {
     expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
   });
 
-  it('blocks local OpenLander image tags before acquiring a deploy lock', async () => {
+  it('restarts local OpenLander image containers without requiring a reproducible source', async () => {
     const ctx = createDuplicateServiceContext({
       alphaService: {
         kind: 'image',
@@ -679,17 +689,15 @@ describe('deployable service target resolution', () => {
     );
 
     expect(result).toMatchObject({
-      status: 'blocked',
-      code: 'SERVICE_SOURCE_MISSING',
-      details: { missingField: 'image_url', source: 'image' },
-      service: { id: 'alpha__svc', projectId: 'alpha' },
-      _agent_guidance: {
-        message: expect.stringContaining('existing container was left untouched'),
-      },
+      status: 'restarted',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      container_id: 'alpha-container',
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.stop).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+    expect(ctx.pipeline.restartServiceRuntime).toHaveBeenCalledWith('alpha__svc');
   });
 
   it('requires service_id when service_name matches a multi-deployable project group', async () => {

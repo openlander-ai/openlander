@@ -10,7 +10,8 @@ import type { ProjectStateManager } from './project-state-manager.js';
 const log = createModuleLogger('container-state-reconciler');
 
 const DEFAULT_INTERVAL_MS = 30_000;
-const MISSING_CONTAINER_SUGGESTION = 'Run restart_service to redeploy.';
+const MISSING_CONTAINER_SUGGESTION =
+  'Run update_app with strategy="force" to recreate the missing runtime.';
 // 1.0 GA: 60 minutes (raised from 30 to reduce false positives on slow
 // recoveries that legitimately take >30 min — e.g. large npm install +
 // Docker pull + multi-service compose). The watchdog still escapes truly
