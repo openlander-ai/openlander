@@ -948,11 +948,24 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    compose_file: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Repository-relative production Compose file path.'),
+    compose_profiles: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Compose profiles to activate.'),
     traffic_service: z
       .string()
       .min(1)
       .optional()
       .describe('Compose application service that represents public traffic.'),
+    environment: z
+      .enum(['production', 'development'])
+      .optional()
+      .describe('Deployment environment. Defaults to production.'),
     target_project_id: z
       .string()
       .optional()
@@ -972,6 +985,13 @@ export const createDeployPlanSchema = z
     }
 
     if (data.source === 'image') {
+      if (data.compose_file || data.compose_profiles || data.traffic_service) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['compose_file'],
+          message: 'Compose settings are only valid for Git repository deploys.',
+        });
+      }
       if (data.git_credential_id) {
         ctx.addIssue({
           code: 'custom',
@@ -1004,7 +1024,7 @@ export const updateDeployPlanSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions). For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
+      'JSON object with plan updates. Supported fields include env, build, compose_file, compose_profiles, traffic_service, services, and health. For user-supplied external env, use env:{provided:{KEY:"..."},trusted:["KEY"]}.',
     ),
 });
 
@@ -1019,7 +1039,7 @@ export const executeDeployPlanSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      'For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.',
+      'For Compose projects: replace only these service names (e.g., ["backend", "worker"]). Dependencies remain prerequisites and are not implicitly replaced. Omit to use the full deployment plan.',
     ),
   approve_all_safe_resources: z
     .boolean()

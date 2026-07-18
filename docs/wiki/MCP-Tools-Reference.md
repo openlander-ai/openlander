@@ -145,22 +145,25 @@ Composite catalog:
 
 Analyze a repository and create a deployment plan.
 
-| Parameter           | Type    | Required | Description                                         |
-| ------------------- | ------- | -------- | --------------------------------------------------- |
-| `repo_url`          | string  | No       | Git repository URL                                  |
-| `branch`            | string  | No       | Branch to deploy                                    |
-| `name`              | string  | No       | Project name                                        |
-| `source`            | string  | No       | `'git'` or `'image'`                                |
-| `image`             | string  | No       | Docker image (if source=image)                      |
-| `cmd`               | string  | No       | Container command override                          |
-| `port`              | number  | No       | Container port                                      |
-| `health_check_path` | string  | No       | Health check path                                   |
-| `env_vars`          | object  | No       | Environment variables                               |
-| `prefer_dockerfile` | boolean | No       | Prefer existing Dockerfile                          |
-| `dockerfile_path`   | string  | No       | Relative Dockerfile path                            |
-| `docker_target`     | string  | No       | Docker build target stage                           |
-| `traffic_service`   | string  | No       | Compose application used for representative traffic |
-| `target_project_id` | string  | No       | Deploy first Application into an existing Project   |
+| Parameter           | Type     | Required | Description                                         |
+| ------------------- | -------- | -------- | --------------------------------------------------- |
+| `repo_url`          | string   | No       | Git repository URL                                  |
+| `branch`            | string   | No       | Branch to deploy                                    |
+| `name`              | string   | No       | Project name                                        |
+| `source`            | string   | No       | `'git'` or `'image'`                                |
+| `image`             | string   | No       | Docker image (if source=image)                      |
+| `cmd`               | string   | No       | Container command override                          |
+| `port`              | number   | No       | Container port                                      |
+| `health_check_path` | string   | No       | Health check path                                   |
+| `env_vars`          | object   | No       | Environment variables                               |
+| `prefer_dockerfile` | boolean  | No       | Prefer existing Dockerfile                          |
+| `dockerfile_path`   | string   | No       | Relative Dockerfile path                            |
+| `docker_target`     | string   | No       | Docker build target stage                           |
+| `compose_file`      | string   | No       | Repository-relative Compose file                    |
+| `compose_profiles`  | string[] | No       | Compose profiles to activate                        |
+| `traffic_service`   | string   | No       | Compose application used for representative traffic |
+| `environment`       | string   | No       | `production` (default) or `development`             |
+| `target_project_id` | string   | No       | Deploy first Application into an existing Project   |
 
 For Compose plans, OpenLander auto-selects `traffic_service` when exactly one exposed application
 exists. Multiple exposed applications return `needs_input` with
@@ -172,10 +175,10 @@ representative HTTP probe.
 
 Update a deployment plan with missing values.
 
-| Parameter | Type   | Required | Description                                             |
-| --------- | ------ | -------- | ------------------------------------------------------- |
-| `plan_id` | string | Yes      | Plan ID                                                 |
-| `updates` | object | Yes      | JSON with env, dockerfile, traffic_service, or services |
+| Parameter | Type   | Required | Description                                                        |
+| --------- | ------ | -------- | ------------------------------------------------------------------ |
+| `plan_id` | string | Yes      | Plan ID                                                            |
+| `updates` | object | Yes      | JSON with env, Compose file/profiles, traffic service, or services |
 
 ### `get_deploy_plan`
 
@@ -192,7 +195,7 @@ Execute a deployment plan (non-blocking).
 | Parameter                    | Type     | Required | Description                                                                       |
 | ---------------------------- | -------- | -------- | --------------------------------------------------------------------------------- |
 | `plan_id`                    | string   | Yes      | Plan ID                                                                           |
-| `deploy_only`                | string[] | No       | Service names for compose projects                                                |
+| `deploy_only`                | string[] | No       | Compose services to replace; dependencies are treated as prerequisites            |
 | `approve_all_safe_resources` | boolean  | No       | Approve every proposed project-scoped Database/Cache/Storage resource on the plan |
 | `approvals.create_resources` | string[] | No       | Approve specific proposed services by identifier (e.g. `postgresql`)              |
 

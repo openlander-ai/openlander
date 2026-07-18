@@ -41,10 +41,14 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import {
+  filterServicesByProfiles,
   findComposeHostPortUsages,
+  fingerprintComposeServices,
   inferComposeRuntimeRoles,
+  validateComposeProfiles,
   type ComposePipeline,
 } from '../compose.js';
+import { resolveComposeFilePath } from '../compose-spec.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import {
   InvalidTrafficServiceError,
@@ -78,6 +82,8 @@ export interface CreatePlanOptions {
   projectId?: string;
   targetProjectId?: string;
   trafficService?: string;
+  composeFile?: string;
+  composeProfiles?: string[];
 }
 
 interface PlanExecutionContext {
@@ -89,11 +95,16 @@ interface PlanExecutionContext {
   containerPort?: number;
   healthCheckPath?: string;
   targetProjectId?: string;
+  composeFile?: string;
+  composeProfiles?: string[];
+  composeServiceFingerprints?: Record<string, string>;
 }
 
 export interface PlanUpdates {
   env?: { provided?: Record<string, string>; trusted?: string[] } | Record<string, string>;
   build?: Partial<DeployPlan['build']>;
+  compose_file?: string;
+  compose_profiles?: string[];
   traffic_service?: string;
   services?: PlanService[];
   health?: Partial<DeployPlan['health']>;
@@ -236,6 +247,7 @@ export class PlanEngine {
     generatedDockerfile?: string;
     composeFilePath?: string;
     composeBuildServices?: PlanBuildService[];
+    composeServiceFingerprints?: Record<string, string>;
     trafficServiceCandidates?: string[];
     relativeDockerfiles: string[];
   } {
@@ -265,14 +277,33 @@ export class PlanEngine {
     let composeBuildServices: PlanBuildService[] | undefined;
     let generatedDockerfile: string | undefined;
 
+    if (opts.composeFile && (opts.preferDockerfile || opts.dockerfilePath)) {
+      throw new ServiceConfigError(
+        'compose_file cannot be combined with prefer_dockerfile or dockerfile_path.',
+        { composeFile: opts.composeFile },
+      );
+    }
+    if (opts.composeFile && !this.composePipeline) {
+      throw new ServiceConfigError('Compose support is unavailable in this runtime.', {
+        composeFile: opts.composeFile,
+      });
+    }
+
+    let composeServiceFingerprints: Record<string, string> | undefined;
     if (!opts.preferDockerfile && !opts.dockerfilePath && this.composePipeline) {
-      const detectedComposeFile = this.composePipeline.detectComposeFile(clonePath);
+      const detectedComposeFile = opts.composeFile
+        ? resolveComposeFilePath(clonePath, opts.composeFile)
+        : this.composePipeline.detectComposeFile(clonePath);
       if (detectedComposeFile) {
         buildMethod = 'compose';
         composeFilePath = relative(clonePath, detectedComposeFile);
         const parsed = this.composePipeline.parseComposeFile(detectedComposeFile);
-        const runtimeRoles = inferComposeRuntimeRoles(parsed.services);
-        const hostPortUsages = findComposeHostPortUsages(parsed);
+        validateComposeProfiles(parsed.services, opts.composeProfiles);
+        const activeServices = filterServicesByProfiles(parsed.services, opts.composeProfiles);
+        const activeProject = { ...parsed, services: activeServices };
+        const runtimeRoles = inferComposeRuntimeRoles(activeServices);
+        const hostPortUsages = findComposeHostPortUsages(activeProject);
+        composeServiceFingerprints = fingerprintComposeServices(activeServices);
         if (hostPortUsages.length > 0) {
           warnings.push(
             'Compose host ports will be replaced with OpenLander-managed ports: ' +
@@ -282,7 +313,7 @@ export class PlanEngine {
           );
         }
 
-        composeBuildServices = parsed.services.map((svc) => {
+        composeBuildServices = activeServices.map((svc) => {
           let dockerfile: string | undefined;
           if (typeof svc.build === 'string') {
             const candidate = join(svc.build, 'Dockerfile');
@@ -324,7 +355,7 @@ export class PlanEngine {
           };
         });
 
-        for (const svc of parsed.services) {
+        for (const svc of activeServices) {
           if (svc.envFile) {
             for (const envFileRef of svc.envFile) {
               const fullPath = join(clonePath, envFileRef.path);
@@ -380,6 +411,7 @@ export class PlanEngine {
       generatedDockerfile,
       composeFilePath,
       composeBuildServices,
+      composeServiceFingerprints,
       trafficServiceCandidates: composeBuildServices
         // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanBuildService.port is Compose plan metadata, not a services DB row.
         ?.filter((service) => service.runtime_role === 'application' && service.port !== undefined)
@@ -528,6 +560,8 @@ export class PlanEngine {
       containerPort: opts.containerPort,
       healthCheckPath: opts.healthCheckPath,
       targetProjectId: opts.targetProjectId,
+      composeFile: opts.composeFile,
+      composeProfiles: opts.composeProfiles,
     };
 
     if (
@@ -538,7 +572,9 @@ export class PlanEngine {
       !execution.imageCmd &&
       execution.containerPort === undefined &&
       !execution.healthCheckPath &&
-      !execution.targetProjectId
+      !execution.targetProjectId &&
+      !execution.composeFile &&
+      !execution.composeProfiles
     ) {
       return undefined;
     }
@@ -935,6 +971,7 @@ export class PlanEngine {
     dockerTarget?: string;
     generatedDockerfile?: string;
     composeFilePath?: string;
+    composeProfiles?: string[];
     composeBuildServices?: PlanBuildService[];
     trafficService?: string;
     trafficServiceCandidates?: string[];
@@ -947,6 +984,7 @@ export class PlanEngine {
     envIssues: EnvValueIssue[];
     missing: string[];
     warnings: string[];
+    environment: 'production' | 'development';
   }): DeployPlan {
     const now = new Date().toISOString();
     const dockerfileDir = params.userDockerfile.includes('/')
@@ -1000,6 +1038,7 @@ export class PlanEngine {
         target: params.dockerTarget,
         generated_dockerfile: params.generatedDockerfile,
         compose_file: params.composeFilePath,
+        compose_profiles: params.composeProfiles,
         compose_services: composeBuildServicesWithUrls,
         traffic_service: params.trafficService,
         traffic_service_candidates:
@@ -1025,6 +1064,8 @@ export class PlanEngine {
       },
       missing: params.missing,
       warnings: params.warnings,
+      environment: params.environment,
+      production: params.environment === 'production',
       created_at: now,
       updated_at: now,
       internal_url: internalUrl,
@@ -1164,6 +1205,7 @@ export class PlanEngine {
         envIssues,
         missing: [],
         warnings: [],
+        environment: opts.environment === 'development' ? 'development' : 'production',
       });
 
       const execution = this.buildExecutionContext(opts);
@@ -1211,6 +1253,7 @@ export class PlanEngine {
       generatedDockerfile,
       composeFilePath,
       composeBuildServices,
+      composeServiceFingerprints,
       trafficServiceCandidates,
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
@@ -1307,6 +1350,7 @@ export class PlanEngine {
       dockerTarget: opts.dockerTarget,
       generatedDockerfile,
       composeFilePath,
+      composeProfiles: opts.composeProfiles,
       composeBuildServices,
       trafficService,
       trafficServiceCandidates,
@@ -1319,11 +1363,15 @@ export class PlanEngine {
       envIssues,
       missing,
       warnings,
+      environment: opts.environment === 'development' ? 'development' : 'production',
     });
 
     const execution = this.buildExecutionContext(opts);
-    if (execution) {
-      (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = execution;
+    if (execution || composeServiceFingerprints) {
+      (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = {
+        ...execution,
+        ...(composeServiceFingerprints ? { composeServiceFingerprints } : {}),
+      };
     }
 
     log.info({ planId, status: initialStatus, buildMethod }, 'Creating deploy plan');
@@ -1352,6 +1400,66 @@ export class PlanEngine {
       throw new Error(`Cannot update plan in ${plan.status} status`);
     }
 
+    let refreshedComposeBuild: Partial<DeployPlan['build']> = {};
+    let refreshedComposeExecution: Partial<PlanExecutionContext> = {};
+    const requestedComposeFile = updates.compose_file ?? updates.build?.compose_file;
+    const requestedComposeProfiles = updates.compose_profiles ?? updates.build?.compose_profiles;
+    if (requestedComposeFile !== undefined || requestedComposeProfiles !== undefined) {
+      if (!plan.app.source.repo_url) {
+        throw new ServiceConfigError('Compose settings require a Git repository plan.');
+      }
+      const execution = this.getExecutionContext(plan);
+      const cloneResult = await cloneRepo({
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+        sshKeyPath: execution.sshKeyPath,
+        gitCredentialId: plan.app.source.git_credential_id,
+      });
+      const composeWarnings: string[] = [];
+      const composeDetectedEnv: PlanEnvEntry[] = [];
+      const resolved = this.resolveBuildConfig(
+        cloneResult.path,
+        {
+          repoUrl: plan.app.source.repo_url,
+          composeFile: requestedComposeFile ?? plan.build.compose_file,
+          composeProfiles: requestedComposeProfiles ?? plan.build.compose_profiles,
+        },
+        composeWarnings,
+        composeDetectedEnv,
+      );
+      if (resolved.buildMethod !== 'compose' || !resolved.composeFilePath) {
+        throw new ServiceConfigError('The selected file is not a valid Compose deployment.', {
+          composeFile: requestedComposeFile ?? plan.build.compose_file,
+        });
+      }
+      const candidates = resolved.trafficServiceCandidates ?? [];
+      const explicitlyUpdatedTraffic =
+        updates.traffic_service ?? updates.build?.traffic_service ?? undefined;
+      const retainedTraffic = explicitlyUpdatedTraffic ?? plan.build.traffic_service;
+      const trafficService =
+        retainedTraffic && candidates.includes(retainedTraffic)
+          ? retainedTraffic
+          : candidates.length === 1
+            ? candidates[0]
+            : undefined;
+      if (explicitlyUpdatedTraffic && !candidates.includes(explicitlyUpdatedTraffic)) {
+        throw new InvalidTrafficServiceError(explicitlyUpdatedTraffic, candidates);
+      }
+      refreshedComposeBuild = {
+        method: 'compose',
+        compose_file: resolved.composeFilePath,
+        compose_profiles: requestedComposeProfiles ?? plan.build.compose_profiles,
+        compose_services: resolved.composeBuildServices,
+        traffic_service: trafficService,
+        traffic_service_candidates: candidates.length > 1 ? candidates : undefined,
+      };
+      refreshedComposeExecution = {
+        composeFile: resolved.composeFilePath,
+        composeProfiles: requestedComposeProfiles ?? plan.build.compose_profiles,
+        composeServiceFingerprints: resolved.composeServiceFingerprints,
+      };
+    }
+
     const merged: DeployPlan = {
       ...plan,
       env: {
@@ -1362,11 +1470,22 @@ export class PlanEngine {
       build: {
         ...plan.build,
         ...(updates.build || {}),
+        ...refreshedComposeBuild,
+        ...(updates.compose_file !== undefined ? { compose_file: updates.compose_file } : {}),
+        ...(updates.compose_profiles !== undefined
+          ? { compose_profiles: updates.compose_profiles }
+          : {}),
         ...(updates.traffic_service !== undefined
           ? { traffic_service: updates.traffic_service }
           : {}),
       },
     };
+    if (Object.keys(refreshedComposeExecution).length > 0) {
+      (merged as DeployPlan & { execution?: PlanExecutionContext }).execution = {
+        ...this.getExecutionContext(plan),
+        ...refreshedComposeExecution,
+      };
+    }
     const trafficCandidates = merged.build.traffic_service_candidates ?? [];
     if (
       merged.build.traffic_service &&
@@ -1995,10 +2114,21 @@ export class PlanEngine {
         !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
       dockerTarget: plan.build.target,
       buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
-      composeServices: isCompose ? deployOnly : undefined,
-      trafficService: isCompose ? plan.build.traffic_service : undefined,
+      ...(isCompose && plan.build.compose_file ? { composeFile: plan.build.compose_file } : {}),
+      ...(isCompose && plan.build.compose_profiles
+        ? { composeProfiles: plan.build.compose_profiles }
+        : {}),
+      ...(isCompose && (deployOnly ?? plan.build.selected_services)
+        ? { composeServices: deployOnly ?? plan.build.selected_services }
+        : {}),
+      ...(isCompose && plan.build.traffic_service
+        ? { trafficService: plan.build.traffic_service }
+        : {}),
+      ...(isCompose && planExecution.composeServiceFingerprints
+        ? { composeServiceFingerprints: planExecution.composeServiceFingerprints }
+        : {}),
       ...(execution.visibility ? { visibility: execution.visibility } : {}),
-      ...(execution.environment ? { environment: execution.environment } : {}),
+      ...(plan.environment ? { environment: plan.environment } : {}),
       ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
       ...(plan.app.source.git_credential_id
         ? { gitCredentialId: plan.app.source.git_credential_id }
@@ -2171,7 +2301,26 @@ export class PlanEngine {
     triggerOverride?: 'chat' | 'webhook' | 'api',
     approval?: ExecutePlanApproval,
   ): Promise<ExecutePlanResult> {
-    const freshPlan = await this.loadPlanForExecution(planId);
+    let freshPlan = await this.loadPlanForExecution(planId);
+    if (deployOnly && deployOnly.length > 0) {
+      if (freshPlan.build.method !== 'compose') {
+        throw new ServiceConfigError('deploy_only is only valid for Compose plans.', {
+          deployOnly,
+        });
+      }
+      const available = (freshPlan.build.compose_services ?? []).map((service) => service.name);
+      const unknown = deployOnly.filter((service) => !available.includes(service));
+      if (unknown.length > 0) {
+        throw new ServiceConfigError(`Unknown Compose service(s): ${unknown.join(', ')}`, {
+          requested: deployOnly,
+          available,
+        });
+      }
+      freshPlan = {
+        ...freshPlan,
+        build: { ...freshPlan.build, selected_services: [...deployOnly] },
+      };
+    }
     this.assertPlanHasRequiredInput(freshPlan);
 
     const approvalGate = this.evaluateApprovalGate(planId, freshPlan, approval);
