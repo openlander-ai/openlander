@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
+  redactRepoUrl: vi.fn((value: string) => value),
 }));
 
 vi.mock('node:fs', async () => {

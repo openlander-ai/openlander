@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
+  redactRepoUrl: vi.fn((value: string) => value),
 }));
 
 import { PlanEngine } from '../../src/pipeline/deploy-plan/engine.js';
