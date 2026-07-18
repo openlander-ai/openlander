@@ -132,3 +132,37 @@ describe('removeImage', () => {
     await expect(docker.removeImage('gone:v1')).resolves.toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: buildComposeService
+// ---------------------------------------------------------------------------
+
+describe('buildComposeService', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('uses BuildKit for Compose Dockerfiles', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => done(null),
+    );
+
+    const docker = new Docker();
+    await docker.buildComposeService({
+      contextPath: '/tmp/compose-app',
+      dockerfile: 'infra/Dockerfile.api',
+      tag: 'incar-api:dev',
+      cacheFrom: ['incar-api:dev'],
+    });
+
+    expect(mockBuildImage).toHaveBeenCalledWith(
+      { context: '/tmp/compose-app', src: ['.'] },
+      expect.objectContaining({
+        t: 'incar-api:dev',
+        dockerfile: 'infra/Dockerfile.api',
+        version: '2',
+      }),
+    );
+  });
+});
