@@ -1143,6 +1143,14 @@ export const translations = {
         empty: '이 리소스에 연결된 Project가 없습니다.',
         openProject: 'Open project',
       },
+      credentials: {
+        title: '인증 정보',
+        description: '명시적으로 표시하기 전까지 인증 정보를 숨깁니다.',
+        reveal: '인증 정보 표시',
+        hide: '인증 정보 숨기기',
+        empty: '이 리소스에 저장된 인증 정보가 없습니다.',
+        error: '인증 정보를 표시하지 못했습니다',
+      },
       settings: {
         lifecycle: 'Lifecycle',
         lifecycleDescription: '저장된 데이터는 유지한 채 컨테이너를 시작하거나 중지합니다.',

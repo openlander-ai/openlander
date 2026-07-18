@@ -66,6 +66,7 @@ import {
   archiveGroupService,
   deleteGroupService,
   managedServices,
+  revealServiceCredentials,
   unarchiveGroupService,
   updateGroupService,
   type ConnectedProject,
@@ -2616,6 +2617,7 @@ function ManagedOverviewTab({
           <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
         </SubCard>
       </div>
+      <ManagedCredentialCard serviceId={service.id} />
       <ManagedOperationsSection
         service={service}
         connections={connections}
@@ -2629,21 +2631,80 @@ function ManagedOverviewTab({
   );
 }
 
-function getManagedServicePortLabel(service: Pick<Service, 'credentials' | 'port'>): string {
-  const port = service.port ?? getManagedServiceCredentialsPort(service.credentials);
-  return port == null ? '—' : String(port);
+function getManagedServicePortLabel(service: Pick<Service, 'port'>): string {
+  return service.port == null ? '—' : String(service.port);
 }
 
-function getManagedServiceCredentialsPort(credentials: string | null): number | null {
-  if (!credentials) return null;
-  try {
-    const parsed: unknown = JSON.parse(credentials);
-    if (!parsed || typeof parsed !== 'object' || !('port' in parsed)) return null;
-    const port = (parsed as { port?: unknown }).port;
-    return typeof port === 'number' && Number.isInteger(port) && port > 0 ? port : null;
-  } catch {
-    return null;
-  }
+function ManagedCredentialCard({ serviceId }: { serviceId: string }) {
+  const { t } = useLanguage();
+  const [revealed, setRevealed] = useState<Record<string, unknown> | null>(null);
+  const [revealedEnv, setRevealedEnv] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reveal = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await revealServiceCredentials(serviceId);
+      setRevealed(result.credentials);
+      setRevealedEnv(result.env_vars);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : t('services.managedDetail.credentials.error'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hide = () => {
+    setRevealed(null);
+    setRevealedEnv({});
+    setError(null);
+  };
+
+  const rows = [...Object.entries(revealed ?? {}), ...Object.entries(revealedEnv)];
+  const hasRevealed = revealed !== null || Object.keys(revealedEnv).length > 0;
+
+  return (
+    <SubCard
+      title={t('services.managedDetail.credentials.title')}
+      action={
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={loading}
+          onClick={() => void (hasRevealed ? hide() : reveal())}
+        >
+          {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          {hasRevealed
+            ? t('services.managedDetail.credentials.hide')
+            : t('services.managedDetail.credentials.reveal')}
+        </Button>
+      }
+    >
+      {error ? <p className="text-sm text-error">{error}</p> : null}
+      {!hasRevealed && !error ? (
+        <p className="text-sm text-[color:var(--ol-fg-muted)]">
+          {t('services.managedDetail.credentials.description')}
+        </p>
+      ) : null}
+      {hasRevealed ? (
+        rows.length > 0 ? (
+          <KvList
+            rows={rows.map(([key, value]) => [key, String(value)])}
+            valueClassName="ol-mono break-all text-[12px]"
+          />
+        ) : (
+          <p className="text-sm text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.credentials.empty')}
+          </p>
+        )
+      ) : null}
+    </SubCard>
+  );
 }
 
 function ManagedLogsTab({ serviceId }: { serviceId: string }) {

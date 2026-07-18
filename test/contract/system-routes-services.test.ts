@@ -2,13 +2,12 @@
  * Contract test: /api/services wire shape stability post-Phase-C.
  *
  * Asserts that GET /services, POST /services, and GET /services/:id all
- * return objects with the legacy wire fields (type, image, port, env_vars)
+ * return objects with the non-sensitive legacy wire fields (type, image, port)
  * populated from canonical ServiceRow fields after migration 0012 Phase C
  * drops the storage columns.
  *
- * This test pins the wire contract so the frontend (ServiceDetailV2.tsx,
- * ServiceConnectionTab.tsx) continues to receive
- * the shape it expects through 1.x.
+ * Credentials and env vars are intentionally available only through the
+ * explicit reveal endpoint.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
@@ -86,65 +85,64 @@ function buildMockRoutes(
 }
 
 describe('system-routes /api/services wire shape contract', () => {
-  it(
-    'GET /services: each item has type, image, port derived from canonical fields',
-    async () => {
-      // Build the real route using mocked AppContext
-      const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
-      const app = new Hono();
+  it('GET /services: each item has type, image, port derived from canonical fields', async () => {
+    // Build the real route using mocked AppContext
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
 
-      const mockCtx = {
-        serviceManager: {
-          listWithCardSummary: vi.fn().mockResolvedValue([makeCardSummary()]),
-          create: vi.fn(),
-          getDetail: vi.fn(),
-          getLogs: vi.fn(),
-          getStats: vi.fn(),
-          getInspectionHealth: vi.fn(),
-          getConnectedProjects: vi.fn(),
-          listDatabases: vi.fn(),
-          createDatabase: vi.fn(),
-          listUsers: vi.fn(),
-          createUser: vi.fn(),
-          remove: vi.fn(),
-          start: vi.fn(),
-          stop: vi.fn(),
-          restart: vi.fn(),
-        },
-        db: {
-          getEnvVars: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
-          getEnvVarsForService: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
-          getService: vi.fn(),
-          hasAnyServiceMetrics: vi.fn(),
-          listServiceMetricsSince: vi.fn(),
-        },
-        config: { gitProviders: { github: {} } },
-        docker: {},
-      } as unknown as Parameters<typeof createSystemRoutes>[0];
+    const mockCtx = {
+      serviceManager: {
+        listWithCardSummary: vi.fn().mockResolvedValue([makeCardSummary()]),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
+      },
+      db: {
+        getEnvVars: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
+        getEnvVarsForService: vi.fn().mockReturnValue({ REDIS_URL: 'redis://localhost:6379' }),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
 
-      app.route('/api', createSystemRoutes(mockCtx));
-      const res = await app.request('/api/services');
-      expect(res.status).toBe(200);
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services');
+    expect(res.status).toBe(200);
 
-      const body = (await res.json()) as Array<Record<string, unknown>>;
-      expect(Array.isArray(body)).toBe(true);
-      expect(body.length).toBeGreaterThan(0);
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBeGreaterThan(0);
 
-      const svc = body[0];
-      // Wire contract: legacy fields must be present and populated
-      expect(svc).toHaveProperty('type');
-      expect(svc.type).toBe('redis'); // kind → type
-      expect(svc).toHaveProperty('image');
-      expect(svc.image).toBe('redis:7-alpine'); // image_url → image
-      expect(svc).toHaveProperty('port');
-      expect(svc.port).toBe(6379); // assigned_port → port
-      expect(svc).toHaveProperty('env_vars');
-      expect(typeof svc.env_vars).toBe('string'); // JSON string from env_vars repo
-    },
-    30_000,
-  );
+    const svc = body[0];
+    // Wire contract: legacy fields must be present and populated
+    expect(svc).toHaveProperty('type');
+    expect(svc.type).toBe('redis'); // kind → type
+    expect(svc).toHaveProperty('image');
+    expect(svc.image).toBe('redis:7-alpine'); // image_url → image
+    expect(svc).toHaveProperty('port');
+    expect(svc.port).toBe(6379); // assigned_port → port
+    expect(svc).not.toHaveProperty('env_vars');
+    expect(svc).not.toHaveProperty('credentials');
+    expect(svc).not.toHaveProperty('access_code');
+    expect(svc).not.toHaveProperty('access_code_iv');
+    expect(svc).not.toHaveProperty('git_credential_id');
+  }, 30_000);
 
-  it('GET /services: env_vars is null when no env vars exist', async () => {
+  it('GET /services: env_vars is omitted even when no env vars exist', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();
 
@@ -180,7 +178,7 @@ describe('system-routes /api/services wire shape contract', () => {
     app.route('/api', createSystemRoutes(mockCtx));
     const res = await app.request('/api/services');
     const body = (await res.json()) as Array<Record<string, unknown>>;
-    expect(body[0].env_vars).toBeNull();
+    expect(body[0]).not.toHaveProperty('env_vars');
   });
 
   it('GET /services/:id: wire fields present on single service', async () => {
@@ -224,6 +222,50 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(svc.type).toBe('redis');
     expect(svc.image).toBe('redis:7-alpine');
     expect(svc.port).toBe(6379);
+    expect(svc).not.toHaveProperty('credentials');
+    expect(svc).not.toHaveProperty('env_vars');
+  });
+
+  it('POST /services/:id/credentials/reveal returns secrets only explicitly and audits access', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+    const insertActivityLog = vi.fn().mockResolvedValue(undefined);
+    const service = makeCanonicalServiceRow({
+      credentials: JSON.stringify({ user: 'app', password: 'secret' }),
+    });
+    const mockCtx = {
+      serviceManager: {
+        getDetail: vi.fn().mockResolvedValue(service),
+      },
+      db: {
+        getEnvVarsForService: vi.fn().mockResolvedValue({ DATABASE_URL: 'secret-url' }),
+        insertActivityLog,
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-test-001/credentials/reveal', {
+      method: 'POST',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    await expect(res.json()).resolves.toEqual({
+      service_id: 'svc-test-001',
+      credentials: { user: 'app', password: 'secret' },
+      env_vars: { DATABASE_URL: 'secret-url' },
+    });
+    expect(insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'credential:reveal',
+        project_id: 'proj-test-001',
+        correlation_id: 'svc-test-001',
+      }),
+    );
+    const audit = insertActivityLog.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(JSON.stringify(audit)).not.toContain('secret');
   });
 
   it('GET /services/:id/connected-projects resolves and returns connected projects', async () => {
@@ -704,7 +746,7 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(body[0].type).toBe('postgres');
     expect(body[0].image).toBe('postgres:16-alpine');
     expect(body[0].port).toBe(5432);
-    expect(body[0].env_vars).toBe('{"PG_PASSWORD":"secret"}');
+    expect(body[0]).not.toHaveProperty('env_vars');
   });
 });
 

@@ -1020,6 +1020,14 @@ export const translations = {
         empty: 'No Projects are connected to this resource.',
         openProject: 'Open project',
       },
+      credentials: {
+        title: 'Credentials',
+        description: 'Credentials stay hidden until you explicitly reveal them.',
+        reveal: 'Reveal credentials',
+        hide: 'Hide credentials',
+        empty: 'No credentials are stored for this resource.',
+        error: 'Failed to reveal credentials',
+      },
       settings: {
         lifecycle: 'Lifecycle',
         lifecycleDescription: 'Start or stop the container without changing stored data.',

@@ -1,5 +1,13 @@
 import { getLogBuffer, type LogEntry } from '../../lib/log-buffer.js';
 import { isDockerNotFoundError } from '../../errors.js';
+import type {
+  ActivityLogRow,
+  DeployLogRow,
+  ProjectRow,
+  ServiceRow,
+  TimelineEventRow,
+  WebhookConfigRow,
+} from '../../db/types.js';
 import {
   platformDbInspectSchema,
   platformDockerInspectSchema,
@@ -18,6 +26,135 @@ const PINO_LEVEL_MAP: Record<string, number> = {
 };
 
 const FORBIDDEN_TABLES = new Set(['global_secrets', 'oauth_tokens', 'secret_files', 'env_vars']);
+const SENSITIVE_CONFIG_KEYS = new Set([
+  'credentials',
+  'env_vars',
+  'access_code',
+  'access_code_iv',
+  'secret',
+  'sshKeyPath',
+  'gitCredentialId',
+  'git_credential_id',
+]);
+
+function safeProjectRow(row: ProjectRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    display_name: row.display_name,
+    description: row.description,
+    tags: row.tags,
+    archived_at: row.archived_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    server_id: row.server_id,
+  };
+}
+
+function safeServiceRow(row: ServiceRow) {
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    name: row.name,
+    kind: row.kind,
+    parent_service_id: row.parent_service_id,
+    status: row.status,
+    visibility: row.visibility,
+    assigned_port: row.assigned_port,
+    container_id: row.container_id,
+    container_name: row.container_name,
+    container_port: row.container_port,
+    image_tag: row.image_tag,
+    previous_image_tag: row.previous_image_tag,
+    public_url: row.public_url,
+    dockerfile_path: row.dockerfile_path,
+    docker_target: row.docker_target,
+    build_context: row.build_context,
+    build_method: row.build_method,
+    source: row.source,
+    repo_url: row.repo_url,
+    branch: row.branch,
+    image_url: row.image_url,
+    image_cmd: row.image_cmd,
+    is_preview: row.is_preview,
+    pr_number: row.pr_number,
+    project_type: row.project_type,
+    health_check_strategy: row.health_check_strategy,
+    health_check_path: row.health_check_path,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    archived_at: row.archived_at,
+    server_id: row.server_id,
+  };
+}
+
+function safeDeployLogRow(row: DeployLogRow, projectId?: string) {
+  return {
+    id: row.id,
+    service_id: row.service_id,
+    environment_id: row.environment_id,
+    status: row.status,
+    trigger: row.trigger,
+    trigger_detail: row.trigger_detail,
+    commit_sha: row.commit_sha,
+    commit_message: row.commit_message,
+    representative_traffic_json: row.representative_traffic_json,
+    duration_ms: row.duration_ms,
+    created_at: row.created_at,
+    ...(projectId ? { project_id: projectId } : {}),
+  };
+}
+
+function safeTimelineEventRow(row: TimelineEventRow) {
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    deploy_id: row.deploy_id,
+    type: row.type,
+    message: row.message,
+    severity: row.severity,
+    percent: row.percent,
+    tool_name: row.tool_name,
+    created_at: row.created_at,
+  };
+}
+
+function safeWebhookConfigRow(row: WebhookConfigRow) {
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    source: row.source,
+    branch_filter: row.branch_filter,
+    enabled: row.enabled,
+    created_at: row.created_at,
+  };
+}
+
+function safeActivityLogRow(row: ActivityLogRow) {
+  return {
+    id: row.id,
+    event_type: row.event_type,
+    activity_type: row.activity_type,
+    severity: row.severity,
+    project_id: row.project_id,
+    correlation_id: row.correlation_id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    created_at: row.created_at,
+  };
+}
+
+function sanitizeDeployConfig(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => sanitizeDeployConfig(entry));
+  if (!value || typeof value !== 'object') return value;
+
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!SENSITIVE_CONFIG_KEYS.has(key)) safe[key] = sanitizeDeployConfig(entry);
+  }
+  return safe;
+}
 
 function mapManagedContainer(container: {
   id: string;
@@ -182,8 +319,11 @@ export const platformDebugToolDefs: ToolDef[] = [
 
       switch (table) {
         case 'projects': {
+          const all = await db.listProjects(undefined, { includeArchived: true });
           const rows = applyLimit(
-            await db.listProjects(undefined, { includeArchived: true }),
+            all
+              .filter((project) => projectId === undefined || project.id === projectId)
+              .map(safeProjectRow),
             limit,
           );
           return { table, count: rows.length, rows };
@@ -206,22 +346,28 @@ export const platformDebugToolDefs: ToolDef[] = [
           return { table, count: selected.length, rows: selected };
         }
         case 'services': {
-          const rows = applyLimit(await db.listServices(), limit);
+          const rows = applyLimit(
+            (await db.listServices())
+              .filter((service) => projectId === undefined || service.project_id === projectId)
+              .map(safeServiceRow),
+            limit,
+          );
           return { table, count: rows.length, rows };
         }
         case 'deploy_logs': {
           const rows =
             projectId !== undefined
-              ? await db.getDeployLogs(projectId, limit)
+              ? (await db.getDeployLogs(projectId, limit)).map((entry) =>
+                  safeDeployLogRow(entry, projectId),
+                )
               : applyLimit(
                   (
                     await Promise.all(
                       (await db.listProjects(undefined, { includeArchived: true })).map(
                         async (project) =>
-                          (await db.getDeployLogs(project.id, limit)).map((entry) => ({
-                            ...entry,
-                            project_id: project.id,
-                          })),
+                          (await db.getDeployLogs(project.id, limit)).map((entry) =>
+                            safeDeployLogRow(entry, project.id),
+                          ),
                       ),
                     )
                   ).flat(),
@@ -232,16 +378,13 @@ export const platformDebugToolDefs: ToolDef[] = [
         case 'timeline_events': {
           const rows =
             projectId !== undefined
-              ? await db.getTimelineEvents(projectId, limit)
+              ? (await db.getTimelineEvents(projectId, limit)).map(safeTimelineEventRow)
               : applyLimit(
                   (
                     await Promise.all(
                       (await db.listProjects(undefined, { includeArchived: true })).map(
                         async (project) =>
-                          (await db.getTimelineEvents(project.id, limit)).map((entry) => ({
-                            ...entry,
-                            project_id: project.id,
-                          })),
+                          (await db.getTimelineEvents(project.id, limit)).map(safeTimelineEventRow),
                       ),
                     )
                   ).flat(),
@@ -260,16 +403,13 @@ export const platformDebugToolDefs: ToolDef[] = [
         case 'webhook_configs': {
           const rows =
             projectId !== undefined
-              ? await db.getWebhookConfigs(projectId)
+              ? (await db.getWebhookConfigs(projectId)).map(safeWebhookConfigRow)
               : applyLimit(
                   (
                     await Promise.all(
                       (await db.listProjects(undefined, { includeArchived: true })).map(
                         async (project) =>
-                          (await db.getWebhookConfigs(project.id)).map((entry) => ({
-                            ...entry,
-                            project_id: project.id,
-                          })),
+                          (await db.getWebhookConfigs(project.id)).map(safeWebhookConfigRow),
                       ),
                     )
                   ).flat(),
@@ -281,7 +421,9 @@ export const platformDebugToolDefs: ToolDef[] = [
         case 'deploy_configs': {
           if (projectId !== undefined) {
             const config = await db.loadDeployConfig(projectId);
-            const rows = config ? [{ project_id: projectId, config }] : [];
+            const rows = config
+              ? [{ project_id: projectId, config: sanitizeDeployConfig(config) }]
+              : [];
             return { table, count: rows.length, rows };
           }
 
@@ -291,19 +433,21 @@ export const platformDebugToolDefs: ToolDef[] = [
                 (await db.listProjects(undefined, { includeArchived: true })).map(
                   async (project) => ({
                     project_id: project.id,
-                    config: await db.loadDeployConfig(project.id),
+                    config: sanitizeDeployConfig(await db.loadDeployConfig(project.id)),
                   }),
                 ),
               )
-            ).filter((entry) => entry.config !== null),
+            ).filter((entry) => entry.config != null),
             limit,
           );
           return { table, count: rows.length, rows };
         }
         case 'activity_log': {
-          const rows = await db.findActivityLogRecent(limit, {
-            ...(projectId !== undefined ? { project_id: projectId } : {}),
-          });
+          const rows = (
+            await db.findActivityLogRecent(limit, {
+              ...(projectId !== undefined ? { project_id: projectId } : {}),
+            })
+          ).map(safeActivityLogRow);
           return { table, count: rows.length, rows };
         }
         default:
