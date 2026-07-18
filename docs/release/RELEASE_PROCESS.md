@@ -214,6 +214,20 @@ gh workflow run release-gate.yml \
   -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
 ```
 
+To verify an in-place upgrade on the same database and data volumes, provide the
+previous published image as well. The gate seeds a password, API token, and
+database marker on the previous image, recreates only the OpenLander container
+with the RC image, verifies that state, and then runs the normal cold-agent smoke:
+
+```bash
+gh workflow run release-gate.yml \
+  --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_smoke_slow=true \
+  -f rc_upgrade_from_image=ghcr.io/openlander-ai/openlander:0.1.8 \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
+```
+
 ## Post-Release Verification
 
 ```bash
