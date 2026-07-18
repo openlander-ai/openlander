@@ -280,6 +280,7 @@ describe('platform-debug tools', () => {
         project_id: 'p1',
         name: 'db-a',
         kind: 'postgres',
+        repo_url: 'https://token@github.com/example/private.git',
         credentials: '{"password":"secret"}',
         env_vars: '{"TOKEN":"secret"}',
         access_code: 'secret',
@@ -301,6 +302,7 @@ describe('platform-debug tools', () => {
     expect(result.rows[0]).not.toHaveProperty('access_code');
     expect(result.rows[0]).not.toHaveProperty('access_code_iv');
     expect(result.rows[0]).not.toHaveProperty('git_credential_id');
+    expect(result.rows[0]?.['repo_url']).toBe('https://***@github.com/example/private.git');
   });
 
   it('platform_db_inspect removes raw logs, webhook secrets, and unstructured metadata', async () => {
@@ -360,6 +362,71 @@ describe('platform-debug tools', () => {
       repoUrl: 'https://github.com/openlander-ai/openlander',
       nested: { safe: true },
     });
+  });
+
+  it('platform_db_inspect parses and sanitizes stored deploy config JSON', async () => {
+    const { ctx, dbMocks } = createMockPlatformDebugContext();
+    dbMocks.loadDeployConfig.mockReturnValueOnce({
+      id: 'config-1',
+      project_id: 'p1',
+      service_id: 'p1__svc',
+      config_version: 2,
+      config_json: JSON.stringify({
+        version: 2,
+        snapshot: {
+          repoUrl: 'https://token@github.com/example/private.git',
+          sshKeyPath: '/tmp/key',
+          gitCredentialId: 'credential-id',
+          nested: { env_vars: { TOKEN: 'secret' }, safe: true },
+        },
+      }),
+    });
+
+    const result = (await getTool('platform_db_inspect').execute(
+      { table: 'deploy_configs', project_id: 'p1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as { rows: Array<{ config: Record<string, unknown> }> };
+
+    expect(result.rows[0]?.config).toEqual({
+      id: 'config-1',
+      project_id: 'p1',
+      service_id: 'p1__svc',
+      config_version: 2,
+      config: {
+        version: 2,
+        snapshot: {
+          repoUrl: 'https://***@github.com/example/private.git',
+          nested: { safe: true },
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('token@');
+    expect(JSON.stringify(result)).not.toContain('/tmp/key');
+    expect(JSON.stringify(result)).not.toContain('credential-id');
+    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(JSON.stringify(result)).not.toContain('config_json');
+  });
+
+  it('platform_db_inspect omits malformed deploy config JSON', async () => {
+    const { ctx, dbMocks } = createMockPlatformDebugContext();
+    dbMocks.loadDeployConfig.mockReturnValueOnce({
+      id: 'config-1',
+      project_id: 'p1',
+      config_json: '{not-json:token-secret}',
+    });
+
+    const result = (await getTool('platform_db_inspect').execute(
+      { table: 'deploy_configs', project_id: 'p1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as { rows: Array<{ config: Record<string, unknown> }> };
+
+    expect(result.rows[0]?.config).toEqual({
+      id: 'config-1',
+      project_id: 'p1',
+      config_parse_error: 'invalid_json',
+    });
+    expect(JSON.stringify(result)).not.toContain('token-secret');
+    expect(JSON.stringify(result)).not.toContain('config_json');
   });
 
   it('platform_db_inspect rejects forbidden tables at runtime', async () => {
