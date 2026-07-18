@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.4-rc.1] - 2026-07-19
+
+### Added
+
+- Add persistent Compose runtime roles for applications, one-shot jobs, and
+  infrastructure resources, including additive migration and legacy backfill.
+- Add explicit Compose traffic-service selection with automatic resolution for
+  a single exposed application and guided input when multiple candidates exist.
+- Add audited, no-store service credential reveal for authenticated Web users
+  while keeping scoped MCP credential reads project-bound.
+
+### Changed
+
+- Diagnose Compose applications with HTTP and routing checks, resources with
+  Docker health or TCP checks, and jobs with exit-code and log evidence.
+- Run resource and job containers without host ports or Traefik routes, and
+  treat a one-shot job exit code of zero as successful completion.
+- Use the selected child application for Compose representative URLs and
+  readiness probes instead of probing the portless aggregate parent.
+
+### Fixed
+
+- Scope Platform database inspection to the requested project, reject scoped
+  tokens for instance-wide debug access, and remove credentials, environment
+  values, secrets, logs, and sensitive deploy configuration from safe DTOs.
+- Remove credential and environment plaintext from normal service HTTP and MCP
+  responses while preserving explicit, audited credential reveal operations.
+- Distinguish retryable DNS, timeout, network, reset, and endpoint connectivity
+  failures from Git authentication errors across Deploy Key, SSH, OAuth, and
+  PAT clone paths, with repository credentials and tokens redacted.
+- Preserve Compose child container names and internal ports in representative
+  traffic and role-aware diagnostic regression coverage.
+
 ## [0.2.3] - 2026-07-18
 
 ### Added
