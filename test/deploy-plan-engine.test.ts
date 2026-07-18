@@ -975,6 +975,49 @@ describe('PlanEngine.executePlan', () => {
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
+  it('lets compose-declared services satisfy their own runtime dependencies', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        compose_file: 'docker-compose.yml',
+        compose_services: [
+          { name: 'db', image: 'pgvector/pgvector:pg18' },
+          { name: 'api', build: '.', depends_on: ['db'] },
+        ],
+      },
+      services: [
+        {
+          type: 'postgresql',
+          action: 'create',
+          connect_via: 'DATABASE_URL',
+          resolution: 'compose_service',
+        },
+      ],
+      env: {
+        auto: {},
+        required: [],
+        provided: {},
+        detected: [],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.not.objectContaining({ DATABASE_URL: expect.anything() }),
+      }),
+    );
+  });
+
   it('injects same-project reusable service credentials into environment variables', async () => {
     const reusableService = {
       id: 'same-project-pg',
