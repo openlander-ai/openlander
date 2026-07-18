@@ -14,6 +14,7 @@ import * as gitPipeline from '../../src/pipeline/git.js';
 import * as dockerfileGen from '../../src/pipeline/dockerfile-gen.js';
 import { ServiceSelectionRequiredError } from '../../src/errors.js';
 import { createMockDocker } from '../helpers/docker-mocks.js';
+import { serializeConfig } from '../../src/pipeline/config-snapshot.js';
 
 const NOW = '2026-01-01T00:00:00.000Z';
 
@@ -123,6 +124,7 @@ class FakeRedeployDb {
   readonly projects = new Map<string, ProjectRow>();
   readonly services = new Map<string, ServiceRow>();
   readonly environments = new Map<string, EnvironmentRow>();
+  readonly deployConfigs = new Map<string, string>();
 
   async createProject(input: CreateProjectInput): Promise<ProjectRow> {
     const project = makeProjectRow(input);
@@ -249,12 +251,13 @@ class FakeRedeployDb {
     return undefined;
   }
 
-  async loadDeployConfigForService(): Promise<null> {
-    return null;
+  async loadDeployConfigForService(serviceId: string): Promise<{ config_json: string } | null> {
+    const config = this.deployConfigs.get(serviceId);
+    return config ? { config_json: config } : null;
   }
 
-  async loadDeployConfig(): Promise<null> {
-    return null;
+  async loadDeployConfig(projectId: string): Promise<{ config_json: string } | null> {
+    return this.loadDeployConfigForService(`${projectId}__svc`);
   }
 }
 
@@ -377,6 +380,7 @@ describe('redeploy() config reconstruction characterization', () => {
       visibility: 'shared',
       buildMethod: 'compose',
     });
+    db.deployConfigs.set('p2__svc', serializeConfig({ composeServices: ['web', 'api', 'logto'] }));
 
     // Call redeploy
     const result = await pipeline.redeploy('p2');
@@ -401,8 +405,9 @@ describe('redeploy() config reconstruction characterization', () => {
     // preferDockerfile is false for compose
     expect(capturedConfig.preferDockerfile).toBe(false);
 
-    // Assert: Gaps remain
-    expect(capturedConfig.composeServices).toBeUndefined();
+    // Service selection is persisted by the successful first deploy and
+    // restored so an unselected test-only service is not added on redeploy.
+    expect(capturedConfig.composeServices).toEqual(['web', 'api', 'logto']);
     expect(capturedConfig.sshKeyPath).toBeUndefined();
     expect(capturedConfig.envVars).toBeUndefined();
   });

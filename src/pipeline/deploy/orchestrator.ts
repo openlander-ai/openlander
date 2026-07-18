@@ -277,8 +277,17 @@ export async function buildProject(
     await deps.db.updateProject(projectId, {
       buildMethod: isCompose ? 'compose' : 'dockerfile',
     });
+    const deployable = config._serviceId
+      ? await deps.db.getService(config._serviceId)
+      : await deps.db.getDeployableForProject(projectId);
+    if (deployable) {
+      await deps.db.updateService(deployable.id, {
+        kind: isCompose ? 'compose' : 'git',
+        buildMethod: isCompose ? 'compose' : 'dockerfile',
+      });
+    }
   } catch (err) {
-    log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
+    log.debug({ err, projectId }, 'Failed to store detected workload kind and build method');
   }
   const composeEnvVars = await resolveEnvVars(
     {

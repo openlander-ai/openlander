@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { SHARED_NETWORK_NAME } from '../../src/config/index.js';
@@ -87,10 +87,12 @@ function createFakeDocker(overrides: Partial<Docker> = {}): Docker {
       .fn()
       .mockImplementation(async (config: { name: string }) => `container-${config.name}`),
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
+    inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true, ExitCode: 0 } }),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
+    seedVolumeFromDirectory: vi.fn().mockResolvedValue(undefined),
     getNetworkName: vi.fn().mockReturnValue(SHARED_NETWORK_NAME),
     ...overrides,
   } as unknown as Docker;
@@ -197,6 +199,228 @@ describe('compose network cleanup', () => {
     );
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'ol-stack-web',
+    );
+  });
+
+  it('replaces published ports, interpolates env defaults, and scopes named volumes', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  db:
+    image: postgres:16
+    ports:
+      - "\${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_PASSWORD: "\${POSTGRES_PASSWORD:-local-password}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerPort: 5432,
+        envVars: expect.objectContaining({ POSTGRES_PASSWORD: 'local-password' }),
+        extraBinds: ['ol-stack-volume-pgdata:/var/lib/postgresql/data'],
+      }),
+    );
+    const call = runComposeService.mock.calls[0]?.[0] as { port: number } | undefined;
+    expect(call?.port).not.toBe(5432);
+  });
+
+  it('snapshots relative bind directories into managed volumes', async () => {
+    const dataDir = join(tmpDir, 'data');
+    mkdirSync(dataDir);
+    writeFileSync(join(dataDir, 'reference.json'), '{}\n', 'utf8');
+    writeFileSync(
+      composePath,
+      `services:
+  api:
+    image: app:latest
+    volumes:
+      - ./data:/data:ro
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const seedVolumeFromDirectory = vi.fn().mockResolvedValue(undefined);
+    const docker = createFakeDocker({
+      runComposeService,
+      seedVolumeFromDirectory,
+    } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(true);
+    expect(seedVolumeFromDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ol-stack-bind-api-1',
+        sourcePath: dataDir,
+        imageTag: 'app:latest',
+      }),
+    );
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({ extraBinds: ['ol-stack-bind-api-1:/data:ro'] }),
+    );
+  });
+
+  it('loads optional env_file values below explicit deployment variables', async () => {
+    writeFileSync(join(tmpDir, '.env'), 'FROM_FILE=file-value\nOVERRIDE=file-value\n', 'utf8');
+    writeFileSync(
+      composePath,
+      `services:
+  api:
+    image: app:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SERVICE_VALUE: service-value
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      envVars: { OVERRIDE: 'deployment-value' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          FROM_FILE: 'file-value',
+          OVERRIDE: 'deployment-value',
+          SERVICE_VALUE: 'service-value',
+        }),
+      }),
+    );
+  });
+
+  it('publishes every Compose container port and applies mem_limit', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  auth:
+    image: auth:latest
+    mem_limit: 4g
+    ports:
+      - "3001:3001"
+      - "3002:3002"
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerPort: 3001,
+        additionalPorts: [expect.objectContaining({ containerPort: 3002 })],
+        memoryLimitBytes: 4 * 1024 ** 3,
+      }),
+    );
+    expect(result.services[0]?.ports).toHaveLength(2);
+  });
+
+  it('fails the stack when a leaf service does not become healthy', async () => {
+    const docker = createFakeDocker({
+      waitForHealthy: vi.fn().mockResolvedValue({ healthy: false, error: 'web is unhealthy' }),
+    } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('web is unhealthy');
+  });
+
+  it('waits for successful one-shot jobs before starting dependents', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  db:
+    image: postgres:16
+  migrate:
+    image: app:latest
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    image: app:latest
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+`,
+      'utf8',
+    );
+    const inspectContainer = vi.fn().mockResolvedValue({
+      State: { Running: false, ExitCode: 0 },
+    });
+    const docker = createFakeDocker({ inspectContainer } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(true);
+    expect(inspectContainer).toHaveBeenCalled();
+    expect(result.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'migrate', status: 'stopped' }),
+        expect.objectContaining({ name: 'api', status: 'running' }),
+      ]),
     );
   });
 });

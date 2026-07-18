@@ -40,6 +40,7 @@ export interface RunComposeServiceOptions {
   name: string;
   port: number;
   containerPort?: number;
+  additionalPorts?: Array<{ hostPort: number; containerPort: number }>;
   envVars: Record<string, string>;
   traefikLabels: Record<string, string>;
   secretFiles?: SecretFileMount[];
@@ -56,6 +57,8 @@ export interface RunComposeServiceOptions {
   network?: string;
   networks?: string[];
   aliases?: string[];
+  extraBinds?: string[];
+  memoryLimitBytes?: number;
 }
 
 export interface ContainerInfo {

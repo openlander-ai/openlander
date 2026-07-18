@@ -25,6 +25,10 @@ import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ComposePipeline } from '../src/pipeline/compose.js';
+import type { Docker } from '../src/pipeline/docker.js';
+import type { Database } from '../src/db/index.js';
+import { EventBus } from '../src/events/index.js';
 
 const mockCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
 const mockExistsSync = vi.mocked(existsSync);
@@ -617,6 +621,72 @@ describe('PlanEngine.createPlan', () => {
     expect(mockComposePipeline.detectComposeFile).toHaveBeenCalled();
   });
 
+  it('does not require empty template values from an optional compose env_file', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-optional-compose-env-'));
+    writeFileSync(join(repoPath, '.env.example'), 'GEMINI_API_KEY=\nOPTIONAL_ORG_ID=\n');
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(
+      join(repoPath, 'docker-compose.yml'),
+      `services:
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+`,
+    );
+    mockCloneRepo.mockResolvedValue({ path: repoPath, commitSha: 'optional-compose-env' });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockImplementation((path) => {
+      const value = String(path);
+      return (
+        value === join(repoPath, '.env.example') ||
+        value === join(repoPath, 'Dockerfile') ||
+        value === join(repoPath, 'docker-compose.yml')
+      );
+    });
+    mockReadFileSync.mockImplementation((path) => {
+      const value = String(path);
+      if (value.endsWith('.env.example')) return 'GEMINI_API_KEY=\nOPTIONAL_ORG_ID=\n';
+      if (value.endsWith('docker-compose.yml')) {
+        return `services:
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+`;
+      }
+      return 'FROM node:22\n';
+    });
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: new ComposePipeline({} as Docker, {} as Database, new EventBus()),
+    });
+
+    try {
+      const plan = await engineWithCompose.createPlan({
+        repoUrl: 'https://github.com/test/optional-compose-env',
+      });
+
+      expect(plan.status).toBe('ready');
+      expect(plan.missing).toEqual([]);
+      expect(plan.env.detected).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: 'GEMINI_API_KEY', required: false }),
+          expect.objectContaining({ key: 'OPTIONAL_ORG_ID', required: false }),
+        ]),
+      );
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it('skips compose detection when preferDockerfile is true (even without dockerfilePath)', async () => {
     const mockComposePipeline = {
       detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
@@ -872,6 +942,51 @@ describe('PlanEngine.createPlan', () => {
         (svc) => svc.type === 'postgresql' && svc.resolution === 'proposed_project_service',
       ),
     ).toBe(false);
+  });
+
+  it('recognizes pgvector compose images as PostgreSQL dependencies', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [
+          { name: 'api', build: '.', dependsOn: ['db'] },
+          { name: 'db', image: 'pgvector/pgvector:pg18' },
+        ],
+      }),
+    };
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    });
+    mockCloneRepo.mockResolvedValue({ path: '/tmp/test-repo', commitSha: 'pgvector-compose' });
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'DATABASE_URL' }],
+      available: [],
+      missing: [
+        {
+          type: 'postgresql',
+          suggestion: 'Create a postgresql service',
+          detectedFrom: 'DATABASE_URL',
+        },
+      ],
+    });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-pgvector-app',
+      branch: 'main',
+    });
+
+    expect(plan.services[0]).toMatchObject({
+      type: 'postgresql',
+      resolution: 'compose_service',
+    });
   });
 
   it('keeps a compose-detected postgres dependency as proposed_project_service for a dockerfile build', async () => {

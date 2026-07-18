@@ -255,6 +255,8 @@ describe('Docker sandbox race prevention', () => {
       name: 'ol-demo-stack-postgres',
       port: 10003,
       containerPort: 5432,
+      additionalPorts: [{ hostPort: 10004, containerPort: 5433 }],
+      memoryLimitBytes: 4 * 1024 ** 3,
       envVars: {},
       traefikLabels: {},
       networks: ['ol-demo-stack', 'openlander'],
@@ -273,7 +275,13 @@ describe('Docker sandbox race prevention', () => {
         },
         HostConfig: expect.objectContaining({
           NetworkMode: 'ol-demo-stack',
+          Memory: 4 * 1024 ** 3,
+          PortBindings: {
+            '5432/tcp': [{ HostPort: '10003' }],
+            '5433/tcp': [{ HostPort: '10004' }],
+          },
         }),
+        ExposedPorts: { '5432/tcp': {}, '5433/tcp': {} },
       }),
     );
     expect(connect).toHaveBeenCalledTimes(1);

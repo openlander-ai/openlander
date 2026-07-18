@@ -2526,9 +2526,9 @@ export const deployPlanToolDefs: ToolDef[] = [
         if (servicesWithHostPorts.length > 0) {
           checks.push({
             name: 'compose_ports',
-            status: 'fail',
+            status: 'info',
             message:
-              'Compose `ports:` host mappings are not supported. OpenLander manages public routing through Traefik; remove `ports:` and use `expose:` or the service container port instead. Affected services: ' +
+              'Compose host ports will be replaced with collision-free OpenLander ports while container ports are preserved. Affected services: ' +
               servicesWithHostPorts
                 .map((service) => `${service.name} (${service.host_ports?.join(', ') ?? ''})`)
                 .join('; '),

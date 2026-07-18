@@ -122,6 +122,9 @@ export interface RuntimeBackend {
   removeVolume(
     ...args: Parameters<VolumeOps['removeVolume']>
   ): ReturnType<VolumeOps['removeVolume']>;
+  seedVolumeFromDirectory(
+    ...args: Parameters<VolumeOps['seedVolumeFromDirectory']>
+  ): ReturnType<VolumeOps['seedVolumeFromDirectory']>;
 
   execSimple(
     containerId: Parameters<ExecOps['execSimple']>[0],

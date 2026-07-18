@@ -203,6 +203,10 @@ export class Docker implements RuntimeBackend {
     return this.volumeOps.removeVolume(...args);
   }
 
+  seedVolumeFromDirectory(...args: Parameters<VolumeOps['seedVolumeFromDirectory']>) {
+    return this.volumeOps.seedVolumeFromDirectory(...args);
+  }
+
   execSimple(
     containerId: Parameters<ExecOps['execSimple']>[0],
     cmd: Parameters<ExecOps['execSimple']>[1],

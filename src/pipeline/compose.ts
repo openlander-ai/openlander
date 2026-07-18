@@ -1,13 +1,8 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import {
-  checkEnvRequirements,
-  classifyVar,
-  detectEnvFile,
-  parseEnvFile,
-  formatEnvValue,
-} from './env-inject.js';
-import { join, dirname, relative } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { classifyVar, parseEnvFile, formatEnvValue } from './env-inject.js';
+import { isAbsolute, join, dirname, relative, resolve, sep } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
@@ -23,7 +18,7 @@ import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
-import { ComposeHostPortsUnsupportedError, isDockerNotFoundError } from '../errors.js';
+import { ServiceConfigError, isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -53,10 +48,12 @@ export interface ComposeService {
   environment?: Record<string, string> | string[];
   envFile?: ComposeEnvFile[];
   dependsOn?: string[];
+  dependsOnConditions?: Record<string, ComposeDependencyCondition>;
   volumes?: string[];
   command?: string | string[];
   entrypoint?: string | string[];
   restart?: string;
+  memoryLimitBytes?: number;
   healthcheck?: {
     test: string | string[];
     interval?: string;
@@ -65,6 +62,9 @@ export interface ComposeService {
     start_period?: string;
   };
 }
+
+export type ComposeDependencyCondition =
+  'service_started' | 'service_healthy' | 'service_completed_successfully';
 
 export interface ComposeEnvFile {
   path: string;
@@ -124,15 +124,62 @@ export function filterServicesByProfiles(
     return {
       ...service,
       dependsOn: service.dependsOn.filter((dependency) => keptNames.has(dependency)),
+      dependsOnConditions: service.dependsOnConditions
+        ? Object.fromEntries(
+            Object.entries(service.dependsOnConditions).filter(([dependency]) =>
+              keptNames.has(dependency),
+            ),
+          )
+        : undefined,
     };
   });
+}
+
+/**
+ * Selects requested services together with their transitive dependencies.
+ * This mirrors `docker compose up service...` instead of producing a broken
+ * topology with missing `depends_on` targets.
+ */
+export function selectComposeServices(
+  services: ComposeService[],
+  requested?: string[],
+): ComposeService[] {
+  if (!requested || requested.length === 0) {
+    return services;
+  }
+
+  const byName = new Map(services.map((service) => [service.name, service]));
+  const unknown = requested.filter((name) => !byName.has(name));
+  if (unknown.length > 0) {
+    throw new ServiceConfigError(`Unknown Compose service(s): ${unknown.join(', ')}`, {
+      requested,
+      available: services.map((service) => service.name),
+    });
+  }
+
+  const selected = new Set<string>();
+  const visit = (name: string): void => {
+    if (selected.has(name)) return;
+    const service = byName.get(name);
+    if (!service) return;
+    selected.add(name);
+    for (const dependency of service.dependsOn ?? []) {
+      visit(dependency);
+    }
+  };
+  for (const name of requested) visit(name);
+
+  return services.filter((service) => selected.has(service.name));
 }
 
 export function findComposeHostPortUsages(composeProject: ComposeProject): ComposeHostPortUsage[] {
   return composeProject.services
     .map((service) => ({
       service: service.name,
-      ports: (service.ports ?? []).filter((port) => port.trim().length > 0),
+      ports: (service.ports ?? []).filter((port) => {
+        const withoutProtocol = port.trim().split('/')[0] ?? '';
+        return withoutProtocol.split(':').length > 1;
+      }),
     }))
     .filter((usage) => usage.ports.length > 0);
 }
@@ -399,10 +446,30 @@ export class ComposePipeline {
       }
 
       let dependsOn: string[] | undefined;
+      let dependsOnConditions: Record<string, ComposeDependencyCondition> | undefined;
       if (Array.isArray(dependsOnRaw)) {
         dependsOn = dependsOnRaw.map((dep) => String(dep));
       } else if (dependsOnRaw && typeof dependsOnRaw === 'object') {
         dependsOn = Object.keys(dependsOnRaw);
+        dependsOnConditions = {};
+        for (const [dependency, rawConfig] of Object.entries(
+          dependsOnRaw as Record<string, unknown>,
+        )) {
+          if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) {
+            continue;
+          }
+          const condition = (rawConfig as Record<string, unknown>)['condition'];
+          if (
+            condition === 'service_started' ||
+            condition === 'service_healthy' ||
+            condition === 'service_completed_successfully'
+          ) {
+            dependsOnConditions[dependency] = condition;
+          }
+        }
+        if (Object.keys(dependsOnConditions).length === 0) {
+          dependsOnConditions = undefined;
+        }
       }
 
       const portsRaw = serviceObj['ports'];
@@ -415,6 +482,7 @@ export class ComposePipeline {
       const entrypointRaw = serviceObj['entrypoint'];
       const restartRaw = serviceObj['restart'];
       const healthcheckRaw = serviceObj['healthcheck'];
+      const memoryLimitRaw = serviceObj['mem_limit'];
 
       let command: ComposeService['command'];
       if (typeof commandRaw === 'string') {
@@ -511,10 +579,12 @@ export class ComposePipeline {
         environment,
         envFile,
         dependsOn,
+        dependsOnConditions,
         volumes: Array.isArray(volumesRaw) ? volumesRaw.map((volume) => String(volume)) : undefined,
         command,
         entrypoint,
         restart,
+        memoryLimitBytes: parseComposeByteValue(memoryLimitRaw),
         healthcheck,
       });
     }
@@ -533,7 +603,10 @@ export class ComposePipeline {
   }> {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentProjectId = nanoid(12);
-    this.assertNoHostPortMappings(this.filteredComposeProjectForConfig(config));
+    this.validateComposeInterpolation(
+      this.filteredComposeProjectForConfig(config),
+      config.envVars ?? {},
+    );
 
     await this.db.createProject({
       id: parentProjectId,
@@ -575,9 +648,9 @@ export class ComposePipeline {
 
     const composeProject = this.parseComposeFile(config.composePath);
     const filteredComposeProject = this.filteredComposeProjectForConfig(config, composeProject);
-    this.assertNoHostPortMappings(filteredComposeProject);
 
     const envVars = { ...(config.envVars ?? {}) };
+    this.validateComposeInterpolation(filteredComposeProject, envVars);
 
     const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
     if (envFileErrors.length > 0) {
@@ -595,18 +668,6 @@ export class ComposePipeline {
       });
       throw new Error(`Missing env_file(s) in docker-compose:\n${errorMessages.join('\n')}`);
     }
-
-    const envCheckResult = checkEnvRequirements(filteredComposeProject.projectPath, envVars);
-    if (envCheckResult.missing.length > 0) {
-      throw new Error(
-        'compose env validation failed: ' +
-          (envCheckResult.templateFile ?? '.env file') +
-          ' is missing required variables: ' +
-          envCheckResult.missing.join(', '),
-      );
-    }
-
-    this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
 
     if (!config._parentId) {
       await this.db.createProject({
@@ -755,7 +816,10 @@ export class ComposePipeline {
     );
     const deploymentByService = new Map<
       string,
-      { containerId: string; port: number; containerPort: number }
+      {
+        containerId: string;
+        ports: Array<{ hostPort: number; containerPort: number }>;
+      }
     >();
     const containerNameByService = new Map<string, string>();
     let projectNetwork: string | null = null;
@@ -770,12 +834,10 @@ export class ComposePipeline {
       const activeProjectNetwork = projectNetwork;
       await ensureManagedTraefikNetwork(this.docker, activeProjectNetwork);
       const services: ServiceNode[] = filteredComposeProject.services.map((service) => {
-        const parsedPort = this.resolveServicePortMapping(service);
         return {
           name: service.name,
           composePath: config.composePath,
           dependsOn: service.dependsOn ?? [],
-          port: parsedPort?.hostPort ?? undefined,
           envVars,
         };
       });
@@ -795,10 +857,16 @@ export class ComposePipeline {
         );
       }
 
-      const servicesWithDependents = new Set<string>();
+      const servicesRequiringSuccessfulCompletion = new Set<string>();
+      const completedServiceNames = new Set<string>();
       for (const service of topology.services) {
         for (const dependency of service.dependsOn) {
-          servicesWithDependents.add(dependency);
+          if (
+            serviceByName.get(service.name)?.dependsOnConditions?.[dependency] ===
+            'service_completed_successfully'
+          ) {
+            servicesRequiringSuccessfulCompletion.add(dependency);
+          }
         }
       }
 
@@ -833,12 +901,16 @@ export class ComposePipeline {
           const containerName = composeContainerName(parentName, service.name);
           containerNameByService.set(service.name, containerName);
 
-          let allocatedHostPort: number | null = null;
+          let allocatedPortMappings: Array<{ hostPort: number; containerPort: number }> = [];
 
           try {
             this.jobManager?.updatePhase(childId, 'building');
 
-            const imageTag = this.resolveComposeServiceImageTag(composeService, projectName);
+            const imageTag = this.resolveComposeServiceImageTag(
+              composeService,
+              projectName,
+              envVars,
+            );
             if (composeService.build) {
               const { contextPath, dockerfile } = this.resolveBuildContext(
                 filteredComposeProject.projectPath,
@@ -859,37 +931,48 @@ export class ComposePipeline {
             this.jobManager?.updatePhase(childId, 'starting');
             await this.docker.safeRemoveContainer(containerName);
 
-            const parsedPort = this.resolveServicePortMapping(composeService);
-            let hostPort = await allocatePort(
-              this.db,
-              this.docker,
-              {
-                preferredPort: parsedPort?.hostPort ?? undefined,
-              },
+            let portMappings = await this.allocateComposePortMappings(
+              composeService,
+              envVars,
               envType,
             );
-            allocatedHostPort = hostPort;
-            const containerPort = parsedPort?.containerPort ?? hostPort;
+            allocatedPortMappings = portMappings;
+            let primaryPort = portMappings[0];
+            if (!primaryPort) {
+              throw new Error(`Failed to allocate a port for Compose service ${service.name}`);
+            }
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
             const traefikLabels = buildTraefikLabels(
               routeName,
-              containerPort,
+              primaryPort.containerPort,
               undefined,
               envType,
               activeProjectNetwork,
               this.routeProvider,
             );
-            const resolvedEnvVars = this.resolveComposeServiceEnvVars(composeService, envVars);
+            const resolvedEnvVars = this.resolveComposeServiceEnvVars(
+              composeService,
+              envVars,
+              filteredComposeProject.projectPath,
+            );
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
 
+            const extraBinds = await this.resolveComposeServiceBinds(
+              projectName,
+              composeService,
+              filteredComposeProject.projectPath,
+              envVars,
+              imageTag,
+            );
             let containerId: string | null = null;
             for (let attempt = 0; attempt < 2; attempt += 1) {
               try {
                 containerId = await this.docker.runComposeService({
                   imageTag,
                   name: containerName,
-                  port: hostPort,
-                  containerPort,
+                  port: primaryPort.hostPort,
+                  containerPort: primaryPort.containerPort,
+                  additionalPorts: portMappings.slice(1),
                   envVars: resolvedEnvVars,
                   traefikLabels,
                   secretFiles: sharedSecretFiles,
@@ -899,6 +982,8 @@ export class ComposePipeline {
                   healthcheck,
                   networks: [activeProjectNetwork],
                   aliases: [service.name],
+                  extraBinds,
+                  memoryLimitBytes: composeService.memoryLimitBytes,
                 });
                 break;
               } catch (error) {
@@ -907,10 +992,22 @@ export class ComposePipeline {
                   message.includes('port is already allocated') ||
                   message.includes('address already in use');
                 if (attempt === 0 && isPortConflict) {
-                  releasePortReservation(hostPort);
+                  for (const mapping of portMappings) {
+                    releasePortReservation(mapping.hostPort);
+                  }
                   clearPortScanCache();
-                  hostPort = await allocatePort(this.db, this.docker, {}, envType);
-                  allocatedHostPort = hostPort;
+                  portMappings = await this.allocateComposePortMappings(
+                    composeService,
+                    envVars,
+                    envType,
+                  );
+                  primaryPort = portMappings[0];
+                  if (!primaryPort) {
+                    throw new Error(
+                      `Failed to re-allocate a port for Compose service ${service.name}`,
+                    );
+                  }
+                  allocatedPortMappings = portMappings;
                   continue;
                 }
                 if (attempt === 0 && isDockerEndpointConflictError(error)) {
@@ -931,24 +1028,25 @@ export class ComposePipeline {
 
             deploymentByService.set(service.name, {
               containerId,
-              port: hostPort,
-              containerPort,
+              ports: portMappings,
             });
 
             await this.db.updateProject(childId, {
               status: 'running',
               containerId,
-              assignedPort: hostPort,
+              assignedPort: primaryPort.hostPort,
               imageTag,
             });
 
             // Release reservation AFTER the DB write so subsequent allocatePort
             // calls within the same deploy see the port as used (via DB scan)
             // and do not re-allocate it to another service.
-            releasePortReservation(hostPort);
-            allocatedHostPort = null;
+            for (const mapping of portMappings) {
+              releasePortReservation(mapping.hostPort);
+            }
+            allocatedPortMappings = [];
             this.jobManager?.updatePhase(childId, 'done');
-            buildLog += `[compose run ${service.name}] ${containerId.slice(0, 12)} ${String(hostPort)}:${String(containerPort)}\n`;
+            buildLog += `[compose run ${service.name}] ${containerId.slice(0, 12)} ${portMappings.map((mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`).join(', ')}\n`;
 
             return {
               success: true,
@@ -956,8 +1054,8 @@ export class ComposePipeline {
             };
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            if (allocatedHostPort !== null) {
-              releasePortReservation(allocatedHostPort);
+            for (const mapping of allocatedPortMappings) {
+              releasePortReservation(mapping.hostPort);
             }
 
             await this.cleanupComposeContainer(
@@ -988,21 +1086,27 @@ export class ComposePipeline {
             };
           }
 
-          const healthResult = await this.docker.waitForHealthy(deployment.containerId, 20000);
+          if (servicesRequiringSuccessfulCompletion.has(service.name)) {
+            const completion = await this.waitForComposeJob(deployment.containerId, 120_000);
+            if (completion.healthy) {
+              completedServiceNames.add(service.name);
+            }
+            return completion;
+          }
+
+          const composeService = serviceByName.get(service.name);
+          const healthResult = await this.docker.waitForHealthy(
+            deployment.containerId,
+            this.resolveComposeHealthTimeoutMs(composeService?.healthcheck),
+          );
           if (healthResult.healthy) {
             return { healthy: true };
           }
 
-          if (servicesWithDependents.has(service.name)) {
-            return {
-              healthy: false,
-              error:
-                healthResult.error ??
-                `Service ${service.name} failed health check and has dependent services`,
-            };
-          }
-
-          return { healthy: true };
+          return {
+            healthy: false,
+            error: healthResult.error ?? `Service ${service.name} failed its health check`,
+          };
         },
         rollbackService: async (service) => {
           const deployment = deploymentByService.get(service.name);
@@ -1022,7 +1126,9 @@ export class ComposePipeline {
               this.composeNetworkNames(projectNetwork, envType),
               'compose-rollback-deployed-service',
             );
-            releasePortReservation(deployment.port);
+            for (const mapping of deployment.ports) {
+              releasePortReservation(mapping.hostPort);
+            }
           } else if (containerName) {
             try {
               await this.docker.stopContainer(containerName);
@@ -1066,8 +1172,12 @@ export class ComposePipeline {
         if (deployment && orchestrationStatus === 'deployed') {
           return {
             name: service.name,
-            status: 'running' as const,
-            ports: [`${String(deployment.port)}:${String(deployment.containerPort)}`],
+            status: completedServiceNames.has(service.name)
+              ? ('stopped' as const)
+              : ('running' as const),
+            ports: deployment.ports.map(
+              (mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`,
+            ),
             containerId: deployment.containerId,
           };
         }
@@ -1086,7 +1196,9 @@ export class ComposePipeline {
           return {
             name: service.name,
             status: 'running' as const,
-            ports: [`${String(deployment.port)}:${String(deployment.containerPort)}`],
+            ports: deployment.ports.map(
+              (mapping) => `${String(mapping.hostPort)}:${String(mapping.containerPort)}`,
+            ),
             containerId: deployment.containerId,
             error: orchestrationEntry?.error,
           };
@@ -1132,6 +1244,8 @@ export class ComposePipeline {
         });
 
         if (status.status === 'running') {
+          this.jobManager?.updatePhase(childId, 'done');
+        } else if (status.status === 'stopped' && completedServiceNames.has(status.name)) {
           this.jobManager?.updatePhase(childId, 'done');
         } else if (status.status === 'stopped') {
           this.jobManager?.updatePhase(childId, 'failed', 'Service stopped after compose deploy');
@@ -1377,44 +1491,6 @@ export class ComposePipeline {
     });
   }
 
-  private createComposeEnvFileIfMissing(
-    projectPath: string,
-    envVars: Record<string, string>,
-  ): void {
-    const envTemplatePath = detectEnvFile(projectPath);
-    if (!envTemplatePath) {
-      return;
-    }
-
-    const envFilePath = join(projectPath, '.env');
-    if (existsSync(envFilePath)) {
-      return;
-    }
-
-    const templateVars = parseEnvFile(envTemplatePath);
-    const envLines: string[] = [];
-
-    for (const [key, templateValue] of templateVars.entries()) {
-      const providedValue = envVars[key];
-      const classification = classifyVar(key, templateValue);
-
-      if (classification === 'secret' && providedValue === undefined) {
-        envLines.push('# TODO: Set ' + key);
-        envLines.push(key + '=');
-        continue;
-      }
-
-      const resolvedValue = providedValue === undefined ? templateValue : providedValue;
-      envLines.push(key + '=' + formatEnvValue(resolvedValue));
-    }
-
-    writeFileSync(envFilePath, envLines.join('\n') + '\n', 'utf8');
-    log.info(
-      { envFilePath, templateFile: envTemplatePath },
-      'Generated compose .env file from template',
-    );
-  }
-
   private async resolveParentProject(projectId: string): Promise<ProjectRow> {
     const project = await this.db.getProject(projectId);
     if (!project) {
@@ -1436,22 +1512,50 @@ export class ComposePipeline {
     return parent;
   }
 
-  private resolveServicePortMapping(
+  private resolveServiceContainerPorts(
     service: ComposeService,
-  ): { hostPort: number | null; containerPort: number } | null {
+    envVars: Record<string, string>,
+  ): number[] {
+    const containerPorts: number[] = [];
     for (const mapping of service.ports ?? []) {
-      const parsed = parseComposePortMapping(mapping);
+      const parsed = parseComposePortMapping(interpolateComposeValue(mapping, envVars));
       if (parsed) {
-        return parsed;
+        // Published host ports belong to the source machine. OpenLander always
+        // allocates a collision-free host port and preserves only the target.
+        containerPorts.push(parsed.containerPort);
       }
     }
     for (const exposedPort of service.expose ?? []) {
-      const parsed = parseComposePortMapping(exposedPort);
+      const parsed = parseComposePortMapping(interpolateComposeValue(exposedPort, envVars));
       if (parsed) {
-        return { hostPort: null, containerPort: parsed.containerPort };
+        containerPorts.push(parsed.containerPort);
       }
     }
-    return null;
+    return [...new Set(containerPorts)];
+  }
+
+  private async allocateComposePortMappings(
+    service: ComposeService,
+    envVars: Record<string, string>,
+    envType: OpenLanderEnv,
+  ): Promise<Array<{ hostPort: number; containerPort: number }>> {
+    const containerPorts = this.resolveServiceContainerPorts(service, envVars);
+    if (containerPorts.length === 0) {
+      const hostPort = await allocatePort(this.db, this.docker, {}, envType);
+      return [{ hostPort, containerPort: hostPort }];
+    }
+
+    const mappings: Array<{ hostPort: number; containerPort: number }> = [];
+    try {
+      for (const containerPort of containerPorts) {
+        const hostPort = await allocatePort(this.db, this.docker, {}, envType);
+        mappings.push({ hostPort, containerPort });
+      }
+      return mappings;
+    } catch (error) {
+      for (const mapping of mappings) releasePortReservation(mapping.hostPort);
+      throw error;
+    }
   }
 
   private filteredComposeProjectForConfig(
@@ -1463,27 +1567,39 @@ export class ComposePipeline {
       services: filterServicesByProfiles(composeProject.services, config.profiles),
     };
 
-    if (config.services && config.services.length > 0) {
-      const requestedServices = new Set(config.services);
-      filtered.services = filtered.services.filter((service) =>
-        requestedServices.has(service.name),
-      );
-    }
+    filtered.services = selectComposeServices(filtered.services, config.services);
 
     return filtered;
   }
 
-  private assertNoHostPortMappings(composeProject: ComposeProject): void {
-    const usages = findComposeHostPortUsages(composeProject);
-    if (usages.length > 0) {
-      throw new ComposeHostPortsUnsupportedError(usages);
+  private validateComposeInterpolation(
+    composeProject: ComposeProject,
+    envVars: Record<string, string>,
+  ): void {
+    for (const service of composeProject.services) {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- Compose YAML field, not a services table column
+      if (service.image) interpolateComposeValue(service.image, envVars);
+      for (const value of service.ports ?? []) interpolateComposeValue(value, envVars);
+      for (const value of service.expose ?? []) interpolateComposeValue(value, envVars);
+      for (const value of service.volumes ?? []) interpolateComposeValue(value, envVars);
+      if (Array.isArray(service.environment)) {
+        for (const value of service.environment) interpolateComposeValue(value, envVars);
+      } else if (service.environment) {
+        for (const value of Object.values(service.environment)) {
+          interpolateComposeValue(value, envVars);
+        }
+      }
     }
   }
 
-  private resolveComposeServiceImageTag(service: ComposeService, projectName: string): string {
+  private resolveComposeServiceImageTag(
+    service: ComposeService,
+    projectName: string,
+    envVars: Record<string, string>,
+  ): string {
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (service.image && service.image.length > 0) {
-      return service.image; // eslint-disable-line openlander-internal/no-dropped-columns
+      return interpolateComposeValue(service.image, envVars); // eslint-disable-line openlander-internal/no-dropped-columns
     }
 
     if (service.build) {
@@ -1516,8 +1632,26 @@ export class ComposePipeline {
   private resolveComposeServiceEnvVars(
     service: ComposeService,
     baseEnvVars: Record<string, string>,
+    projectPath: string,
   ): Record<string, string> {
-    const resolved = { ...baseEnvVars };
+    const resolved: Record<string, string> = {};
+    const root = resolve(projectPath);
+    for (const envFile of service.envFile ?? []) {
+      const envFilePath = resolve(root, envFile.path);
+      if (envFilePath !== root && !envFilePath.startsWith(`${root}${sep}`)) {
+        throw new ServiceConfigError(`Compose env_file escapes the repository: ${envFile.path}`, {
+          service: service.name,
+        });
+      }
+      if (!existsSync(envFilePath)) continue;
+      for (const [key, value] of parseEnvFile(envFilePath)) {
+        resolved[key] = interpolateComposeValue(value, baseEnvVars);
+      }
+    }
+
+    // Explicit OpenLander environment values override env_file, while the
+    // service's own environment block remains the highest precedence.
+    Object.assign(resolved, baseEnvVars);
 
     if (!service.environment) {
       return resolved;
@@ -1538,16 +1672,123 @@ export class ComposePipeline {
         if (!key) {
           continue;
         }
-        resolved[key] = line.slice(separatorIndex + 1);
+        resolved[key] = interpolateComposeValue(line.slice(separatorIndex + 1), baseEnvVars);
       }
       return resolved;
     }
 
     for (const [key, value] of Object.entries(service.environment)) {
-      resolved[key] = value;
+      resolved[key] = interpolateComposeValue(value, baseEnvVars);
     }
 
     return resolved;
+  }
+
+  private async waitForComposeJob(
+    containerId: string,
+    timeoutMs: number,
+  ): Promise<{ healthy: boolean; error?: string }> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const info = await this.docker.inspectContainer(containerId);
+        if (!info.State.Running) {
+          return info.State.ExitCode === 0
+            ? { healthy: true }
+            : {
+                healthy: false,
+                error: `Compose job exited with code ${String(info.State.ExitCode)}`,
+              };
+        }
+      } catch (error) {
+        if (isDockerNotFoundError(error)) {
+          return { healthy: false, error: 'Compose job container not found' };
+        }
+      }
+      await sleep(500);
+    }
+    return { healthy: false, error: 'Compose job did not complete before timeout' };
+  }
+
+  private async resolveComposeServiceBinds(
+    projectName: string,
+    service: ComposeService,
+    projectPath: string,
+    envVars: Record<string, string>,
+    imageTag: string,
+  ): Promise<string[]> {
+    const binds: string[] = [];
+    for (const [index, rawVolume] of (service.volumes ?? []).entries()) {
+      const volume = interpolateComposeValue(rawVolume, envVars).trim();
+      if (!volume) continue;
+      const tokens = volume.split(':');
+      if (tokens.length === 1) {
+        const target = tokens[0];
+        if (!target?.startsWith('/')) {
+          throw new ServiceConfigError(`Invalid Compose volume target: ${volume}`, {
+            service: service.name,
+          });
+        }
+        const volumeName = composeContainerName(
+          projectName,
+          `volume-${service.name}-${String(index + 1)}`,
+        );
+        binds.push(`${volumeName}:${target}`);
+        continue;
+      }
+
+      const source = tokens[0]?.trim();
+      const target = tokens[1]?.trim();
+      const mode = tokens.slice(2).join(':').trim();
+      if (!source || !target?.startsWith('/')) {
+        throw new ServiceConfigError(`Invalid Compose volume mapping: ${volume}`, {
+          service: service.name,
+        });
+      }
+
+      if (source.startsWith('.')) {
+        const root = resolve(projectPath);
+        const absoluteSource = resolve(root, source);
+        if (absoluteSource !== root && !absoluteSource.startsWith(`${root}${sep}`)) {
+          throw new ServiceConfigError(`Compose bind mount escapes the repository: ${source}`, {
+            service: service.name,
+          });
+        }
+        if (!existsSync(absoluteSource) || !statSync(absoluteSource).isDirectory()) {
+          throw new ServiceConfigError(
+            `Imported Compose bind source must be an existing directory: ${source}`,
+            { service: service.name },
+          );
+        }
+        const volumeName = composeContainerName(
+          projectName,
+          `bind-${service.name}-${String(index + 1)}`,
+        );
+        await this.docker.seedVolumeFromDirectory({
+          name: volumeName,
+          sourcePath: absoluteSource,
+          imageTag,
+          labels: {
+            'openlander.compose.project': projectName,
+            'openlander.compose.service': service.name,
+            'openlander.compose.bind-source': source,
+          },
+        });
+        binds.push(`${volumeName}:${target}${mode ? `:${mode}` : ''}`);
+        continue;
+      }
+
+      if (isAbsolute(source)) {
+        throw new ServiceConfigError(
+          `Absolute host bind mounts are not allowed in imported Compose projects: ${source}`,
+          { service: service.name },
+        );
+      }
+
+      const volumeName = composeContainerName(projectName, `volume-${source}`);
+      binds.push(`${volumeName}:${target}${mode ? `:${mode}` : ''}`);
+    }
+    return binds;
   }
 
   private resolveDockerHealthcheck(healthcheck: ComposeService['healthcheck']):
@@ -1571,6 +1812,40 @@ export class ComposePipeline {
       start_period: parseComposeDurationSeconds(healthcheck.start_period),
     };
   }
+
+  private resolveComposeHealthTimeoutMs(healthcheck: ComposeService['healthcheck']): number {
+    if (!healthcheck) return 20_000;
+    const startPeriod = parseComposeDurationSeconds(healthcheck.start_period) ?? 0;
+    const interval = parseComposeDurationSeconds(healthcheck.interval) ?? 30;
+    const timeout = parseComposeDurationSeconds(healthcheck.timeout) ?? 30;
+    const retries = healthcheck.retries ?? 3;
+    const declaredWindowSeconds = startPeriod + interval * retries + timeout;
+    return Math.min(10 * 60_000, Math.max(20_000, declaredWindowSeconds * 1_000));
+  }
+}
+
+function parseComposeByteValue(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+  }
+  if (typeof value !== 'string') return undefined;
+  const match = value
+    .trim()
+    .toLowerCase()
+    .match(/^([0-9]+(?:\.[0-9]+)?)\s*(b|k|kb|kib|m|mb|mib|g|gb|gib)?$/);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const unit = match[2] ?? 'b';
+  const multiplier =
+    unit === 'k' || unit === 'kb' || unit === 'kib'
+      ? 1024
+      : unit === 'm' || unit === 'mb' || unit === 'mib'
+        ? 1024 ** 2
+        : unit === 'g' || unit === 'gb' || unit === 'gib'
+          ? 1024 ** 3
+          : 1;
+  const bytes = amount * multiplier;
+  return Number.isFinite(bytes) && bytes > 0 ? Math.floor(bytes) : undefined;
 }
 
 function parseComposeDurationSeconds(value?: string): number | undefined {
@@ -1692,6 +1967,35 @@ function normalizeComposeStringList(value: unknown): string[] | undefined {
     )
     .filter((item) => item.length > 0);
   return normalized.length > 0 ? normalized : undefined;
+}
+
+export function interpolateComposeValue(value: string, envVars: Record<string, string>): string {
+  const escapedDollar = '\u0000OPENLANDER_COMPOSE_DOLLAR\u0000';
+  const escaped = value.replaceAll('$$', escapedDollar);
+  const interpolated = escaped.replace(
+    /\$\{([A-Z_][A-Z0-9_]*)(?:(:-|-|:\?|\?)([^}]*))?\}/g,
+    (_match, key: string, operator: string | undefined, operand: string | undefined) => {
+      const explicitlyProvided = Object.prototype.hasOwnProperty.call(envVars, key);
+      const raw = explicitlyProvided ? envVars[key] : process.env[key];
+      const isSet = raw !== undefined;
+      const isNonEmpty = isSet && raw.length > 0;
+
+      if (!operator) return raw ?? '';
+      if (operator === ':-') return isNonEmpty ? raw : (operand ?? '');
+      if (operator === '-') return isSet ? raw : (operand ?? '');
+      if (operator === ':?') {
+        if (isNonEmpty) return raw;
+      } else if (operator === '?') {
+        if (isSet) return raw;
+      }
+
+      throw new ServiceConfigError(
+        operand?.trim() || `Compose environment variable ${key} is required`,
+        { key },
+      );
+    },
+  );
+  return interpolated.replaceAll(escapedDollar, '$');
 }
 
 function parseComposePortMapping(
