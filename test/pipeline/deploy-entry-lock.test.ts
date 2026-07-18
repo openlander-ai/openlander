@@ -24,6 +24,7 @@ vi.mock('../../src/pipeline/git.js', () => ({
     commitSha: 'abc123def456',
   })),
   getCommitSubject: vi.fn().mockResolvedValue('test commit'),
+  redactRepoUrl: vi.fn((value: string) => value),
 }));
 
 /**

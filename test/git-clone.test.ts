@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, existsSync: vi.fn(actual.existsSync) };
+});
 
 vi.mock('../src/config/index.js', () => ({
   loadConfig: vi.fn(),
@@ -18,19 +23,48 @@ import {
   GitAuthError,
   GitBranchNotFoundError,
   GitCloneError,
+  GitHubRepoAccessError,
   GitRepoNotFoundError,
 } from '../src/errors.js';
 
 const mockExecFile = execFile as unknown as ReturnType<typeof vi.fn>;
 const mockLoadConfig = loadConfig as unknown as ReturnType<typeof vi.fn>;
+const mockExistsSync = existsSync as unknown as ReturnType<typeof vi.fn>;
 const describeGitClone = describe;
 const originalWorkspaceDir = process.env['OPENLANDER_WORKSPACE_DIR'];
+const originalFetch = global.fetch;
+
+function githubRepo(name = 'repo') {
+  return {
+    name,
+    full_name: `user/${name}`,
+    description: null,
+    html_url: `https://github.com/user/${name}`,
+    clone_url: `https://github.com/user/${name}.git`,
+    ssh_url: `git@github.com:user/${name}.git`,
+    private: true,
+    default_branch: 'main',
+    language: null,
+    updated_at: '2026-01-01T00:00:00Z',
+    stargazers_count: 0,
+  };
+}
 
 // Make promisified execFile resolve by default
 beforeEach(() => {
   mockExecFile.mockReset();
   mockLoadConfig.mockReset();
+  mockExistsSync.mockReset();
+  mockExistsSync.mockImplementation((path) =>
+    String(path).startsWith('/home/user/.ssh/') ? true : false,
+  );
   delete process.env['OPENLANDER_WORKSPACE_DIR'];
+  global.fetch = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(githubRepo()), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
 
   mockExecFile.mockImplementation(
     (
@@ -54,6 +88,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  global.fetch = originalFetch;
   if (originalWorkspaceDir === undefined) {
     delete process.env['OPENLANDER_WORKSPACE_DIR'];
   } else {
@@ -90,7 +125,23 @@ describeGitClone('cloneRepo — GitHub token injection', () => {
     expect(urlArg).not.toContain('x-access-token');
   });
 
-  it('converts to SSH URL and does not inject token when sshKeyPath is provided', async () => {
+  it('uses SSH for a GitHub HTTPS URL only when no provider is connected', async () => {
+    mockLoadConfig.mockReturnValue({ gitProviders: {} });
+
+    await cloneRepo({
+      repoUrl: 'https://github.com/user/private-repo',
+      sshKeyPath: '/home/user/.ssh/id_ed25519',
+    });
+
+    const cloneCall = mockExecFile.mock.calls[0];
+    const args = cloneCall?.[1] as string[];
+    const opts = cloneCall?.[2] as { env: Record<string, string> };
+    expect(args).toContain('git@github.com:user/private-repo');
+    expect(args.join(' ')).not.toContain('x-access-token');
+    expect(opts.env.GIT_SSH_COMMAND).toContain('/home/user/.ssh/id_ed25519');
+  });
+
+  it('prefers the connected provider over SSH for GitHub HTTPS URLs', async () => {
     await cloneRepo({
       repoUrl: 'https://github.com/user/repo',
       sshKeyPath: '/home/user/.ssh/id_rsa',
@@ -99,10 +150,9 @@ describeGitClone('cloneRepo — GitHub token injection', () => {
     const cloneCall = mockExecFile.mock.calls[0];
     const args = cloneCall![1] as string[];
 
-    // When sshKeyPath is provided, HTTPS URL is converted to SSH format
     const urlArg = args.find((a: string) => a.includes('github.com'));
-    expect(urlArg).toBe('git@github.com:user/repo');
-    expect(urlArg).not.toContain('x-access-token');
+    expect(urlArg).toContain('https://x-access-token:ghp_test_token_123@github.com/user/repo');
+    expect(urlArg).not.toBe('git@github.com:user/repo');
   });
 
   it('does not inject token for non-GitHub HTTPS URLs', async () => {
@@ -142,99 +192,154 @@ describeGitClone('cloneRepo — GitHub token injection', () => {
   });
 });
 
-describeGitClone('cloneRepo — HTTPS auth failure and SSH retry', () => {
-  it('retries with SSH when HTTPS fails with terminal prompts disabled and succeeds', async () => {
-    mockExecFile
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(new Error('fatal: terminal prompts disabled'), { stdout: '', stderr: '' });
-        },
+describeGitClone('cloneRepo — deterministic provider authentication', () => {
+  it('falls back to anonymous clone when a rejected token targets a public repo', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401 }),
       )
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(null, { stdout: '', stderr: '' });
-        },
-      )
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(null, { stdout: 'retry-success-sha\n', stderr: '' });
-        },
-      )
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(null, { stdout: 'main\n', stderr: '' });
-        },
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...githubRepo('public-repo'), private: false }), {
+          status: 200,
+        }),
       );
 
-    const result = await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
+    await cloneRepo({ repoUrl: 'https://github.com/user/public-repo' });
 
-    const firstCloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
-    const retryCloneArgs = mockExecFile.mock.calls[1]?.[1] as string[];
-
-    expect(firstCloneArgs).toContain(
-      'https://x-access-token:ghp_test_token_123@github.com/user/private-repo',
-    );
-    expect(retryCloneArgs).toContain('git@github.com:user/private-repo');
-    expect(result.commitSha).toBe('retry-success-sha');
-    expect(result.branch).toBe('main');
-    expect(mockExecFile).toHaveBeenCalledTimes(4);
+    const cloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
+    expect(cloneArgs).toContain('https://github.com/user/public-repo');
+    expect(cloneArgs.join(' ')).not.toContain('ghp_test_token_123');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const anonymousHeaders = vi.mocked(global.fetch).mock.calls[1]?.[1]?.headers as Record<
+      string,
+      string
+    >;
+    expect(anonymousHeaders['Authorization']).toBeUndefined();
   });
 
-  it('throws GitCloneError when both HTTPS and SSH attempts fail', async () => {
-    mockExecFile
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(new Error('fatal: Authentication failed for https clone'), {
-            stdout: '',
-            stderr: '',
-          });
-        },
+  it('stops before clone when organization SSO is decisively required', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'SAML SSO required' }), {
+          status: 403,
+          headers: {
+            'x-github-sso':
+              'required; url=https://github.com/orgs/acme/sso?authorization_request=abc',
+          },
+        }),
       )
-      .mockImplementationOnce(
-        (
-          _cmd: string,
-          _args: string[],
-          _opts: Record<string, unknown>,
-          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-        ) => {
-          cb?.(new Error('fatal: Permission denied (publickey).'), { stdout: '', stderr: '' });
-        },
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 }),
+      );
+
+    await expect(
+      cloneRepo({ repoUrl: 'https://github.com/acme/private-repo' }),
+    ).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: { reason: 'sso_required' },
+    });
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'rate limit',
+      new Response(JSON.stringify({ message: 'API rate limit exceeded' }), {
+        status: 403,
+        headers: { 'x-ratelimit-remaining': '0' },
+      }),
+    ],
+    ['GitHub 5xx', new Response(JSON.stringify({ message: 'Unavailable' }), { status: 503 })],
+  ])('continues authenticated clone when %s makes preflight inconclusive', async (_name, res) => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(res);
+
+    await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
+
+    const cloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
+    expect(cloneArgs.join(' ')).toContain('x-access-token:ghp_test_token_123@github.com');
+  });
+
+  it('continues authenticated clone when access preflight times out', async () => {
+    vi.mocked(global.fetch).mockRejectedValueOnce(new DOMException('Timed out', 'TimeoutError'));
+
+    await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
+
+    const cloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
+    expect(cloneArgs.join(' ')).toContain('x-access-token:ghp_test_token_123@github.com');
+  });
+
+  it('does not silently retry provider authentication with SSH', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('fatal: Authentication failed for https clone'), {
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    await expect(
+      cloneRepo({
+        repoUrl: 'https://github.com/user/private-repo',
+        sshKeyPath: '/home/user/.ssh/id_ed25519',
+      }),
+    ).rejects.toBeInstanceOf(GitAuthError);
+
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    const cloneArgs = mockExecFile.mock.calls[0]?.[1] as string[];
+    expect(cloneArgs.join(' ')).toContain('x-access-token:ghp_test_token_123@github.com');
+    expect(cloneArgs.join(' ')).not.toContain('git@github.com');
+  });
+
+  it('redacts provider tokens from clone failures', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(
+          new Error(
+            'fatal: transport failed for https://x-access-token:ghp_test_token_123@github.com/user/private-repo',
+          ),
+          { stdout: '', stderr: '' },
+        );
+      },
+    );
+
+    await expect(cloneRepo({ repoUrl: 'https://github.com/user/private-repo' })).rejects.toSatisfy(
+      (error: unknown) => {
+        return (
+          error instanceof GitCloneError &&
+          !error.message.includes('ghp_test_token_123') &&
+          error.message.includes('https://***@github.com')
+        );
+      },
+    );
+  });
+
+  it('does not expose GitHub provider messages in typed access-error details', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'private provider diagnostic' }), { status: 401 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 }),
       );
 
     try {
       await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
-      throw new Error('expected cloneRepo to throw');
+      throw new Error('expected clone to fail');
     } catch (error) {
-      expect(error).toBeInstanceOf(GitCloneError);
-      expect((error as Error).message).toContain('HTTPS and SSH both failed');
+      expect(error).toBeInstanceOf(GitHubRepoAccessError);
+      expect((error as GitHubRepoAccessError).details).not.toHaveProperty('providerMessage');
     }
-
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
   });
 
   it('does not retry when auth fails on unsupported host (no SSH conversion)', async () => {

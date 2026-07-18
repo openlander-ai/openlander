@@ -34,7 +34,7 @@ export function createGitProvider(type: GitProviderType, config: GitProviderConf
 
   switch (type) {
     case 'github':
-      return new GitHubProvider(config.token, config.baseUrl);
+      return new GitHubProvider(config.token, config.baseUrl, config.authMethod);
     case 'gitlab':
       return new GitLabProvider(config.token, config.baseUrl);
     default:

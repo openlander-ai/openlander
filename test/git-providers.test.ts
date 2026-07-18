@@ -7,6 +7,7 @@ import {
 } from '../src/git-providers/index.js';
 import { GitHubProvider } from '../src/git-providers/github.js';
 import type { GitProviderConfig, GitProviderType } from '../src/git-providers/types.js';
+import { GitHubRepoAccessError } from '../src/errors.js';
 
 // ---------------------------------------------------------------------------
 // Mock fetch globally
@@ -204,33 +205,24 @@ describe('GitHubProvider', () => {
   });
 
   it('searchRepos returns mapped results', async () => {
-    // First call: getUserOrgs
     mockFetch().mockResolvedValueOnce({
       ok: true,
-      json: async () => [],
+      json: async () => [
+        {
+          name: 'search-result',
+          full_name: 'user/search-result',
+          description: null,
+          html_url: 'https://github.com/user/search-result',
+          clone_url: 'https://github.com/user/search-result.git',
+          ssh_url: 'git@github.com:user/search-result.git',
+          private: true,
+          default_branch: 'develop',
+          language: null,
+          updated_at: '2026-01-01T00:00:00Z',
+          stargazers_count: 0,
+        },
+      ],
       headers: new Headers(),
-    } as Response);
-    // Second call: search/repositories
-    mockFetch().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        total_count: 1,
-        items: [
-          {
-            name: 'search-result',
-            full_name: 'user/search-result',
-            description: null,
-            html_url: 'https://github.com/user/search-result',
-            clone_url: 'https://github.com/user/search-result.git',
-            ssh_url: 'git@github.com:user/search-result.git',
-            private: true,
-            default_branch: 'develop',
-            language: null,
-            updated_at: '2026-01-01T00:00:00Z',
-            stargazers_count: 0,
-          },
-        ],
-      }),
     } as Response);
 
     const result = await provider.searchRepos('search-result');
@@ -239,6 +231,99 @@ describe('GitHubProvider', () => {
     expect(result.repos).toHaveLength(1);
     expect(result.repos[0]?.name).toBe('search-result');
     expect(result.repos[0]?.isPrivate).toBe(true);
+  });
+
+  it('searches collaborator repositories from the paginated accessible-repo list', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              name: 'unrelated',
+              full_name: 'testuser/unrelated',
+              description: null,
+              html_url: 'https://github.com/testuser/unrelated',
+              clone_url: 'https://github.com/testuser/unrelated.git',
+              ssh_url: 'git@github.com:testuser/unrelated.git',
+              private: true,
+              default_branch: 'main',
+              language: null,
+              updated_at: '2026-01-01T00:00:00Z',
+              stargazers_count: 0,
+            },
+          ]),
+          { headers: { link: '<https://api.github.com/user/repos?page=2>; rel="next"' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              name: 'shared-service',
+              full_name: 'outside-owner/shared-service',
+              description: 'Outside collaborator repository',
+              html_url: 'https://github.com/outside-owner/shared-service',
+              clone_url: 'https://github.com/outside-owner/shared-service.git',
+              ssh_url: 'git@github.com:outside-owner/shared-service.git',
+              private: true,
+              default_branch: 'main',
+              language: 'TypeScript',
+              updated_at: '2026-01-01T00:00:00Z',
+              stargazers_count: 0,
+            },
+          ]),
+        ),
+      );
+
+    const result = await provider.searchRepos('outside collaborator');
+
+    expect(result.repos.map((repo) => repo.fullName)).toEqual(['outside-owner/shared-service']);
+    expect(mockFetch().mock.calls[0]?.[0]).toContain(
+      'affiliation=owner,collaborator,organization_member',
+    );
+  });
+
+  it('marks search results truncated when more than ten accessible-repo pages exist', async () => {
+    for (let page = 1; page <= 10; page++) {
+      mockFetch().mockResolvedValueOnce(
+        new Response(JSON.stringify([]), {
+          headers: {
+            link: `<https://api.github.com/user/repos?page=${String(page + 1)}>; rel="next"`,
+          },
+        }),
+      );
+    }
+
+    const result = await provider.searchRepos('anything');
+
+    expect(result).toMatchObject({ repos: [], total: 0, truncated: true });
+    expect(mockFetch()).toHaveBeenCalledTimes(10);
+  });
+
+  it('uses a single repository access check for exact owner/repo search', async () => {
+    mockFetch().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          name: 'repo',
+          full_name: 'outside-owner/repo',
+          description: null,
+          html_url: 'https://github.com/outside-owner/repo',
+          clone_url: 'https://github.com/outside-owner/repo.git',
+          ssh_url: 'git@github.com:outside-owner/repo.git',
+          private: true,
+          default_branch: 'main',
+          language: null,
+          updated_at: '2026-01-01T00:00:00Z',
+          stargazers_count: 0,
+        }),
+      ),
+    );
+
+    const result = await provider.searchRepos('outside-owner/repo');
+
+    expect(result.total).toBe(1);
+    expect(mockFetch()).toHaveBeenCalledTimes(1);
+    expect(mockFetch().mock.calls[0]?.[0]).toBe('https://api.github.com/repos/outside-owner/repo');
   });
 
   it('getRepo returns single repo', async () => {
@@ -291,37 +376,127 @@ describe('GitHubProvider', () => {
     expect(url).toBe('https://x-access-token:ghp_test_token@github.com/user/repo.git');
   });
 
-  it('throws on 401 Unauthorized', async () => {
+  it('throws a typed token_invalid error on 401 Unauthorized', async () => {
     mockFetch().mockResolvedValueOnce({
       ok: false,
       status: 401,
       text: async () => 'Bad credentials',
+      headers: new Headers(),
     } as Response);
 
-    await expect(provider.getRepo('user', 'repo')).rejects.toThrow(
-      'Invalid or expired GitHub token',
-    );
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: { reason: 'token_invalid' },
+    });
   });
 
-  it('throws on 403 Forbidden', async () => {
+  it('throws a typed rate_limited error for rate-limit 403 responses', async () => {
     mockFetch().mockResolvedValueOnce({
       ok: false,
       status: 403,
       text: async () => 'Rate limit exceeded',
+      headers: new Headers({ 'x-ratelimit-remaining': '0' }),
     } as Response);
 
-    await expect(provider.getRepo('user', 'repo')).rejects.toThrow(
-      'GitHub token lacks required permissions',
-    );
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: { reason: 'rate_limited' },
+    });
   });
 
-  it('throws on 404 Not Found', async () => {
+  it('classifies generic 403 as permission_denied', async () => {
+    mockFetch().mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Resource not accessible by token' }), {
+        status: 403,
+      }),
+    );
+
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      details: { reason: 'permission_denied' },
+    });
+  });
+
+  it('classifies 429 as rate_limited and exposes retryAt', async () => {
+    mockFetch().mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Slow down' }), {
+        status: 429,
+        headers: { 'retry-after': '60' },
+      }),
+    );
+
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      details: { reason: 'rate_limited', retryAt: expect.any(String) },
+    });
+  });
+
+  it.each([
+    ['server error', () => Promise.resolve(new Response('Unavailable', { status: 503 }))],
+    ['network error', () => Promise.reject(new Error('socket closed'))],
+  ])('classifies %s as unreachable', async (_label, responseFactory) => {
+    mockFetch().mockImplementationOnce(responseFactory);
+
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      details: { reason: 'unreachable' },
+    });
+  });
+
+  it('keeps 404 ambiguous between missing and unauthorized', async () => {
     mockFetch().mockResolvedValueOnce({
       ok: false,
       status: 404,
       text: async () => 'Not Found',
+      headers: new Headers(),
     } as Response);
 
-    await expect(provider.getRepo('user', 'repo')).rejects.toThrow('GitHub resource not found');
+    await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
+      code: 'GITHUB_REPO_ACCESS_DENIED',
+      details: { reason: 'not_found_or_not_authorized' },
+    });
+  });
+
+  it('surfaces the GitHub SSO authorization URL', async () => {
+    mockFetch().mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ message: 'Resource protected by organization SAML' }),
+      headers: new Headers({
+        'x-github-sso': 'required; url=https://github.com/orgs/acme/sso?authorization_request=abc',
+      }),
+    } as Response);
+
+    try {
+      await provider.getRepo('acme', 'private-repo');
+      throw new Error('expected access check to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(GitHubRepoAccessError);
+      expect((error as GitHubRepoAccessError).details).toMatchObject({
+        reason: 'sso_required',
+        authorizeUrl: 'https://github.com/orgs/acme/sso?authorization_request=abc',
+      });
+    }
+  });
+
+  it('removes URL userinfo from GitHub SSO authorization links', async () => {
+    mockFetch().mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'SSO required' }), {
+        status: 403,
+        headers: {
+          'x-github-sso':
+            'required; url=https://credential@github.com/orgs/acme/sso?authorization_request=abc',
+        },
+      }),
+    );
+
+    try {
+      await provider.getRepo('acme', 'private-repo');
+      throw new Error('expected access check to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(GitHubRepoAccessError);
+      const serialized = JSON.stringify((error as GitHubRepoAccessError).toJSON());
+      expect(serialized).not.toContain('credential@');
+      expect((error as GitHubRepoAccessError).details).toMatchObject({
+        authorizeUrl: 'https://github.com/orgs/acme/sso?authorization_request=abc',
+      });
+    }
   });
 });

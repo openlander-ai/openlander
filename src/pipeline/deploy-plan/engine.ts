@@ -9,7 +9,7 @@ import {
   mergeEnvValueRequirement,
   validateEnvValue,
 } from '../env-requirements.js';
-import { cloneRepo } from '../git.js';
+import { cloneRepo, redactRepoUrl } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { ManagedServiceLinker } from '../managed-service-linker.js';
 import { getServiceAdapter } from '../service-adapters/index.js';
@@ -1149,7 +1149,7 @@ export class PlanEngine {
     const resourceProject = attachTargetProject ?? targetProject;
     const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
 
-    log.info({ repoUrl, branch }, 'Cloning repository');
+    log.info({ repoUrl: redactRepoUrl(repoUrl), branch }, 'Cloning repository');
     const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
     const clonePath = cloneResult.path;
     const commitSha = cloneResult.commitSha;

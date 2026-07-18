@@ -18,9 +18,8 @@ describe('Broader orphan i18n stays pruned (PR-B+ follow-up)', () => {
   //   - `settings.title`, `settings.description` — legacy /settings
   //     header strings.
   //   - `settings.tabs.{system,proxy,github}` — labels for the legacy
-  //     3-tab strip on SettingsPage. The `github` tab body is still
-  //     live (the GitHub-only narrowed SettingsPage), but its label
-  //     comes from the live `settings.github.*` block instead.
+  //     3-tab strip on SettingsPage. GitHub connect remains live inline
+  //     on `/settings/git-providers` and uses `settings.github.*`.
   //   - `settings.system.*` — Global Secrets UI wired to
   //     SystemSettingsTab. UI cut for v0.1, backend retained.
   //   - `settings.proxySection.*` — section header above the Traefik

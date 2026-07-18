@@ -10,9 +10,18 @@ import { useGithubDeviceFlow } from '@/hooks/use-github-device-flow';
 interface GithubSettingsTabProps {
   status: SetupStatus | null;
   refetch: () => Promise<void>;
+  forceReauthorize?: boolean;
+  onComplete?: () => void | Promise<void>;
+  onCancel?: () => void;
 }
 
-export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
+export function GithubSettingsTab({
+  status,
+  refetch,
+  forceReauthorize = false,
+  onComplete,
+  onCancel,
+}: GithubSettingsTabProps) {
   const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const [githubToken, setGithubToken] = useState('');
@@ -25,7 +34,12 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     startDeviceFlow: handleStartDeviceFlow,
     cancelDeviceFlow: handleCancelDeviceFlow,
     resetDeviceFlow,
-  } = useGithubDeviceFlow({ onComplete: refetch });
+  } = useGithubDeviceFlow({
+    onComplete: async () => {
+      await refetch();
+      await onComplete?.();
+    },
+  });
 
   const handleConnectGithub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +50,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
       await connectGithub(githubToken.trim());
       await refetch();
       setGithubToken('');
+      await onComplete?.();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to connect GitHub';
       setGithubError(message);
@@ -64,24 +79,46 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     await copy(deviceFlow.userCode);
   };
 
+  const handleCancel = () => {
+    handleCancelDeviceFlow();
+    onCancel?.();
+  };
+
   return (
     <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
-      <div className="flex items-center gap-2">
-        <Github className="h-4 w-4 text-foreground/80" />
-        <h2 className="font-display text-sm font-semibold text-foreground">
-          {'GitHub Connection'}
-        </h2>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Github className="h-4 w-4 text-foreground/80" />
+          <h2 className="font-display text-sm font-semibold text-foreground">
+            {forceReauthorize
+              ? t('settings.github.reauthorizeTitle')
+              : t('settings.github.connectionTitle')}
+          </h2>
+        </div>
+        {onCancel && !deviceFlow && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCancel}
+            className="text-xs font-body text-muted-foreground"
+          >
+            {t('settings.github.cancel')}
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
         <p className="text-sm font-body text-foreground/80">{t('settings.github.description')}</p>
 
-        {status?.github?.ok ? (
+        {status?.github?.ok && !forceReauthorize ? (
           <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
             <div className="flex items-center gap-2 text-success">
               <CheckCircle2 className="w-4 h-4" />
               <span className="text-sm font-medium">
-                {'Connected as'} {status.github.username}
+                {t('settings.github.connectedAs', {
+                  username: status.github.username ?? '',
+                })}
               </span>
             </div>
             <Button
@@ -95,7 +132,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               {githubDisconnecting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                'Disconnect'
+                t('settings.github.disconnect')
               )}
             </Button>
           </div>
@@ -118,7 +155,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 className="gap-1.5 font-body"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                {'Open GitHub'}
+                {t('settings.github.openGithub')}
               </Button>
               <Button
                 type="button"
@@ -132,27 +169,34 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
-                {isCopied() ? 'Copied' : 'Copy Code'}
+                {isCopied() ? t('settings.github.copied') : t('settings.github.copyCode')}
               </Button>
             </div>
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span className="text-xs font-body">{t('settings.github.waiting')}</span>
+              <span role="status" className="text-xs font-body">
+                {t('settings.github.waiting')}
+              </span>
             </div>
             <div className="flex justify-center">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleCancelDeviceFlow}
+                onClick={handleCancel}
                 className="text-xs font-body text-muted-foreground"
               >
-                {'Cancel'}
+                {t('settings.github.cancel')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
+            {forceReauthorize && (
+              <p className="text-xs font-body text-muted-foreground">
+                {t('settings.github.reauthorizeDescription')}
+              </p>
+            )}
             <Button
               type="button"
               onClick={handleStartDeviceFlow}
@@ -168,7 +212,9 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 <span className="w-full border-t border-[hsl(var(--border))]" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-bg-panel px-2 text-muted-foreground font-body">{'or'}</span>
+                <span className="bg-bg-panel px-2 text-muted-foreground font-body">
+                  {t('settings.github.or')}
+                </span>
               </div>
             </div>
 
@@ -205,11 +251,15 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 ) : (
                   <Github className="h-3.5 w-3.5" />
                 )}
-                {'Connect'}
+                {t('settings.github.connectToken')}
               </Button>
             </form>
 
-            {githubError && <p className="text-sm font-body text-error">{githubError}</p>}
+            {githubError && (
+              <p role="alert" className="text-sm font-body text-error">
+                {githubError}
+              </p>
+            )}
 
             <Button
               type="button"
@@ -219,7 +269,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               onClick={refetch}
             >
               <RefreshCw className="h-3 w-3" />
-              {'Refresh'}
+              {t('settings.github.checkStatus')}
             </Button>
           </div>
         )}

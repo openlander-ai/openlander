@@ -7,10 +7,10 @@
  *
  *   1. GitHub identity card
  *      - octocat mark + `@login` + status pip + auth-method badge
- *      - action row: Manage on GitHub + ⋯ menu (Re-authorize / Refresh / Disconnect)
+ *      - action row: Manage on GitHub + ⋯ menu (Re-authorize / Check connection / Disconnect)
  *      - stat block: Repos linked / Last sync / Connected on / OAuth scope chips
  *   2. Empty-state card (only when no token configured)
- *      - single CTA "Connect GitHub" pointing to the legacy connection flow
+ *      - single CTA "Connect GitHub" opening the inline connection flow
  *   3. Other providers — compressed rows for GitLab / Bitbucket marked Later
  *
  * v0.1 honest gaps:
@@ -18,20 +18,25 @@
  *     persistence (PR #236). Tiles render "—" only on the brief window
  *     between connect and the first successful validateToken sync, not
  *     as a permanent placeholder.
- *   - `Refresh repo list` re-fetches the status aggregator. A real
- *     server-side cache rebuild ships with the v0.1.x repo-cache slice.
+ *   - `Check connection` re-fetches the live status aggregator; no repository
+ *     cache or sync operation is implied.
  *
- * Connect / Disconnect / Re-authorize keep using the legacy
- * `/api/setup/github*` endpoints already in `web/src/lib/api/system.ts`;
- * this page is observability + control surface, not a rewrite of the
- * connection flow.
+ * Connect / Disconnect / Re-authorize use the existing `/api/setup/github*`
+ * endpoints. Connect and re-authorize render inline on this canonical route;
+ * re-authorize replaces the credential only after validation succeeds.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronUp, ExternalLink, Github, MoreHorizontal, RefreshCw } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { GithubSettingsTab } from '@/components/settings/GithubSettingsTab';
 import { useLanguage } from '@/i18n/context';
-import { getGitHubProviderStatus, type GitHubProviderStatus } from '@/lib/api/git-providers';
+import { useSetup } from '@/hooks/use-setup';
+import {
+  getGitHubProviderStatus,
+  type GitHubProviderStatus,
+  type GitHubValidationReason,
+} from '@/lib/api/git-providers';
 import { disconnectGithub } from '@/lib/api/system';
 import { formatDateTime, formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -60,28 +65,25 @@ function useGitHubStatus() {
   // tag every request and ignore stale resolutions. Codex CCG round 1 P2
   // caught the case where the original `cancelled` flag only protected
   // the initial effect and not subsequent reloads.
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     setState((prev) => ({ ...prev, loading: true }));
-    void getGitHubProviderStatus()
-      .then((data) => {
-        if (!mountedRef.current) return;
-        if (requestIdRef.current !== requestId) return;
-        setState({ data, loading: false, error: null });
-      })
-      .catch((err: unknown) => {
-        if (!mountedRef.current) return;
-        if (requestIdRef.current !== requestId) return;
-        setState({
-          data: null,
-          loading: false,
-          error: err instanceof Error ? err.message : 'Failed',
-        });
+    try {
+      const data = await getGitHubProviderStatus();
+      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      setState({ data, loading: false, error: null });
+    } catch (err) {
+      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      setState({
+        data: null,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Failed',
       });
+    }
   }, []);
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload]);
   return { ...state, reload };
 }
@@ -112,6 +114,47 @@ function authMethodLabel(method: GitHubProviderStatus['authMethod'], t: Translat
   if (method === 'oauth') return t('gitProviders.github.authMethod.oauth');
   if (method === 'pat') return t('gitProviders.github.authMethod.pat');
   return t('gitProviders.github.authMethod.unknown');
+}
+
+function validationGuidance(
+  reason: GitHubValidationReason | null,
+  authMethod: GitHubProviderStatus['authMethod'],
+  authorizeUrl: string | null,
+): { messageKey: string; url: string } | null {
+  const credentialSettingsUrl =
+    authMethod === 'pat'
+      ? 'https://github.com/settings/tokens'
+      : 'https://github.com/settings/applications';
+  switch (reason) {
+    case 'token_invalid':
+      return {
+        messageKey: 'gitProviders.github.guidance.tokenInvalid',
+        url: credentialSettingsUrl,
+      };
+    case 'sso_required':
+      return {
+        messageKey: 'gitProviders.github.guidance.ssoRequired',
+        url: authorizeUrl ?? credentialSettingsUrl,
+      };
+    case 'rate_limited':
+      return {
+        messageKey: 'gitProviders.github.guidance.rateLimited',
+        url: 'https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api',
+      };
+    case 'permission_denied':
+    case 'not_found_or_not_authorized':
+      return {
+        messageKey: 'gitProviders.github.guidance.repositoryAccess',
+        url: credentialSettingsUrl,
+      };
+    case 'unreachable':
+      return {
+        messageKey: 'gitProviders.github.guidance.unreachable',
+        url: 'https://www.githubstatus.com/',
+      };
+    case null:
+      return null;
+  }
 }
 
 interface StatTileProps {
@@ -235,28 +278,29 @@ function MoreActionsMenu({
 interface GitHubCardProps {
   data: GitHubProviderStatus;
   onReload: () => void;
+  onReauthorize: () => void;
 }
 
-function GitHubCard({ data, onReload }: GitHubCardProps) {
+function GitHubCard({ data, onReload, onReauthorize }: GitHubCardProps) {
   const { t } = useLanguage();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
 
   const pip = pipKindFor(data);
+  const guidance = validationGuidance(data.validationReason, data.authMethod, data.authorizeUrl);
   const handleManageOnGithub = () => {
     if (typeof window === 'undefined') return;
-    const url = data.login
-      ? `https://github.com/${encodeURIComponent(data.login)}`
-      : 'https://github.com/settings/applications';
+    const url =
+      data.authMethod === 'pat'
+        ? 'https://github.com/settings/tokens'
+        : 'https://github.com/settings/applications';
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleReauthorize = () => {
-    if (typeof window === 'undefined') return;
-    // Re-authorize lives on the legacy setup surface, which still owns
-    // the device-flow / PAT entry UI. Send the user there with a hint.
-    window.location.assign('/settings?tab=github&reauth=1');
+    setActionError(null);
+    onReauthorize();
   };
 
   const handleRefresh = () => {
@@ -359,6 +403,16 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
               className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
             >
               {t('gitProviders.github.validationError', { message: data.validationError })}
+              {guidance && (
+                <a
+                  href={guidance.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 underline underline-offset-2"
+                >
+                  {t(guidance.messageKey)}
+                </a>
+              )}
             </div>
           )}
           {pip === 'unknown' && data.validationError && (
@@ -367,6 +421,16 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
               className="rounded-md border border-[color:var(--ol-warn)] bg-[color:color-mix(in_oklch,var(--ol-warn)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
             >
               {t('gitProviders.github.validationUnreachable', { message: data.validationError })}
+              {guidance && (
+                <a
+                  href={guidance.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 underline underline-offset-2"
+                >
+                  {t(guidance.messageKey)}
+                </a>
+              )}
             </div>
           )}
           {actionError && (
@@ -430,12 +494,8 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
   );
 }
 
-function GitHubEmptyCard() {
+function GitHubEmptyCard({ onConnect }: { onConnect: () => void }) {
   const { t } = useLanguage();
-  const handleConnect = () => {
-    if (typeof window === 'undefined') return;
-    window.location.assign('/settings?tab=github');
-  };
   return (
     <OuterCard
       title={
@@ -457,7 +517,7 @@ function GitHubEmptyCard() {
         </p>
         <button
           type="button"
-          onClick={handleConnect}
+          onClick={onConnect}
           className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 text-[13px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90"
         >
           <Github className="h-3.5 w-3.5" />
@@ -558,19 +618,64 @@ function ErrorCard({ message, onRetry, t }: ErrorCardProps) {
   );
 }
 
+interface GitHubConnectionFlowProps {
+  mode: 'connect' | 'reauthorize';
+  onComplete: () => void | Promise<void>;
+  onCancel: () => void;
+}
+
+function GitHubConnectionFlow({ mode, onComplete, onCancel }: GitHubConnectionFlowProps) {
+  const { t } = useLanguage();
+  const setup = useSetup();
+
+  if (setup.loading && !setup.status) {
+    return <LoadingCard t={t} />;
+  }
+
+  return (
+    <GithubSettingsTab
+      status={setup.status}
+      refetch={setup.refetch}
+      forceReauthorize={mode === 'reauthorize'}
+      onComplete={onComplete}
+      onCancel={onCancel}
+    />
+  );
+}
+
 export function GitProvidersSettings() {
   const { t } = useLanguage();
   const status = useGitHubStatus();
+  const [connectionMode, setConnectionMode] = useState<'connect' | 'reauthorize' | null>(null);
+
+  const finishConnection = async () => {
+    await status.reload();
+    setConnectionMode(null);
+  };
 
   let mainCard: ReactNode;
-  if (status.loading && !status.data) {
+  if (connectionMode) {
+    mainCard = (
+      <GitHubConnectionFlow
+        mode={connectionMode}
+        onComplete={finishConnection}
+        onCancel={() => setConnectionMode(null)}
+      />
+    );
+  } else if (status.loading && !status.data) {
     mainCard = <LoadingCard t={t} />;
   } else if (status.error) {
     mainCard = <ErrorCard message={status.error} onRetry={status.reload} t={t} />;
   } else if (status.data && status.data.connected) {
-    mainCard = <GitHubCard data={status.data} onReload={status.reload} />;
+    mainCard = (
+      <GitHubCard
+        data={status.data}
+        onReload={status.reload}
+        onReauthorize={() => setConnectionMode('reauthorize')}
+      />
+    );
   } else {
-    mainCard = <GitHubEmptyCard />;
+    mainCard = <GitHubEmptyCard onConnect={() => setConnectionMode('connect')} />;
   }
 
   return (

@@ -227,6 +227,7 @@ export const gitToolDefs: ToolDef[] = [
       if (target === 'mcp') {
         return {
           total: result.total,
+          ...(result.truncated ? { truncated: true } : {}),
           repos: result.repos.map((repo) => ({
             name: repo.name,
             fullName: repo.fullName,
@@ -241,6 +242,7 @@ export const gitToolDefs: ToolDef[] = [
 
       return {
         total: result.total,
+        ...(result.truncated ? { truncated: true } : {}),
         repos: result.repos.map((repo) => ({
           name: repo.name,
           fullName: repo.fullName,
