@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.5-rc.1] - 2026-07-19
+## [0.2.5-rc.2] - 2026-07-19
 
 ### Added
 
@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Persist Compose child deployment logs against each child's canonical service
+  ID so successful multi-service deploys do not fail during log recording.
 - Preserve the container ID during runtime restart, reject one-shot job
   restarts, and enforce mutation policy, deploy locking, and post-restart state
   validation at the pipeline boundary.
