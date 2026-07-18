@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3-rc.3] - 2026-07-18
+
+### Added
+
+- Add a reproducible release gate for in-place upgrades that verifies password,
+  API token, and database state preservation before the full cold-agent smoke.
+
 ## [0.2.3-rc.2] - 2026-07-18
 
 ### Fixed
