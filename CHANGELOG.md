@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3-rc.1] - 2026-07-18
+
+### Added
+
+- Add encrypted, repository-scoped GitHub Deploy Key credentials with strict
+  host-key verification, service bindings, sanitized HTTP and MCP management
+  actions, and in-use deletion protection.
+- Add the Repository Keys settings experience, guided GitHub key setup,
+  verification recovery, and source-credential selection for Applications.
+- Add production-like Compose stack imports with transitive service selection,
+  dependency conditions, interpolation, env files, persistent volumes, bind
+  snapshots, resource limits, readiness windows, and multiple published ports.
+
+### Changed
+
+- Prefer connected GitHub OAuth or PAT credentials for HTTPS repositories,
+  while keeping explicit SSH URLs and repository Deploy Keys intentional.
+- Search all repositories accessible to the authenticated GitHub user,
+  including collaborator and organization repositories, with bounded results.
+- Update production AI SDK and Hono dependencies plus the development lint,
+  formatting, TypeScript, Vitest, and Node type toolchain.
+
+### Fixed
+
+- Preserve structured GitHub access failures across repository search, deploy
+  planning, HTTP, and MCP boundaries, including SSO and rate-limit guidance.
+- Fall back to anonymous cloning for public repositories when provider access
+  is unavailable, without turning transient GitHub API failures into blockers.
+- Keep existing credentials during failed re-authorization, return successful
+  GitHub setup to the canonical Git Providers page, and redact credentials from
+  clone errors and build logs.
+- Disable OpenSSH IP QoS for repository Deploy Key verification and cloning to
+  avoid connection timeouts behind Docker and NAT paths.
+- Skip managed Database or Cache env injection for dependencies supplied by a
+  Compose stack.
+- Build Compose service images with BuildKit so modern Dockerfile features such
+  as cache mounts work during deployment.
+
 ## [0.2.2] - 2026-07-05
 
 ### Changed
