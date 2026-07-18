@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.1] - 2026-07-19
+
+### Added
+
+- Add explicit Compose file, profile, service, traffic-target, and environment
+  fields to deploy plans and persist them in versioned deployment snapshots.
+- Add normalized per-service fingerprints so selective redeploys can detect
+  changed applications without storing environment or secret plaintext.
+
+### Changed
+
+- Split Compose execution into replacement targets, reusable prerequisites,
+  and one-shot release hooks instead of recreating the dependency closure.
+- Reuse healthy dependency containers, start stopped prerequisites in place,
+  and replace only explicitly selected or changed stateless applications.
+- Build replacement application images before running successful-completion
+  hooks, then replace the application only after its migration job succeeds.
+
+### Fixed
+
+- Preserve unchanged database and other stateful resource containers, volumes,
+  routes, ports, and domains across selective and full-force redeploys.
+- Block automatic stateful service definition changes and removals with typed
+  errors instead of deleting or recreating resource containers.
+- Keep the existing API container and route active when migration fails, times
+  out, or image preparation fails, while retaining the failed job container
+  and exit-code evidence for diagnostics.
+- Reject unhealthy Compose prerequisites before touching requested application
+  containers and report `COMPOSE_PREREQUISITE_UNHEALTHY` consistently.
+
 ## [0.2.5-rc.2] - 2026-07-19
 
 ### Added
