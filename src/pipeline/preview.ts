@@ -24,6 +24,7 @@ export interface PreviewOptions {
   /** Link to parent project if it exists. */
   projectId?: string;
   sshKeyPath?: string;
+  gitCredentialId?: string;
   /** Auto-cleanup time-to-live in milliseconds (default: 24h). */
   ttlMs?: number;
 }
@@ -97,6 +98,8 @@ export class PreviewDeployer {
         repoUrl: options.repoUrl,
         branch: options.branch,
         sshKeyPath: options.sshKeyPath,
+        gitCredentialId: options.gitCredentialId,
+        serviceId: options.projectId ? `${options.projectId}__svc` : undefined,
       });
 
       ensureDockerfile(cloneResult.path);

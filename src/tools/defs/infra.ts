@@ -423,6 +423,7 @@ export const infraToolDefs: ToolDef[] = [
         const cloneResult = await cloneRepo({
           repoUrl,
           branch,
+          gitCredentialId: args['git_credential_id'] as string | undefined,
           sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         });
         const existingServices = await appCtx.serviceManager.list();

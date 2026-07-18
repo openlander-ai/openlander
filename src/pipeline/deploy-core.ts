@@ -192,6 +192,8 @@ export interface ProjectConfig {
   visibility?: 'internal' | 'quick-share' | 'shared' | 'production';
   /** SSH key path for private repos */
   sshKeyPath?: string;
+  /** Repository Deploy Key credential selected for this source. */
+  gitCredentialId?: string;
   /** Deployment trigger source */
   trigger?: 'chat' | 'webhook' | 'api';
   /** Target environment (e.g., production, development) */
@@ -335,6 +337,7 @@ export interface MonorepoConfig {
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'shared' | 'production';
   trigger?: 'chat' | 'webhook' | 'api';
+  gitCredentialId?: string;
   /** Parent project name (auto-generated from repo if not provided) */
   name?: string;
   /** @internal Pre-allocated parent ID from startMonorepoDeploy(). Do not set manually. */
@@ -508,12 +511,10 @@ export class DeployPipeline {
       const services = await this.db.listServices();
       const environmentsByProject = new Map<string, EnvironmentRow[]>(
         await Promise.all(
-          projects.map(
-            async (project): Promise<[string, EnvironmentRow[]]> => [
-              project.id,
-              await this.db.getEnvironmentsByProject(project.id),
-            ],
-          ),
+          projects.map(async (project): Promise<[string, EnvironmentRow[]]> => [
+            project.id,
+            await this.db.getEnvironmentsByProject(project.id),
+          ]),
         ),
       );
       const { knownIds, knownNames } = collectKnownContainerNames(
@@ -659,6 +660,8 @@ export class DeployPipeline {
         repoUrl: config.repoUrl,
         branch: config.branch,
         sshKeyPath: config.sshKeyPath,
+        gitCredentialId: config.gitCredentialId,
+        serviceId: config._serviceId,
       });
 
       const hasExplicitDockerfilePath =
@@ -1790,7 +1793,10 @@ export class DeployPipeline {
           repoUrl,
           branch,
           sshKeyPath: deployConfig.sshKeyPath,
+          gitCredentialId: deployConfig.gitCredentialId,
+          serviceId: deployConfig._serviceId,
         });
+        deployConfig.gitCredentialId = cloneResult.gitCredentialId;
         clonePath = cloneResult.clonePath;
         diffContext = cloneResult.diffContext;
         buildLog = cloneResult.buildLog;
@@ -2348,6 +2354,14 @@ export class DeployPipeline {
     this.jobManager?.updatePhase(parentId, allSuccess ? 'done' : 'failed');
 
     if (allSuccess) {
+      if (config.gitCredentialId) {
+        const parentService = await this.db.getDeployableForProject(parentId);
+        if (parentService) {
+          await this.db.updateService(parentService.id, {
+            gitCredentialId: config.gitCredentialId,
+          });
+        }
+      }
       await eventBus.emit('deploy:success', {
         projectId: parentId,
         url: getProjectUrl(parentName),
@@ -3147,7 +3161,10 @@ export class DeployPipeline {
         const cloneResult = await cloneRepo({
           repoUrl: deployConfig.repoUrl,
           branch: deployConfig.branch,
+          gitCredentialId: deployConfig.gitCredentialId,
+          serviceId: deployConfig._serviceId,
         });
+        deployConfig.gitCredentialId = cloneResult.gitCredentialId;
         clonePath = cloneResult.path;
         commitSha = cloneResult.commitSha;
         buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
@@ -3384,6 +3401,12 @@ export class DeployPipeline {
         buildLog,
         durationMs,
       });
+
+      if (deployConfig.gitCredentialId) {
+        await this.db.updateService(deployConfig._serviceId ?? blueDeployable.id, {
+          gitCredentialId: deployConfig.gitCredentialId,
+        });
+      }
 
       this.jobManager?.updatePhase(projectId, 'done');
       await eventBus.emit('deploy:success', {

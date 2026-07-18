@@ -125,6 +125,23 @@ describe('MCP destructive safety', () => {
     );
   });
 
+  it('holds repository credential deletion for human approval', async () => {
+    const context = createContext({ projectId: null });
+    const result = await maybeHandleMcpSafety(
+      createTool('remove_git_credential'),
+      { credential_id: 'gitcred_1' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'pending_approval',
+      tool: 'remove_git_credential',
+    });
+    expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'remove_git_credential' }),
+    );
+  });
+
   it('routes deployable service archive/restore to pending approval rows', async () => {
     for (const toolName of ['archive_service', 'unarchive_service'] as const) {
       const context = createContext();

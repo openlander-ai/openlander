@@ -95,6 +95,7 @@ export async function maybeHandleMcpSafety(
     def.name === 'archive_service' ||
     def.name === 'unarchive_service' ||
     def.name === 'remove_secret_file' ||
+    def.name === 'remove_git_credential' ||
     (def.name === 'bulk_delete_env_vars' && args['confirm'] === true);
   if (!GROUP_B_APPROVAL_HOLD.has(def.name) || !shouldHold) return undefined;
 

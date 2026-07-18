@@ -159,6 +159,7 @@ export interface DeployPlan {
       repo_url: string;
       branch: string;
       commit_sha: string;
+      git_credential_id?: string;
       image_url?: string;
     };
   };

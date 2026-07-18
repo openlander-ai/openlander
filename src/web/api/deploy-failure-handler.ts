@@ -402,12 +402,20 @@ export function registerBuildProgressRoute(api: Hono, ctx: AppContext): void {
 
 export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
   api.post('/env/scan', async (c) => {
-    const body = await c.req.json<{ repo_url: string; branch?: string }>();
+    const body = await c.req.json<{
+      repo_url: string;
+      branch?: string;
+      git_credential_id?: string;
+    }>();
     if (!body.repo_url) return c.json({ error: 'repo_url is required' }, 400);
 
     let clonePath: string | null = null;
     try {
-      const cloneResult = await cloneRepo({ repoUrl: body.repo_url, branch: body.branch });
+      const cloneResult = await cloneRepo({
+        repoUrl: body.repo_url,
+        branch: body.branch,
+        gitCredentialId: body.git_credential_id,
+      });
       clonePath = cloneResult.path;
       return c.json(scanRepoEnvVars(clonePath));
     } catch (err) {
@@ -431,6 +439,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
       const cloneResult = await cloneRepo({
         repoUrl: deployable.repo_url,
         branch: deployable.branch ?? undefined,
+        serviceId: deployable.id,
       });
       clonePath = cloneResult.path;
       // PR 4 canonical-first: dockerfile_path on the deployable services

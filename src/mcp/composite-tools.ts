@@ -53,6 +53,10 @@ export const DEPLOY_ACTIONS = [
   'get_build_log',
   'list_github_repos',
   'search_github_repos',
+  'create_git_deploy_key',
+  'list_git_credentials',
+  'verify_git_credential',
+  'remove_git_credential',
   'scan_dockerfiles',
   'analyze_infrastructure',
 ] as const;
@@ -234,11 +238,7 @@ export type MonitorAction = (typeof MONITOR_ACTIONS)[number];
 export type PlatformAction = (typeof PLATFORM_ACTIONS)[number];
 
 export type CompositeAction =
-  | DeployAction
-  | ProjectAction
-  | ServiceAction
-  | ManagedServiceAction
-  | MonitorAction;
+  DeployAction | ProjectAction | ServiceAction | ManagedServiceAction | MonitorAction;
 export type AllAction = CompositeAction | PlatformAction;
 
 /**

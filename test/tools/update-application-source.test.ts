@@ -57,11 +57,22 @@ function createContext(initialServices: ServiceRow[]) {
       if (updates['imageUrl'] !== undefined) next['image_url'] = updates['imageUrl'];
       if (updates['imageCmd'] !== undefined) next['image_cmd'] = updates['imageCmd'];
       if (updates['containerPort'] !== undefined) next['container_port'] = updates['containerPort'];
+      if (updates['gitCredentialId'] !== undefined)
+        next['git_credential_id'] = updates['gitCredentialId'];
       services.set(id, next as unknown as ServiceRow);
     }),
   };
-  const ctx = { db } as unknown as AppContext;
-  return { ctx, db };
+  const gitCredentials = {
+    validateForRepository: vi.fn(async () => undefined),
+    get: vi.fn(async (id: string) => ({
+      id,
+      name: 'hotdeal-key',
+      fingerprint: 'SHA256:test',
+      status: 'verified',
+    })),
+  };
+  const ctx = { db, gitCredentials } as unknown as AppContext;
+  return { ctx, db, gitCredentials };
 }
 
 describe('update_application_source MCP action', () => {
@@ -127,6 +138,7 @@ describe('update_application_source MCP action', () => {
         imageCmd: JSON.stringify(['node', 'server.js']),
         repoUrl: null,
         branch: null,
+        gitCredentialId: null,
         containerPort: 8080,
       }),
     );
@@ -138,7 +150,15 @@ describe('update_application_source MCP action', () => {
         cmd: ['node', 'server.js'],
         container_port: 8080,
       },
-      changed_fields: ['source', 'image', 'cmd', 'repo_url', 'branch', 'container_port'],
+      changed_fields: [
+        'source',
+        'image',
+        'cmd',
+        'repo_url',
+        'branch',
+        'git_credential_id',
+        'container_port',
+      ],
       needs_redeploy: true,
     });
   });
@@ -224,5 +244,42 @@ describe('update_application_source MCP action', () => {
         { target: 'mcp' },
       ),
     ).rejects.toMatchObject({ code: 'SERVICE_OPERATION_UNSUPPORTED' });
+  });
+
+  it('validates and connects a repository credential', async () => {
+    const { ctx, db, gitCredentials } = createContext([serviceRow({ git_credential_id: null })]);
+    const result = await getTool(ctx, 'update_application_source').execute(
+      { service_id: 'hotdeal__svc', git_credential_id: 'gitcred_1' },
+      { target: 'mcp' },
+    );
+
+    expect(gitCredentials.validateForRepository).toHaveBeenCalledWith(
+      'gitcred_1',
+      'https://github.com/acme/hotdeal',
+    );
+    expect(db.updateService).toHaveBeenCalledWith(
+      'hotdeal__svc',
+      expect.objectContaining({ gitCredentialId: 'gitcred_1' }),
+    );
+    expect(result).toMatchObject({
+      source: {
+        git_credential_id: 'gitcred_1',
+        git_credential: { id: 'gitcred_1', status: 'verified' },
+      },
+    });
+  });
+
+  it('disconnects a repository credential explicitly with null', async () => {
+    const { ctx, db } = createContext([
+      serviceRow({ git_credential_id: 'gitcred_1' }),
+    ]);
+    await getTool(ctx, 'update_application_source').execute(
+      { service_id: 'hotdeal__svc', git_credential_id: null },
+      { target: 'mcp' },
+    );
+    expect(db.updateService).toHaveBeenCalledWith(
+      'hotdeal__svc',
+      expect.objectContaining({ gitCredentialId: null }),
+    );
   });
 });

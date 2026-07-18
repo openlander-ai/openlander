@@ -1,4 +1,5 @@
-import { access, readFile, stat } from 'node:fs/promises';
+import { access, chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -9,12 +10,16 @@ import { GitCredentialInUseError, GitDeployKeyUnauthorizedError } from '../src/e
 import {
   canonicalizeGitHubRepoUrl,
   GitCredentialManager,
+  setActiveGitCredentialManager,
   type VerifyGitRemote,
 } from '../src/git-credentials/manager.js';
+import { cloneRepo } from '../src/pipeline/git.js';
 
 class MemoryGitCredentialDb {
   readonly rows = new Map<string, GitCredentialRow>();
   readonly usages = new Map<string, GitCredentialServiceUsage[]>();
+  readonly services = new Map<string, { git_credential_id: string | null }>();
+  readonly used: string[] = [];
 
   async createGitCredential(input: {
     id: string;
@@ -95,6 +100,14 @@ class MemoryGitCredentialDb {
 
   async deleteGitCredential(id: string): Promise<boolean> {
     return this.rows.delete(id);
+  }
+
+  async getService(id: string): Promise<{ git_credential_id: string | null } | undefined> {
+    return this.services.get(id);
+  }
+
+  async markGitCredentialUsed(id: string): Promise<void> {
+    this.used.push(id);
   }
 }
 
@@ -187,5 +200,115 @@ describe('GitCredentialManager', () => {
 
     await expect(manager.remove(created.id)).rejects.toBeInstanceOf(GitCredentialInUseError);
     expect(db.rows.has(created.id)).toBe(true);
+  });
+
+  it('auto-selects the unique verified exact-repository credential', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(created.id, { status: 'verified' });
+
+    const selected = await manager.runWithCloneCredential(
+      { repoUrl: 'https://github.com/team-spacey/incar-app.git' },
+      async (auth) => auth?.credentialId,
+    );
+
+    expect(selected).toBe(created.id);
+    expect(db.used).toEqual([created.id]);
+  });
+
+  it('prefers an existing service binding and requires explicit selection for ambiguous matches', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const first = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    const second = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(first.id, { status: 'verified' });
+    await db.setGitCredentialVerification(second.id, { status: 'verified' });
+
+    await expect(
+      manager.runWithCloneCredential(
+        { repoUrl: first.repository_url },
+        async (auth) => auth?.credentialId,
+      ),
+    ).rejects.toMatchObject({ code: 'GIT_CREDENTIAL_SELECTION_REQUIRED' });
+
+    db.services.set('svc_1', { git_credential_id: second.id });
+    await expect(
+      manager.runWithCloneCredential(
+        { repoUrl: first.repository_url, serviceId: 'svc_1' },
+        async (auth) => auth?.credentialId,
+      ),
+    ).resolves.toBe(second.id);
+  });
+
+  it('rejects pending and cross-repository explicit credentials', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const pending = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+
+    await expect(
+      manager.runWithCloneCredential(
+        { repoUrl: pending.repository_url, credentialId: pending.id },
+        async () => 'unused',
+      ),
+    ).rejects.toMatchObject({ code: 'GIT_CREDENTIAL_NOT_VERIFIED' });
+
+    await db.setGitCredentialVerification(pending.id, { status: 'verified' });
+    await expect(
+      manager.runWithCloneCredential(
+        { repoUrl: 'github.com/Team-SpaceY/another-repo', credentialId: pending.id },
+        async () => 'unused',
+      ),
+    ).rejects.toMatchObject({ code: 'GIT_CREDENTIAL_REPOSITORY_MISMATCH' });
+  });
+
+  it('does not mark a selected key used when the authenticated operation fails', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(created.id, { status: 'verified' });
+
+    await expect(
+      manager.runWithCloneCredential(
+        { repoUrl: created.repository_url, credentialId: created.id },
+        async () => {
+          throw new Error('selected deploy key failed');
+        },
+      ),
+    ).rejects.toThrow('selected deploy key failed');
+    expect(db.used).toEqual([]);
+  });
+
+  it('maps a selected Deploy Key clone failure without falling back to another auth method', async () => {
+    const db = new MemoryGitCredentialDb();
+    const manager = new GitCredentialManager(db, MASTER_KEY);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+    await db.setGitCredentialVerification(created.id, { status: 'verified' });
+    const fakeBin = await mkdtemp(`${tmpdir()}/openlander-fake-git-`);
+    const workspace = await mkdtemp(`${tmpdir()}/openlander-clone-test-`);
+    const gitPath = `${fakeBin}/git`;
+    await writeFile(gitPath, '#!/bin/sh\necho "fatal: Authentication failed" >&2\nexit 128\n');
+    await chmod(gitPath, 0o755);
+    const previousPath = process.env['PATH'];
+    const previousWorkspace = process.env['OPENLANDER_WORKSPACE_DIR'];
+    process.env['PATH'] = `${fakeBin}:${previousPath ?? ''}`;
+    process.env['OPENLANDER_WORKSPACE_DIR'] = workspace;
+    setActiveGitCredentialManager(manager);
+    try {
+      await expect(
+        cloneRepo({ repoUrl: created.repository_url, gitCredentialId: created.id }),
+      ).rejects.toMatchObject({ code: 'GIT_DEPLOY_KEY_UNAUTHORIZED' });
+      expect(db.used).toEqual([]);
+    } finally {
+      setActiveGitCredentialManager(null);
+      if (previousPath === undefined) delete process.env['PATH'];
+      else process.env['PATH'] = previousPath;
+      if (previousWorkspace === undefined) delete process.env['OPENLANDER_WORKSPACE_DIR'];
+      else process.env['OPENLANDER_WORKSPACE_DIR'] = previousWorkspace;
+      await Promise.all([
+        rm(fakeBin, { recursive: true, force: true }),
+        rm(workspace, { recursive: true, force: true }),
+      ]);
+    }
   });
 });

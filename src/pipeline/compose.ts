@@ -95,6 +95,7 @@ export interface ComposeDeployConfig {
   trigger?: 'chat' | 'webhook' | 'api';
   environmentType?: OpenLanderEnv;
   _parentId?: string;
+  gitCredentialId?: string;
 }
 
 /**
@@ -1197,6 +1198,14 @@ export class ComposePipeline {
           error: errorMessage ?? 'One or more services failed to start',
         });
       } else {
+        if (config.gitCredentialId) {
+          const parentService = await this.db.getDeployableForProject(parentProjectId);
+          if (parentService) {
+            await this.db.updateService(parentService.id, {
+              gitCredentialId: config.gitCredentialId,
+            });
+          }
+        }
         await this.events.emit('compose:up', {
           projectId: parentProjectId,
           services: reconciledStatuses.map((status) => status.name),

@@ -982,9 +982,17 @@ const EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS = [
   'prefer_dockerfile',
   'dockerfile_path',
   'docker_target',
+  'git_credential_id',
 ] as const;
 
-const EXISTING_SERVICE_SOURCE_UPDATE_PARAMS = ['repo_url', 'branch', 'source', 'image', 'port'];
+const EXISTING_SERVICE_SOURCE_UPDATE_PARAMS = [
+  'repo_url',
+  'branch',
+  'source',
+  'image',
+  'port',
+  'git_credential_id',
+];
 const EXISTING_SERVICE_BUILD_CONFIG_PARAMS = ['dockerfile_path', 'docker_target'];
 
 const EXISTING_SERVICE_REDEPLOY_ALLOWED_PARAMS = [
@@ -1231,6 +1239,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
+        gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
         source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
         imageUrl: (args['image'] as string | undefined) ?? undefined,
@@ -1701,6 +1710,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
+        gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
         name: newAppName,
         source,
         imageUrl: image,

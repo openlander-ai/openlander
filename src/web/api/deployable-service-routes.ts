@@ -19,6 +19,17 @@ import {
   parseNullableTextField,
 } from './helpers/project-route-shared.js';
 
+function gitCredentialSummary(
+  credential: Awaited<ReturnType<AppContext['gitCredentials']['get']>>,
+) {
+  return {
+    id: credential.id,
+    name: credential.name,
+    fingerprint: credential.fingerprint,
+    status: credential.status,
+  };
+}
+
 export function createDeployableServiceRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -41,16 +52,27 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const visibleDeployables = includeArchived
       ? projectLevelDeployables
       : projectLevelDeployables.filter((service) => !service.archived_at);
-    const domainMappingsByService = await loadDomainMappingsByService(ctx, visibleDeployables);
+    const gitCredentialManager = (ctx as Partial<AppContext>).gitCredentials;
+    const [domainMappingsByService, credentials] = await Promise.all([
+      loadDomainMappingsByService(ctx, visibleDeployables),
+      gitCredentialManager ? gitCredentialManager.list() : Promise.resolve([]),
+    ]);
+    const credentialsById = new Map(credentials.map((credential) => [credential.id, credential]));
 
     return c.json({
       count: visibleDeployables.length,
-      services: visibleDeployables.map((service) =>
-        mapServiceForApi(service, environments, {
-          domainMappings: domainMappingsByService.get(service.id),
-          autoRouteName: getDeployableServiceAutoRouteName(project, service),
-        }),
-      ),
+      services: visibleDeployables.map((service) => {
+        const credential = service.git_credential_id
+          ? credentialsById.get(service.git_credential_id)
+          : undefined;
+        return {
+          ...mapServiceForApi(service, environments, {
+            domainMappings: domainMappingsByService.get(service.id),
+            autoRouteName: getDeployableServiceAutoRouteName(project, service),
+          }),
+          gitCredential: credential ? gitCredentialSummary(credential) : null,
+        };
+      }),
     });
   });
 
@@ -69,20 +91,28 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const envVars = service
       ? await ctx.env.getAllForService(project.id, service.id)
       : await ctx.env.getAll(project.id);
-    const [environments, deployLogs, serviceRecords, domainMappingsByService] = await Promise.all([
-      ctx.db.getEnvironmentsByProject(project.id),
-      ctx.db.getDeployLogs(project.id, 5),
-      loadServiceViewRecords(ctx.db, [project]),
-      loadDomainMappingsByService(ctx, service ? [service] : []),
-    ]);
+    const gitCredentialManager = (ctx as Partial<AppContext>).gitCredentials;
+    const [environments, deployLogs, serviceRecords, domainMappingsByService, gitCredential] =
+      await Promise.all([
+        ctx.db.getEnvironmentsByProject(project.id),
+        ctx.db.getDeployLogs(project.id, 5),
+        loadServiceViewRecords(ctx.db, [project]),
+        loadDomainMappingsByService(ctx, service ? [service] : []),
+        service?.git_credential_id && gitCredentialManager
+          ? gitCredentialManager.get(service.git_credential_id)
+          : null,
+      ]);
 
     return c.json({
       ...mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined),
       service: service
-        ? mapServiceForApi(service, environments, {
-            domainMappings: domainMappingsByService.get(service.id),
-            autoRouteName: getDeployableServiceAutoRouteName(project, service),
-          })
+        ? {
+            ...mapServiceForApi(service, environments, {
+              domainMappings: domainMappingsByService.get(service.id),
+              autoRouteName: getDeployableServiceAutoRouteName(project, service),
+            }),
+            gitCredential: gitCredential ? gitCredentialSummary(gitCredential) : null,
+          }
         : null,
       environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
@@ -111,6 +141,7 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const imageUrlRaw = getAliasedField(body, 'imageUrl', 'image_url');
     const imageCmdRaw = getAliasedField(body, 'imageCmd', 'image_cmd');
     const containerPortRaw = getAliasedField(body, 'containerPort', 'container_port');
+    const gitCredentialRaw = getAliasedField(body, 'gitCredentialId', 'git_credential_id');
 
     const source = parseNullableTextField(sourceRaw, 'source');
     const repoUrl = parseNullableTextField(repoUrlRaw, 'repoUrl');
@@ -154,6 +185,18 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const buildMethodValue = buildMethod.ok ? buildMethod.value : undefined;
     const imageUrlValue = imageUrl.ok ? imageUrl.value : undefined;
     const imageCmdValue = imageCmd.value;
+    const gitCredentialId =
+      gitCredentialRaw === undefined || gitCredentialRaw === null
+        ? gitCredentialRaw
+        : typeof gitCredentialRaw === 'string' && gitCredentialRaw.trim().length > 0
+          ? gitCredentialRaw.trim()
+          : false;
+    if (gitCredentialId === false) {
+      return c.json(
+        { error: 'INVALID_FIELD', message: 'gitCredentialId must be a non-empty string or null' },
+        400,
+      );
+    }
 
     const allowedSources = new Set(['git', 'image', 'compose', 'compose-child']);
     if (sourceValue !== undefined && sourceValue !== null && !allowedSources.has(sourceValue)) {
@@ -193,6 +236,28 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       );
     }
 
+    const effectiveSource = sourceValue ?? service.source;
+    const effectiveRepoUrl = repoUrlValue === undefined ? service.repo_url : repoUrlValue;
+    let effectiveCredentialId = gitCredentialId;
+    if (effectiveSource === 'image') {
+      effectiveCredentialId = null;
+    } else if (typeof effectiveCredentialId === 'string') {
+      if (!effectiveRepoUrl) {
+        return c.json(
+          { error: 'INVALID_SOURCE_FIELDS', message: 'A Git credential requires repoUrl.' },
+          400,
+        );
+      }
+      await ctx.gitCredentials.validateForRepository(effectiveCredentialId, effectiveRepoUrl);
+    } else if (
+      effectiveCredentialId === undefined &&
+      repoUrlValue !== undefined &&
+      service.git_credential_id &&
+      effectiveRepoUrl
+    ) {
+      await ctx.gitCredentials.validateForRepository(service.git_credential_id, effectiveRepoUrl);
+    }
+
     await ctx.db.updateService(service.id, {
       source: sourceValue ?? undefined,
       repoUrl: repoUrlValue,
@@ -209,6 +274,7 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
             ? null
             : JSON.stringify(imageCmdValue),
       containerPort,
+      gitCredentialId: effectiveCredentialId,
     });
 
     const updatedService = await ctx.db.getService(service.id);

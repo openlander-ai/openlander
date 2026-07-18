@@ -51,6 +51,7 @@ export const APPROVAL_HOLD_TOOLS = [
   'unarchive_service',
   'bulk_delete_env_vars',
   'remove_secret_file',
+  'remove_git_credential',
 ] as const;
 
 export type HumanUiOnlyTool = (typeof HUMAN_UI_ONLY_TOOLS)[number];
