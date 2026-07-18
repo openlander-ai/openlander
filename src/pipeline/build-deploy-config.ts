@@ -82,6 +82,7 @@ export async function buildDeployConfig(params: BuildDeployConfigParams): Promis
   const dbConfig: ProjectConfig = {
     repoUrl,
     branch,
+    gitCredentialId: deployable?.git_credential_id ?? undefined,
     name: project.name,
     visibility: project.visibility ?? undefined,
     source: (source as 'git' | 'image' | undefined) ?? undefined,

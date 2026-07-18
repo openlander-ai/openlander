@@ -104,6 +104,8 @@ export async function cloneAndAnalyze(
     repoUrl: string;
     branch?: string;
     sshKeyPath?: string;
+    gitCredentialId?: string;
+    serviceId?: string;
   },
 ): Promise<{
   clonePath: string;
@@ -111,12 +113,28 @@ export async function cloneAndAnalyze(
   commitMessage?: string;
   buildLog: string;
   diffContext?: string;
+  gitCredentialId?: string;
 }> {
-  const { projectId, projectName, environmentId, repoUrl, branch, sshKeyPath } = params;
+  const {
+    projectId,
+    projectName,
+    environmentId,
+    repoUrl,
+    branch,
+    sshKeyPath,
+    gitCredentialId,
+    serviceId,
+  } = params;
   let buildLog = '';
   let diffContext: string | undefined;
 
-  const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
+  const cloneResult = await cloneRepo({
+    repoUrl,
+    branch,
+    sshKeyPath,
+    gitCredentialId,
+    serviceId,
+  });
   const commitMessage = await getCommitSubject(cloneResult.path, cloneResult.commitSha);
 
   await eventBus.emit('deploy:clone', {
@@ -190,6 +208,7 @@ export async function cloneAndAnalyze(
     commitMessage,
     buildLog,
     diffContext,
+    gitCredentialId: cloneResult.gitCredentialId,
   };
 }
 
@@ -285,6 +304,7 @@ export async function buildProject(
       envVars: composeEnvVars,
       environmentType: params.environmentType,
       _parentId: projectId,
+      gitCredentialId: config.gitCredentialId,
     });
 
     if (result.success) {
@@ -753,6 +773,13 @@ export async function handlePostDeploy(
     await persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: deps.db });
   } catch (err) {
     log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
+  }
+
+  if (config.gitCredentialId) {
+    const serviceId = config._serviceId ?? (await deps.db.getDeployableForProject(projectId))?.id;
+    if (serviceId) {
+      await deps.db.updateService(serviceId, { gitCredentialId: config.gitCredentialId });
+    }
   }
 
   if (!skipPhaseUpdate) {

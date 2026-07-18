@@ -64,6 +64,7 @@ export interface CreatePlanOptions {
   visibility?: 'internal' | 'quick-share' | 'shared';
   environment?: string;
   sshKeyPath?: string;
+  gitCredentialId?: string;
   trigger?: string;
   preferDockerfile?: boolean;
   dockerfilePath?: string;
@@ -894,6 +895,7 @@ export class PlanEngine {
     repoUrl: string;
     planBranch: string;
     commitSha: string;
+    gitCredentialId?: string;
     imageUrl?: string;
     buildMethod: DeployPlan['build']['method'];
     userDockerfile: string;
@@ -951,6 +953,7 @@ export class PlanEngine {
           repo_url: params.repoUrl,
           branch: params.planBranch,
           commit_sha: params.commitSha,
+          git_credential_id: params.gitCredentialId,
           image_url: params.imageUrl,
         },
       },
@@ -1150,7 +1153,12 @@ export class PlanEngine {
     const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
 
     log.info({ repoUrl: redactRepoUrl(repoUrl), branch }, 'Cloning repository');
-    const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
+    const cloneResult = await cloneRepo({
+      repoUrl,
+      branch,
+      sshKeyPath,
+      gitCredentialId: opts.gitCredentialId,
+    });
     const clonePath = cloneResult.path;
     const commitSha = cloneResult.commitSha;
 
@@ -1242,6 +1250,7 @@ export class PlanEngine {
       repoUrl,
       planBranch,
       commitSha,
+      gitCredentialId: cloneResult.gitCredentialId,
       buildMethod,
       userDockerfile,
       dockerTarget: opts.dockerTarget,
@@ -1867,6 +1876,7 @@ export class PlanEngine {
         repoUrl: plan.app.source.repo_url,
         branch: plan.app.source.branch,
         sshKeyPath: execution.sshKeyPath,
+        gitCredentialId: plan.app.source.git_credential_id,
       });
       const dockerfiles =
         deployOnly && deployOnly.length > 0
@@ -1879,6 +1889,7 @@ export class PlanEngine {
         branch: plan.app.source.branch,
         clonePath: cloneResult.path,
         commitSha: cloneResult.commitSha,
+        gitCredentialId: cloneResult.gitCredentialId,
         dockerfiles,
         envVars: mergedEnv,
         name: plan.app.name,
@@ -1913,6 +1924,9 @@ export class PlanEngine {
       ...(execution.visibility ? { visibility: execution.visibility } : {}),
       ...(execution.environment ? { environment: execution.environment } : {}),
       ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
+      ...(plan.app.source.git_credential_id
+        ? { gitCredentialId: plan.app.source.git_credential_id }
+        : {}),
       ...(execution.trigger ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' } : {}),
       ...(attachTargetProject ? { _networkProjectName: attachTargetProject.name } : {}),
       ...(deferredRuntimeEnvVars ? { _deferredRuntimeEnvVars: deferredRuntimeEnvVars } : {}),

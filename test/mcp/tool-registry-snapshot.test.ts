@@ -27,6 +27,7 @@ const EXPECTED_TOOLS = [
   'cleanup_preview',
   'create_bucket',
   'create_deploy_plan',
+  'create_git_deploy_key',
   'create_project',
   'create_service',
   'create_service_user',
@@ -63,6 +64,7 @@ const EXPECTED_TOOLS = [
   'list_data_sources',
   'list_domain_routes',
   'list_env_vars',
+  'list_git_credentials',
   'list_github_repos',
   'list_global_secrets',
   'list_previews',
@@ -76,6 +78,7 @@ const EXPECTED_TOOLS = [
   'probe_host',
   'read_data_source',
   'redeploy_app',
+  'remove_git_credential',
   'remove_secret_file',
   'remove_service',
   'remove_volume',
@@ -97,6 +100,7 @@ const EXPECTED_TOOLS = [
   'update_service_config',
   'upload_secret_file',
   'validate_deploy_plan',
+  'verify_git_credential',
 ];
 
 const REMOVED_PROJECT_RUNTIME_TOOLS = [
@@ -141,8 +145,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 83 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(83);
+  it('maintains exactly 87 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(87);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

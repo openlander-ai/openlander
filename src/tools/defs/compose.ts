@@ -23,6 +23,7 @@ const deployComposeInputSchema = deployComposeSchema.extend({
     .array(z.string())
     .optional()
     .describe('Docker Compose profiles to activate (e.g., ["infra", "dev"])'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
 });
 
 const orchestrateDeployInputSchema = orchestrateDeploySchema.extend({
@@ -30,6 +31,7 @@ const orchestrateDeployInputSchema = orchestrateDeploySchema.extend({
     .array(z.string())
     .optional()
     .describe('Docker Compose profiles to activate (e.g., ["infra", "dev"])'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
 });
 
 export const composeToolDefs: ToolDef[] = [
@@ -52,6 +54,7 @@ export const composeToolDefs: ToolDef[] = [
         repoUrl,
         branch,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
+        gitCredentialId: args['git_credential_id'] as string | undefined,
       });
 
       const composePath = appCtx.composePipeline.detectComposeFile(cloneResult.path);
@@ -74,6 +77,7 @@ export const composeToolDefs: ToolDef[] = [
         envVars,
         trigger: 'chat',
         environmentType: environment,
+        gitCredentialId: cloneResult.gitCredentialId,
       });
 
       if (!result.success) {
@@ -143,6 +147,7 @@ export const composeToolDefs: ToolDef[] = [
         repoUrl,
         branch,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
+        gitCredentialId: args['git_credential_id'] as string | undefined,
       });
 
       const dockerfiles = findDockerfiles(cloneResult.path).map((filePath) =>

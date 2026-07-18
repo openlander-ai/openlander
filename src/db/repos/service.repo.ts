@@ -341,6 +341,7 @@ export class ServiceRepo {
       buildMethod: string | null;
       containerPort: number | null;
       imageCmd: string | null;
+      gitCredentialId: string | null;
     }>,
   ): Promise<void> {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -374,6 +375,9 @@ export class ServiceRepo {
     }
     if (updates.repoUrl !== undefined) {
       setValues.repo_url = updates.repoUrl;
+    }
+    if (updates.gitCredentialId !== undefined) {
+      setValues.git_credential_id = updates.gitCredentialId;
     }
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;

@@ -176,6 +176,7 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
       const cloneResult = await cloneRepo({
         repoUrl: deployable.repo_url,
         branch: environmentRow?.branch ?? deployable.branch ?? undefined,
+        serviceId: deployable.id,
       });
       clonePath = cloneResult.path;
       const scanResult = scanForEnvUsage(clonePath);

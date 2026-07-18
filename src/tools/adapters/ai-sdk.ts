@@ -177,6 +177,7 @@ export function toAiSdkTools(
         repoUrl: deployable.repo_url,
         branch: deployable.branch ?? undefined,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
+        serviceId: deployable.id,
       });
       const currentDockerfile = readDockerfile(cloneResult.path) ?? 'Not available';
 

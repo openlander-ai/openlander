@@ -345,6 +345,21 @@ export const projectOpsToolDefs: ToolDef[] = [
         deployables.set(p.id, primary ?? groupDeployables[0]);
       }
 
+      const gitCredentialManager = (context.appCtx as Partial<typeof context.appCtx>)
+        .gitCredentials;
+      const gitCredentials = gitCredentialManager ? await gitCredentialManager.list() : [];
+      const gitCredentialsById = new Map(
+        gitCredentials.map((credential) => [
+          credential.id,
+          {
+            id: credential.id,
+            name: credential.name,
+            fingerprint: credential.fingerprint,
+            status: credential.status,
+          },
+        ]),
+      );
+
       if (context.target === 'mcp') {
         return {
           count: projectsForResponse.length,
@@ -397,6 +412,9 @@ export const projectOpsToolDefs: ToolDef[] = [
                   port: deployable.assigned_port,
                   container_name: deployableContainerName,
                   route_health: routeHealthFor(deployable),
+                  git_credential: deployable.git_credential_id
+                    ? gitCredentialsById.get(deployable.git_credential_id)
+                    : null,
                 }
               : null;
             const deployableServices = (deployableGroupsForResponse.get(project.id) ?? []).map(
@@ -411,6 +429,9 @@ export const projectOpsToolDefs: ToolDef[] = [
                   service.container_name ??
                   (deployable?.id === service.id ? deployableContainerName : null),
                 route_health: routeHealthFor(service),
+                git_credential: service.git_credential_id
+                  ? gitCredentialsById.get(service.git_credential_id)
+                  : null,
               }),
             );
             const deployableServiceCount = deployableServices.length;

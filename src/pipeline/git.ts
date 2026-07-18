@@ -12,11 +12,16 @@ import {
   GitBranchNotFoundError,
   UnsafeRepoUrlError,
   GitHubRepoAccessError,
+  GitDeployKeyUnauthorizedError,
 } from '../errors.js';
 import { loadConfig } from '../config/index.js';
 import { GitHubProvider, type GitHubRepoAccessFailure } from '../git-providers/github.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { checkUrlSafety, GIT_ALLOWED_SCHEMES } from '../lib/url-safety.js';
+import {
+  getActiveGitCredentialManager,
+  type GitCloneCredentialAuth,
+} from '../git-credentials/manager.js';
 
 const log = createModuleLogger('git');
 
@@ -30,12 +35,17 @@ export interface CloneOptions {
   sshKeyPath?: string;
   /** Shallow clone depth (default: 1). */
   depth?: number;
+  /** Explicit repository Deploy Key credential. */
+  gitCredentialId?: string;
+  /** Existing service whose persisted source credential should be reused. */
+  serviceId?: string;
 }
 
 export interface CloneResult {
   path: string;
   commitSha: string;
   branch: string;
+  gitCredentialId?: string;
 }
 
 export async function getCommitSubject(
@@ -64,11 +74,31 @@ export async function getCommitSubject(
  * Shallow clone by default for speed.
  */
 export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
+  const credentialManager = getActiveGitCredentialManager();
+  if (credentialManager) {
+    return await credentialManager.runWithCloneCredential(
+      {
+        repoUrl: options.repoUrl,
+        ...(options.gitCredentialId ? { credentialId: options.gitCredentialId } : {}),
+        ...(options.serviceId ? { serviceId: options.serviceId } : {}),
+      },
+      async (auth) => await cloneRepoWithAuth(options, auth),
+    );
+  }
+  return await cloneRepoWithAuth(options, null);
+}
+
+async function cloneRepoWithAuth(
+  options: CloneOptions,
+  deployKeyAuth: GitCloneCredentialAuth | null,
+): Promise<CloneResult> {
   const { repoUrl, branch, sshKeyPath, depth = 1 } = options;
   const effectiveSshKeyPath =
-    sshKeyPath && sshKeyPath.trim().length > 0 && existsSync(sshKeyPath) ? sshKeyPath : undefined;
+    !deployKeyAuth && sshKeyPath && sshKeyPath.trim().length > 0 && existsSync(sshKeyPath)
+      ? sshKeyPath
+      : undefined;
 
-  if (sshKeyPath && !effectiveSshKeyPath) {
+  if (!deployKeyAuth && sshKeyPath && !effectiveSshKeyPath) {
     log.warn({ sshKeyPath }, 'Configured SSH key path does not exist in this runtime; ignoring it');
   }
 
@@ -82,16 +112,24 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   assertSafeRepoUrl(normalizedUrl);
   let githubToken: string | undefined;
   let githubAuthMethod: 'oauth' | 'pat' = 'pat';
-  try {
-    const githubConfig = loadConfig().gitProviders.github;
-    githubToken = githubConfig.token || undefined;
-    githubAuthMethod = githubConfig.authMethod ?? 'pat';
-  } catch (err) {
-    log.debug({ err }, 'Failed to load GitHub provider config');
+  if (!deployKeyAuth) {
+    try {
+      const githubConfig = loadConfig().gitProviders.github;
+      githubToken = githubConfig.token || undefined;
+      githubAuthMethod = githubConfig.authMethod ?? 'pat';
+    } catch (err) {
+      log.debug({ err }, 'Failed to load GitHub provider config');
+    }
   }
 
   const githubRepo = parseGitHubHttpsRepo(normalizedUrl);
-  if (githubRepo && githubToken) {
+  if (deployKeyAuth) {
+    normalizedUrl = deployKeyAuth.cloneUrl;
+    log.info(
+      { repoUrl: redactRepoUrl(repoUrl), credentialId: deployKeyAuth.credentialId },
+      'Using repository Deploy Key for clone',
+    );
+  } else if (githubRepo && githubToken) {
     const provider = new GitHubProvider(githubToken, undefined, githubAuthMethod);
     const access = await provider.checkRepoAccess(githubRepo.owner, githubRepo.repo);
     if (access.accessible) {
@@ -147,7 +185,9 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     const val = process.env[key];
     if (val) env[key] = val;
   }
-  if (effectiveSshKeyPath) {
+  if (deployKeyAuth) {
+    env['GIT_SSH_COMMAND'] = deployKeyAuth.gitSshCommand;
+  } else if (effectiveSshKeyPath) {
     env['GIT_SSH_COMMAND'] = `ssh -i ${effectiveSshKeyPath} -o StrictHostKeyChecking=no`;
   }
 
@@ -157,6 +197,16 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const msg = sanitizeGitError(rawMessage, githubToken);
 
+    if (deployKeyAuth) {
+      if (isGitBranchNotFoundMessage(msg)) {
+        throw new GitBranchNotFoundError(redactRepoUrl(repoUrl), branch ?? 'unknown');
+      }
+      throw new GitDeployKeyUnauthorizedError(
+        deployKeyAuth.credentialId,
+        redactRepoUrl(repoUrl),
+        'clone_failed',
+      );
+    }
     if (githubRepo && githubToken && msg.includes('Authentication failed')) {
       throw githubAccessError(repoUrl, githubAuthMethod, { reason: 'token_invalid' });
     }
@@ -189,6 +239,7 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     path: cloneDir,
     commitSha: sha.trim(),
     branch: resolvedBranch.trim() || branch || 'main',
+    ...(deployKeyAuth ? { gitCredentialId: deployKeyAuth.credentialId } : {}),
   };
 }
 

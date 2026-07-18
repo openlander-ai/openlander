@@ -16,6 +16,9 @@ import {
   GitCredentialInUseError,
   GitCredentialInvalidRepositoryError,
   GitCredentialNotFoundError,
+  GitCredentialNotVerifiedError,
+  GitCredentialRepositoryMismatchError,
+  GitCredentialSelectionRequiredError,
   GitDeployKeyUnauthorizedError,
 } from '../errors.js';
 import { GITHUB_KNOWN_HOSTS } from './known-hosts.js';
@@ -31,6 +34,8 @@ type GitCredentialDatabase = Pick<
   | 'setGitCredentialVerification'
   | 'listGitCredentialUsages'
   | 'deleteGitCredential'
+  | 'getService'
+  | 'markGitCredentialUsed'
 >;
 
 export interface CanonicalGitHubRepository {
@@ -61,6 +66,12 @@ export interface GitCredentialView {
   github_setup_url: string;
   usage_count: number;
   services: GitCredentialServiceUsage[];
+}
+
+export interface GitCloneCredentialAuth {
+  credentialId: string;
+  cloneUrl: string;
+  gitSshCommand: string;
 }
 
 function repositoryFromParts(rawUrl: string, owner: string, repoWithSuffix: string) {
@@ -233,6 +244,14 @@ export class GitCredentialManager {
     return this.toView(row, usages.get(id) ?? []);
   }
 
+  async validateForRepository(id: string, repoUrl: string): Promise<GitCredentialView> {
+    const row = await this.requireCredential(id);
+    const repository = canonicalizeGitHubRepoUrl(repoUrl);
+    this.assertCloneCredential(row, repository);
+    const usages = await this.db.listGitCredentialUsages([id]);
+    return this.toView(row, usages.get(id) ?? []);
+  }
+
   async list(filters?: {
     repoUrl?: string;
     status?: GitCredentialStatus;
@@ -282,6 +301,99 @@ export class GitCredentialManager {
     if (!deleted) throw new GitCredentialNotFoundError(id);
   }
 
+  async runWithCloneCredential<T>(
+    input: { repoUrl: string; credentialId?: string; serviceId?: string },
+    callback: (auth: GitCloneCredentialAuth | null) => Promise<T>,
+  ): Promise<T> {
+    const selected = await this.resolveCloneCredential(input);
+    if (!selected) return await callback(null);
+
+    const repository = canonicalizeGitHubRepoUrl(selected.repository_url);
+    const privateKey = decrypt(
+      selected.encrypted_private_key,
+      selected.private_key_iv,
+      this.masterKey,
+    );
+    const result = await withPrivateKey(privateKey, async ({ keyPath, knownHostsPath }) => {
+      const gitSshCommand = [
+        'ssh',
+        '-F',
+        '/dev/null',
+        '-i',
+        shellQuote(keyPath),
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'IdentitiesOnly=yes',
+        '-o',
+        'StrictHostKeyChecking=yes',
+        '-o',
+        `UserKnownHostsFile=${shellQuote(knownHostsPath)}`,
+      ].join(' ');
+      return await callback({
+        credentialId: selected.id,
+        cloneUrl: repository.sshUrl,
+        gitSshCommand,
+      });
+    });
+    await this.db.markGitCredentialUsed(selected.id);
+    return result;
+  }
+
+  private async resolveCloneCredential(input: {
+    repoUrl: string;
+    credentialId?: string;
+    serviceId?: string;
+  }): Promise<GitCredentialRow | null> {
+    let selectedId = input.credentialId;
+    if (!selectedId && input.serviceId) {
+      const service = await this.db.getService(input.serviceId);
+      selectedId = service?.git_credential_id ?? undefined;
+    }
+
+    let requestedRepository: CanonicalGitHubRepository | null = null;
+    try {
+      requestedRepository = canonicalizeGitHubRepoUrl(input.repoUrl);
+    } catch (error) {
+      if (selectedId) throw error;
+      return null;
+    }
+
+    if (selectedId) {
+      const row = await this.requireCredential(selectedId);
+      this.assertCloneCredential(row, requestedRepository);
+      return row;
+    }
+
+    const matches = await this.db.listGitCredentials({
+      repositoryKey: requestedRepository.repositoryKey,
+      status: 'verified',
+    });
+    if (matches.length > 1) {
+      throw new GitCredentialSelectionRequiredError(
+        requestedRepository.repositoryUrl,
+        matches.map((row) => row.id),
+      );
+    }
+    return matches[0] ?? null;
+  }
+
+  private assertCloneCredential(
+    row: GitCredentialRow,
+    requestedRepository: CanonicalGitHubRepository,
+  ): void {
+    if (row.repository_key !== requestedRepository.repositoryKey) {
+      throw new GitCredentialRepositoryMismatchError(
+        row.id,
+        row.repository_url,
+        requestedRepository.repositoryUrl,
+      );
+    }
+    if (row.status !== 'verified') {
+      throw new GitCredentialNotVerifiedError(row.id, row.status);
+    }
+  }
+
   private async requireCredential(id: string): Promise<GitCredentialRow> {
     const row = await this.db.getGitCredential(id);
     if (!row) throw new GitCredentialNotFoundError(id);
@@ -310,4 +422,14 @@ export class GitCredentialManager {
       services: usages,
     };
   }
+}
+
+let activeGitCredentialManager: GitCredentialManager | null = null;
+
+export function setActiveGitCredentialManager(manager: GitCredentialManager | null): void {
+  activeGitCredentialManager = manager;
+}
+
+export function getActiveGitCredentialManager(): GitCredentialManager | null {
+  return activeGitCredentialManager;
 }

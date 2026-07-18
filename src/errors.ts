@@ -125,6 +125,42 @@ export class GitDeployKeyUnauthorizedError extends OpenLanderError {
   }
 }
 
+export class GitCredentialRepositoryMismatchError extends OpenLanderError {
+  constructor(credentialId: string, credentialRepo: string, requestedRepo: string) {
+    super(
+      'The selected Git credential belongs to a different repository.',
+      'GIT_CREDENTIAL_REPOSITORY_MISMATCH',
+      409,
+      { credentialId, credentialRepo, requestedRepo },
+    );
+    this.name = 'GitCredentialRepositoryMismatchError';
+  }
+}
+
+export class GitCredentialNotVerifiedError extends OpenLanderError {
+  constructor(credentialId: string, status: string) {
+    super(
+      'The selected Git credential must be verified before it can be used.',
+      'GIT_CREDENTIAL_NOT_VERIFIED',
+      409,
+      { credentialId, status },
+    );
+    this.name = 'GitCredentialNotVerifiedError';
+  }
+}
+
+export class GitCredentialSelectionRequiredError extends OpenLanderError {
+  constructor(repoUrl: string, credentialIds: string[]) {
+    super(
+      'Multiple verified Git credentials match this repository. Select one explicitly.',
+      'GIT_CREDENTIAL_SELECTION_REQUIRED',
+      409,
+      { repoUrl, credentialIds },
+    );
+    this.name = 'GitCredentialSelectionRequiredError';
+  }
+}
+
 export type GitHubRepoAccessReason =
   | 'token_invalid'
   | 'sso_required'

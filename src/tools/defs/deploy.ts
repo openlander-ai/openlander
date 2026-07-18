@@ -162,6 +162,7 @@ export const deployToolDefs: ToolDef[] = [
       return appCtx.previewDeployer
         .deploy({
           repoUrl: args['repo_url'] as string,
+          gitCredentialId: args['git_credential_id'] as string | undefined,
           branch,
           sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         })

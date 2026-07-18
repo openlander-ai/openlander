@@ -408,6 +408,7 @@ export const domainSchema = z
 export const previewDeploySchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().min(1).describe('Branch to preview'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
 });
 
 export const previewIdSchema = z.object({
@@ -451,6 +452,7 @@ export const deployStatusSchema = z.object({
 export const scanDockerfilesSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch to scan'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
 });
 
 export const orchestrateDeploySchema = z.object({
@@ -468,6 +470,24 @@ export const listGithubReposSchema = z.object({
 
 export const searchGithubReposSchema = z.object({
   query: z.string().min(1).describe('Search query'),
+});
+
+export const createGitDeployKeySchema = z.object({
+  repo_url: z.string().min(1).describe('GitHub repository URL'),
+  name: z.string().min(1).optional().describe('Display name for this repository key'),
+});
+
+export const listGitCredentialsSchema = z.object({
+  repo_url: z.string().min(1).optional().describe('Filter by exact GitHub repository URL'),
+  status: z.enum(['pending', 'verified', 'failed']).optional().describe('Filter by status'),
+});
+
+export const verifyGitCredentialSchema = z.object({
+  credential_id: z.string().min(1).describe('Git credential ID'),
+});
+
+export const removeGitCredentialSchema = z.object({
+  credential_id: z.string().min(1).describe('Git credential ID to permanently delete'),
 });
 
 // Compose & orchestration schemas
@@ -663,6 +683,7 @@ export const platformAdoptOrphanServiceSchema = z.object({
 export const analyzeInfrastructureSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
 });
 
 // Debug & troubleshooting schemas
@@ -718,6 +739,7 @@ export const emptySchema = z.object({}).strict();
 export const scanProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),
+  git_credential_id: z.string().min(1).optional().describe('Repository Deploy Key credential ID'),
   clone_path: z
     .string()
     .optional()
@@ -888,6 +910,11 @@ export const createDeployPlanSchema = z
       .optional()
       .describe('Git repository URL (e.g., github.com/user/repo)'),
     branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
+    git_credential_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Verified repository Deploy Key credential ID. Omit for automatic selection.'),
     name: z
       .string()
       .regex(
@@ -940,6 +967,13 @@ export const createDeployPlanSchema = z
     }
 
     if (data.source === 'image') {
+      if (data.git_credential_id) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['git_credential_id'],
+          message: 'git_credential_id is only valid for Git repository deploys.',
+        });
+      }
       if (!data.image || data.image.length === 0) {
         ctx.addIssue({
           code: 'custom',
@@ -1078,6 +1112,11 @@ export const deploySchema = z
       .optional()
       .describe('Git repository URL (e.g., github.com/user/repo)'),
     branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
+    git_credential_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Verified repository Deploy Key credential ID. Omit for automatic selection.'),
     name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
@@ -1164,6 +1203,13 @@ export const deploySchema = z
     }
 
     if (data.source === 'image') {
+      if (data.git_credential_id) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['git_credential_id'],
+          message: 'git_credential_id is only valid for Git repository deploys.',
+        });
+      }
       if (!data.image || data.image.length === 0) {
         ctx.addIssue({
           code: 'custom',

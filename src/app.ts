@@ -53,7 +53,7 @@ import { createModuleLogger } from './lib/logger.js';
 import type { AgentPool } from './_ai-ops/agent-pool.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
 import type { OpsAgent } from './_ai-ops/ops-agent.js';
-import { GitCredentialManager } from './git-credentials/manager.js';
+import { GitCredentialManager, setActiveGitCredentialManager } from './git-credentials/manager.js';
 
 const log = createModuleLogger('app');
 
@@ -301,6 +301,7 @@ export async function createAppContext(
 ): Promise<AppContext> {
   const db = await Database.connect(databaseUrl);
   const gitCredentials = new GitCredentialManager(db);
+  setActiveGitCredentialManager(gitCredentials);
   await migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const runtime: RuntimeBackend = docker;
@@ -625,6 +626,7 @@ export async function createAppContext(
 
 /** Shutdown the application context. */
 export async function shutdownAppContext(ctx: AppContext): Promise<void> {
+  setActiveGitCredentialManager(null);
   activeIncidentReporter?.stop();
   activeActivityLogger?.stop();
   activeAiUsageListener?.stop();

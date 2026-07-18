@@ -119,6 +119,12 @@ const updateApplicationSourceSchema = z
       .describe('Saved source type to use on next redeploy'),
     repo_url: z.string().min(1).optional().describe('Git repository URL to save'),
     branch: z.string().min(1).optional().describe('Git branch to save'),
+    git_credential_id: z
+      .string()
+      .min(1)
+      .nullable()
+      .optional()
+      .describe('Verified repository Deploy Key credential ID, or null to disconnect it'),
     image: z.string().min(1).optional().describe('Container image reference to save'),
     cmd: z.array(z.string()).optional().describe('Image start command to save'),
     container_port: z
@@ -390,10 +396,24 @@ function sourceSnapshot(service: ResolvedServiceRow) {
     source: service.source,
     repo_url: service.repo_url,
     branch: service.branch,
+    git_credential_id: service.git_credential_id,
     image: service.image_url,
     cmd: parseSavedImageCommand(service.image_cmd),
     container_port: service.container_port,
   };
+}
+
+function gitCredentialSummary(
+  credential: Awaited<ReturnType<AppCtx['gitCredentials']['get']>> | null,
+) {
+  return credential
+    ? {
+        id: credential.id,
+        name: credential.name,
+        fingerprint: credential.fingerprint,
+        status: credential.status,
+      }
+    : null;
 }
 
 function buildSourceUpdate(
@@ -410,17 +430,33 @@ function buildSourceUpdate(
   const image = trimOptional(args.image);
   const cmd = args.cmd as string[] | undefined;
   const containerPort = args.container_port as number | undefined;
+  const hasCredentialField = Object.prototype.hasOwnProperty.call(args, 'git_credential_id');
+  const gitCredentialId = args.git_credential_id as string | null | undefined;
   const hasGitFields = repoUrl !== undefined || branch !== undefined;
   const hasImageFields = image !== undefined || cmd !== undefined;
   const hasContainerPort = containerPort !== undefined;
 
-  if (!requestedSource && !hasGitFields && !hasImageFields && !hasContainerPort) {
+  if (
+    !requestedSource &&
+    !hasGitFields &&
+    !hasImageFields &&
+    !hasContainerPort &&
+    !hasCredentialField
+  ) {
     throw new OpenLanderError(
       'No source update fields were provided.',
       'NO_SOURCE_UPDATE_FIELDS',
       400,
       {
-        allowed_fields: ['source', 'repo_url', 'branch', 'image', 'cmd', 'container_port'],
+        allowed_fields: [
+          'source',
+          'repo_url',
+          'branch',
+          'git_credential_id',
+          'image',
+          'cmd',
+          'container_port',
+        ],
       },
     );
   }
@@ -450,7 +486,17 @@ function buildSourceUpdate(
     );
   }
 
-  const mode = requestedSource ?? (hasImageFields ? 'image' : hasGitFields ? 'git' : undefined);
+  const mode =
+    requestedSource ??
+    (hasImageFields
+      ? 'image'
+      : hasGitFields
+        ? 'git'
+        : hasCredentialField
+          ? service.source === 'image'
+            ? 'image'
+            : 'git'
+          : undefined);
   if (mode === 'git' && !repoUrl && !service.repo_url) {
     throw new OpenLanderError(
       'Git source updates require repo_url unless the service already has one.',
@@ -492,6 +538,10 @@ function buildSourceUpdate(
       updates.branch = branch;
       mark('branch', service.branch !== branch);
     }
+    if (hasCredentialField) {
+      updates.gitCredentialId = gitCredentialId ?? null;
+      mark('git_credential_id', service.git_credential_id !== (gitCredentialId ?? null));
+    }
     if (service.kind !== 'compose') {
       updates.imageUrl = null;
       mark('image', service.image_url !== null);
@@ -523,6 +573,8 @@ function buildSourceUpdate(
     mark('repo_url', service.repo_url !== null);
     updates.branch = null;
     mark('branch', service.branch !== null);
+    updates.gitCredentialId = null;
+    mark('git_credential_id', service.git_credential_id !== null);
   }
 
   if (containerPort !== undefined) {
@@ -542,14 +594,45 @@ export async function runUpdateApplicationSourceAction(
     throw new ServiceOperationUnsupportedError('update_application_source', service.kind);
   }
 
+  const requestedCredential = args.git_credential_id;
+  const hasCredentialField = Object.prototype.hasOwnProperty.call(args, 'git_credential_id');
+  const requestedRepo = trimOptional(args.repo_url) ?? service.repo_url ?? undefined;
+  const requestedMode =
+    (args.source as SourceMode | undefined) ??
+    (args.image !== undefined ? 'image' : args.repo_url !== undefined ? 'git' : undefined);
+  if (hasCredentialField && requestedCredential !== null) {
+    if (typeof requestedCredential !== 'string' || !requestedRepo || requestedMode === 'image') {
+      throw new OpenLanderError(
+        'git_credential_id requires a Git repository source.',
+        'INVALID_SOURCE_FIELDS',
+        400,
+        { field: 'git_credential_id' },
+      );
+    }
+    await context.appCtx.gitCredentials.validateForRepository(requestedCredential, requestedRepo);
+  } else if (
+    !hasCredentialField &&
+    args.repo_url !== undefined &&
+    service.git_credential_id &&
+    requestedRepo
+  ) {
+    await context.appCtx.gitCredentials.validateForRepository(
+      service.git_credential_id,
+      requestedRepo,
+    );
+  }
+
   const { updates, changedFields, mode } = buildSourceUpdate(args, service);
   if (changedFields.length === 0) {
+    const credential = service.git_credential_id
+      ? await context.appCtx.gitCredentials.get(service.git_credential_id)
+      : null;
     return {
       status: 'unchanged',
       project_id: project.id,
       service_id: service.id,
       service: serviceSummary(service, project),
-      source: sourceSnapshot(service),
+      source: { ...sourceSnapshot(service), git_credential: gitCredentialSummary(credential) },
       changed_fields: [],
       needs_redeploy: false,
       _agent_guidance: {
@@ -561,13 +644,16 @@ export async function runUpdateApplicationSourceAction(
   }
   await context.appCtx.db.updateService(service.id, updates);
   const updated = (await context.appCtx.db.getService(service.id)) ?? service;
+  const credential = updated.git_credential_id
+    ? await context.appCtx.gitCredentials.get(updated.git_credential_id)
+    : null;
 
   return {
     status: 'updated',
     project_id: project.id,
     service_id: service.id,
     service: serviceSummary(updated, project),
-    source: sourceSnapshot(updated),
+    source: { ...sourceSnapshot(updated), git_credential: gitCredentialSummary(credential) },
     changed_fields: changedFields,
     needs_redeploy: true,
     suggested_call: {

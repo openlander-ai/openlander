@@ -144,6 +144,32 @@ describe('PlanEngine.createPlan', () => {
     expect(call.projectName).toBe('persist-app');
   });
 
+  it('persists only the selected credential ID in the deploy plan', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'credential123',
+      branch: 'main',
+      gitCredentialId: 'gitcred_1',
+    });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/private-app',
+      gitCredentialId: 'gitcred_1',
+    });
+
+    expect(mockCloneRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ gitCredentialId: 'gitcred_1' }),
+    );
+    expect(plan.app.source.git_credential_id).toBe('gitcred_1');
+    const stored = mockDb.createDeployPlan.mock.calls[0][0].planJson as string;
+    expect(JSON.parse(stored).app.source.git_credential_id).toBe('gitcred_1');
+    expect(stored).not.toContain('private_key');
+    expect(stored).not.toContain('openlander-git-key');
+  });
+
   it('uses project_id as the existing project target when creating a plan', async () => {
     mockDb.getProject.mockResolvedValue({ id: 'target-project', name: 'workspace' });
     mockCloneRepo.mockResolvedValue({
