@@ -85,6 +85,46 @@ export class GitAuthError extends OpenLanderError {
   }
 }
 
+export class GitCredentialInvalidRepositoryError extends OpenLanderError {
+  constructor(repoUrl: string, reason: string) {
+    super(`Unsupported Git repository URL: ${repoUrl}`, 'GIT_CREDENTIAL_INVALID_REPOSITORY', 400, {
+      repoUrl,
+      reason,
+      supportedProvider: 'github',
+    });
+    this.name = 'GitCredentialInvalidRepositoryError';
+  }
+}
+
+export class GitCredentialNotFoundError extends OpenLanderError {
+  constructor(credentialId: string) {
+    super('Git credential not found.', 'GIT_CREDENTIAL_NOT_FOUND', 404, { credentialId });
+    this.name = 'GitCredentialNotFoundError';
+  }
+}
+
+export class GitCredentialInUseError extends OpenLanderError {
+  constructor(credentialId: string, serviceIds: string[]) {
+    super('Git credential is connected to one or more services.', 'GIT_CREDENTIAL_IN_USE', 409, {
+      credentialId,
+      serviceIds,
+    });
+    this.name = 'GitCredentialInUseError';
+  }
+}
+
+export class GitDeployKeyUnauthorizedError extends OpenLanderError {
+  constructor(credentialId: string, repoUrl: string, reason: string) {
+    super(
+      'The GitHub Deploy Key could not access this repository.',
+      'GIT_DEPLOY_KEY_UNAUTHORIZED',
+      403,
+      { credentialId, repoUrl, reason },
+    );
+    this.name = 'GitDeployKeyUnauthorizedError';
+  }
+}
+
 export type GitHubRepoAccessReason =
   | 'token_invalid'
   | 'sso_required'

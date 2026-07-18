@@ -71,6 +71,13 @@
       "when": 1783036800000,
       "tag": "0009_data_source_access",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784343600000,
+      "tag": "0010_git_credentials",
+      "breakpoints": true
     }
   ]
 }

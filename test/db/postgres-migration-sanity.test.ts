@@ -262,6 +262,7 @@ describe('Postgres migration sanity gate', () => {
       '0007_pat_service_scope',
       '0008_ai_ops_pending_inputs',
       '0009_data_source_access',
+      '0010_git_credentials',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -274,6 +275,7 @@ describe('Postgres migration sanity gate', () => {
       '0007_pat_service_scope.sql',
       '0008_ai_ops_pending_inputs.sql',
       '0009_data_source_access.sql',
+      '0010_git_credentials.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -287,6 +289,10 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "data_source_access"');
     expect(sql).toContain('CONSTRAINT "data_source_access_mode_check"');
     expect(sql).toContain('CREATE UNIQUE INDEX "data_source_access_project_service_idx"');
+    expect(sql).toContain('CREATE TABLE "git_credentials"');
+    expect(sql).toContain('CONSTRAINT "git_credentials_status_check"');
+    expect(sql).toContain('ADD COLUMN "git_credential_id" text');
+    expect(sql).toContain('CREATE INDEX "idx_services_git_credential"');
     expect(sql).toContain('CREATE TABLE "domain_mappings"');
     expect(sql).toContain('"target_port" integer');
     expect(sql).toContain('CONSTRAINT "domain_mappings_path_prefix_check"');
@@ -381,6 +387,20 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 10 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 11 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -401,7 +421,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 11 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 12 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
