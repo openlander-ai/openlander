@@ -1,12 +1,14 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import type { HttpBindings } from '@hono/node-server';
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { cors } from 'hono/cors';
+import type { Readable, Writable } from 'node:stream';
 import type { AppContext } from '../app.js';
 import { AuthService, type McpTokenIdentity } from '../auth/auth-service.js';
 import { createCorsOriginPolicy } from '../web/middleware/cors-policy.js';
@@ -210,11 +212,88 @@ async function createMcpServerInstance(
   return server;
 }
 
-export async function startMcpServer(ctx: AppContext): Promise<void> {
+interface StdioMcpServer {
+  connect(transport: Transport): Promise<void>;
+  close(): Promise<void>;
+  onclose?: () => void;
+}
+
+interface McpStdioServerOptions {
+  input?: Readable;
+  output?: Writable;
+  signal?: AbortSignal;
+}
+
+/**
+ * Keep a stdio MCP server alive until its transport closes.
+ *
+ * The SDK stdio transport does not treat stdin EOF as a close event. Without
+ * this bridge, detached clients can leave the AppContext and its database
+ * pool alive indefinitely.
+ */
+export async function runMcpStdioLifecycle(
+  server: StdioMcpServer,
+  transport: Transport,
+  input: Readable,
+  signal?: AbortSignal,
+): Promise<void> {
+  let closePromise: Promise<void> | null = null;
+  let resolveClosed: (() => void) | null = null;
+  let rejectClosed: ((error: unknown) => void) | null = null;
+  const closed = new Promise<void>((resolve, reject) => {
+    resolveClosed = resolve;
+    rejectClosed = reject;
+  });
+
+  const previousOnClose = server.onclose;
+  server.onclose = () => {
+    previousOnClose?.();
+    resolveClosed?.();
+  };
+
+  const requestClose = (): void => {
+    if (closePromise) return;
+    closePromise = server.close();
+    void closePromise.then(
+      () => resolveClosed?.(),
+      (error: unknown) => rejectClosed?.(error),
+    );
+  };
+
+  const onInputEnd = (): void => {
+    requestClose();
+  };
+  const onAbort = (): void => {
+    requestClose();
+  };
+
+  input.once('end', onInputEnd);
+  input.once('close', onInputEnd);
+  signal?.addEventListener('abort', onAbort, { once: true });
+
+  try {
+    await server.connect(transport);
+    log.info('OpenLander MCP server started on stdio transport');
+    if (input.readableEnded || input.destroyed || signal?.aborted) {
+      requestClose();
+    }
+    await closed;
+  } finally {
+    input.off('end', onInputEnd);
+    input.off('close', onInputEnd);
+    signal?.removeEventListener('abort', onAbort);
+    server.onclose = previousOnClose;
+  }
+}
+
+export async function startMcpServer(
+  ctx: AppContext,
+  options: McpStdioServerOptions = {},
+): Promise<void> {
   const server = await createMcpServerInstance(ctx);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  log.info('OpenLander MCP server started on stdio transport');
+  const input = options.input ?? process.stdin;
+  const transport = new StdioServerTransport(input, options.output ?? process.stdout);
+  await runMcpStdioLifecycle(server, transport, input, options.signal);
 }
 
 interface McpSession {

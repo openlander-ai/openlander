@@ -739,26 +739,38 @@ const mcpCommand = program
 
     const config = loadConfig();
 
-    const { createAppContext } = await import('../app.js');
+    const { createAppContext, shutdownAppContext } = await import('../app.js');
     const ctx = await createAppContext(config, getDatabaseUrl());
+    const shutdownController = new AbortController();
+    const requestShutdown = (): void => {
+      shutdownController.abort();
+    };
+    process.once('SIGINT', requestShutdown);
+    process.once('SIGTERM', requestShutdown);
 
-    if (ctx.agent) {
-      const { createTools } = await import('../tools/index.js');
-      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
-      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
-      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
-        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
-        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+    try {
+      if (ctx.agent) {
+        const { createTools } = await import('../tools/index.js');
+        const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
+        let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+        if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
+          await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
+          tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+        }
+        ctx.agent.setTools(tools);
       }
-      ctx.agent.setTools(tools);
-    }
 
-    if (ctx.config.ai.operationalMonitoring.enabled) {
-      ctx.alertMonitor.start();
-    }
+      if (ctx.config.ai.operationalMonitoring.enabled) {
+        ctx.alertMonitor.start();
+      }
 
-    const { startMcpServer } = await import('../mcp/server.js');
-    await startMcpServer(ctx);
+      const { startMcpServer } = await import('../mcp/server.js');
+      await startMcpServer(ctx, { signal: shutdownController.signal });
+    } finally {
+      process.off('SIGINT', requestShutdown);
+      process.off('SIGTERM', requestShutdown);
+      await shutdownAppContext(ctx);
+    }
   });
 
 const mcpTokenCommand = mcpCommand

@@ -80,6 +80,7 @@ export default defineConfig({
       'test/mcp/project-create-action.test.ts',
       'test/mcp/response-contract.test.ts',
       'test/mcp/session-heartbeat.test.ts',
+      'test/mcp/stdio-lifecycle.test.ts',
       'test/mcp/scoped-token-enforcement.test.ts',
       'test/mcp/tool-registry-snapshot.test.ts',
       'test/monitor/ops-agent.test.ts',
