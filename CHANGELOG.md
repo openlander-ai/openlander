@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.3] - 2026-07-19
+
+### Fixed
+
+- Fall back to the published host port when an application image lacks HTTP
+  probe tools, avoiding false unhealthy diagnostics while preserving real
+  connectivity and port-mismatch failures.
+
 ## [0.2.7-rc.2] - 2026-07-19
 
 ### Fixed
