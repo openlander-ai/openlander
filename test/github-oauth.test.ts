@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const { mockExec } = vi.hoisted(() => ({ mockExec: vi.fn() }));
+
+vi.mock('node:child_process', () => ({ exec: mockExec }));
+
 import {
   getGitHubClientId,
   requestDeviceCode,
@@ -258,9 +262,16 @@ describe('pollForAccessToken', () => {
 // ---------------------------------------------------------------------------
 
 describe('openInBrowser', () => {
-  it('opens URL without throwing', () => {
-    // This function uses child_process.exec which is hard to mock
-    // Just verify it doesn't throw
-    expect(() => openInBrowser('https://example.com')).not.toThrow();
+  it('delegates the URL to the platform browser command without launching it', () => {
+    openInBrowser('https://example.com');
+
+    const command =
+      process.platform === 'darwin'
+        ? 'open https://example.com'
+        : process.platform === 'win32'
+          ? 'start https://example.com'
+          : 'xdg-open https://example.com';
+    expect(mockExec).toHaveBeenCalledOnce();
+    expect(mockExec).toHaveBeenCalledWith(command, expect.any(Function));
   });
 });
