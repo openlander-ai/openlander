@@ -11,6 +11,7 @@ import {
 } from '../../../db/service-ids.js';
 import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../../db/views/service-view.js';
+import { isHttpRoutableRuntimeService } from '../../../health/compose-runtime.js';
 import {
   CircuitBreakerOpenError,
   DeployLockedError,
@@ -322,6 +323,7 @@ const COMPOSE_INTERNAL_SERVICE_NAME_RE =
 
 function isComposeInternalDependency(service: ServiceRow): boolean {
   if (service.kind !== 'compose-child') return false;
+  if (!isHttpRoutableRuntimeService(service)) return true;
   const displayName = getDeployableServiceDisplayName(service);
   const image = service.image_url ?? service.image_tag ?? '';
   return (

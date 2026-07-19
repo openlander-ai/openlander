@@ -36,6 +36,7 @@ import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
+import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
 
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
@@ -114,6 +115,7 @@ function resolveServiceContainerName(service: ServiceRow, project: ProjectRow): 
 function serviceIsHttpProviderRoutable(service: ServiceRow): boolean {
   if (service.archived_at) return false;
   if (MANAGED_SERVICE_KINDS.has(service.kind)) return false;
+  if (!isHttpRoutableRuntimeService(service)) return false;
   const status = service.status as ServiceRow['status'] | 'building';
   if (status === 'running') return true;
   return status === 'building' && Boolean(service.container_id);
@@ -402,7 +404,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const serviceStatus = service?.status as ServiceRow['status'] | 'building' | undefined;
       const isRoutable =
         serviceStatus === 'running' || (serviceStatus === 'building' && service?.container_id);
-      if (!service || service.archived_at || !isRoutable) continue;
+      if (
+        !service ||
+        service.archived_at ||
+        !isRoutable ||
+        !isHttpRoutableRuntimeService(service)
+      ) {
+        continue;
+      }
 
       const project = projectsById.get(service.project_id);
       if (!project) continue;

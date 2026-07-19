@@ -15,6 +15,52 @@ function composeChildServiceName(service: Pick<ServiceRow, 'name'>): string {
   );
 }
 
+/**
+ * Replace each Compose parent with its persisted runtime children while
+ * preserving non-Compose deployables in the same Project. Callers should load
+ * all children in one batch and pass them here rather than querying per parent.
+ */
+export function expandComposeRuntimeServices<
+  T extends Pick<ServiceRow, 'id' | 'kind' | 'parent_service_id'>,
+>(deployables: readonly T[], composeChildren: readonly T[]): T[] {
+  const childrenByParent = new Map<string, T[]>();
+  for (const child of composeChildren) {
+    if (!child.parent_service_id) continue;
+    const siblings = childrenByParent.get(child.parent_service_id) ?? [];
+    siblings.push(child);
+    childrenByParent.set(child.parent_service_id, siblings);
+  }
+
+  const expanded: T[] = [];
+  const seen = new Set<string>();
+  for (const service of deployables) {
+    const children = service.kind === 'compose' ? childrenByParent.get(service.id) : undefined;
+    const candidates = children && children.length > 0 ? children : [service];
+    for (const candidate of candidates) {
+      if (seen.has(candidate.id)) continue;
+      seen.add(candidate.id);
+      expanded.push(candidate);
+    }
+  }
+  return expanded;
+}
+
+/** Only application runtimes may receive HTTP URLs or Traefik routes. */
+export function isHttpRoutableRuntimeService(service: {
+  runtime_role?: ServiceRow['runtime_role'] | null;
+}): boolean {
+  return service.runtime_role == null || service.runtime_role === 'application';
+}
+
+export function isSuccessfulComposeJob(
+  service: Pick<ServiceRow, 'runtime_role' | 'status'>,
+  lastDeployStatus?: 'success' | 'failed' | 'cancelled',
+): boolean {
+  return (
+    service.runtime_role === 'job' && service.status === 'stopped' && lastDeployStatus === 'success'
+  );
+}
+
 export function resolveComposeTrafficTargetId(
   children: readonly ComposeTrafficChild[],
   trafficService?: string,

@@ -104,13 +104,31 @@ function isDeployableStatusService(kind: string): boolean {
   return !(NON_DEPLOYABLE_SERVICE_KINDS as readonly string[]).includes(kind);
 }
 
-function deriveGroupStatusFromServices(
-  serviceRows: Array<{ kind: string; status: ServiceRow['status'] }>,
+export function deriveGroupStatusFromServices(
+  serviceRows: Array<{
+    kind: string;
+    status: ServiceRow['status'];
+    runtime_role?: ServiceRow['runtime_role'];
+    archived_at?: string | null;
+  }>,
 ): ProjectStatus | undefined {
-  const deployableRows = serviceRows.filter((service) => isDeployableStatusService(service.kind));
-  if (deployableRows.length === 0) return undefined;
-  if (deployableRows.some((service) => service.status === 'error')) return 'error';
-  if (deployableRows.some((service) => service.status === 'running')) return 'running';
+  const activeRows = serviceRows.filter((service) => !service.archived_at);
+  const composeChildren = activeRows.filter((service) => service.kind === 'compose-child');
+  const topLevelDeployables = activeRows.filter((service) =>
+    isDeployableStatusService(service.kind),
+  );
+  const operationalRows =
+    composeChildren.length > 0
+      ? [
+          ...topLevelDeployables.filter((service) => service.kind !== 'compose'),
+          ...composeChildren.filter((service) => service.runtime_role !== 'job'),
+        ]
+      : topLevelDeployables;
+  const failureRows =
+    composeChildren.length > 0 ? [...operationalRows, ...composeChildren] : operationalRows;
+  if (failureRows.length === 0) return undefined;
+  if (failureRows.some((service) => service.status === 'error')) return 'error';
+  if (operationalRows.some((service) => service.status === 'running')) return 'running';
   return 'stopped';
 }
 
@@ -616,6 +634,7 @@ export class ProjectRepo {
         project_id: services.project_id,
         kind: services.kind,
         status: services.status,
+        runtime_role: services.runtime_role,
         archived_at: services.archived_at,
       })
       .from(services)
@@ -624,12 +643,22 @@ export class ProjectRepo {
     const isComposeByProject = new Map<string, boolean>();
     const servicesByProject = new Map<
       string,
-      Array<{ kind: string; status: ServiceRow['status']; archived_at: string | null }>
+      Array<{
+        kind: string;
+        status: ServiceRow['status'];
+        runtime_role: ServiceRow['runtime_role'];
+        archived_at: string | null;
+      }>
     >();
     for (const s of groupServices) {
       if (!s.project_id) continue;
       const rows = servicesByProject.get(s.project_id) ?? [];
-      rows.push({ kind: s.kind, status: s.status, archived_at: s.archived_at });
+      rows.push({
+        kind: s.kind,
+        status: s.status,
+        runtime_role: s.runtime_role,
+        archived_at: s.archived_at,
+      });
       servicesByProject.set(s.project_id, rows);
       if (s.kind === 'compose' || s.kind === 'compose-child') {
         isComposeByProject.set(s.project_id, true);

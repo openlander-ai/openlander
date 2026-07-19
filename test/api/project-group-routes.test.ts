@@ -303,6 +303,55 @@ describe('createProjectGroupRoutes', () => {
     });
   });
 
+  it('reports a Compose Project as running when its long-running children are healthy', async () => {
+    const project = makeProjectRow({ status: 'stopped' });
+    const parent = makeServiceRow({
+      kind: 'compose',
+      status: 'stopped',
+      assigned_port: null,
+      container_id: null,
+      container_name: null,
+      container_port: null,
+    });
+    const web = makeServiceRow({
+      id: 'group-1__web__svc',
+      name: 'workspace/web__svc',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'application',
+      status: 'running',
+    });
+    const migrate = makeServiceRow({
+      id: 'group-1__migrate__svc',
+      name: 'workspace/migrate__svc',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'job',
+      status: 'stopped',
+    });
+    const getServices = vi.fn(
+      async (opts: { ids?: readonly string[]; project_id?: string } = {}) =>
+        opts.project_id ? [parent, web, migrate] : [parent],
+    );
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        getDeployLogs: vi.fn(async () => []),
+        getServices,
+        getDeployableForProject: vi.fn(async () => parent),
+        getDeployablesByGroup: vi.fn(async () => [parent]),
+      },
+      env: { getAll: vi.fn(async () => []) },
+    });
+
+    const res = await app.request('/api/projects/group-1');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ id: project.id, status: 'running' });
+    expect(getServices).toHaveBeenCalledWith({ project_id: project.id });
+  });
+
   it('reports a partial group without exposing the group as archived on detail', async () => {
     const archivedAt = '2026-02-01T00:00:00.000Z';
     const project = makeProjectRow({ archived_at: archivedAt });

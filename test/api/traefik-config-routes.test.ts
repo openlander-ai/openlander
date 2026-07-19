@@ -232,6 +232,58 @@ describe('GET /api/traefik/config domain routing', () => {
       .toBe(true);
   });
 
+  it('does not create automatic or custom HTTP routes for Compose jobs and resources', async () => {
+    const project = makeProject({ name: 'stack' });
+    const parent = makeService({
+      id: 'stack__svc',
+      kind: 'compose',
+      status: 'stopped',
+      container_id: null,
+    });
+    const db = makeService({
+      id: 'stack__db__svc',
+      name: 'stack/db__svc',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'resource',
+      assigned_port: null,
+      container_port: 5432,
+      container_id: 'container-stack-db',
+      container_name: 'ol-stack-db',
+    });
+    const migrate = makeService({
+      id: 'stack__migrate__svc',
+      name: 'stack/migrate__svc',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'job',
+      status: 'running',
+      assigned_port: null,
+      container_port: 3000,
+      container_id: 'container-stack-migrate',
+      container_name: 'ol-stack-migrate',
+    });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({
+        projects: [project],
+        services: [parent, db, migrate],
+        mappings: [
+          makeMapping({ id: 'dm-db', service_id: db.id, domain: 'db.example.com' }),
+          makeMapping({
+            id: 'dm-migrate',
+            service_id: migrate.id,
+            domain: 'migrate.example.com',
+          }),
+        ],
+      }).app,
+    );
+
+    expect(config.http.services['svc-stack-db']).toBeUndefined();
+    expect(config.http.services['svc-stack-migrate']).toBeUndefined();
+    expect(findRouterForDomain(config, 'db.example.com')).toBeUndefined();
+    expect(findRouterForDomain(config, 'migrate.example.com')).toBeUndefined();
+  });
+
   it('routes in-memory previews through the HTTP provider', async () => {
     const config = await requestTraefikConfig(
       createTraefikConfigApp({

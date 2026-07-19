@@ -2,12 +2,42 @@ import { describe, expect, it } from 'vitest';
 
 import {
   aggregateComposeStatus,
+  expandComposeRuntimeServices,
+  isHttpRoutableRuntimeService,
+  isSuccessfulComposeJob,
   resolveComposeTrafficTargetId,
   serviceHealthStrategy,
   serviceLifecycle,
 } from '../../src/health/compose-runtime.js';
 
 describe('compose runtime semantics', () => {
+  it('expands a Compose parent into its runtime children without dropping sibling apps', () => {
+    const standalone = { id: 'worker', kind: 'git', parent_service_id: null };
+    const parent = { id: 'stack', kind: 'compose', parent_service_id: null };
+    const web = { id: 'web', kind: 'compose-child', parent_service_id: 'stack' };
+    const db = { id: 'db', kind: 'compose-child', parent_service_id: 'stack' };
+
+    expect(expandComposeRuntimeServices([standalone, parent], [web, db])).toEqual([
+      standalone,
+      web,
+      db,
+    ]);
+  });
+
+  it('only treats application roles as HTTP-routable', () => {
+    expect(isHttpRoutableRuntimeService({ runtime_role: 'application' })).toBe(true);
+    expect(isHttpRoutableRuntimeService({ runtime_role: null })).toBe(true);
+    expect(isHttpRoutableRuntimeService({ runtime_role: 'job' })).toBe(false);
+    expect(isHttpRoutableRuntimeService({ runtime_role: 'resource' })).toBe(false);
+  });
+
+  it('requires successful deploy evidence for a stopped one-shot job', () => {
+    const job = { runtime_role: 'job' as const, status: 'stopped' as const };
+    expect(isSuccessfulComposeJob(job, 'success')).toBe(true);
+    expect(isSuccessfulComposeJob(job, 'failed')).toBe(false);
+    expect(isSuccessfulComposeJob(job)).toBe(false);
+  });
+
   it('uses the persisted traffic service when several applications expose ports', () => {
     const children = [
       {

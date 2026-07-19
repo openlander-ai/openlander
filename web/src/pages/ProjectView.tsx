@@ -84,6 +84,7 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
 
 function groupServiceToNode(service: GroupService): ServiceNode {
   const health: ServiceHealth =
+    (service.kind === 'compose' && service.aggregateStatus === 'running') ||
     service.status === 'running' ||
     (service.runtimeRole === 'job' && service.lastDeploy?.status === 'success')
       ? 'healthy'

@@ -33,8 +33,17 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
-import type { DomainMappingRow, ServiceRow } from '../../db/types.js';
+import type { DeployLogRow, DomainMappingRow, ServiceRow } from '../../db/types.js';
 import { loadServiceView, loadServiceViewRecords } from '../../db/views/service-view.js';
+import {
+  aggregateComposeStatus,
+  expandComposeRuntimeServices,
+  isSuccessfulComposeJob,
+  resolveComposeTrafficTargetId,
+  serviceHealthStrategy,
+  serviceLifecycle,
+} from '../../health/compose-runtime.js';
+import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
 import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api');
@@ -170,8 +179,15 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       // path when the group has no services. The previous unconditional call
       // ran a query + N getProject() round-trips for every grouped project,
       // even though the result was discarded by useServices=true.
-      const groupServices = (await ctx.db.getDeployablesByGroup(project.id)).filter(
+      const projectDeployables = (await ctx.db.getDeployablesByGroup(project.id)).filter(
         (service) => !service.archived_at,
+      );
+      const composeChildren = projectDeployables.some((service) => service.kind === 'compose')
+        ? await ctx.db.getServices({ project_id: project.id, kindIn: ['compose-child'] })
+        : [];
+      const groupServices = expandComposeRuntimeServices(
+        projectDeployables,
+        composeChildren.filter((service) => !service.archived_at),
       );
       const useServices = groupServices.length > 0;
       const childProjects = useServices
@@ -194,6 +210,31 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       const domainMappingsByService: Map<string, DomainMappingRow[]> = useServices
         ? await loadDomainMappingsByService(ctx, groupServices)
         : new Map<string, DomainMappingRow[]>();
+      const runtimeComposeChildren = groupServices.filter(
+        (service) => service.kind === 'compose-child',
+      );
+      const composeDb = ctx.db as unknown as {
+        loadDeployConfig?: AppContext['db']['loadDeployConfig'];
+        getLastDeployLogsForServices?: (
+          serviceIds: readonly string[],
+        ) => Promise<Map<string, DeployLogRow>>;
+      };
+      const trafficService =
+        runtimeComposeChildren.length > 0 && typeof composeDb.loadDeployConfig === 'function'
+          ? await loadComposeTrafficService(ctx.db, project.id)
+          : undefined;
+      const trafficTargetId = resolveComposeTrafficTargetId(runtimeComposeChildren, trafficService);
+      const lastComposeDeploys: Map<string, DeployLogRow> =
+        runtimeComposeChildren.length > 0 &&
+        typeof composeDb.getLastDeployLogsForServices === 'function'
+          ? await composeDb.getLastDeployLogsForServices(
+              runtimeComposeChildren.map((service) => service.id),
+            )
+          : new Map<string, DeployLogRow>();
+      const aggregateStatus = aggregateComposeStatus(
+        runtimeComposeChildren,
+        new Map([...lastComposeDeploys].map(([id, deploy]) => [id, deploy.status])),
+      );
 
       const nodeIds = new Set(
         useServices
@@ -243,12 +284,28 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
                   autoRouteName: getDeployableServiceAutoRouteName(project, svc),
                 });
                 const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
-                const kind = 'Application' as const;
-                const runtime = await getTopologyNodeRuntime(ctx, {
-                  id: svc.id,
-                  container_id: svc.container_id,
-                  status: svc.status ?? null,
-                });
+                const runtimeRole = svc.runtime_role;
+                const lastDeploy = lastComposeDeploys.get(svc.id);
+                const kind =
+                  runtimeRole === 'resource'
+                    ? inferLegacyTopologyKind(`${svc.name} ${image}`)
+                    : ('Application' as const);
+                const runtime =
+                  runtimeRole === 'job'
+                    ? {
+                        health: isSuccessfulComposeJob(svc, lastDeploy?.status)
+                          ? ('healthy' as const)
+                          : svc.status === 'running'
+                            ? ('deploying' as const)
+                            : ('crashed' as const),
+                        cpuDisplay: '—',
+                        memDisplay: '—',
+                      }
+                    : await getTopologyNodeRuntime(ctx, {
+                        id: svc.id,
+                        container_id: svc.container_id,
+                        status: svc.status ?? null,
+                      });
                 return {
                   id: svc.id,
                   name: displayName,
@@ -273,6 +330,19 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
                   buildContext: svc.build_context,
                   buildMethod: svc.build_method,
                   routeName: getDeployableServiceRouteName(svc),
+                  ...(svc.kind === 'compose-child'
+                    ? {
+                        runtimeRole,
+                        lifecycle: serviceLifecycle(svc),
+                        healthStrategy: serviceHealthStrategy(svc),
+                        isTrafficTarget: svc.id === trafficTargetId,
+                        aggregateStatus,
+                        lastDeploy: lastDeploy
+                          ? { status: lastDeploy.status, createdAt: lastDeploy.created_at }
+                          : undefined,
+                        isComposeChild: true,
+                      }
+                    : {}),
                 };
               },
             )),
@@ -322,7 +392,10 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
             }),
           );
 
-      return c.json({ services: serviceNodes });
+      return c.json({
+        services: serviceNodes,
+        ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
+      });
     } catch (err) {
       log.debug({ err, projectId: project.id }, 'Get project topology failed');
       const message = err instanceof Error ? err.message : String(err);
