@@ -284,11 +284,14 @@ describe('createDeployableServiceRoutes', () => {
         },
       ],
     ]);
+    const getDeployablesByGroup = vi.fn(async () => [parent]);
+    const getServices = vi.fn(async () => [parent, web, database, migrate]);
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployablesByGroup: vi.fn(async () => [parent, web, database, migrate]),
+        getDeployablesByGroup,
+        getServices,
         getEnvironmentsByProject: vi.fn(async () => []),
         getLastDeployLogsForServices: vi.fn(async () => lastDeploys),
       },
@@ -297,6 +300,11 @@ describe('createDeployableServiceRoutes', () => {
     const res = await app.request('/api/projects/stack/services?include_compose_children=true');
 
     expect(res.status).toBe(200);
+    expect(getServices).toHaveBeenCalledWith({
+      project_id: 'stack',
+      kindNotIn: ['postgres', 'mysql', 'redis', 'mongo', 'minio'],
+    });
+    expect(getDeployablesByGroup).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
       count: 4,
       aggregate_status: 'running',

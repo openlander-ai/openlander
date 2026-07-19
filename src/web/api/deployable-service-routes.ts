@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { DeployLogRow } from '../../db/types.js';
 import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { ProjectNotFoundError } from '../../errors.js';
@@ -49,8 +50,14 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       return c.json(err.toJSON(), err.statusCode as 404);
     }
 
+    const deployablesPromise = includeComposeChildren
+      ? ctx.db.getServices({
+          project_id: project.id,
+          kindNotIn: MANAGED_SERVICE_KINDS,
+        })
+      : ctx.db.getDeployablesByGroup(project.id);
     const [deployables, environments] = await Promise.all([
-      ctx.db.getDeployablesByGroup(project.id),
+      deployablesPromise,
       ctx.db.getEnvironmentsByProject(project.id),
     ]);
     const projectLevelDeployables = deployables.filter(
