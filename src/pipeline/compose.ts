@@ -76,6 +76,11 @@ export interface ComposeService {
 
 export type ComposeRuntimeRole = 'application' | 'job' | 'resource';
 
+function composeChildServiceName(name: string, parentName: string): string {
+  const prefix = `${parentName}/`;
+  return (name.startsWith(prefix) ? name.slice(prefix.length) : name).replace(/__svc$/, '');
+}
+
 const RESOURCE_SIGNATURES: ReadonlyArray<{ pattern: RegExp; port: number }> = [
   { pattern: /(?:postgres|pgvector)/i, port: 5432 },
   { pattern: /(?:mysql|mariadb)/i, port: 3306 },
@@ -892,12 +897,9 @@ export class ComposePipeline {
       }),
     );
     const currentServiceFingerprints = fingerprintComposeServices(activeComposeProject.services);
-    const childNamePrefix = `${parentName}/`;
     const inferredExistingRuntimeRoles = inferComposeRuntimeRoles(
       existingChildren.map((child) => ({
-        name: child.name.startsWith(childNamePrefix)
-          ? child.name.slice(childNamePrefix.length).replace(/__svc$/, '')
-          : child.name.replace(/__svc$/, ''),
+        name: composeChildServiceName(child.name, parentName),
         image: child.image_tag ?? undefined,
       })),
     );
@@ -905,16 +907,12 @@ export class ComposePipeline {
       currentServiceNames: new Set(activeComposeProject.services.map((service) => service.name)),
       currentRuntimeRoles: runtimeRoles,
       existingServices: existingChildServices.map((service) => ({
-        name: service.name.startsWith(childNamePrefix)
-          ? service.name.slice(childNamePrefix.length)
-          : service.name,
+        name: composeChildServiceName(service.name, parentName),
         runtimeRole:
           service.runtime_role === 'resource'
             ? service.runtime_role
             : (inferredExistingRuntimeRoles.get(
-                service.name.startsWith(childNamePrefix)
-                  ? service.name.slice(childNamePrefix.length).replace(/__svc$/, '')
-                  : service.name.replace(/__svc$/, ''),
+                composeChildServiceName(service.name, parentName),
               ) ?? service.runtime_role),
       })),
       previousFingerprints: config.previousServiceFingerprints,
