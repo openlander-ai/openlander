@@ -115,6 +115,7 @@ export async function cloneAndAnalyze(
   buildLog: string;
   diffContext?: string;
   gitCredentialId?: string;
+  sourceRevisionChanged: boolean;
 }> {
   const {
     projectId,
@@ -153,6 +154,8 @@ export async function cloneAndAnalyze(
 
   const previousDeploy = await deps.db.getLastDeployLog(projectId, environmentId);
   const previousSha = previousDeploy?.commit_sha;
+  const sourceRevisionChanged =
+    previousDeploy?.status !== 'success' || previousSha !== cloneResult.commitSha;
 
   if (previousSha && previousSha !== cloneResult.commitSha) {
     const diffAnalysis = await analyzeBuildDiff(cloneResult.path, previousSha);
@@ -210,6 +213,7 @@ export async function cloneAndAnalyze(
     buildLog,
     diffContext,
     gitCredentialId: cloneResult.gitCredentialId,
+    sourceRevisionChanged,
   };
 }
 
@@ -228,6 +232,7 @@ export async function buildProject(
     config: Partial<ProjectConfig>;
     clonePath: string;
     commitSha: string;
+    sourceRevisionChanged: boolean;
     buildLog: string;
     environmentType?: OpenLanderEnv;
   },
@@ -256,6 +261,7 @@ export async function buildProject(
     config,
     clonePath,
     commitSha,
+    sourceRevisionChanged,
   } = params;
   let { buildLog } = params;
 
@@ -340,6 +346,8 @@ export async function buildProject(
       _parentId: projectId,
       gitCredentialId: config.gitCredentialId,
       previousServiceFingerprints,
+      noCache: config._noCacheBuild === true,
+      sourceRevisionChanged,
     });
 
     if (result.success) {

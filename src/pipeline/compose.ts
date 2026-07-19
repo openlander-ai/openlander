@@ -163,6 +163,8 @@ export interface ComposeDeployConfig {
   gitCredentialId?: string;
   trafficService?: string;
   previousServiceFingerprints?: Record<string, string>;
+  noCache?: boolean;
+  sourceRevisionChanged?: boolean;
 }
 
 interface ComposeResetValue {
@@ -932,7 +934,15 @@ export class ComposePipeline {
       existingServices: existingServiceNames,
       previousFingerprints: config.previousServiceFingerprints,
       currentFingerprints: currentServiceFingerprints,
+      forceReplaceApplications: config.noCache === true || config.sourceRevisionChanged === true,
     });
+    if (config.noCache === true || config.sourceRevisionChanged === true) {
+      const reasons = [
+        ...(config.sourceRevisionChanged === true ? ['source-revision'] : []),
+        ...(config.noCache === true ? ['no-cache'] : []),
+      ];
+      buildLog += `[compose rebuild] ${reasons.join(',')}\n`;
+    }
     const filteredComposeProject: ComposeProject = {
       ...activeComposeProject,
       services: activeComposeProject.services
@@ -1269,6 +1279,7 @@ export class ComposePipeline {
             dockerfile,
             tag: imageTag,
             cacheFrom: [imageTag],
+            noCache: config.noCache === true,
           });
         } else {
           buildLog += `[compose pull ${serviceName}] ${imageTag}\n`;
@@ -1378,6 +1389,7 @@ export class ComposePipeline {
                   dockerfile,
                   tag: imageTag,
                   cacheFrom: [imageTag],
+                  noCache: config.noCache === true,
                 });
               } else {
                 buildLog += `[compose pull ${service.name}] ${imageTag}\n`;
