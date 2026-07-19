@@ -58,9 +58,11 @@ import {
 import { isUserOwnedExternalEnvDependency } from '../../monitor/user-owned-input.js';
 import {
   aggregateComposeStatus,
+  resolveComposeTrafficTargetId,
   serviceHealthStrategy,
   serviceLifecycle,
 } from '../../health/compose-runtime.js';
+import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -208,10 +210,9 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
   );
   const nodeIds = new Set([...deployables, ...managedServices].map((service) => service.id));
   const composeChildren = deployables.filter((service) => service.kind === 'compose-child');
-  const trafficCandidates = composeChildren.filter(
-    (service) => service.runtime_role === 'application' && service.assigned_port != null,
-  );
-  const trafficTargetId = trafficCandidates.length === 1 ? trafficCandidates[0]?.id : undefined;
+  const trafficService =
+    composeChildren.length > 0 ? await loadComposeTrafficService(appCtx.db, project.id) : undefined;
+  const trafficTargetId = resolveComposeTrafficTargetId(composeChildren, trafficService);
   const lastComposeDeploys =
     composeChildren.length > 0
       ? await appCtx.db.getLastDeployLogsForServices(composeChildren.map((service) => service.id))

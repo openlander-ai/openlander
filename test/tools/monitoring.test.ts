@@ -1626,6 +1626,18 @@ describe('service-targeted monitoring tools', () => {
       container_port: 3000,
       image_url: 'demo-stack-web:latest',
     };
+    const api = {
+      id: 'stack__api__svc',
+      project_id: 'stack',
+      name: 'demo-stack/api__svc',
+      kind: 'compose-child',
+      source: 'git',
+      status: 'running',
+      runtime_role: 'application',
+      assigned_port: 10002,
+      container_port: 4000,
+      image_url: 'demo-stack-api:latest',
+    };
     const postgres = {
       id: 'stack__postgres__svc',
       project_id: 'stack',
@@ -1655,11 +1667,18 @@ describe('service-targeted monitoring tools', () => {
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
         getDeployablesByGroup: vi.fn(async () => [composeParent]),
-        getComposeChildren: vi.fn(async () => [web, postgres, redis]),
+        getComposeChildren: vi.fn(async () => [web, api, postgres, redis]),
+        loadDeployConfig: vi.fn(async () => ({
+          config_json: JSON.stringify({
+            version: 2,
+            savedAt: '2026-01-02T00:00:00.000Z',
+            snapshot: { trafficService: 'web' },
+          }),
+        })),
         getLastDeployLogsForServices: vi.fn(async () => new Map()),
         getServices: vi.fn(async () => []),
         listServiceConnectionsByProject: vi.fn(async () => []),
-        listServices: vi.fn(async () => [composeParent, web, postgres, redis]),
+        listServices: vi.fn(async () => [composeParent, web, api, postgres, redis]),
         findDependenciesByProject: vi.fn(async (projectId: string) =>
           projectId === 'stack__web'
             ? [
@@ -1689,10 +1708,11 @@ describe('service-targeted monitoring tools', () => {
     };
 
     expect(ctx.db.getComposeChildren).toHaveBeenCalledWith('stack__svc');
-    expect(result.count).toBe(3);
+    expect(result.count).toBe(4);
     expect(result.aggregate_status).toBe('running');
     expect(result.services.map((service) => service.id)).toEqual([
       'stack__web__svc',
+      'stack__api__svc',
       'stack__postgres__svc',
       'stack__redis__svc',
     ]);
@@ -1710,6 +1730,10 @@ describe('service-targeted monitoring tools', () => {
           id: 'stack__postgres__svc',
           runtime_role: 'resource',
           health_strategy: 'tcp',
+          is_traffic_target: false,
+        }),
+        expect.objectContaining({
+          id: 'stack__api__svc',
           is_traffic_target: false,
         }),
       ]),

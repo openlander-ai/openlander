@@ -209,6 +209,14 @@ export function validateStoredConfig(json: string): StoredDeployConfig | null {
   return deserializeConfig(json);
 }
 
+export async function loadComposeTrafficService(
+  db: Database,
+  projectId: string,
+): Promise<string | undefined> {
+  const configRow = await db.loadDeployConfig(projectId);
+  return validateStoredConfig(configRow?.config_json ?? '')?.snapshot.trafficService;
+}
+
 export async function persistDeployConfig(params: {
   projectId: string;
   config: ProjectConfig;

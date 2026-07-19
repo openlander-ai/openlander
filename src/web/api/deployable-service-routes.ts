@@ -7,9 +7,11 @@ import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
   aggregateComposeStatus,
+  resolveComposeTrafficTargetId,
   serviceHealthStrategy,
   serviceLifecycle,
 } from '../../health/compose-runtime.js';
+import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
 import {
   findService,
   resolveDeployableServiceForRoute,
@@ -80,10 +82,9 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const composeChildren = visibleDeployables.filter(
       (service) => service.kind === 'compose-child',
     );
-    const trafficCandidates = composeChildren.filter(
-      (service) => service.runtime_role === 'application' && service.assigned_port != null,
-    );
-    const trafficTargetId = trafficCandidates.length === 1 ? trafficCandidates[0]?.id : undefined;
+    const trafficService =
+      composeChildren.length > 0 ? await loadComposeTrafficService(ctx.db, project.id) : undefined;
+    const trafficTargetId = resolveComposeTrafficTargetId(composeChildren, trafficService);
     const aggregateStatus = aggregateComposeStatus(
       composeChildren,
       new Map([...lastDeploys].map(([id, log]) => [id, log.status])),

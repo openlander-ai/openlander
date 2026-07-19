@@ -2,11 +2,32 @@ import { describe, expect, it } from 'vitest';
 
 import {
   aggregateComposeStatus,
+  resolveComposeTrafficTargetId,
   serviceHealthStrategy,
   serviceLifecycle,
 } from '../../src/health/compose-runtime.js';
 
 describe('compose runtime semantics', () => {
+  it('uses the persisted traffic service when several applications expose ports', () => {
+    const children = [
+      {
+        id: 'stack__web__svc',
+        name: 'stack/web__svc',
+        runtime_role: 'application' as const,
+        assigned_port: 10001,
+      },
+      {
+        id: 'stack__api__svc',
+        name: 'stack/api__svc',
+        runtime_role: 'application' as const,
+        assigned_port: 10002,
+      },
+    ];
+
+    expect(resolveComposeTrafficTargetId(children, 'web')).toBe('stack__web__svc');
+    expect(resolveComposeTrafficTargetId(children)).toBeUndefined();
+  });
+
   it('does not degrade a project for a successfully stopped one-shot job', () => {
     expect(
       aggregateComposeStatus(

@@ -893,6 +893,14 @@ export class ComposePipeline {
     );
     const currentServiceFingerprints = fingerprintComposeServices(activeComposeProject.services);
     const childNamePrefix = `${parentName}/`;
+    const inferredExistingRuntimeRoles = inferComposeRuntimeRoles(
+      existingChildren.map((child) => ({
+        name: child.name.startsWith(childNamePrefix)
+          ? child.name.slice(childNamePrefix.length).replace(/__svc$/, '')
+          : child.name.replace(/__svc$/, ''),
+        image: child.image_tag ?? undefined,
+      })),
+    );
     assertComposeStatefulChangesSafe({
       currentServiceNames: new Set(activeComposeProject.services.map((service) => service.name)),
       currentRuntimeRoles: runtimeRoles,
@@ -900,7 +908,14 @@ export class ComposePipeline {
         name: service.name.startsWith(childNamePrefix)
           ? service.name.slice(childNamePrefix.length)
           : service.name,
-        runtimeRole: service.runtime_role,
+        runtimeRole:
+          service.runtime_role === 'resource'
+            ? service.runtime_role
+            : (inferredExistingRuntimeRoles.get(
+                service.name.startsWith(childNamePrefix)
+                  ? service.name.slice(childNamePrefix.length).replace(/__svc$/, '')
+                  : service.name.replace(/__svc$/, ''),
+              ) ?? service.runtime_role),
       })),
       previousFingerprints: config.previousServiceFingerprints,
       currentFingerprints: currentServiceFingerprints,
@@ -971,6 +986,40 @@ export class ComposePipeline {
         return msg;
       });
       throw new Error(`Missing env_file(s) in docker-compose:\n${errorMessages.join('\n')}`);
+    }
+
+    // A selective deploy may intentionally exclude a one-shot job or an unrelated
+    // application from the runtime execution set. Keep every existing child aligned
+    // with the active Compose specification so observation does not retain legacy
+    // roles, ports, or health strategies for services that were not restarted.
+    for (const service of activeComposeProject.services) {
+      const existing = existingByName.get(`${parentName}/${service.name}`);
+      if (!existing) continue;
+      const runtimeRole = runtimeRoles.get(service.name) ?? 'application';
+      const declaredContainerPorts = this.resolveServiceContainerPorts(service, envVars);
+      const internalContainerPort =
+        runtimeRole === 'job'
+          ? null
+          : (declaredContainerPorts[0] ??
+            (runtimeRole === 'resource' ? knownComposeResourcePort(service) : null));
+      await this.db.updateProject(existing.id, {
+        runtimeRole,
+        containerName: composeContainerName(parentName, service.name),
+        assignedPort: runtimeRole === 'application' ? existing.assigned_port : null,
+        containerPort: internalContainerPort,
+        healthCheckStrategy:
+          runtimeRole === 'job'
+            ? 'none'
+            : runtimeRole === 'resource'
+              ? service.healthcheck
+                ? 'exec'
+                : internalContainerPort
+                  ? 'tcp'
+                  : 'none'
+              : internalContainerPort
+                ? 'http'
+                : 'none',
+      });
     }
 
     if (!config._parentId) {
