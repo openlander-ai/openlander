@@ -10,6 +10,12 @@ export interface SecretFileMount {
   mountPath: string;
 }
 
+export interface ContainerFileCopy {
+  sourcePath: string;
+  targetPath: string;
+  readOnly?: boolean;
+}
+
 export interface RunContainerOptions {
   imageTag: string;
   name: string;
@@ -59,6 +65,7 @@ export interface RunComposeServiceOptions {
   networks?: string[];
   aliases?: string[];
   extraBinds?: string[];
+  fileCopies?: ContainerFileCopy[];
   memoryLimitBytes?: number;
 }
 

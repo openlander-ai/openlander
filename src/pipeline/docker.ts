@@ -2,6 +2,7 @@ export { Docker } from './docker/facade.js';
 export type {
   DockerStatus,
   SecretFileMount,
+  ContainerFileCopy,
   RunContainerOptions,
   RunComposeServiceOptions,
   ContainerInfo,

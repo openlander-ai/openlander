@@ -1,5 +1,12 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+  mkdirSync,
+  statSync,
+} from 'node:fs';
 import { classifyVar, parseEnvFile, formatEnvValue } from './env-inject.js';
 import { isAbsolute, join, dirname, relative, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -1420,7 +1427,7 @@ export class ComposePipeline {
             );
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
 
-            const extraBinds = await this.resolveComposeServiceBinds(
+            const { binds: extraBinds, fileCopies } = await this.resolveComposeServiceMounts(
               projectName,
               composeService,
               filteredComposeProject.projectPath,
@@ -1455,6 +1462,7 @@ export class ComposePipeline {
                   networks: [activeProjectNetwork],
                   aliases: [service.name],
                   extraBinds,
+                  fileCopies,
                   memoryLimitBytes: composeService.memoryLimitBytes,
                 });
                 break;
@@ -2354,14 +2362,18 @@ export class ComposePipeline {
     };
   }
 
-  private async resolveComposeServiceBinds(
+  private async resolveComposeServiceMounts(
     projectName: string,
     service: ComposeService,
     projectPath: string,
     envVars: Record<string, string>,
     imageTag: string,
-  ): Promise<string[]> {
+  ): Promise<{
+    binds: string[];
+    fileCopies: Array<{ sourcePath: string; targetPath: string; readOnly: boolean }>;
+  }> {
     const binds: string[] = [];
+    const fileCopies: Array<{ sourcePath: string; targetPath: string; readOnly: boolean }> = [];
     for (const [index, rawVolume] of (service.volumes ?? []).entries()) {
       const volume = interpolateComposeValue(rawVolume, envVars).trim();
       if (!volume) continue;
@@ -2398,9 +2410,33 @@ export class ComposePipeline {
             service: service.name,
           });
         }
-        if (!existsSync(absoluteSource) || !statSync(absoluteSource).isDirectory()) {
+        if (!existsSync(absoluteSource)) {
+          throw new ServiceConfigError(`Imported Compose bind source does not exist: ${source}`, {
+            service: service.name,
+          });
+        }
+        const canonicalRoot = realpathSync(root);
+        const canonicalSource = realpathSync(absoluteSource);
+        if (
+          canonicalSource !== canonicalRoot &&
+          !canonicalSource.startsWith(`${canonicalRoot}${sep}`)
+        ) {
+          throw new ServiceConfigError(`Compose bind mount escapes the repository: ${source}`, {
+            service: service.name,
+          });
+        }
+        const sourceStat = statSync(canonicalSource);
+        if (sourceStat.isFile()) {
+          fileCopies.push({
+            sourcePath: canonicalSource,
+            targetPath: target,
+            readOnly: mode.split(',').includes('ro'),
+          });
+          continue;
+        }
+        if (!sourceStat.isDirectory()) {
           throw new ServiceConfigError(
-            `Imported Compose bind source must be an existing directory: ${source}`,
+            `Imported Compose bind source must be a file or directory: ${source}`,
             { service: service.name },
           );
         }
@@ -2410,7 +2446,7 @@ export class ComposePipeline {
         );
         await this.docker.seedVolumeFromDirectory({
           name: volumeName,
-          sourcePath: absoluteSource,
+          sourcePath: canonicalSource,
           imageTag,
           labels: {
             'openlander.compose.project': projectName,
@@ -2432,7 +2468,7 @@ export class ComposePipeline {
       const volumeName = composeContainerName(projectName, `volume-${source}`);
       binds.push(`${volumeName}:${target}${mode ? `:${mode}` : ''}`);
     }
-    return binds;
+    return { binds, fileCopies };
   }
 
   private resolveDockerHealthcheck(healthcheck: ComposeService['healthcheck']):

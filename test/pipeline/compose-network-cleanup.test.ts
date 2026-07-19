@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { join } from 'node:path';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { SHARED_NETWORK_NAME } from '../../src/config/index.js';
@@ -740,13 +748,98 @@ describe('compose network cleanup', () => {
     expect(seedVolumeFromDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-stack-bind-api-1',
-        sourcePath: dataDir,
+        sourcePath: realpathSync(dataDir),
         imageTag: 'app:latest',
       }),
     );
     expect(runComposeService).toHaveBeenCalledWith(
       expect.objectContaining({ extraBinds: ['ol-stack-bind-api-1:/data:ro'] }),
     );
+  });
+
+  it('copies relative bind files into the container before startup', async () => {
+    const migrationScript = join(tmpDir, 'infra', 'migrate.sh');
+    mkdirSync(dirname(migrationScript), { recursive: true });
+    writeFileSync(migrationScript, '#!/bin/sh\nexit 0\n', 'utf8');
+    chmodSync(migrationScript, 0o755);
+    writeFileSync(
+      composePath,
+      `services:
+  migrate:
+    image: app:latest
+    volumes:
+      - ./infra/migrate.sh:/app/infra/migrate.sh:ro
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const pipeline = new ComposePipeline(
+      createFakeDocker({ runComposeService } as Partial<Docker>),
+      createFakeDb(),
+      createEventBus(),
+    );
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extraBinds: [],
+        fileCopies: [
+          {
+            sourcePath: realpathSync(migrationScript),
+            targetPath: '/app/infra/migrate.sh',
+            readOnly: true,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('rejects relative bind files whose symlink target escapes the repository', async () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), 'openlander-compose-bind-outside-'));
+    try {
+      const outsideFile = join(outsideDir, 'secret.txt');
+      writeFileSync(outsideFile, 'not-for-the-container\n', 'utf8');
+      const linkedFile = join(tmpDir, 'linked.txt');
+      symlinkSync(outsideFile, linkedFile);
+      writeFileSync(
+        composePath,
+        `services:
+  api:
+    image: app:latest
+    volumes:
+      - ./linked.txt:/app/linked.txt:ro
+`,
+        'utf8',
+      );
+      const runComposeService = vi.fn().mockResolvedValue('container-api');
+      const pipeline = new ComposePipeline(
+        createFakeDocker({ runComposeService } as Partial<Docker>),
+        createFakeDb(),
+        createEventBus(),
+      );
+
+      const result = await deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('escapes the repository');
+      expect(runComposeService).not.toHaveBeenCalled();
+    } finally {
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 
   it('loads optional env_file values below explicit deployment variables', async () => {
