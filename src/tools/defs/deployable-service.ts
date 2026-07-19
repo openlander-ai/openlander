@@ -14,6 +14,7 @@ import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
+import { resolveComposeRedeployTarget } from '../../pipeline/compose-redeploy-target.js';
 import {
   buildDeployLockedResponse,
   buildPolicyRejectionResponse,
@@ -831,17 +832,43 @@ export async function runDeployableServiceAction(
   const envVars = parseInternalRedeployEnvVars(args);
   let autoSelectedBlueGreen = false;
 
+  const redeployTarget =
+    action === 'restart_service'
+      ? { service }
+      : await resolveComposeRedeployTarget(context.appCtx.db, service);
+  const deploymentService = redeployTarget.service;
+  const deploymentProject =
+    deploymentService.id === service.id
+      ? project
+      : await context.appCtx.db.getProject(deploymentService.project_id);
+  if (!deploymentProject) {
+    throw new ProjectNotFoundError(deploymentService.project_id);
+  }
+  const deploymentRuntimeProjectId = deployableServiceIdToProjectId(deploymentService.id);
+  const deploymentRuntimeProject =
+    (await context.appCtx.db.getProject(deploymentRuntimeProjectId)) ?? deploymentProject;
+
   if (service.archived_at) {
     return buildArchivedServiceRejection(runtimeProject, project);
   }
 
   const groupPolicyRejection =
-    runtimeProject.id === project.id ? undefined : await tryRejectIfNotMutable(project, context);
+    deploymentRuntimeProject.id === project.id
+      ? undefined
+      : await tryRejectIfNotMutable(project, context);
   if (groupPolicyRejection) {
     return groupPolicyRejection;
   }
 
-  const policyRejection = await tryRejectIfNotMutable(runtimeProject, context);
+  const requestedRuntimePolicyRejection =
+    runtimeProject.id === deploymentRuntimeProject.id
+      ? undefined
+      : await tryRejectIfNotMutable(runtimeProject, context);
+  if (requestedRuntimePolicyRejection) {
+    return requestedRuntimePolicyRejection;
+  }
+
+  const policyRejection = await tryRejectIfNotMutable(deploymentRuntimeProject, context);
   if (policyRejection) {
     return policyRejection;
   }
@@ -864,7 +891,7 @@ export async function runDeployableServiceAction(
     };
   }
 
-  const sourceMissingError = getRedeploySourceMissingError(service);
+  const sourceMissingError = getRedeploySourceMissingError(deploymentService);
   if (sourceMissingError) {
     return {
       status: 'blocked',
@@ -904,7 +931,7 @@ export async function runDeployableServiceAction(
       };
     }
 
-    const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
+    const eligibility = await getBlueGreenEligibility(deploymentRuntimeProject.id, {
       healthCheckPath: healthCheckPath?.trim() || undefined,
     });
     if (!eligibility.supported) {
@@ -943,7 +970,7 @@ export async function runDeployableServiceAction(
       };
     }
 
-    const eligibility = await getBlueGreenEligibility(runtimeProject.id, {
+    const eligibility = await getBlueGreenEligibility(deploymentRuntimeProject.id, {
       healthCheckPath: healthCheckPath?.trim() || undefined,
     });
     if (eligibility.supported) {
@@ -968,18 +995,29 @@ export async function runDeployableServiceAction(
     }
   }
   const sessionId = `mcp-${action}-${nanoid(12)}`;
-  const lockResult = await tryAcquireDeployLockOrResponse(runtimeProject.id, sessionId, context);
+  const lockResult = await tryAcquireDeployLockOrResponse(
+    deploymentRuntimeProject.id,
+    sessionId,
+    context,
+  );
   if (lockResult) {
     return lockResult;
   }
 
   const releaseDbLock = () =>
-    context.appCtx.db.releaseDeployLock(runtimeProject.id, sessionId).catch((err: unknown) => {
-      log.warn(
-        { err, projectId: runtimeProject.id, groupProjectId: project.id, serviceId: service.id },
-        'Failed to release deploy lock',
-      );
-    });
+    context.appCtx.db
+      .releaseDeployLock(deploymentRuntimeProject.id, sessionId)
+      .catch((err: unknown) => {
+        log.warn(
+          {
+            err,
+            projectId: deploymentRuntimeProject.id,
+            groupProjectId: project.id,
+            serviceId: service.id,
+          },
+          'Failed to release deploy lock',
+        );
+      });
 
   const envKeys = Object.keys(envVars);
   if (envKeys.length > 0) {
@@ -1036,7 +1074,12 @@ export async function runDeployableServiceAction(
     .catch((err: unknown) => {
       if (err instanceof DeployLockedError) {
         log.warn(
-          { err, projectId: runtimeProject.id, groupProjectId: project.id, serviceId: service.id },
+          {
+            err,
+            projectId: deploymentRuntimeProject.id,
+            groupProjectId: project.id,
+            serviceId: service.id,
+          },
           'Service deploy skipped: lock held',
         );
         return;
@@ -1049,7 +1092,7 @@ export async function runDeployableServiceAction(
         log.warn(
           {
             err,
-            projectId: runtimeProject.id,
+            projectId: deploymentRuntimeProject.id,
             groupProjectId: project.id,
             serviceId: service.id,
             code: err.code,
@@ -1059,7 +1102,12 @@ export async function runDeployableServiceAction(
         return;
       }
       log.error(
-        { err, projectId: runtimeProject.id, groupProjectId: project.id, serviceId: service.id },
+        {
+          err,
+          projectId: deploymentRuntimeProject.id,
+          groupProjectId: project.id,
+          serviceId: service.id,
+        },
         'Service deploy failed',
       );
     })
@@ -1088,11 +1136,13 @@ export async function runDeployableServiceAction(
     status_call: {
       tool: 'openlander_deploy',
       action: 'get_deploy_status',
-      params: { service_id: service.id },
+      params: { service_id: deploymentService.id },
     },
     _agent_guidance: {
       next_steps: [
-        `Poll openlander_deploy.get_deploy_status with service_id="${service.id}" to track this deploy.`,
+        deploymentService.id === service.id
+          ? `Poll openlander_deploy.get_deploy_status with service_id="${service.id}" to track this deploy.`
+          : `Poll openlander_deploy.get_deploy_status with service_id="${deploymentService.id}" to track this Compose child deploy.`,
         `If deployment fails or times out, call openlander_monitor.diagnose_service with service_id="${service.id}".`,
         ...(autoSelectedBlueGreen
           ? ['Blue-green was selected automatically because this Application is eligible.']

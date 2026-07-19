@@ -412,6 +412,92 @@ describe('redeploy() config reconstruction characterization', () => {
     expect(capturedConfig.envVars).toBeUndefined();
   });
 
+  it('service-level Compose parent update clears the previous selective target set', async () => {
+    await db.createProject({
+      id: 'stack-parent',
+      name: 'stack-parent',
+      repoUrl: 'https://github.com/example/stack-parent',
+      branch: 'main',
+    });
+    const parentService = db.services.get('stack-parent__svc');
+    expect(parentService).toBeDefined();
+    db.services.set('stack-parent__svc', {
+      ...parentService!,
+      kind: 'compose',
+      build_method: 'compose',
+    });
+    db.deployConfigs.set(
+      'stack-parent__svc',
+      serializeConfig({
+        composeFile: 'docker-compose.yml',
+        composeServices: ['api'],
+        trafficService: 'web',
+      }),
+    );
+
+    const result = await pipeline.redeployService('stack-parent__svc');
+
+    expect(result.success).toBe(true);
+    const capturedConfig = deploySpy.mock.calls[0][0] as ProjectConfig;
+    expect(capturedConfig.composeServices).toEqual([]);
+    expect(capturedConfig.trafficService).toBe('web');
+  });
+
+  it('Compose child update reuses the parent snapshot and selects only that child', async () => {
+    await db.createProject({
+      id: 'stack',
+      name: 'stack',
+      repoUrl: 'https://github.com/example/stack',
+      branch: 'main',
+    });
+    const parentService = db.services.get('stack__svc');
+    expect(parentService).toBeDefined();
+    db.services.set('stack__svc', {
+      ...parentService!,
+      kind: 'compose',
+      build_method: 'compose',
+    });
+    await db.createProject({
+      id: 'stack-web',
+      name: 'stack/web',
+      repoUrl: 'https://github.com/example/stack',
+      branch: 'main',
+    });
+    const childService = db.services.get('stack-web__svc');
+    expect(childService).toBeDefined();
+    db.services.set('stack-web__svc', {
+      ...childService!,
+      project_id: 'stack',
+      name: 'stack/web__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      build_method: 'compose',
+    });
+    db.deployConfigs.set(
+      'stack__svc',
+      serializeConfig({
+        composeFiles: ['docker-compose.yml', 'deploy/docker-compose.prod.yml'],
+        composeServices: ['api'],
+        trafficService: 'web',
+      }),
+    );
+
+    const result = await pipeline.redeployService('stack-web__svc');
+
+    expect(result.success).toBe(true);
+    expect(deploySpy).toHaveBeenCalledOnce();
+    const capturedConfig = deploySpy.mock.calls[0][0] as ProjectConfig;
+    expect(capturedConfig).toMatchObject({
+      _projectId: 'stack',
+      _serviceId: 'stack__svc',
+      repoUrl: 'https://github.com/example/stack',
+      name: 'stack',
+      composeFiles: ['docker-compose.yml', 'deploy/docker-compose.prod.yml'],
+      composeServices: ['web'],
+      trafficService: 'web',
+    });
+  });
+
   it('scenario 3: Non-existent project redeploy returns error', async () => {
     // Call redeploy with non-existent project ID
     const result = await pipeline.redeploy('nonexistent-project-id');

@@ -71,8 +71,8 @@ type EnvRuntimeApply =
   | {
       mode: 'full_redeploy';
       status: 'started';
-      reason: 'build_time_env';
-      build_time_keys: string[];
+      reason: 'build_time_env' | 'compose_project_env';
+      build_time_keys?: string[];
     }
   | {
       mode: EnvApplyMode;
@@ -540,6 +540,9 @@ async function recordEnvActivity(
 }
 
 function serviceNeedsRedeploy(service: ResolvedServiceRow): boolean {
+  if (service.kind === 'compose') {
+    return true;
+  }
   const status = service.status;
   const hasRuntimeContainer =
     typeof service.container_id === 'string' && service.container_id.trim().length > 0;
@@ -606,7 +609,9 @@ function runtimeApplyGuidance(runtimeApply: EnvRuntimeApply | undefined): string
   switch (runtimeApply.status) {
     case 'started':
       return [
-        'A full redeploy was started because at least one changed env key is read at build time.',
+        runtimeApply.reason === 'compose_project_env'
+          ? 'A full Compose redeploy was started so the parent environment change reaches the child services.'
+          : 'A full redeploy was started because at least one changed env key is read at build time.',
         'After the deploy reaches a terminal status, call diagnostic_call to verify runtime health.',
       ];
     case 'verified':
@@ -687,7 +692,7 @@ async function applyRedeployIfRequested(
   }
 
   try {
-    if (changedKeys.some(isBuildTimeEnvKey)) {
+    if (service.kind === 'compose' || changedKeys.some(isBuildTimeEnvKey)) {
       const buildTimeKeys = changedKeys.filter(isBuildTimeEnvKey);
       await appCtx.pipeline.redeployService(service.id, { trigger });
       return {
@@ -697,8 +702,8 @@ async function applyRedeployIfRequested(
         runtimeApply: {
           mode: 'full_redeploy',
           status: 'started',
-          reason: 'build_time_env',
-          build_time_keys: buildTimeKeys,
+          reason: service.kind === 'compose' ? 'compose_project_env' : 'build_time_env',
+          ...(buildTimeKeys.length > 0 ? { build_time_keys: buildTimeKeys } : {}),
         },
       };
     }

@@ -25,6 +25,7 @@ import {
   representativeTrafficFailed,
   representativeTrafficToJson,
   representativeTrafficWarning,
+  resolveRepresentativeTrafficService,
 } from './representative-traffic.js';
 import {
   cleanupPreviewSchema,
@@ -525,16 +526,27 @@ export const deployToolDefs: ToolDef[] = [
           typeof appCtx.db.getService === 'function'
             ? await appCtx.db.getService(log.service_id)
             : undefined;
+        const representativeService = service
+          ? await resolveRepresentativeTrafficService(appCtx, service)
+          : undefined;
         const inferredProjectId =
           service?.project_id ?? log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
-        const view = await resolveServiceView(inferredProjectId, project);
-        const assignedPort = service?.assigned_port ?? view?.assignedPort ?? undefined;
-        const routeService = service
+        const runtimeProjectId = representativeService
+          ? deployableServiceIdToProjectId(representativeService.id)
+          : inferredProjectId;
+        const runtimeProject =
+          runtimeProjectId === inferredProjectId
+            ? project
+            : await appCtx.db.getProject(runtimeProjectId);
+        const view = await resolveServiceView(runtimeProjectId, runtimeProject);
+        const assignedPort =
+          representativeService?.assigned_port ?? view?.assignedPort ?? undefined;
+        const routeService = representativeService
           ? {
-              name: service.name,
+              name: representativeService.name,
               assigned_port: assignedPort ?? null,
-              public_url: service.public_url ?? view?.publicUrl ?? null,
+              public_url: representativeService.public_url ?? view?.publicUrl ?? null,
             }
           : undefined;
         const routeName = routeService ? getDeployableServiceRouteName(routeService) : undefined;

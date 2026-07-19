@@ -85,6 +85,7 @@ import {
 } from '../db/views/service-view.js';
 import { deployableServiceIdToProjectId } from '../db/service-ids.js';
 import { NON_DEPLOYABLE_SERVICE_KINDS } from '../db/repos/service.repo.js';
+import { resolveComposeRedeployTarget } from './compose-redeploy-target.js';
 
 import {
   buildProject,
@@ -330,6 +331,8 @@ export interface RedeployOptions {
   /** @internal Non-interactive callers cannot ask the user; fall back to a deterministic workload. */
   allowMultiServiceProjectFallback?: boolean;
   cmd?: string[];
+  /** @internal Explicit Compose replacement targets. An empty list means stack-level update. */
+  composeServices?: string[];
   lockSessionId?: string;
   trigger?: 'chat' | 'webhook' | 'api';
 }
@@ -2549,7 +2552,15 @@ export class DeployPipeline {
       };
     }
 
-    return await this.redeployResolvedService(service, options);
+    const target = await resolveComposeRedeployTarget(this.db, service);
+    return await this.redeployResolvedService(target.service, {
+      ...options,
+      ...(target.composeServices
+        ? { composeServices: target.composeServices }
+        : target.service.kind === 'compose'
+          ? { composeServices: [] }
+          : {}),
+    });
   }
 
   /** Restart an existing long-running container without clone, build, or replacement. */
@@ -3032,6 +3043,9 @@ export class DeployPipeline {
           _preserveLiveContainerUntilRun: true,
           environment: 'production',
           trigger: options?.trigger,
+          ...(service.kind === 'compose' && options?.composeServices
+            ? { composeServices: options.composeServices }
+            : {}),
           ...(networkProjectName ? { _networkProjectName: networkProjectName } : {}),
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
@@ -3075,7 +3089,13 @@ export class DeployPipeline {
       await this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
       this.jobManager?.trackJob(projectId, project.name);
 
-      return await this.deploy(config);
+      try {
+        return await this.deploy(config);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.jobManager?.updatePhase(projectId, 'failed', message);
+        throw error;
+      }
     });
   }
 

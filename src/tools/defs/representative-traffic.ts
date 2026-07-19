@@ -1,4 +1,7 @@
 import type { ToolContext } from './types.js';
+import type { ServiceRow } from '../../db/types.js';
+import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
+import { resolveComposeTrafficTargetId } from '../../health/compose-runtime.js';
 
 type AppCtx = ToolContext['appCtx'];
 
@@ -10,6 +13,22 @@ export interface RepresentativeTrafficObservation {
   attempts?: number;
   elapsed_ms?: number;
   message?: string;
+}
+
+export async function resolveRepresentativeTrafficService(
+  appCtx: AppCtx,
+  service: ServiceRow,
+  explicitTrafficService?: string,
+): Promise<ServiceRow | undefined> {
+  if (service.kind !== 'compose') {
+    return service;
+  }
+
+  const trafficService =
+    explicitTrafficService ?? (await loadComposeTrafficService(appCtx.db, service.project_id));
+  const children = await appCtx.db.getComposeChildren(service.id);
+  const targetId = resolveComposeTrafficTargetId(children, trafficService);
+  return targetId ? children.find((child) => child.id === targetId) : undefined;
 }
 
 export async function observeRepresentativeTraffic(
