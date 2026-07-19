@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { GitCredentialRow, GitCredentialServiceUsage } from '../src/db/types.js';
 import { decrypt } from '../src/env/crypto.js';
-import { GitCredentialInUseError, GitDeployKeyUnauthorizedError } from '../src/errors.js';
+import {
+  GitCredentialInUseError,
+  GitDeployKeyUnauthorizedError,
+  GitNetworkUnreachableError,
+} from '../src/errors.js';
 import {
   canonicalizeGitHubRepoUrl,
   GitCredentialManager,
@@ -175,6 +179,52 @@ describe('GitCredentialManager', () => {
     expect(verified.status).toBe('verified');
     expect(verified.default_branch).toBe('main');
     await expect(access(keyDirectory)).rejects.toThrow();
+  });
+
+  it('retries Deploy Key verification on GitHub SSH port 443 after a network failure', async () => {
+    const db = new MemoryGitCredentialDb();
+    const attemptedUrls: string[] = [];
+    const verifier: VerifyGitRemote = async (sshUrl) => {
+      attemptedUrls.push(sshUrl);
+      if (attemptedUrls.length === 1) {
+        throw Object.assign(new Error('ssh: connect to host github.com port 22: timed out'), {
+          code: 'ETIMEDOUT',
+        });
+      }
+      return { stdout: 'ref: refs/heads/main\tHEAD\nabc\tHEAD\n' };
+    };
+    const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+
+    await expect(manager.verify(created.id)).resolves.toMatchObject({
+      status: 'verified',
+      default_branch: 'main',
+    });
+    expect(attemptedUrls).toEqual([
+      'git@github.com:Team-SpaceY/incar-app.git',
+      'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
+    ]);
+  });
+
+  it('keeps credential state unchanged when every verification endpoint is unreachable', async () => {
+    const db = new MemoryGitCredentialDb();
+    const attemptedUrls: string[] = [];
+    const verifier: VerifyGitRemote = async (sshUrl) => {
+      attemptedUrls.push(sshUrl);
+      throw Object.assign(new Error('ssh: connect to host github.com port 22: timed out'), {
+        code: 'ETIMEDOUT',
+      });
+    };
+    const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+
+    await expect(manager.verify(created.id)).rejects.toBeInstanceOf(GitNetworkUnreachableError);
+    expect(db.rows.get(created.id)).toMatchObject({ status: 'pending', last_error_code: null });
+    expect(attemptedUrls).toEqual([
+      'git@github.com:Team-SpaceY/incar-app.git',
+      'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
+      'git@github.com:Team-SpaceY/incar-app.git',
+    ]);
   });
 
   it('records a safe failure and cleans temporary keys', async () => {
