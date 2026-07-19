@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.1] - 2026-07-19
+
+### Fixed
+
+- Derive Compose Project status from active runtime children instead of the
+  intentionally portless parent, while treating successful one-shot jobs as
+  completed.
+- Expand Compose parents into child services in REST and MCP topology views so
+  application, job, and resource health matches the actual containers.
+- Exclude Compose resources and one-shot jobs from generated and custom HTTP
+  routes while preserving application routing and Project UI status.
+
 ## [0.2.6] - 2026-07-19
 
 ### Added
