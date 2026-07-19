@@ -336,10 +336,14 @@ describe('probe_host tool', () => {
       )) as Record<string, unknown>;
 
       expect(result.reachable).toBe(true);
-      expect(ctx.docker.execSimple).toHaveBeenCalledWith(
-        'container-2',
-        expect.arrayContaining(['curl', '-w', '%{http_code}', '5', 'http://my-app:3000/health']),
-      );
+      expect(ctx.docker.execSimple).toHaveBeenCalledWith('container-2', [
+        'sh',
+        '-c',
+        expect.stringContaining('command -v node'),
+        'openlander-probe',
+        'http://my-app:3000/health',
+        '5',
+      ]);
     });
 
     it('returns not reachable on exec failure', async () => {
@@ -1162,7 +1166,11 @@ describe('diagnose_service tool', () => {
       archived_at: null,
       server_id: 'local',
     };
-    const execSimple = vi.fn(async () => ({ exitCode: 0, stdout: 'OK', stderr: '' }));
+    const execSimple = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: 'OPENLANDER_HTTP_STATUS=200',
+      stderr: '',
+    }));
     const ctx = {
       db: {
         getProject: vi.fn(() => project),
@@ -1196,11 +1204,19 @@ describe('diagnose_service tool', () => {
     // the host-side assigned_port (10001).
     expect(execSimple).toHaveBeenCalledTimes(1);
     expect(execSimple.mock.calls[0][0]).toBe('abc123def4567890');
-    expect(execSimple.mock.calls[0][1][2]).toContain('127.0.0.1:3000/healthz');
+    expect(execSimple.mock.calls[0][1]).toEqual([
+      'sh',
+      '-c',
+      expect.stringContaining('command -v node'),
+      'openlander-probe',
+      'http://127.0.0.1:3000/healthz',
+      '5',
+    ]);
 
     const httpCheck = result.httpCheck as Record<string, unknown>;
     expect(httpCheck).toMatchObject({
       reachable: true,
+      status_code: 200,
       probed_from: 'service-container',
       protocol_used: 'http',
     });

@@ -2052,28 +2052,30 @@ async function probeServiceHttp(
     const startedAt = Date.now();
     const targetUrl = `http://127.0.0.1:${String(containerPort)}${path}`;
     const timeoutSec = Math.max(1, Math.ceil(timeoutMs / 1000));
-    const cmd = [
-      'sh',
-      '-c',
-      // wget first (BusyBox/Alpine default); fall back to curl for Debian-ish
-      // distros. Both run with a TCP-only timeout so the exec returns within
-      // timeoutSec even on a hung socket. `2>&1` so we get useful stderr in
-      // the response on failure.
-      `wget -qO- --timeout=${String(timeoutSec)} ${targetUrl} 2>&1 || curl -sf --max-time ${String(timeoutSec)} ${targetUrl} 2>&1`,
-    ];
+    const cmd = buildInternalHttpProbeCommand(targetUrl, timeoutSec);
     try {
       const result = await appCtx.docker.execSimple(service.container_id, cmd);
       const latencyMs = Date.now() - startedAt;
-      const reachable = result.exitCode === 0;
+      const statusCode = parseHttpStatusCode(result.stdout.trim());
+      const reachable =
+        result.exitCode === 0 && (statusCode === null || (statusCode >= 200 && statusCode < 400));
       const probeToolUnavailable = result.exitCode === 127;
       const output = result.stderr.trim() || result.stdout.trim();
       return {
         reachable,
+        ...(statusCode !== null ? { status_code: statusCode } : {}),
         latency_ms: latencyMs,
         protocol_used: 'http',
         target_resolved: `${service.container_id.slice(0, 12)}:${String(containerPort)}${path}`,
         probed_from: 'service-container',
-        ...(reachable ? {} : { error: output || `exit code ${String(result.exitCode)}` }),
+        ...(reachable
+          ? {}
+          : {
+              error:
+                statusCode !== null
+                  ? `HTTP ${String(statusCode)}`
+                  : output || `exit code ${String(result.exitCode)}`,
+            }),
         ...(probeToolUnavailable ? { probe_tool_unavailable: true } : {}),
       };
     } catch (err) {
@@ -3795,6 +3797,32 @@ function buildInternalTcpProbeCommand(host: string, port: number, timeoutSec: nu
   ];
 }
 
+function buildInternalHttpProbeCommand(url: string, timeoutSec: number): string[] {
+  return [
+    'sh',
+    '-c',
+    [
+      'url="$1"; timeout="$2"',
+      'if command -v curl >/dev/null 2>&1; then',
+      '  status="$(curl -sS -o /dev/null -w "%{http_code}" --max-time "$timeout" "$url")"',
+      '  exit_code=$?',
+      '  if [ -n "$status" ]; then printf "OPENLANDER_HTTP_STATUS=%s\\n" "$status"; fi',
+      '  exit "$exit_code"',
+      'elif command -v wget >/dev/null 2>&1; then',
+      '  wget -qO /dev/null -T "$timeout" "$url"',
+      'elif command -v node >/dev/null 2>&1; then',
+      '  node -e \'const target=new URL(process.argv[1]); const transport=target.protocol==="https:"?require("https"):require("http"); const request=transport.get(target,{timeout:Number(process.argv[2])*1000},response=>{console.log("OPENLANDER_HTTP_STATUS="+String(response.statusCode||0)); response.destroy(); process.exit(0);}); request.on("timeout",()=>{request.destroy(); process.exit(124);}); request.on("error",()=>process.exit(1));\' "$url" "$timeout"',
+      'else',
+      '  echo "No HTTP probe tool available: install curl, wget, or node in the exec container" >&2',
+      '  exit 127',
+      'fi',
+    ].join('\n'),
+    'openlander-probe',
+    url,
+    String(timeoutSec),
+  ];
+}
+
 function parseHttpStatusCode(value: string): number | null {
   const match = value.match(/\b([1-5][0-9]{2})\b/);
   const rawStatus = match?.[1];
@@ -3866,17 +3894,7 @@ async function probeInternal(
     cmd = buildInternalTcpProbeCommand(host, port, timeoutSec);
   } else {
     const url = `${protocol}://${host}:${String(port)}${path}`;
-    cmd = [
-      'curl',
-      '-sS',
-      '-o',
-      '/dev/null',
-      '-w',
-      '%{http_code}',
-      '--max-time',
-      String(timeoutSec),
-      url,
-    ];
+    cmd = buildInternalHttpProbeCommand(url, timeoutSec);
   }
 
   try {
