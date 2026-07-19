@@ -374,6 +374,37 @@ describe('createWebServerRoutes', () => {
     );
   });
 
+  it('omits Compose jobs and resources from the HTTP routing read model', async () => {
+    const db = makeService({
+      id: 'project-1__db__svc',
+      name: 'demo/db__svc',
+      kind: 'compose-child',
+      runtime_role: 'resource',
+      assigned_port: null,
+      container_port: 5432,
+      container_id: 'container-db',
+      container_name: 'ol-demo-db',
+    });
+    const app = createApp(
+      createContext({
+        services: [db],
+        domainMappings: [makeDomain({ service_id: db.id, domain: 'db.example.com' })],
+        containers: [
+          makeContainer({
+            id: 'container-db',
+            name: 'ol-demo-db',
+            ports: [{ PrivatePort: 5432, Type: 'tcp' }],
+          }),
+        ],
+      }),
+    );
+
+    const res = await app.request('/api/web-server/routes');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ count: 0, issueCount: 0, routes: [] });
+  });
+
   it('treats container-port-only services as routable through Traefik', async () => {
     const service = makeService({ assigned_port: null, container_port: 3000 });
     const app = createApp(

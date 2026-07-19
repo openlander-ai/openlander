@@ -65,6 +65,9 @@ describe('Compose service observability UI', () => {
     expect(projectView).toContain(
       "resourceServiceNodes.filter((service) => service.kind !== 'Compose')",
     );
+    expect(projectView).toContain(
+      "service.kind === 'compose' && service.aggregateStatus === 'running'",
+    );
     expect(projectView).toContain('composeAggregateStatus={composeAggregateStatus}');
     expect(projectView).toContain('`/projects/${projectId}/services/${service.id}`');
     expect(detail).toContain('!resolvedService.isComposeChild &&');

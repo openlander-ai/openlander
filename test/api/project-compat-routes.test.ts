@@ -312,6 +312,124 @@ describe('createProjectCompatRoutes', () => {
     });
   });
 
+  it('expands a stopped Compose parent into healthy role-aware runtime nodes', async () => {
+    const project = { id: 'incar', name: 'incar', container_id: null, status: null };
+    const parent = makeServiceRow({
+      id: 'incar__svc',
+      project_id: project.id,
+      name: 'incar__svc',
+      kind: 'compose',
+      status: 'stopped',
+      assigned_port: null,
+      container_id: null,
+      container_name: null,
+      container_port: null,
+    });
+    const child = (
+      id: string,
+      runtimeRole: 'application' | 'job' | 'resource',
+      status: ServiceRow['status'],
+      containerPort: number | null,
+    ) =>
+      makeServiceRow({
+        id: `incar__${id}__svc`,
+        project_id: project.id,
+        name: `incar/${id}__svc`,
+        kind: 'compose-child',
+        parent_service_id: parent.id,
+        runtime_role: runtimeRole,
+        status,
+        assigned_port: runtimeRole === 'application' ? 10000 + id.length : null,
+        container_id: `container-${id}`,
+        container_name: `ol-incar-${id}`,
+        container_port: containerPort,
+        image_url: runtimeRole === 'resource' ? 'postgres:16' : `incar-${id}:latest`,
+      });
+    const web = child('web', 'application', 'running', 3000);
+    const api = child('api', 'application', 'running', 8000);
+    const logto = child('logto', 'application', 'running', 3001);
+    const migrate = child('migrate', 'job', 'stopped', null);
+    const db = child('db', 'resource', 'running', 5432);
+    const children = [web, api, logto, migrate, db];
+    const app = createApp({
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          State: { Running: true, Health: { Status: 'healthy' } },
+        })),
+      } as unknown as AppContext['docker'],
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [parent]),
+        getServices: vi.fn(
+          async (opts: { kindIn?: readonly string[] } = {}) =>
+            opts.kindIn?.includes('compose-child') ? children : [],
+        ),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listDomainMappings: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+        loadDeployConfig: vi.fn(async () => ({
+          config_json: JSON.stringify({
+            version: 2,
+            savedAt: '2026-07-19T00:00:00.000Z',
+            snapshot: { trafficService: 'web' },
+          }),
+        })),
+        getLastDeployLogsForServices: vi.fn(async () =>
+          new Map(
+            children.map((service) => [
+              service.id,
+              {
+                status: 'success' as const,
+                created_at: '2026-07-19T00:00:00.000Z',
+              },
+            ]),
+          ),
+        ),
+      },
+    });
+
+    const res = await app.request('/api/projects/incar/topology');
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      aggregate_status?: string;
+      services: Array<{
+        id: string;
+        kind: string;
+        health: string;
+        runtimeRole?: string;
+        isTrafficTarget?: boolean;
+      }>;
+    };
+    expect(body.aggregate_status).toBe('running');
+    expect(body.services).toHaveLength(5);
+    expect(body.services.map((service) => service.id)).not.toContain(parent.id);
+    expect(body.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: web.id,
+          health: 'healthy',
+          runtimeRole: 'application',
+          isTrafficTarget: true,
+        }),
+        expect.objectContaining({
+          id: migrate.id,
+          health: 'healthy',
+          runtimeRole: 'job',
+        }),
+        expect.objectContaining({
+          id: db.id,
+          kind: 'Database',
+          health: 'healthy',
+          runtimeRole: 'resource',
+        }),
+      ]),
+    );
+  });
+
   it('uses service domain mappings instead of service-name sslip hosts in topology', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];

@@ -24,6 +24,7 @@ import { apiGet } from './client';
 
 export interface ProjectTopologyResponse {
   services: ServiceNode[];
+  aggregate_status?: 'running' | 'degraded' | 'error';
 }
 
 export async function fetchProjectTopology(id: string): Promise<ServiceNode[]> {

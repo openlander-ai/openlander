@@ -1617,6 +1617,7 @@ describe('service-targeted monitoring tools', () => {
     const web = {
       id: 'stack__web__svc',
       project_id: 'stack',
+      parent_service_id: 'stack__svc',
       name: 'demo-stack/web__svc',
       kind: 'compose-child',
       source: 'git',
@@ -1629,6 +1630,7 @@ describe('service-targeted monitoring tools', () => {
     const api = {
       id: 'stack__api__svc',
       project_id: 'stack',
+      parent_service_id: 'stack__svc',
       name: 'demo-stack/api__svc',
       kind: 'compose-child',
       source: 'git',
@@ -1641,6 +1643,7 @@ describe('service-targeted monitoring tools', () => {
     const postgres = {
       id: 'stack__postgres__svc',
       project_id: 'stack',
+      parent_service_id: 'stack__svc',
       name: 'demo-stack/postgres__svc',
       kind: 'compose-child',
       source: 'git',
@@ -1653,6 +1656,7 @@ describe('service-targeted monitoring tools', () => {
     const redis = {
       id: 'stack__redis__svc',
       project_id: 'stack',
+      parent_service_id: 'stack__svc',
       name: 'demo-stack/redis__svc',
       kind: 'compose-child',
       source: 'git',
@@ -1667,7 +1671,6 @@ describe('service-targeted monitoring tools', () => {
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
         getDeployablesByGroup: vi.fn(async () => [composeParent]),
-        getComposeChildren: vi.fn(async () => [web, api, postgres, redis]),
         loadDeployConfig: vi.fn(async () => ({
           config_json: JSON.stringify({
             version: 2,
@@ -1676,7 +1679,10 @@ describe('service-targeted monitoring tools', () => {
           }),
         })),
         getLastDeployLogsForServices: vi.fn(async () => new Map()),
-        getServices: vi.fn(async () => []),
+        getServices: vi.fn(
+          async (opts: { kindIn?: readonly string[] } = {}) =>
+            opts.kindIn?.includes('compose-child') ? [web, api, postgres, redis] : [],
+        ),
         listServiceConnectionsByProject: vi.fn(async () => []),
         listServices: vi.fn(async () => [composeParent, web, api, postgres, redis]),
         findDependenciesByProject: vi.fn(async (projectId: string) =>
@@ -1707,7 +1713,10 @@ describe('service-targeted monitoring tools', () => {
       edges: Array<{ from: string; to: string }>;
     };
 
-    expect(ctx.db.getComposeChildren).toHaveBeenCalledWith('stack__svc');
+    expect(ctx.db.getServices).toHaveBeenCalledWith({
+      project_id: 'stack',
+      kindIn: ['compose-child'],
+    });
     expect(result.count).toBe(4);
     expect(result.aggregate_status).toBe('running');
     expect(result.services.map((service) => service.id)).toEqual([

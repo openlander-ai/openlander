@@ -26,10 +26,23 @@ export const ServiceNodeSchema = z.object({
   dockerTarget: z.string().nullable().optional(),
   buildContext: z.string().nullable().optional(),
   buildMethod: z.string().nullable().optional(),
+  runtimeRole: z.enum(['application', 'job', 'resource']).optional(),
+  lifecycle: z.enum(['long_running', 'one_shot']).optional(),
+  healthStrategy: z.enum(['http', 'tcp', 'docker_health', 'exit_code', 'none']).optional(),
+  isTrafficTarget: z.boolean().optional(),
+  aggregateStatus: z.enum(['running', 'degraded', 'error']).optional(),
+  lastDeploy: z
+    .object({
+      status: z.enum(['success', 'failed', 'cancelled']),
+      createdAt: z.string(),
+    })
+    .optional(),
+  isComposeChild: z.boolean().optional(),
 });
 
 export const ProjectTopologyResponseSchema = z.object({
   services: z.array(ServiceNodeSchema),
+  aggregate_status: z.enum(['running', 'degraded', 'error']).optional(),
 });
 
 // Compile-time parity assertion

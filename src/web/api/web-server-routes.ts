@@ -4,6 +4,7 @@ import type { AppContext } from '../../app.js';
 import { getPolicy, type OpenLanderEnv } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../db/types.js';
+import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { AllContainerInfo, PortInfo } from '../../pipeline/docker/types.js';
 import {
@@ -364,6 +365,7 @@ async function buildRoutes(ctx: AppContext): Promise<{
   for (const service of services) {
     const project = projectsById.get(service.project_id);
     if (!project || project.archived_at || service.archived_at) continue;
+    if (!isHttpRoutableRuntimeService(service)) continue;
 
     const container = findContainerForService(service, containersById, containersByName);
     if (routeTargetPort(service) !== null) {
@@ -411,6 +413,7 @@ async function buildRoutes(ctx: AppContext): Promise<{
   for (const mapping of domainMappings) {
     const service = servicesById.get(mapping.service_id);
     if (!service) continue;
+    if (!isHttpRoutableRuntimeService(service)) continue;
     const project = projectsById.get(service.project_id);
     if (!project || project.archived_at || service.archived_at) continue;
     const container = findContainerForService(service, containersById, containersByName);

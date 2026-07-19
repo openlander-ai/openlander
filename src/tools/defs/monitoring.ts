@@ -58,6 +58,7 @@ import {
 import { isUserOwnedExternalEnvDependency } from '../../monitor/user-owned-input.js';
 import {
   aggregateComposeStatus,
+  expandComposeRuntimeServices,
   resolveComposeTrafficTargetId,
   serviceHealthStrategy,
   serviceLifecycle,
@@ -108,41 +109,15 @@ async function resolveTopologyProject(
 async function getTopologyDeployables(appCtx: AppCtx, project: ProjectRow): Promise<ServiceRow[]> {
   const groupServices = await appCtx.db.getDeployablesByGroup(project.id);
   if (groupServices.length > 0) {
-    return expandComposeTopologyDeployables(appCtx, groupServices);
+    const hasComposeParent = groupServices.some((service) => service.kind === 'compose');
+    const composeChildren = hasComposeParent
+      ? await appCtx.db.getServices({ project_id: project.id, kindIn: ['compose-child'] })
+      : [];
+    return expandComposeRuntimeServices(groupServices, composeChildren);
   }
   const serviceRecords = await loadServiceViewRecords(appCtx.db, [project]);
   const service = serviceRecords.get(project.id)?.service ?? null;
   return service ? [service] : [];
-}
-
-async function expandComposeTopologyDeployables(
-  appCtx: AppCtx,
-  services: readonly ServiceRow[],
-): Promise<ServiceRow[]> {
-  const expanded: ServiceRow[] = [];
-  const seen = new Set<string>();
-
-  for (const service of services) {
-    if (service.kind === 'compose' && typeof appCtx.db.getComposeChildren === 'function') {
-      const children = await appCtx.db.getComposeChildren(service.id);
-      if (children.length > 0) {
-        for (const child of children) {
-          if (!seen.has(child.id)) {
-            seen.add(child.id);
-            expanded.push(child);
-          }
-        }
-        continue;
-      }
-    }
-
-    if (!seen.has(service.id)) {
-      seen.add(service.id);
-      expanded.push(service);
-    }
-  }
-
-  return expanded;
 }
 
 function topologyDeployableKind(service: ServiceRow): 'application' | 'compose' {

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { deriveGroupStatusFromServices } from '../../db/repos/project.repo.js';
 import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import {
   DeployLockedError,
@@ -126,11 +127,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
   api.get('/projects', async (c) => {
     const status = c.req.query('status') as
-      | 'running'
-      | 'stopped'
-      | 'building'
-      | 'error'
-      | undefined;
+      'running' | 'stopped' | 'building' | 'error' | undefined;
     const includeArchived = c.req.query('include_archived') === 'true';
     const projectsWithMeta = await ctx.db.listProjectsWithMetadata(status, { includeArchived });
     const serviceRecords = await loadServiceViewRecords(
@@ -190,18 +187,22 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const [envVars, environments, deployLogs, serviceRecords, deployables] = await Promise.all([
-      ctx.env.getAll(project.id),
-      ctx.db.getEnvironmentsByProject(project.id),
-      ctx.db.getDeployLogs(project.id, 5),
-      loadServiceViewRecords(ctx.db, [project]),
-      ctx.db.getDeployablesByGroup(project.id),
-    ]);
+    const [envVars, environments, deployLogs, serviceRecords, deployables, groupServices] =
+      await Promise.all([
+        ctx.env.getAll(project.id),
+        ctx.db.getEnvironmentsByProject(project.id),
+        ctx.db.getDeployLogs(project.id, 5),
+        loadServiceViewRecords(ctx.db, [project]),
+        ctx.db.getDeployablesByGroup(project.id),
+        ctx.db.getServices({ project_id: project.id }),
+      ]);
     const lifecycle = deriveGroupLifecycleState(deployables);
     const mapped = mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined);
+    const status = deriveGroupStatusFromServices(groupServices) ?? mapped.status;
 
     return c.json({
       ...mapped,
+      status,
       archived_at: lifecycle.partiallyArchived ? null : mapped.archived_at,
       partiallyArchived: lifecycle.partiallyArchived,
       partially_archived: lifecycle.partiallyArchived,
