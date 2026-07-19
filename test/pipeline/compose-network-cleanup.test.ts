@@ -88,7 +88,7 @@ function createFakeDb() {
         .filter((project) => project.parent_project_id === parentId)
         .map((project) => ({
           id: `${project.id}__svc`,
-          name: project.name,
+          name: `${project.name}__svc`,
           runtime_role:
             (project as ProjectRow & { runtime_role?: 'application' | 'job' | 'resource' })
               .runtime_role ?? 'application',
