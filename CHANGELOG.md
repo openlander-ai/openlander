@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.7] - 2026-07-19
+
+### Fixed
+
+- Normalize canonical Compose child service names before stateful safety
+  comparisons so an unchanged resource is not mistaken for a removed service.
+
 ## [0.2.6-rc.6] - 2026-07-19
 
 ### Fixed
