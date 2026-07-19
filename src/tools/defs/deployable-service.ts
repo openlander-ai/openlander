@@ -13,6 +13,12 @@ import {
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import {
+  CONFIG_VERSION,
+  serializeConfig,
+  validateStoredConfig,
+  type DeployConfigSnapshot,
+} from '../../pipeline/config-snapshot.js';
 import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
 import { resolveComposeRedeployTarget } from '../../pipeline/compose-redeploy-target.js';
 import {
@@ -106,10 +112,75 @@ const updateServiceConfigSchema = z
     dockerfile_path: z.string().optional().describe('Dockerfile path relative to repository root'),
     docker_target: z.string().optional().describe('Docker build target'),
     build_context: z.string().optional().describe('Build context relative to repository root'),
+    compose_file: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Repository-relative Compose file selected for the next update.'),
+    compose_files: z
+      .array(z.string().min(1))
+      .min(1)
+      .optional()
+      .describe('Ordered repository-relative Compose files, from base to overlays.'),
+    compose_profiles: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Compose profiles to activate. Pass an empty array to clear them.'),
+    compose_services: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Compose services to select. Pass an empty array to select all services.'),
+    traffic_service: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Compose application service that represents public traffic.'),
+    environment: z
+      .enum(['production', 'development'])
+      .optional()
+      .describe('Deployment environment saved for the next update.'),
+  })
+  .refine((value) => !(value.compose_file && value.compose_files), {
+    message: 'compose_file and compose_files cannot be combined',
+    path: ['compose_files'],
   })
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',
   });
+
+function normalizeSavedComposePath(value: unknown, field: string): string {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (
+    !normalized ||
+    normalized.startsWith('/') ||
+    normalized.startsWith('\\') ||
+    normalized.includes('..')
+  ) {
+    throw new OpenLanderError(
+      `${field} must be a relative path within the repository`,
+      'INVALID_SERVICE_CONFIG',
+      400,
+      { field },
+    );
+  }
+  return normalized;
+}
+
+function normalizeSavedComposeNames(value: unknown, field: string): string[] {
+  const normalized = (value as string[]).map((entry) => entry.trim());
+  if (
+    normalized.some((entry) => entry.length === 0) ||
+    new Set(normalized).size !== normalized.length
+  ) {
+    throw new OpenLanderError(
+      `${field} must contain unique non-empty values`,
+      'INVALID_SERVICE_CONFIG',
+      400,
+      { field },
+    );
+  }
+  return normalized;
+}
 
 const updateApplicationSourceSchema = z
   .object({
@@ -1364,8 +1435,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_service_config',
     riskLevel: 'medium',
     description:
-      'Update Application/Compose build config (dockerfile_path, docker_target, build_context). Takes effect on next update_app.',
-    mcpDescription: 'Update Application/Compose build config. Takes effect on next update_app.',
+      'Update Application/Compose build config, including saved Compose files, profiles, selected services, traffic target, and environment. Takes effect on next update_app.',
+    mcpDescription:
+      'Update Application/Compose build config and Compose selection. Save-only; call update_app to apply.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(
@@ -1374,6 +1446,99 @@ export const deployableServiceToolDefs: ToolDef[] = [
         'update_service_config',
       );
       const updates: Record<string, string | null> = {};
+      const composeFields = [
+        'compose_file',
+        'compose_files',
+        'compose_profiles',
+        'compose_services',
+        'traffic_service',
+        'environment',
+      ] as const;
+      const hasComposeUpdate = composeFields.some((field) =>
+        Object.prototype.hasOwnProperty.call(args, field),
+      );
+      let savedSnapshot: DeployConfigSnapshot | undefined;
+
+      if (hasComposeUpdate) {
+        if (args.compose_file !== undefined && args.compose_files !== undefined) {
+          throw new OpenLanderError(
+            'compose_file and compose_files cannot be combined.',
+            'INVALID_SERVICE_CONFIG',
+            400,
+            { invalid_fields: ['compose_file', 'compose_files'] },
+          );
+        }
+        if (service.kind !== 'compose' && service.source !== 'compose') {
+          throw new OpenLanderError(
+            'Compose selection fields can only be updated on a Compose parent service.',
+            'INVALID_SERVICE_CONFIG',
+            400,
+            { service_id: service.id, kind: service.kind },
+          );
+        }
+
+        const configRow = await context.appCtx.db.loadDeployConfigForService(service.id);
+        const storedConfig = configRow ? validateStoredConfig(configRow.config_json) : null;
+        if (configRow && !storedConfig) {
+          throw new OpenLanderError(
+            'The saved deployment configuration is invalid and cannot be updated safely.',
+            'INVALID_SERVICE_CONFIG',
+            409,
+            { service_id: service.id },
+          );
+        }
+
+        const snapshot: DeployConfigSnapshot = { ...(storedConfig?.snapshot ?? {}) };
+        if (args.compose_file !== undefined) {
+          snapshot.composeFile = normalizeSavedComposePath(args.compose_file, 'compose_file');
+          delete snapshot.composeFiles;
+        }
+        if (args.compose_files !== undefined) {
+          const composeFiles = normalizeSavedComposeNames(args.compose_files, 'compose_files').map(
+            (composeFile) => normalizeSavedComposePath(composeFile, 'compose_files'),
+          );
+          snapshot.composeFiles = composeFiles;
+          delete snapshot.composeFile;
+        }
+        if (args.compose_profiles !== undefined) {
+          snapshot.composeProfiles = normalizeSavedComposeNames(
+            args.compose_profiles,
+            'compose_profiles',
+          );
+        }
+        if (args.compose_services !== undefined) {
+          snapshot.composeServices = normalizeSavedComposeNames(
+            args.compose_services,
+            'compose_services',
+          );
+        }
+        if (args.traffic_service !== undefined) {
+          const [trafficService] = normalizeSavedComposeNames(
+            [args.traffic_service],
+            'traffic_service',
+          );
+          if (!trafficService) {
+            throw new OpenLanderError(
+              'traffic_service must be non-empty',
+              'INVALID_SERVICE_CONFIG',
+              400,
+              { field: 'traffic_service' },
+            );
+          }
+          snapshot.trafficService = trafficService;
+        }
+        if (args.environment !== undefined) {
+          snapshot.environment = args.environment as 'production' | 'development';
+        }
+
+        await context.appCtx.db.saveDeployConfigForService(
+          service.id,
+          serializeConfig(snapshot),
+          CONFIG_VERSION,
+        );
+        savedSnapshot = snapshot;
+      }
+
       if (args.dockerfile_path !== undefined) {
         const val = (args.dockerfile_path as string).trim();
         if (val.startsWith('/') || val.includes('..')) {
@@ -1400,17 +1565,37 @@ export const deployableServiceToolDefs: ToolDef[] = [
         }
         updates.buildContext = val === '' ? null : val;
       }
-      await context.appCtx.db.updateService(service.id, updates);
+      if (Object.keys(updates).length > 0) {
+        await context.appCtx.db.updateService(service.id, updates);
+      }
       const updated = await context.appCtx.db.getService(service.id);
       return {
         status: 'updated',
+        project_id: project.id,
+        service_id: service.id,
         service: serviceSummary(updated ?? service, project),
         config: {
           dockerfile_path: updated?.dockerfile_path ?? service.dockerfile_path,
           docker_target: updated?.docker_target ?? service.docker_target,
           build_context: updated?.build_context ?? service.build_context,
+          ...(savedSnapshot
+            ? {
+                compose_file: savedSnapshot.composeFile,
+                compose_files: savedSnapshot.composeFiles,
+                compose_profiles: savedSnapshot.composeProfiles,
+                compose_services: savedSnapshot.composeServices,
+                traffic_service: savedSnapshot.trafficService,
+                environment: savedSnapshot.environment,
+              }
+            : {}),
         },
-        _agent_guidance: { next_steps: ['Call update_app to apply the new configuration.'] },
+        needs_redeploy: true,
+        suggested_call: {
+          tool: 'openlander_service',
+          action: 'update_app',
+          params: { service_id: service.id },
+        },
+        _agent_guidance: { next_steps: ['Call update_app to apply the saved configuration.'] },
       };
     },
   },

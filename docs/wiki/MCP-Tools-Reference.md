@@ -572,16 +572,27 @@ open a tunnel.
 
 ### `update_service_config`
 
-Update Application build configuration.
+Save Application build configuration or Compose deployment selection. Changes are applied by a
+subsequent `update_app`. Compose paths are repository-relative and `compose_files` are ordered from
+the base file to overlays.
 
-| Parameter         | Type   | Required | Description                           |
-| ----------------- | ------ | -------- | ------------------------------------- |
-| `service_id`      | string | No       | Application id                        |
-| `service_name`    | string | No       | Application name                      |
-| `project_name`    | string | No       | Optional group scope for name lookups |
-| `dockerfile_path` | string | No       | Dockerfile path                       |
-| `docker_target`   | string | No       | Build target                          |
-| `build_context`   | string | No       | Build context path                    |
+| Parameter          | Type     | Required | Description                                                    |
+| ------------------ | -------- | -------- | -------------------------------------------------------------- |
+| `service_id`       | string   | No       | Application/Compose id                                         |
+| `service_name`     | string   | No       | Application/Compose name                                       |
+| `project_name`     | string   | No       | Optional group scope for name lookups                          |
+| `dockerfile_path`  | string   | No       | Dockerfile path                                                |
+| `docker_target`    | string   | No       | Build target                                                   |
+| `build_context`    | string   | No       | Build context path                                             |
+| `compose_file`     | string   | No       | One repository-relative Compose file                           |
+| `compose_files`    | string[] | No       | Ordered base-to-overlay Compose files; replaces `compose_file` |
+| `compose_profiles` | string[] | No       | Active profiles; an empty array clears the selection           |
+| `compose_services` | string[] | No       | Selected services; an empty array selects all                  |
+| `traffic_service`  | string   | No       | Application service representing public traffic                |
+| `environment`      | string   | No       | `production` or `development`                                  |
+
+`compose_file` and `compose_files` cannot be supplied together. Compose-specific fields are valid
+only for the Compose parent service; child services and non-Compose Applications are rejected.
 
 ### `update_application_source`
 
