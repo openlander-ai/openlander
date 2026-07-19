@@ -152,6 +152,23 @@ async function loadProjectServiceRecords(
   );
 }
 
+async function listProjectsWithRuntimeStatus(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
+  if (typeof appCtx.db.listProjectsWithMetadata === 'function') {
+    const projectsWithMetadata = await appCtx.db.listProjectsWithMetadata();
+    return {
+      projects: projectsWithMetadata.map((entry) => entry.project),
+      runtimeStatusByProject: new Map(
+        projectsWithMetadata.map((entry) => [entry.project.id, entry.runtimeStatus]),
+      ),
+    };
+  }
+
+  return {
+    projects: await appCtx.db.listProjects(),
+    runtimeStatusByProject: new Map<string, 'running' | 'stopped' | 'error'>(),
+  };
+}
+
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
   const projects = await appCtx.db.listProjects();
   const serviceRecords = await loadProjectServiceRecords(appCtx, projects);
@@ -277,7 +294,9 @@ export const projectOpsToolDefs: ToolDef[] = [
         await reconcileRunningProjects(context.appCtx);
       }
 
-      const projects = await context.appCtx.db.listProjects();
+      const { projects, runtimeStatusByProject } = await listProjectsWithRuntimeStatus(
+        context.appCtx,
+      );
       const serviceRecords = await loadProjectServiceRecords(context.appCtx, projects);
       const deployables = new Map<string, ServiceRow | undefined>();
       const domainMappings =
@@ -294,9 +313,12 @@ export const projectOpsToolDefs: ToolDef[] = [
         });
         domainMappingsByService.set(mapping.service_id, routes);
       }
-      const routeHealthFor = (service: ServiceRow) =>
+      const routeHealthFor = (
+        service: ServiceRow,
+        statusOverride?: 'running' | 'stopped' | 'error',
+      ) =>
         summarizeRouteHealth({
-          service,
+          service: { status: statusOverride ?? service.status },
           domainRoutes: domainMappingsByService.get(service.id) ?? [],
         });
       const deployableGroups =
@@ -386,7 +408,13 @@ export const projectOpsToolDefs: ToolDef[] = [
             // ServiceView.visibility normalizes missing/null values to
             // 'internal', while this response historically serialized the
             // ProjectRepo-hydrated raw value.
-            const status = view.status === 'idle' ? undefined : view.status;
+            const runtimeStatus = runtimeStatusByProject.get(project.id);
+            const status =
+              deployable?.kind === 'compose' && runtimeStatus != null
+                ? runtimeStatus
+                : view.status === 'idle'
+                  ? undefined
+                  : view.status;
             const visibility = serviceViewWireVisibility(project);
             const port = deployable ? view.assignedPort : undefined;
             const containerId = view.containerId;
@@ -408,10 +436,13 @@ export const projectOpsToolDefs: ToolDef[] = [
                   service_name: deployable.name,
                   kind: deployable.kind,
                   source: deployable.source,
-                  status: deployable.status,
+                  status: deployable.kind === 'compose' ? status : deployable.status,
                   port: deployable.assigned_port,
                   container_name: deployableContainerName,
-                  route_health: routeHealthFor(deployable),
+                  route_health: routeHealthFor(
+                    deployable,
+                    deployable.kind === 'compose' ? runtimeStatus : undefined,
+                  ),
                   git_credential: deployable.git_credential_id
                     ? gitCredentialsById.get(deployable.git_credential_id)
                     : null,
@@ -423,12 +454,20 @@ export const projectOpsToolDefs: ToolDef[] = [
                 service_name: service.name,
                 kind: service.kind,
                 source: service.source,
-                status: service.status,
+                status:
+                  service.id === deployable?.id && service.kind === 'compose'
+                    ? status
+                    : service.status,
                 port: service.assigned_port,
                 container_name:
                   service.container_name ??
                   (deployable?.id === service.id ? deployableContainerName : null),
-                route_health: routeHealthFor(service),
+                route_health: routeHealthFor(
+                  service,
+                  service.id === deployable?.id && service.kind === 'compose'
+                    ? runtimeStatus
+                    : undefined,
+                ),
                 git_credential: service.git_credential_id
                   ? gitCredentialsById.get(service.git_credential_id)
                   : null,
@@ -447,7 +486,12 @@ export const projectOpsToolDefs: ToolDef[] = [
               preferred_url: routeService ? getPreferredDeployableServiceUrl(routeService) : null,
               urls: serviceUrls,
               publicUrl,
-              route_health: deployable ? routeHealthFor(deployable) : undefined,
+              route_health: deployable
+                ? routeHealthFor(
+                    deployable,
+                    deployable.kind === 'compose' ? runtimeStatus : undefined,
+                  )
+                : undefined,
               deployable_service_count: deployableServiceCount,
               deployable_service: deployableService,
               deployable_services: deployableServices,
@@ -476,7 +520,13 @@ export const projectOpsToolDefs: ToolDef[] = [
           // services row exists, omit when none. status omits only on the
           // synthesized 'idle' bottom; visibility uses the raw wire helper
           // for the same reason as the MCP branch.
-          const status = view.status === 'idle' ? undefined : view.status;
+          const runtimeStatus = runtimeStatusByProject.get(project.id);
+          const status =
+            deployable?.kind === 'compose' && runtimeStatus != null
+              ? runtimeStatus
+              : view.status === 'idle'
+                ? undefined
+                : view.status;
           const visibility = serviceViewWireVisibility(project);
           const port = deployable ? view.assignedPort : undefined;
           const containerId = view.containerId;
@@ -499,7 +549,12 @@ export const projectOpsToolDefs: ToolDef[] = [
             url: preferredUrl,
             preferred_url: preferredUrl,
             publicUrl,
-            route_health: deployable ? routeHealthFor(deployable) : undefined,
+            route_health: deployable
+              ? routeHealthFor(
+                  deployable,
+                  deployable.kind === 'compose' ? runtimeStatus : undefined,
+                )
+              : undefined,
             deployable_service_count: deployableServiceCount,
           };
         }),
