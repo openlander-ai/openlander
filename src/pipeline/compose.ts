@@ -944,7 +944,10 @@ export class ComposePipeline {
             : undefined,
         })),
     };
-    const trafficCandidates = filteredComposeProject.services
+    // Representative traffic belongs to the whole Compose project, not only
+    // the subset being replaced. A selective API deploy must preserve a
+    // persisted web traffic target even though web is outside the execution set.
+    const trafficCandidates = activeComposeProject.services
       .filter(
         (service) =>
           runtimeRoles.get(service.name) === 'application' &&
