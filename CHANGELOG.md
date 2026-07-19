@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.2] - 2026-07-19
+
+### Fixed
+
+- Align MCP Project and Compose parent workload status with the active child
+  runtime aggregate, including route-health summaries, so healthy stacks no
+  longer report a stale stopped warning.
+
 ## [0.2.7-rc.1] - 2026-07-19
 
 ### Fixed
