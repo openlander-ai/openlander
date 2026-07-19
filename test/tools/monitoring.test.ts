@@ -2241,6 +2241,44 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('diagnose_service falls back to the host port when the app image has no HTTP probe tools', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.docker.execSimple).mockResolvedValue({
+      exitCode: 127,
+      stdout: '',
+      stderr: 'sh: curl: not found',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response('OK', { status: 200 }));
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(ctx.docker.execSimple).toHaveBeenCalledTimes(4);
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(':10001/health'),
+        expect.objectContaining({ method: 'GET', redirect: 'manual' }),
+      );
+      expect(result).toMatchObject({
+        httpCheck: {
+          reachable: true,
+          status_code: 200,
+          probe_mode: 'host_port_fallback',
+        },
+        route: {
+          issues: [],
+          consistent: true,
+        },
+      });
+      expect(result['diagnosis']).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('diagnose_service does not let host-port fallback hide a container port mismatch', async () => {
     const { ctx, service } = createServiceTargetContext();
     (service as { container_name: string | null }).container_name = null;
