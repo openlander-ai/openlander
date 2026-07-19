@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { GitCredentialRow, GitCredentialServiceUsage } from '../src/db/types.js';
 import { decrypt } from '../src/env/crypto.js';
-import { GitCredentialInUseError, GitDeployKeyUnauthorizedError } from '../src/errors.js';
+import {
+  GitCredentialInUseError,
+  GitDeployKeyUnauthorizedError,
+  GitNetworkUnreachableError,
+} from '../src/errors.js';
 import {
   canonicalizeGitHubRepoUrl,
   GitCredentialManager,
@@ -149,9 +153,9 @@ describe('GitCredentialManager', () => {
     expect(view).not.toHaveProperty('encrypted_private_key');
     expect(view).not.toHaveProperty('private_key_iv');
     expect(stored?.encrypted_private_key).not.toContain('OPENSSH PRIVATE KEY');
-    expect(
-      decrypt(stored!.encrypted_private_key, stored!.private_key_iv, MASTER_KEY),
-    ).toContain('OPENSSH PRIVATE KEY');
+    expect(decrypt(stored!.encrypted_private_key, stored!.private_key_iv, MASTER_KEY)).toContain(
+      'OPENSSH PRIVATE KEY',
+    );
   });
 
   it('verifies access, discovers the default branch, and removes temporary keys', async () => {
@@ -163,6 +167,9 @@ describe('GitCredentialManager', () => {
       expect((await stat(paths.keyPath)).mode & 0o777).toBe(0o600);
       expect((await stat(paths.knownHostsPath)).mode & 0o777).toBe(0o600);
       expect(await readFile(paths.knownHostsPath, 'utf8')).toContain('github.com ssh-ed25519');
+      expect(await readFile(paths.knownHostsPath, 'utf8')).toContain(
+        '[ssh.github.com]:443 ssh-ed25519',
+      );
       return { stdout: 'ref: refs/heads/main\tHEAD\nabc\tHEAD\n' };
     };
     const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
@@ -172,6 +179,52 @@ describe('GitCredentialManager', () => {
     expect(verified.status).toBe('verified');
     expect(verified.default_branch).toBe('main');
     await expect(access(keyDirectory)).rejects.toThrow();
+  });
+
+  it('retries Deploy Key verification on GitHub SSH port 443 after a network failure', async () => {
+    const db = new MemoryGitCredentialDb();
+    const attemptedUrls: string[] = [];
+    const verifier: VerifyGitRemote = async (sshUrl) => {
+      attemptedUrls.push(sshUrl);
+      if (attemptedUrls.length === 1) {
+        throw Object.assign(new Error('ssh: connect to host github.com port 22: timed out'), {
+          code: 'ETIMEDOUT',
+        });
+      }
+      return { stdout: 'ref: refs/heads/main\tHEAD\nabc\tHEAD\n' };
+    };
+    const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+
+    await expect(manager.verify(created.id)).resolves.toMatchObject({
+      status: 'verified',
+      default_branch: 'main',
+    });
+    expect(attemptedUrls).toEqual([
+      'git@github.com:Team-SpaceY/incar-app.git',
+      'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
+    ]);
+  });
+
+  it('keeps credential state unchanged when every verification endpoint is unreachable', async () => {
+    const db = new MemoryGitCredentialDb();
+    const attemptedUrls: string[] = [];
+    const verifier: VerifyGitRemote = async (sshUrl) => {
+      attemptedUrls.push(sshUrl);
+      throw Object.assign(new Error('ssh: connect to host github.com port 22: timed out'), {
+        code: 'ETIMEDOUT',
+      });
+    };
+    const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
+    const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
+
+    await expect(manager.verify(created.id)).rejects.toBeInstanceOf(GitNetworkUnreachableError);
+    expect(db.rows.get(created.id)).toMatchObject({ status: 'pending', last_error_code: null });
+    expect(attemptedUrls).toEqual([
+      'git@github.com:Team-SpaceY/incar-app.git',
+      'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
+      'git@github.com:Team-SpaceY/incar-app.git',
+    ]);
   });
 
   it('records a safe failure and cleans temporary keys', async () => {
@@ -217,18 +270,22 @@ describe('GitCredentialManager', () => {
     expect(db.used).toEqual([created.id]);
   });
 
-  it('disables SSH IP QoS for Deploy Key clones', async () => {
+  it('bounds SSH connection setup and provides GitHub port 443 fallback', async () => {
     const db = new MemoryGitCredentialDb();
     const manager = new GitCredentialManager(db, MASTER_KEY);
     const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
     await db.setGitCredentialVerification(created.id, { status: 'verified' });
 
-    const gitSshCommand = await manager.runWithCloneCredential(
+    const auth = await manager.runWithCloneCredential(
       { repoUrl: created.repository_url, credentialId: created.id },
-      async (auth) => auth?.gitSshCommand,
+      async (selectedAuth) => selectedAuth,
     );
 
-    expect(gitSshCommand).toContain('-o IPQoS=none');
+    expect(auth?.gitSshCommand).toContain('-o IPQoS=none');
+    expect(auth?.gitSshCommand).toContain('-o ConnectTimeout=15');
+    expect(auth?.gitSshCommand).toContain('-o ConnectionAttempts=1');
+    expect(auth?.fallbackCloneUrl).toBe('ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git');
+    expect(auth?.fallbackGitSshCommand).toBe(auth?.gitSshCommand);
   });
 
   it('prefers an existing service binding and requires explicit selection for ambiguous matches', async () => {

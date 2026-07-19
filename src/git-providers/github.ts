@@ -23,6 +23,8 @@ import { VERSION } from '../version.js';
 const log = createModuleLogger('github');
 
 const DEFAULT_API_BASE = 'https://api.github.com';
+const GITHUB_API_ATTEMPT_TIMEOUT_MS = 15_000;
+const GITHUB_API_MAX_ATTEMPTS = 2;
 
 // --- GitHub-specific API response types ---
 
@@ -56,8 +58,7 @@ export interface GitHubRepoAccessFailure {
 }
 
 export type GitHubRepoAccessResult =
-  | { accessible: true; repo: GitRepo }
-  | { accessible: false; failure: GitHubRepoAccessFailure };
+  { accessible: true; repo: GitRepo } | { accessible: false; failure: GitHubRepoAccessFailure };
 
 const ACCESSIBLE_REPO_SEARCH_PAGE_SIZE = 100;
 const ACCESSIBLE_REPO_SEARCH_MAX_PAGES = 10;
@@ -238,16 +239,38 @@ export class GitHubProvider implements GitProvider {
     }
   }
 
-  private fetchResponse(url: string, token: string | undefined): Promise<Response> {
-    return fetch(url, {
-      signal: AbortSignal.timeout(30_000),
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': `OpenLander/${VERSION}`,
-      },
-    });
+  private async fetchResponse(url: string, token: string | undefined): Promise<Response> {
+    for (let attempt = 1; attempt <= GITHUB_API_MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(GITHUB_API_ATTEMPT_TIMEOUT_MS),
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': `OpenLander/${VERSION}`,
+          },
+        });
+        if (
+          typeof response.status !== 'number' ||
+          response.status < 500 ||
+          attempt === GITHUB_API_MAX_ATTEMPTS
+        ) {
+          return response;
+        }
+
+        await response.body?.cancel();
+        log.warn(
+          { attempt, status: response.status },
+          'GitHub API server error; retrying the request once',
+        );
+      } catch (error) {
+        if (attempt === GITHUB_API_MAX_ATTEMPTS || !isRetryableTransportError(error)) throw error;
+        log.warn({ attempt }, 'GitHub API transport failed; retrying the request once');
+      }
+    }
+
+    throw new GitHubRepoAccessError('https://github.com', this.authMethod, 'unreachable');
   }
 
   private accessError(
@@ -262,6 +285,39 @@ export class GitHubProvider implements GitProvider {
       failure,
     );
   }
+}
+
+function isRetryableTransportError(error: unknown): boolean {
+  const records: unknown[] = [error];
+  if (typeof error === 'object' && error !== null && 'cause' in error) {
+    records.push(error.cause);
+  }
+
+  for (const record of records) {
+    if (!(record instanceof Error)) continue;
+    const code =
+      'code' in record && (typeof record.code === 'string' || typeof record.code === 'number')
+        ? String(record.code)
+        : '';
+    if (
+      [
+        'ETIMEDOUT',
+        'ENETUNREACH',
+        'EHOSTUNREACH',
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+      ].includes(code)
+    ) {
+      return true;
+    }
+    if (record.name === 'TimeoutError' || record.name === 'AbortError') return true;
+    if (/(?:fetch failed|network|socket|timed?\s*out|connection reset)/i.test(record.message)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function classifyAccessFailure(res: Response): Promise<GitHubRepoAccessFailure> {

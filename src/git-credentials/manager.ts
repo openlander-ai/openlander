@@ -20,11 +20,16 @@ import {
   GitCredentialRepositoryMismatchError,
   GitCredentialSelectionRequiredError,
   GitDeployKeyUnauthorizedError,
+  GitNetworkUnreachableError,
 } from '../errors.js';
+import { createModuleLogger } from '../lib/logger.js';
 import { GITHUB_KNOWN_HOSTS } from './known-hosts.js';
+import { isGitNetworkFailure } from './network.js';
 
+const log = createModuleLogger('git-credential-manager');
 const execFile = promisify(execFileCallback);
 const COMMAND_TIMEOUT_MS = 30_000;
+const SSH_CONNECT_TIMEOUT_SECONDS = 15;
 
 type GitCredentialDatabase = Pick<
   Database,
@@ -72,6 +77,8 @@ export interface GitCloneCredentialAuth {
   credentialId: string;
   cloneUrl: string;
   gitSshCommand: string;
+  fallbackCloneUrl?: string;
+  fallbackGitSshCommand?: string;
 }
 
 function repositoryFromParts(rawUrl: string, owner: string, repoWithSuffix: string) {
@@ -87,6 +94,10 @@ function repositoryFromParts(rawUrl: string, owner: string, repoWithSuffix: stri
     sshUrl: `git@github.com:${owner}/${repo}.git`,
     settingsUrl: `https://github.com/${owner}/${repo}/settings/keys`,
   } satisfies CanonicalGitHubRepository;
+}
+
+function githubSshFallbackUrl(repository: CanonicalGitHubRepository): string {
+  return `ssh://git@ssh.github.com:443/${repository.owner}/${repository.repo}.git`;
 }
 
 export function canonicalizeGitHubRepoUrl(rawUrl: string): CanonicalGitHubRepository {
@@ -159,6 +170,10 @@ function buildGitSshCommand(keyPath: string, knownHostsPath: string): string {
     'IdentitiesOnly=yes',
     '-o',
     'IPQoS=none',
+    '-o',
+    `ConnectTimeout=${String(SSH_CONNECT_TIMEOUT_SECONDS)}`,
+    '-o',
+    'ConnectionAttempts=1',
     '-o',
     'StrictHostKeyChecking=yes',
     '-o',
@@ -276,7 +291,7 @@ export class GitCredentialManager {
     const privateKey = decrypt(row.encrypted_private_key, row.private_key_iv, this.masterKey);
     try {
       const result = await withPrivateKey(privateKey, async ({ keyPath, knownHostsPath }) => {
-        return await this.verifyRemote(repository.sshUrl, { keyPath, knownHostsPath });
+        return await this.verifyRepositoryWithFallback(repository, { keyPath, knownHostsPath });
       });
       const branch = /^ref:\s+refs\/heads\/([^\s]+)\s+HEAD$/m.exec(result.stdout)?.[1] ?? null;
       const updated = await this.db.setGitCredentialVerification(id, {
@@ -289,6 +304,10 @@ export class GitCredentialManager {
       return this.toView(updated, usages.get(id) ?? []);
     } catch (error) {
       if (error instanceof GitCredentialNotFoundError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof GitNetworkUnreachableError || isGitNetworkFailure(error, message)) {
+        throw new GitNetworkUnreachableError(repository.repositoryUrl, 'deploy_key');
+      }
       const reason = safeVerificationFailure(error);
       await this.db.setGitCredentialVerification(id, {
         status: 'failed',
@@ -326,10 +345,48 @@ export class GitCredentialManager {
         credentialId: selected.id,
         cloneUrl: repository.sshUrl,
         gitSshCommand,
+        fallbackCloneUrl: githubSshFallbackUrl(repository),
+        fallbackGitSshCommand: gitSshCommand,
       });
     });
     await this.db.markGitCredentialUsed(selected.id);
     return result;
+  }
+
+  private async verifyRepositoryWithFallback(
+    repository: CanonicalGitHubRepository,
+    paths: { keyPath: string; knownHostsPath: string },
+  ): Promise<{ stdout: string }> {
+    const attempts = [
+      { sshUrl: repository.sshUrl, transport: 'ssh_22' },
+      { sshUrl: githubSshFallbackUrl(repository), transport: 'ssh_443' },
+      { sshUrl: repository.sshUrl, transport: 'ssh_22_retry' },
+    ] as const;
+
+    for (let index = 0; index < attempts.length; index++) {
+      const attempt = attempts[index];
+      if (!attempt) continue;
+      try {
+        return await this.verifyRemote(attempt.sshUrl, paths);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const hasNextAttempt = index + 1 < attempts.length;
+        if (hasNextAttempt && isGitNetworkFailure(error, message)) {
+          log.warn(
+            {
+              attempt: index + 1,
+              transport: attempt.transport,
+              nextTransport: attempts[index + 1]?.transport,
+            },
+            'Deploy Key verification transport failed; retrying with the next GitHub SSH endpoint',
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new GitNetworkUnreachableError(repository.repositoryUrl, 'deploy_key');
   }
 
   private async resolveCloneCredential(input: {

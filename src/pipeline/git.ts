@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -24,6 +24,7 @@ import {
   getActiveGitCredentialManager,
   type GitCloneCredentialAuth,
 } from '../git-credentials/manager.js';
+import { isGitNetworkFailure } from '../git-credentials/network.js';
 
 const log = createModuleLogger('git');
 
@@ -174,27 +175,54 @@ async function cloneRepoWithAuth(
     }
   }
 
-  const cloneDir = await createCloneWorkspace();
-
-  const args = ['clone', '--depth', String(depth)];
-  if (branch) {
-    args.push('--branch', branch);
-  }
-  args.push(normalizedUrl, cloneDir);
-
-  const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' };
+  const baseEnv: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' };
   for (const key of ['PATH', 'HOME', 'USER', 'LANG', 'SSH_AUTH_SOCK', 'GIT_SSH_COMMAND']) {
     const val = process.env[key];
-    if (val) env[key] = val;
-  }
-  if (deployKeyAuth) {
-    env['GIT_SSH_COMMAND'] = deployKeyAuth.gitSshCommand;
-  } else if (effectiveSshKeyPath) {
-    env['GIT_SSH_COMMAND'] = `ssh -i ${effectiveSshKeyPath} -o StrictHostKeyChecking=no`;
+    if (val) baseEnv[key] = val;
   }
 
+  const cloneAttempts = buildCloneAttempts(normalizedUrl, deployKeyAuth);
+  let cloneDir: string | undefined;
   try {
-    await exec('git', args, { env, timeout: 120_000 }); // 2 minute timeout
+    for (let index = 0; index < cloneAttempts.length; index++) {
+      const attempt = cloneAttempts[index];
+      if (!attempt) continue;
+      const candidateDir = await createCloneWorkspace();
+      const args = ['clone', '--depth', String(depth)];
+      if (branch) args.push('--branch', branch);
+      args.push(attempt.cloneUrl, candidateDir);
+
+      const env = { ...baseEnv };
+      if (attempt.gitSshCommand) {
+        env['GIT_SSH_COMMAND'] = attempt.gitSshCommand;
+      } else if (effectiveSshKeyPath) {
+        env['GIT_SSH_COMMAND'] = `ssh -i ${effectiveSshKeyPath} -o StrictHostKeyChecking=no`;
+      }
+
+      try {
+        await exec('git', args, { env, timeout: 120_000 }); // 2 minute transfer timeout
+        cloneDir = candidateDir;
+        break;
+      } catch (error) {
+        await rm(candidateDir, { recursive: true, force: true });
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        const msg = sanitizeGitError(rawMessage, githubToken);
+        const hasNextAttempt = index + 1 < cloneAttempts.length;
+        if (deployKeyAuth && hasNextAttempt && isGitNetworkFailure(error, msg)) {
+          log.warn(
+            {
+              credentialId: deployKeyAuth.credentialId,
+              attempt: index + 1,
+              transport: attempt.transport,
+              nextTransport: cloneAttempts[index + 1]?.transport,
+            },
+            'Deploy Key clone transport failed; retrying with the next GitHub SSH endpoint',
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const msg = sanitizeGitError(rawMessage, githubToken);
@@ -245,6 +273,10 @@ async function cloneRepoWithAuth(
     throw new GitCloneError(redactRepoUrl(repoUrl), msg);
   }
 
+  if (!cloneDir) {
+    throw new GitCloneError(redactRepoUrl(repoUrl), 'No clone attempt completed');
+  }
+
   const { stdout: sha } = await exec('git', ['rev-parse', 'HEAD'], { cwd: cloneDir });
   const { stdout: resolvedBranch } = await exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
     cwd: cloneDir,
@@ -256,6 +288,38 @@ async function cloneRepoWithAuth(
     branch: resolvedBranch.trim() || branch || 'main',
     ...(deployKeyAuth ? { gitCredentialId: deployKeyAuth.credentialId } : {}),
   };
+}
+
+interface GitCloneAttempt {
+  cloneUrl: string;
+  gitSshCommand?: string;
+  transport: 'default' | 'ssh_22' | 'ssh_443' | 'ssh_22_retry';
+}
+
+function buildCloneAttempts(
+  normalizedUrl: string,
+  deployKeyAuth: GitCloneCredentialAuth | null,
+): GitCloneAttempt[] {
+  if (!deployKeyAuth) {
+    return [{ cloneUrl: normalizedUrl, transport: 'default' }];
+  }
+
+  const primary: GitCloneAttempt = {
+    cloneUrl: deployKeyAuth.cloneUrl,
+    gitSshCommand: deployKeyAuth.gitSshCommand,
+    transport: 'ssh_22',
+  };
+  if (!deployKeyAuth.fallbackCloneUrl) return [primary];
+
+  return [
+    primary,
+    {
+      cloneUrl: deployKeyAuth.fallbackCloneUrl,
+      gitSshCommand: deployKeyAuth.fallbackGitSshCommand ?? deployKeyAuth.gitSshCommand,
+      transport: 'ssh_443',
+    },
+    { ...primary, transport: 'ssh_22_retry' },
+  ];
 }
 
 function parseGitHubHttpsRepo(repoUrl: string): { owner: string; repo: string } | null {
@@ -394,33 +458,5 @@ function isGitBranchNotFoundMessage(message: string): boolean {
 function isGitRepoNotFoundMessage(message: string): boolean {
   return (
     message.includes('not found') || message.includes('does not exist') || message.includes('404')
-  );
-}
-
-function isGitNetworkFailure(error: unknown, message: string): boolean {
-  const errorRecord = error && typeof error === 'object' ? error : undefined;
-  const rawCode = errorRecord && 'code' in errorRecord ? errorRecord.code : undefined;
-  const code = typeof rawCode === 'string' || typeof rawCode === 'number' ? String(rawCode) : '';
-  const killed = errorRecord && 'killed' in errorRecord ? errorRecord.killed : undefined;
-  const signal = errorRecord && 'signal' in errorRecord ? errorRecord.signal : undefined;
-  if (killed === true && (signal === 'SIGTERM' || signal === 'SIGKILL')) {
-    return true;
-  }
-  if (
-    [
-      'ETIMEDOUT',
-      'ENETUNREACH',
-      'EHOSTUNREACH',
-      'ECONNRESET',
-      'ECONNREFUSED',
-      'ENOTFOUND',
-      'EAI_AGAIN',
-    ].includes(code)
-  ) {
-    return true;
-  }
-
-  return /(?:could not resolve (?:host|hostname)|temporary failure in name resolution|name or service not known|connection (?:timed out|reset by peer|refused)|operation timed out|network is unreachable|no route to host|failed to connect|ssh: connect to host .* port \d+|kex_exchange_identification:.*(?:closed|reset)|connection closed by remote host)/i.test(
-    message,
   );
 }

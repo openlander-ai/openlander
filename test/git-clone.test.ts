@@ -569,6 +569,147 @@ describeGitClone('cloneRepo — error classification', () => {
     });
   });
 
+  it('falls back from GitHub SSH port 22 to port 443 only after a network failure', async () => {
+    const manager = {
+      runWithCloneCredential: vi.fn(
+        async (
+          _options: { repoUrl: string; credentialId?: string; serviceId?: string },
+          clone: (auth: GitCloneCredentialAuth) => Promise<unknown>,
+        ) =>
+          await clone({
+            credentialId: 'gitcred_fallback',
+            cloneUrl: 'git@github.com:user/private-repo.git',
+            gitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+            fallbackCloneUrl: 'ssh://git@ssh.github.com:443/user/private-repo.git',
+            fallbackGitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+          }),
+      ),
+    } as unknown as GitCredentialManager;
+    setActiveGitCredentialManager(manager);
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('ssh: connect to host github.com port 22: Connection timed out'), {
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    await expect(
+      cloneRepo({
+        repoUrl: 'https://github.com/user/private-repo',
+        gitCredentialId: 'gitcred_fallback',
+      }),
+    ).resolves.toMatchObject({ gitCredentialId: 'gitcred_fallback' });
+
+    const cloneCalls = mockExecFile.mock.calls.filter(
+      (call) => (call[1] as string[])[0] === 'clone',
+    );
+    expect(cloneCalls).toHaveLength(2);
+    expect(cloneCalls[0]?.[1]).toContain('git@github.com:user/private-repo.git');
+    expect(cloneCalls[1]?.[1]).toContain('ssh://git@ssh.github.com:443/user/private-repo.git');
+  });
+
+  it('does not try the Deploy Key fallback endpoint after an authentication failure', async () => {
+    const manager = {
+      runWithCloneCredential: vi.fn(
+        async (
+          _options: { repoUrl: string; credentialId?: string; serviceId?: string },
+          clone: (auth: GitCloneCredentialAuth) => Promise<unknown>,
+        ) =>
+          await clone({
+            credentialId: 'gitcred_denied',
+            cloneUrl: 'git@github.com:user/private-repo.git',
+            gitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+            fallbackCloneUrl: 'ssh://git@ssh.github.com:443/user/private-repo.git',
+            fallbackGitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+          }),
+      ),
+    } as unknown as GitCredentialManager;
+    setActiveGitCredentialManager(manager);
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        cb?.(new Error('git@github.com: Permission denied (publickey).'), {
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    await expect(
+      cloneRepo({
+        repoUrl: 'https://github.com/user/private-repo',
+        gitCredentialId: 'gitcred_denied',
+      }),
+    ).rejects.toMatchObject({ code: 'GIT_DEPLOY_KEY_UNAUTHORIZED' });
+
+    const cloneCalls = mockExecFile.mock.calls.filter(
+      (call) => (call[1] as string[])[0] === 'clone',
+    );
+    expect(cloneCalls).toHaveLength(1);
+  });
+
+  it('tries GitHub SSH port 22 again after both SSH endpoints have network failures', async () => {
+    const manager = {
+      runWithCloneCredential: vi.fn(
+        async (
+          _options: { repoUrl: string; credentialId?: string; serviceId?: string },
+          clone: (auth: GitCloneCredentialAuth) => Promise<unknown>,
+        ) =>
+          await clone({
+            credentialId: 'gitcred_network',
+            cloneUrl: 'git@github.com:user/private-repo.git',
+            gitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+            fallbackCloneUrl: 'ssh://git@ssh.github.com:443/user/private-repo.git',
+            fallbackGitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+          }),
+      ),
+    } as unknown as GitCredentialManager;
+    setActiveGitCredentialManager(manager);
+    mockExecFile.mockImplementation(
+      (
+        _cmd: string,
+        args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        if (args[0] === 'clone') {
+          cb?.(new Error('ssh: connect to host github.com port 22: Connection timed out'), {
+            stdout: '',
+            stderr: '',
+          });
+        }
+      },
+    );
+
+    await expect(
+      cloneRepo({
+        repoUrl: 'https://github.com/user/private-repo',
+        gitCredentialId: 'gitcred_network',
+      }),
+    ).rejects.toMatchObject({ code: 'GIT_NETWORK_UNREACHABLE' });
+
+    const cloneCalls = mockExecFile.mock.calls.filter(
+      (call) => (call[1] as string[])[0] === 'clone',
+    );
+    expect(cloneCalls).toHaveLength(3);
+    expect(cloneCalls.map((call) => (call[1] as string[]).at(-2))).toEqual([
+      'git@github.com:user/private-repo.git',
+      'ssh://git@ssh.github.com:443/user/private-repo.git',
+      'git@github.com:user/private-repo.git',
+    ]);
+  });
+
   it('classifies "Authentication failed" as GitAuthError', async () => {
     mockExecFile.mockImplementationOnce(
       (
