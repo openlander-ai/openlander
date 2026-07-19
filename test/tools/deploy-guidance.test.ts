@@ -1342,11 +1342,23 @@ describe('deploy MCP guidance', () => {
       assigned_port: 3100,
       archived_at: null,
     };
+    const parentService = {
+      id: 'stack__svc',
+      name: 'stack__svc',
+      project_id: 'stack',
+      kind: 'compose',
+      source: 'git',
+      status: 'running',
+      container_id: null,
+      assigned_port: null,
+      public_url: null,
+    };
     const service = {
       id: 'stack-web__svc',
       name: 'stack/web',
       project_id: 'stack',
       kind: 'compose-child',
+      parent_service_id: 'stack__svc',
       source: 'git',
       status: 'running',
       container_id: 'container-web',
@@ -1370,6 +1382,10 @@ describe('deploy MCP guidance', () => {
         ),
         getProjectByName: vi.fn((name: string) => (name === parent.name ? parent : undefined)),
         getComposeChildProjects: vi.fn(async () => [child]),
+        getComposeChildren: vi.fn(async () => [service]),
+        getService: vi.fn(async (id: string) =>
+          id === parentService.id ? parentService : id === service.id ? service : undefined,
+        ),
         getServices: vi.fn(async (query?: { ids?: string[] }) =>
           query?.ids?.includes(service.id) ? [service] : [],
         ),
@@ -1444,6 +1460,7 @@ describe('deploy MCP guidance', () => {
       readiness: 'healthy',
       preferred_url: expect.stringContaining('stack-web'),
     });
+    expect(ctx.db.getComposeChildProjects).not.toHaveBeenCalled();
   });
 
   it('skips representative HTTP probing when Compose has no traffic application', async () => {

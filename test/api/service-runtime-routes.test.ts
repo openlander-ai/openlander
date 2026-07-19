@@ -297,6 +297,50 @@ describe('createServiceRuntimeRoutes', () => {
     });
   });
 
+  it('deploys a Compose child through its parent Compose runtime', async () => {
+    const group = makeProjectRow({ id: 'stack', name: 'stack' });
+    const runtime = makeProjectRow({ id: 'stack-web', name: 'stack/web' });
+    const parentService = makeServiceRow({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      kind: 'compose',
+      build_method: 'compose',
+      container_id: null,
+      assigned_port: null,
+      repo_url: 'https://github.com/acme/stack.git',
+    });
+    const childService = makeServiceRow({
+      id: 'stack-web__svc',
+      project_id: 'stack',
+      name: 'stack/web__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      build_method: 'compose',
+      repo_url: 'https://github.com/acme/stack.git',
+    });
+    const { app, db, pipeline, coordinator } = makeRuntimeContext(
+      {},
+      { group, runtime, service: childService },
+    );
+    db.getService.mockImplementation(async (id: string) =>
+      id === childService.id ? childService : id === parentService.id ? parentService : undefined,
+    );
+
+    const res = await app.request(
+      '/api/projects/stack/services/stack-web__svc/deploy?strategy=force',
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(200);
+    expect(db.updateProject).toHaveBeenCalledWith(group.id, { status: 'building' });
+    expect(coordinator.suppressProject).toHaveBeenCalledWith(group.id, 120_000);
+    expect(pipeline.redeployService).toHaveBeenCalledWith(
+      childService.id,
+      expect.objectContaining({ strategy: 'force' }),
+    );
+  });
+
   it('rejects deploy when the selected service row is archived', async () => {
     const service = makeServiceRow({
       id: 'api__svc',

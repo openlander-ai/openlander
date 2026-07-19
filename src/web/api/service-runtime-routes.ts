@@ -20,6 +20,7 @@ import {
 import { createModuleLogger } from '../../lib/logger.js';
 import type { LifecycleAction } from '../../pipeline/mutation-policy.js';
 import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
+import { resolveComposeRedeployTarget } from '../../pipeline/compose-redeploy-target.js';
 import { resolveEnvironmentByType } from './helpers/project-helpers.js';
 import {
   assertProjectLifecycleMutableForRoute,
@@ -347,6 +348,11 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     const resolved = await resolveServiceForRequest(c, ctx);
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
+    const redeployTarget = await resolveComposeRedeployTarget(ctx.db, service);
+    const deploymentService = redeployTarget.service;
+    const deploymentRuntimeProjectId = deployableServiceIdToProjectId(deploymentService.id);
+    const deploymentRuntimeProject =
+      (await ctx.db.getProject(deploymentRuntimeProjectId)) ?? project;
     try {
       await assertResolvedServiceMutable(ctx, project, runtimeProject, service);
     } catch (err) {
@@ -362,12 +368,12 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         health_check_path?: string;
       }>()
       .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
-    const sourceMissingError = getRedeploySourceMissingError(service);
+    const sourceMissingError = getRedeploySourceMissingError(deploymentService);
     if (sourceMissingError) {
       return c.json({ success: false, ...sourceMissingError.toJSON() }, 400);
     }
     if (strategy === 'blue-green') {
-      const eligibility = await ctx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+      const eligibility = await ctx.pipeline.getBlueGreenEligibility(deploymentRuntimeProject.id, {
         healthCheckPath: body.health_check_path,
       });
       if (!eligibility.supported) {
@@ -395,18 +401,21 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         await ctx.env.setBulkForService(runtimeProject.id, service.id, envVars);
       }
     }
-    const lockSessionId = `redeploy-${runtimeProject.id}-${Date.now().toString(36)}`;
-    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
-      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+    const lockSessionId = `redeploy-${deploymentRuntimeProject.id}-${Date.now().toString(36)}`;
+    if (
+      ctx.agentPool &&
+      !ctx.agentPool.acquireProjectLock(deploymentRuntimeProject.id, lockSessionId)
+    ) {
+      const lock = ctx.agentPool.getProjectLock(deploymentRuntimeProject.id);
       return c.json(
-        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        new DeployLockedError(deploymentRuntimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
         409,
       );
     }
     const runRedeploy = async () => {
-      ctx.coordinator.suppressProject(runtimeProject.id, 120_000);
+      ctx.coordinator.suppressProject(deploymentRuntimeProject.id, 120_000);
       if (strategy !== 'blue-green') {
-        await ctx.db.updateProject(runtimeProject.id, { status: 'building' });
+        await ctx.db.updateProject(deploymentRuntimeProject.id, { status: 'building' });
       }
       return ctx.pipeline.redeployService(service.id, {
         noCache: body.no_cache,
@@ -422,33 +431,33 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           log.error(
-            { err, projectId: runtimeProject.id, serviceId: service.id },
+            { err, projectId: deploymentRuntimeProject.id, serviceId: service.id },
             'Async service redeploy failed',
           );
           await ctx.db
-            .updateProject(runtimeProject.id, { status: 'error' })
+            .updateProject(deploymentRuntimeProject.id, { status: 'error' })
             .catch((updateErr: unknown) => {
               log.warn(
-                { err: updateErr, projectId: runtimeProject.id },
+                { err: updateErr, projectId: deploymentRuntimeProject.id },
                 'Failed to mark async redeploy project as error',
               );
             });
           await ctx.db
             .createDeployLog({
               id: `deploy-${Date.now().toString(36)}`,
-              projectId: runtimeProject.id,
+              projectId: deploymentRuntimeProject.id,
               status: 'failed',
               trigger: 'api',
               buildLog: `[error] ${errMsg}`,
             })
             .catch((logErr: unknown) => {
               log.warn(
-                { err: logErr, projectId: runtimeProject.id },
+                { err: logErr, projectId: deploymentRuntimeProject.id },
                 'Failed to persist async redeploy failure log',
               );
             });
         } finally {
-          ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+          ctx.agentPool?.releaseProjectLock(deploymentRuntimeProject.id, lockSessionId);
         }
       })();
 
@@ -459,7 +468,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
           serviceId: service.id,
           deploymentId: service.id,
           status: 'building',
-          statusUrl: `/api/projects/${runtimeProject.id}`,
+          statusUrl: `/api/projects/${deploymentRuntimeProject.id}`,
           logUrl: `/api/deployments/${service.id}/log/stream`,
         },
         202,
@@ -477,11 +486,11 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
       if (err instanceof OpenLanderError) return c.json(err.toJSON(), err.statusCode as 400);
-      await ctx.db.updateProject(runtimeProject.id, { status: 'error' });
+      await ctx.db.updateProject(deploymentRuntimeProject.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
     } finally {
-      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+      ctx.agentPool?.releaseProjectLock(deploymentRuntimeProject.id, lockSessionId);
     }
   });
 

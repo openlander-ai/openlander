@@ -383,6 +383,70 @@ describe('env MCP tools', () => {
     });
   });
 
+  it('set_env_vars marks a portless Compose parent as needing redeploy', async () => {
+    const { ctx, db } = createEnvToolContext();
+    const composeParent = {
+      ...service,
+      kind: 'compose',
+      build_method: 'compose',
+      status: 'stopped',
+      container_id: null,
+    };
+    db.getDeployablesByGroup = vi.fn().mockResolvedValue([composeParent]);
+
+    const result = await getEnvTool('set_env_vars').execute(
+      { project_name: 'my-app', variables: { API_ORIGIN: 'https://api.example.com' } },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'updated',
+      needs_redeploy: true,
+      _agent_guidance: {
+        next_steps: ['Update required: call update_app to apply env changes.'],
+      },
+    });
+  });
+
+  it('set_env_vars immediately applies Compose parent env through a full stack update', async () => {
+    const { ctx, db, pipeline } = createEnvToolContext();
+    const composeParent = {
+      ...service,
+      kind: 'compose',
+      build_method: 'compose',
+      status: 'stopped',
+      container_id: null,
+    };
+    db.getDeployablesByGroup = vi.fn().mockResolvedValue([composeParent]);
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { API_ORIGIN: 'https://api.example.com' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(pipeline.redeployService).toHaveBeenCalledWith('svc1', { trigger: 'chat' });
+    expect(pipeline.recreateServiceRuntime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'updated_and_redeployed',
+      needs_redeploy: false,
+      apply_mode: 'full_redeploy',
+      runtime_apply: {
+        mode: 'full_redeploy',
+        status: 'started',
+        reason: 'compose_project_env',
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('parent environment change reaches the child services'),
+        ]),
+      },
+    });
+  });
+
   it('set_env_vars immediate apply recreates from the same image for runtime env', async () => {
     const { ctx, pipeline } = createEnvToolContext();
 

@@ -617,6 +617,60 @@ describe('deployable service target resolution', () => {
     );
   });
 
+  it('routes a Compose child update through the parent deploy job while diagnosing the child', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        id: 'alpha__svc',
+        name: 'stack__svc',
+        kind: 'compose',
+        build_method: 'compose',
+        source: 'git',
+        repo_url: 'https://github.com/acme/stack.git',
+        container_id: null,
+      },
+      betaService: {
+        id: 'beta__svc',
+        name: 'stack/web__svc',
+        project_id: 'alpha',
+        kind: 'compose-child',
+        parent_service_id: 'alpha__svc',
+        build_method: 'compose',
+        source: 'git',
+        repo_url: 'https://github.com/acme/stack.git',
+      },
+    });
+
+    const result = await getTool(ctx, 'update_app').execute(
+      { service_id: 'beta__svc', strategy: 'force' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      service: { id: 'beta__svc', projectId: 'alpha' },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'beta__svc' },
+      },
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { service_id: 'alpha__svc' },
+      },
+    });
+    expect(ctx.db.acquireDeployLock).toHaveBeenCalledWith(
+      'alpha',
+      expect.stringContaining('mcp-update_app-'),
+    );
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
+        'beta__svc',
+        expect.objectContaining({ strategy: 'force' }),
+      ),
+    );
+  });
+
   it('blocks implicit updates when blue-green is not eligible instead of falling back to force', async () => {
     const ctx = createDuplicateServiceContext();
     (ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

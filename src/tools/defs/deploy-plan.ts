@@ -55,6 +55,7 @@ import {
   representativeTrafficFailed,
   representativeTrafficToJson,
   representativeTrafficWarning,
+  resolveRepresentativeTrafficService,
   type RepresentativeTrafficObservation,
 } from './representative-traffic.js';
 
@@ -2014,16 +2015,34 @@ export const deployPlanToolDefs: ToolDef[] = [
 
               const finalProjectId = projectIdOverride ?? projectId;
               let diagnosticProjectId = finalProjectId;
+              let composeTrafficService: ServiceRow | undefined;
               if (planBuild?.method === 'compose' && planBuild.traffic_service) {
-                const parent = await appCtx.db.getProject(finalProjectId);
-                const children = await appCtx.db.getComposeChildProjects(finalProjectId);
-                const trafficChild = parent
-                  ? children.find(
-                      (child) =>
-                        child.name === `${parent.name}/${planBuild.traffic_service as string}`,
-                    )
-                  : undefined;
-                if (trafficChild) diagnosticProjectId = trafficChild.id;
+                const parentService =
+                  typeof appCtx.db.getService === 'function'
+                    ? await appCtx.db.getService(
+                        targetIdentityResolver.deployableServiceIdForRuntimeProject(finalProjectId),
+                      )
+                    : undefined;
+                if (parentService) {
+                  composeTrafficService = await resolveRepresentativeTrafficService(
+                    appCtx,
+                    parentService,
+                    planBuild.traffic_service,
+                  );
+                }
+                if (composeTrafficService) {
+                  diagnosticProjectId = deployableServiceIdToProjectId(composeTrafficService.id);
+                } else {
+                  const parent = await appCtx.db.getProject(finalProjectId);
+                  const children = await appCtx.db.getComposeChildProjects(finalProjectId);
+                  const trafficChild = parent
+                    ? children.find(
+                        (child) =>
+                          child.name === `${parent.name}/${planBuild.traffic_service as string}`,
+                      )
+                    : undefined;
+                  if (trafficChild) diagnosticProjectId = trafficChild.id;
+                }
               }
               const hasRepresentativeTarget =
                 planBuild?.method !== 'compose' || Boolean(planBuild.traffic_service);
@@ -2072,6 +2091,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                   : undefined;
 
               const resolvedRouteService =
+                composeTrafficService ??
                 attachedService ??
                 (diagnosticProjectId !== finalProjectId ? serviceRecord?.service : undefined);
               const assignedPort =

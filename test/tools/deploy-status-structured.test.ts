@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
+import { serializeConfig } from '../../src/pipeline/config-snapshot.js';
 
 function getTool(ctx: AppContext, name: string) {
   const tool = createSharedToolRegistry(ctx, { target: 'mcp', names: [name] }).find(
@@ -713,6 +714,128 @@ describe('get_deploy_status structured fields (O1)', () => {
       path: '/',
       status_code: 200,
     });
+  });
+
+  it('completed Compose parent deploy probes and reports its persisted traffic child', async () => {
+    const parentProject = { id: 'stack', name: 'stack', status: 'running' };
+    const childProject = {
+      id: 'stack-web',
+      name: 'stack/web',
+      status: 'running',
+      container_id: 'container-web',
+      assigned_port: 13100,
+    };
+    const parentService = {
+      id: 'stack__svc',
+      name: 'stack__svc',
+      project_id: 'stack',
+      kind: 'compose',
+      status: 'running',
+      assigned_port: null,
+      container_id: null,
+      public_url: null,
+    };
+    const childService = {
+      id: 'stack-web__svc',
+      name: 'stack/web__svc',
+      project_id: 'stack',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      runtime_role: 'application',
+      status: 'running',
+      assigned_port: 13100,
+      container_port: 3000,
+      container_id: 'container-web',
+      public_url: null,
+    };
+    const updateDeployLogRepresentativeTraffic = vi.fn(async () => undefined);
+    const verifyManagedTraefikRoute = vi.fn(async () => ({
+      ok: true as const,
+      status: 200,
+      attempts: 1,
+      elapsedMs: 4,
+    }));
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'compose-deploy'
+            ? {
+                id: 'compose-deploy',
+                service_id: 'stack__svc',
+                project_id: 'stack',
+                status: 'success',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: null,
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) =>
+          id === parentProject.id
+            ? parentProject
+            : id === childProject.id
+              ? childProject
+              : undefined,
+        ),
+        getService: vi.fn(async (id: string) =>
+          id === parentService.id
+            ? parentService
+            : id === childService.id
+              ? childService
+              : undefined,
+        ),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === parentProject.id
+            ? parentService
+            : id === childProject.id
+              ? childService
+              : undefined,
+        ),
+        getComposeChildren: vi.fn(async () => [childService]),
+        loadDeployConfig: vi.fn(async () => ({
+          config_json: serializeConfig({ trafficService: 'web' }),
+        })),
+        updateDeployLogRepresentativeTraffic,
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 0,
+          State: {
+            Running: true,
+            Restarting: false,
+            ExitCode: 0,
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            Health: { Status: 'healthy' },
+          },
+        })),
+      },
+      pipeline: { verifyManagedTraefikRoute },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'compose-deploy' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    expect(verifyManagedTraefikRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ projectName: 'stack-web', path: '/' }),
+    );
+    expect(result.jobs[0]).toMatchObject({
+      project_id: 'stack',
+      service_id: 'stack__svc',
+      preferred_url: expect.stringContaining('stack-web'),
+      internal_host: 'ol-stack-web',
+      representative_traffic: {
+        status: 'passed',
+        severity: 'ok',
+        status_code: 200,
+      },
+    });
+    expect(updateDeployLogRepresentativeTraffic).toHaveBeenCalledTimes(1);
   });
 
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
