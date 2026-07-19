@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.5] - 2026-07-19
+
+### Fixed
+
+- Classify timed-out Git clone child processes as retryable
+  `GIT_NETWORK_UNREACHABLE` failures instead of incorrectly reporting a Deploy
+  Key authorization error.
+
 ## [0.2.6-rc.4] - 2026-07-19
 
 ### Fixed
