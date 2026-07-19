@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.8] - 2026-07-19
+
+### Fixed
+
+- Preserve the project-level representative traffic service when selectively
+  deploying a different Compose application, such as API plus migration hooks.
+
 ## [0.2.6-rc.7] - 2026-07-19
 
 ### Fixed
