@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] - 2026-07-19
+
+### Added
+
+- Add persistent Compose runtime roles for applications, one-shot jobs, and
+  infrastructure resources, including additive migration and legacy backfill.
+- Add explicit Compose traffic-service selection with automatic resolution for
+  a single exposed application and guided input when multiple candidates exist.
+- Add audited, no-store service credential reveal for authenticated Web users
+  while keeping scoped MCP credential reads project-bound.
+- Add opt-in Compose child observability to the Project services API, including
+  runtime role, lifecycle, health strategy, traffic target, and latest deploy.
+- Show Compose applications, jobs, and resources as individual Project rows
+  with role-aware status, traffic, recent deploy, log, and diagnostic links.
+- Add a shared aggregate status for Compose parents that treats successful
+  one-shot jobs as complete instead of degraded.
+- Add explicit Compose file, profile, service, traffic-target, and environment
+  fields to deploy plans and persist them in versioned deployment snapshots.
+- Add normalized per-service fingerprints so selective redeploys can detect
+  changed applications without storing environment or secret plaintext.
+
+### Changed
+
+- Diagnose Compose applications with HTTP and routing checks, resources with
+  Docker health or TCP checks, and jobs with exit-code and log evidence.
+- Run resource and job containers without host ports or Traefik routes, and
+  treat a one-shot job exit code of zero as successful completion.
+- Use the selected child application for Compose representative URLs and
+  readiness probes instead of probing the portless aggregate parent.
+- Record deploy logs for individual Compose children so Project and service
+  views can connect each runtime to its latest deployment and logs.
+- Extend MCP topology and diagnostics with runtime role, lifecycle, health
+  strategy, traffic-target, and aggregate-status metadata.
+- Make `restart_service` restart the existing long-running Docker container in
+  place without cloning, building, removing, or replacing it.
+- Keep Compose child detail screens observation-only and hide HTTP/domain
+  controls that do not apply to resources or one-shot jobs.
+- Split Compose execution into replacement targets, reusable prerequisites,
+  and one-shot release hooks instead of recreating the dependency closure.
+- Reuse healthy dependency containers, start stopped prerequisites in place,
+  and replace only explicitly selected or changed stateless applications.
+- Build replacement application images before running successful-completion
+  hooks, then replace the application only after its migration job succeeds.
+
+### Fixed
+
+- Scope Platform database inspection to the requested project, reject scoped
+  tokens for instance-wide debug access, and remove credentials, environment
+  values, secrets, logs, and sensitive deploy configuration from safe DTOs.
+- Remove credential and environment plaintext from normal service HTTP and MCP
+  responses while preserving explicit, audited credential reveal operations.
+- Distinguish retryable DNS, timeout, network, reset, endpoint, and clone-process
+  timeout failures from Git authentication errors, with credentials redacted.
+- Preserve Compose child container names and internal ports in representative
+  traffic and role-aware diagnostic regression coverage.
+- Persist Compose child deployment logs against each child's canonical service
+  ID so successful multi-service deploys do not fail during log recording.
+- Preserve the container ID during runtime restart, reject one-shot job
+  restarts, and enforce mutation policy, deploy locking, and state validation.
+- Allow logs from stopped one-shot job containers and direct child detail pages
+  to child-scoped deployment history instead of aggregate parent history.
+- Return Compose children from the opt-in Project services endpoint while
+  preserving the parent-only default and excluding managed resources.
+- Preserve unchanged database and other stateful resource containers, volumes,
+  routes, ports, and domains across selective and full-force redeploys.
+- Block automatic stateful service definition changes and removals with typed
+  errors instead of deleting or recreating resource containers.
+- Keep the existing API container and route active when migration fails, times
+  out, or image preparation fails, while retaining failure evidence.
+- Reject unhealthy Compose prerequisites before touching requested application
+  containers and report `COMPOSE_PREREQUISITE_UNHEALTHY` consistently.
+- Support ordered base-to-overlay Compose file sets in deploy plans, snapshots,
+  and redeploy execution while preserving the single-file contract.
+- Apply Compose `!reset` tags when merging production overlays and infer an
+  application's internal port when published ports are removed.
+- Parse and sanitize serialized deployment snapshots before returning them from
+  `platform_db_inspect`, omitting malformed configuration instead of raw data.
+- Synchronize roles, ports, container names, and health strategies for existing
+  Compose children excluded from a selective deployment.
+- Resolve persisted traffic-target metadata consistently across REST and MCP,
+  including when the selected deploy target is a different application.
+- Normalize canonical Compose child names before stateful safety comparisons so
+  unchanged resources are not mistaken for removed services.
+- Support repository-relative Compose file mounts for migration jobs through
+  Docker API copy-before-start while rejecting symlinks outside the repository.
+- Prevent backend release tests from opening an external `example.com` browser
+  tab by mocking the OAuth browser opener.
+
 ## [0.2.6-rc.9] - 2026-07-19
 
 ### Fixed
