@@ -5,23 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.7-rc.3] - 2026-07-19
-
-### Fixed
-
-- Fall back to the published host port when an application image lacks HTTP
-  probe tools, avoiding false unhealthy diagnostics while preserving real
-  connectivity and port-mismatch failures.
-
-## [0.2.7-rc.2] - 2026-07-19
-
-### Fixed
-
-- Align MCP Project and Compose parent workload status with the active child
-  runtime aggregate, including route-health summaries, so healthy stacks no
-  longer report a stale stopped warning.
-
-## [0.2.7-rc.1] - 2026-07-19
+## [0.2.7] - 2026-07-19
 
 ### Fixed
 
@@ -32,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   application, job, and resource health matches the actual containers.
 - Exclude Compose resources and one-shot jobs from generated and custom HTTP
   routes while preserving application routing and Project UI status.
+- Align MCP Project and Compose parent workload status with the active child
+  runtime aggregate, including route-health summaries, so healthy stacks no
+  longer report a stale stopped warning.
+- Fall back to the published host port when an application image lacks HTTP
+  probe tools, avoiding false unhealthy diagnostics while preserving real
+  connectivity and port-mismatch failures.
 
 ## [0.2.6] - 2026-07-19
 
