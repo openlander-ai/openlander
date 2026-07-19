@@ -1849,6 +1849,7 @@ export class DeployPipeline {
           config: deployConfig,
           clonePath: cloneResult.clonePath,
           commitSha: cloneResult.commitSha,
+          sourceRevisionChanged: cloneResult.sourceRevisionChanged,
           buildLog,
           environmentType: environment.type,
         });

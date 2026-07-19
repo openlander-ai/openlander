@@ -260,6 +260,78 @@ describe('compose network cleanup', () => {
     expect(secondContainers['web']).not.toBe(firstContainers['web']);
   });
 
+  it('rebuilds every application for a new source revision and forwards no-cache', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres:16\n  api:\n    build: ./api\n    expose: ["4000"]\n    depends_on:\n      - db\n  web:\n    build: ./web\n    expose: ["3000"]\n    depends_on:\n      - api\n`,
+      'utf8',
+    );
+    mkdirSync(join(tmpDir, 'api'));
+    mkdirSync(join(tmpDir, 'web'));
+    let runSequence = 0;
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(
+        async (config: { name: string }) => `container-${config.name}-${String(++runSequence)}`,
+      );
+    const buildComposeService = vi.fn().mockResolvedValue(undefined);
+    const docker = createFakeDocker({ runComposeService, buildComposeService } as Partial<Docker>);
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+      trafficService: 'web',
+    };
+
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+    const dbContainerBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/db',
+    )?.container_id;
+    const apiContainerBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/api',
+    )?.container_id;
+    const webContainerBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/web',
+    )?.container_id;
+    buildComposeService.mockClear();
+    runComposeService.mockClear();
+
+    const second = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      previousServiceFingerprints: first.serviceFingerprints,
+      sourceRevisionChanged: true,
+      noCache: true,
+    });
+
+    expect(second.success).toBe(true);
+    expect(buildComposeService).toHaveBeenCalledTimes(2);
+    expect(buildComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: 'ol-stack-api:latest', noCache: true }),
+    );
+    expect(buildComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: 'ol-stack-web:latest', noCache: true }),
+    );
+    expect(runComposeService).toHaveBeenCalledTimes(2);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/db')?.container_id,
+    ).toBe(dbContainerBefore);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/api')?.container_id,
+    ).not.toBe(apiContainerBefore);
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/web')?.container_id,
+    ).not.toBe(webContainerBefore);
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({ buildLog: expect.stringContaining('[compose rebuild]') }),
+    );
+  });
+
   it('synchronizes metadata for existing children excluded from a selective deploy', async () => {
     writeFileSync(
       composePath,

@@ -14,6 +14,7 @@ export interface ComposeDeploymentSetOptions {
   existingServices?: ReadonlySet<string>;
   previousFingerprints?: Readonly<Record<string, string>>;
   currentFingerprints?: Readonly<Record<string, string>>;
+  forceReplaceApplications?: boolean;
 }
 
 /**
@@ -44,7 +45,11 @@ export function planComposeDeploymentSets(
     const previous = options.previousFingerprints?.[service.name];
     const current = options.currentFingerprints?.[service.name];
     const isMissing = !existing.has(service.name);
-    const isChanged = previous === undefined || current === undefined || previous !== current;
+    const isChanged =
+      options.forceReplaceApplications === true ||
+      previous === undefined ||
+      current === undefined ||
+      previous !== current;
     if (isMissing || isChanged) {
       replaceTargets.add(service.name);
     } else {

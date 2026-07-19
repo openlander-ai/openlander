@@ -86,6 +86,24 @@ describe('planComposeDeploymentSets', () => {
     });
   });
 
+  it('replaces every application for a new source revision while preserving resources', () => {
+    const fingerprints = Object.fromEntries(services.map((service) => [service.name, 'same']));
+    const plan = planComposeDeploymentSets({
+      services,
+      runtimeRoles,
+      existingServices: new Set(services.map((service) => service.name)),
+      previousFingerprints: fingerprints,
+      currentFingerprints: fingerprints,
+      forceReplaceApplications: true,
+    });
+
+    expectSets(plan, {
+      replace: ['api', 'logto', 'web'],
+      prerequisites: ['db'],
+      hooks: ['migrate'],
+    });
+  });
+
   it('creates all applications, resources, and required jobs on first deploy', () => {
     const plan = planComposeDeploymentSets({
       services,
