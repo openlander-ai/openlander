@@ -327,6 +327,73 @@ describe('compose network cleanup', () => {
     });
   });
 
+  it('preserves a traffic target outside the selective API execution set', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  db:
+    image: postgres:16
+  migrate:
+    image: example/api
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    image: example/api
+    expose: ["4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+  web:
+    image: example/web
+    expose: ["3000"]
+    depends_on:
+      - api
+`,
+      'utf8',
+    );
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const inspectContainer = vi.fn().mockImplementation(async (containerRef: string) => ({
+      State: { Running: !containerRef.includes('migrate'), ExitCode: 0 },
+    }));
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(
+      createFakeDocker({ runComposeService, inspectContainer } as Partial<Docker>),
+      db,
+      createEventBus(),
+    );
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'web',
+    };
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+    const webBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/web',
+    )?.container_id;
+
+    const second = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['api'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+
+    expect(second.success).toBe(true);
+    expect(second.trafficService).toBe('web');
+    expect(second.trafficServiceProjectId).toBeDefined();
+    expect(
+      [...db._projects.values()].find((project) => project.name === 'stack/web')?.container_id,
+    ).toBe(webBefore);
+  });
+
   it('blocks selected replacement when a reused resource is unhealthy', async () => {
     writeFileSync(
       composePath,
