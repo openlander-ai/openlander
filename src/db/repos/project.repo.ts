@@ -37,6 +37,8 @@ import {
  */
 export interface ProjectWithMetadata {
   project: ProjectRow;
+  /** Runtime status derived from the active services in this Project group. */
+  runtimeStatus?: 'running' | 'stopped' | 'error';
   environments: EnvironmentRow[];
   /** Number of services shown under this group, including connected managed services. */
   childCount: number;
@@ -111,7 +113,7 @@ export function deriveGroupStatusFromServices(
     runtime_role?: ServiceRow['runtime_role'];
     archived_at?: string | null;
   }>,
-): ProjectStatus | undefined {
+): Extract<ProjectStatus, 'running' | 'stopped' | 'error'> | undefined {
   const activeRows = serviceRows.filter((service) => !service.archived_at);
   const composeChildren = activeRows.filter((service) => service.kind === 'compose-child');
   const topLevelDeployables = activeRows.filter((service) =>
@@ -688,6 +690,7 @@ export class ProjectRepo {
         (totalManagedCountByParent.get(project.id) ?? 0);
       return {
         project: aggregateStatus ? { ...project, status: aggregateStatus } : project,
+        runtimeStatus: aggregateStatus,
         environments: envByProject.get(project.id) ?? [],
         childCount,
         activeChildCount,

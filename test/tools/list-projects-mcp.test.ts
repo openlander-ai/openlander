@@ -32,6 +32,7 @@ function makeService(overrides: Record<string, unknown>) {
 
 function createContext(params: {
   projects: Array<Record<string, unknown>>;
+  runtimeStatuses?: Record<string, string>;
   deployables: Record<string, ReturnType<typeof makeService> | undefined>;
   groups?: Record<string, Array<ReturnType<typeof makeService>>>;
   domainMappings?: Array<Record<string, unknown>>;
@@ -42,6 +43,12 @@ function createContext(params: {
   const ctx = {
     db: {
       listProjects: vi.fn(async () => params.projects),
+      listProjectsWithMetadata: vi.fn(async () =>
+        params.projects.map((project) => ({
+          project,
+          runtimeStatus: params.runtimeStatuses?.[String(project['id'])],
+        })),
+      ),
       getServices: vi.fn(async (query?: { ids?: string[] }) =>
         query?.ids ? services.filter((service) => query.ids?.includes(service.id)) : services,
       ),
@@ -68,6 +75,55 @@ async function runWire(ctx: AppContext, target: 'mcp' | 'agent' = 'mcp') {
 }
 
 describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
+  it('uses the Compose child aggregate status for the Project and parent workload', async () => {
+    const rawParent = {
+      id: 'incar',
+      name: 'incar',
+      status: 'stopped',
+      visibility: 'internal',
+      created_at: NOW,
+      updated_at: NOW,
+    };
+    const composeParent = makeService({
+      id: 'incar__svc',
+      name: 'incar__svc',
+      project_id: 'incar',
+      kind: 'compose',
+      status: 'stopped',
+    });
+    const ctx = createContext({
+      projects: [rawParent],
+      runtimeStatuses: { incar: 'running' },
+      deployables: { incar: composeParent },
+      groups: { incar: [composeParent] },
+    });
+
+    const wire = await runWire(ctx);
+
+    expect(ctx.db.listProjectsWithMetadata).toHaveBeenCalledWith();
+    expect(wire.projects[0]).toMatchObject({
+      id: 'incar',
+      status: 'running',
+      route_health: { status: 'unknown', summary: 'No custom domain routes are registered.' },
+      deployable_service: {
+        status: 'running',
+        route_health: {
+          status: 'unknown',
+          summary: 'No custom domain routes are registered.',
+        },
+      },
+      deployable_services: [
+        {
+          status: 'running',
+          route_health: {
+            status: 'unknown',
+            summary: 'No custom domain routes are registered.',
+          },
+        },
+      ],
+    });
+  });
+
   it('advertises primary Application route URL instead of Project namespace URL', async () => {
     const originalPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     process.env['OPENLANDER_PUBLIC_HOST'] = 'apps.example.com';
