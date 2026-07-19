@@ -398,11 +398,14 @@ function isGitRepoNotFoundMessage(message: string): boolean {
 }
 
 function isGitNetworkFailure(error: unknown, message: string): boolean {
-  const rawCode =
-    error && typeof error === 'object' && 'code' in error
-      ? (error as { code?: unknown }).code
-      : undefined;
+  const errorRecord = error && typeof error === 'object' ? error : undefined;
+  const rawCode = errorRecord && 'code' in errorRecord ? errorRecord.code : undefined;
   const code = typeof rawCode === 'string' || typeof rawCode === 'number' ? String(rawCode) : '';
+  const killed = errorRecord && 'killed' in errorRecord ? errorRecord.killed : undefined;
+  const signal = errorRecord && 'signal' in errorRecord ? errorRecord.signal : undefined;
+  if (killed === true && (signal === 'SIGTERM' || signal === 'SIGKILL')) {
+    return true;
+  }
   if (
     [
       'ETIMEDOUT',

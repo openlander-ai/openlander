@@ -20,6 +20,11 @@ import { execFile } from 'node:child_process';
 import { cloneRepo } from '../src/pipeline/git.js';
 import { loadConfig } from '../src/config/index.js';
 import {
+  setActiveGitCredentialManager,
+  type GitCloneCredentialAuth,
+  type GitCredentialManager,
+} from '../src/git-credentials/manager.js';
+import {
   GitAuthError,
   GitBranchNotFoundError,
   GitCloneError,
@@ -53,6 +58,7 @@ function githubRepo(name = 'repo') {
 
 // Make promisified execFile resolve by default
 beforeEach(() => {
+  setActiveGitCredentialManager(null);
   mockExecFile.mockReset();
   mockLoadConfig.mockReset();
   mockExistsSync.mockReset();
@@ -89,6 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setActiveGitCredentialManager(null);
   global.fetch = originalFetch;
   if (originalWorkspaceDir === undefined) {
     delete process.env['OPENLANDER_WORKSPACE_DIR'];
@@ -513,6 +520,53 @@ describeGitClone('cloneRepo — error classification', () => {
     await expect(
       cloneRepo({ repoUrl: 'https://github.com/user/private-repo' }),
     ).rejects.toMatchObject({ code: 'GIT_NETWORK_UNREACHABLE' });
+  });
+
+  it('classifies a timed-out Deploy Key clone from child-process metadata', async () => {
+    const manager = {
+      runWithCloneCredential: vi.fn(
+        async (
+          _options: { repoUrl: string; credentialId?: string; serviceId?: string },
+          clone: (auth: GitCloneCredentialAuth) => Promise<unknown>,
+        ) =>
+          await clone({
+            credentialId: 'gitcred_timeout',
+            cloneUrl: 'git@github.com:user/private-repo.git',
+            gitSshCommand: 'ssh -F /dev/null -i /tmp/deploy_key',
+          }),
+      ),
+    } as unknown as GitCredentialManager;
+    setActiveGitCredentialManager(manager);
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: Record<string, unknown>,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        const error = Object.assign(new Error('Command failed: git clone'), {
+          code: null,
+          killed: true,
+          signal: 'SIGTERM',
+          cmd: 'git clone',
+        });
+        cb?.(error, { stdout: '', stderr: '' });
+      },
+    );
+
+    await expect(
+      cloneRepo({
+        repoUrl: 'https://github.com/user/private-repo',
+        gitCredentialId: 'gitcred_timeout',
+      }),
+    ).rejects.toMatchObject({
+      code: 'GIT_NETWORK_UNREACHABLE',
+      details: {
+        repoUrl: 'https://github.com/user/private-repo',
+        authMethod: 'deploy_key',
+        retryable: true,
+      },
+    });
   });
 
   it('classifies "Authentication failed" as GitAuthError', async () => {
