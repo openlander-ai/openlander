@@ -149,9 +149,9 @@ describe('GitCredentialManager', () => {
     expect(view).not.toHaveProperty('encrypted_private_key');
     expect(view).not.toHaveProperty('private_key_iv');
     expect(stored?.encrypted_private_key).not.toContain('OPENSSH PRIVATE KEY');
-    expect(
-      decrypt(stored!.encrypted_private_key, stored!.private_key_iv, MASTER_KEY),
-    ).toContain('OPENSSH PRIVATE KEY');
+    expect(decrypt(stored!.encrypted_private_key, stored!.private_key_iv, MASTER_KEY)).toContain(
+      'OPENSSH PRIVATE KEY',
+    );
   });
 
   it('verifies access, discovers the default branch, and removes temporary keys', async () => {
@@ -163,6 +163,9 @@ describe('GitCredentialManager', () => {
       expect((await stat(paths.keyPath)).mode & 0o777).toBe(0o600);
       expect((await stat(paths.knownHostsPath)).mode & 0o777).toBe(0o600);
       expect(await readFile(paths.knownHostsPath, 'utf8')).toContain('github.com ssh-ed25519');
+      expect(await readFile(paths.knownHostsPath, 'utf8')).toContain(
+        '[ssh.github.com]:443 ssh-ed25519',
+      );
       return { stdout: 'ref: refs/heads/main\tHEAD\nabc\tHEAD\n' };
     };
     const manager = new GitCredentialManager(db, MASTER_KEY, verifier);
@@ -217,18 +220,22 @@ describe('GitCredentialManager', () => {
     expect(db.used).toEqual([created.id]);
   });
 
-  it('disables SSH IP QoS for Deploy Key clones', async () => {
+  it('bounds SSH connection setup and provides GitHub port 443 fallback', async () => {
     const db = new MemoryGitCredentialDb();
     const manager = new GitCredentialManager(db, MASTER_KEY);
     const created = await manager.create({ repoUrl: 'github.com/Team-SpaceY/incar-app' });
     await db.setGitCredentialVerification(created.id, { status: 'verified' });
 
-    const gitSshCommand = await manager.runWithCloneCredential(
+    const auth = await manager.runWithCloneCredential(
       { repoUrl: created.repository_url, credentialId: created.id },
-      async (auth) => auth?.gitSshCommand,
+      async (selectedAuth) => selectedAuth,
     );
 
-    expect(gitSshCommand).toContain('-o IPQoS=none');
+    expect(auth?.gitSshCommand).toContain('-o IPQoS=none');
+    expect(auth?.gitSshCommand).toContain('-o ConnectTimeout=15');
+    expect(auth?.gitSshCommand).toContain('-o ConnectionAttempts=1');
+    expect(auth?.fallbackCloneUrl).toBe('ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git');
+    expect(auth?.fallbackGitSshCommand).toBe(auth?.gitSshCommand);
   });
 
   it('prefers an existing service binding and requires explicit selection for ambiguous matches', async () => {

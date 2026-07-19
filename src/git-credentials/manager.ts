@@ -25,6 +25,7 @@ import { GITHUB_KNOWN_HOSTS } from './known-hosts.js';
 
 const execFile = promisify(execFileCallback);
 const COMMAND_TIMEOUT_MS = 30_000;
+const SSH_CONNECT_TIMEOUT_SECONDS = 15;
 
 type GitCredentialDatabase = Pick<
   Database,
@@ -72,6 +73,8 @@ export interface GitCloneCredentialAuth {
   credentialId: string;
   cloneUrl: string;
   gitSshCommand: string;
+  fallbackCloneUrl?: string;
+  fallbackGitSshCommand?: string;
 }
 
 function repositoryFromParts(rawUrl: string, owner: string, repoWithSuffix: string) {
@@ -159,6 +162,10 @@ function buildGitSshCommand(keyPath: string, knownHostsPath: string): string {
     'IdentitiesOnly=yes',
     '-o',
     'IPQoS=none',
+    '-o',
+    `ConnectTimeout=${String(SSH_CONNECT_TIMEOUT_SECONDS)}`,
+    '-o',
+    'ConnectionAttempts=1',
     '-o',
     'StrictHostKeyChecking=yes',
     '-o',
@@ -326,6 +333,8 @@ export class GitCredentialManager {
         credentialId: selected.id,
         cloneUrl: repository.sshUrl,
         gitSshCommand,
+        fallbackCloneUrl: `ssh://git@ssh.github.com:443/${repository.owner}/${repository.repo}.git`,
+        fallbackGitSshCommand: gitSshCommand,
       });
     });
     await this.db.markGitCredentialUsed(selected.id);

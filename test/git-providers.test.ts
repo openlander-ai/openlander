@@ -414,6 +414,7 @@ describe('GitHubProvider', () => {
     await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
       details: { reason: 'permission_denied' },
     });
+    expect(mockFetch()).toHaveBeenCalledTimes(1);
   });
 
   it('classifies 429 as rate_limited and exposes retryAt', async () => {
@@ -429,15 +430,70 @@ describe('GitHubProvider', () => {
     });
   });
 
+  it('retries a transient GitHub server error once', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(new Response('Unavailable', { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: 'repo',
+            full_name: 'user/repo',
+            description: null,
+            html_url: 'https://github.com/user/repo',
+            clone_url: 'https://github.com/user/repo.git',
+            ssh_url: 'git@github.com:user/repo.git',
+            private: true,
+            default_branch: 'main',
+            language: null,
+            updated_at: '2026-01-01T00:00:00Z',
+            stargazers_count: 0,
+          }),
+        ),
+      );
+
+    await expect(provider.getRepo('user', 'repo')).resolves.toMatchObject({
+      fullName: 'user/repo',
+    });
+    expect(mockFetch()).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient GitHub transport error once', async () => {
+    mockFetch()
+      .mockRejectedValueOnce(new Error('socket closed'))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: 'repo',
+            full_name: 'user/repo',
+            description: null,
+            html_url: 'https://github.com/user/repo',
+            clone_url: 'https://github.com/user/repo.git',
+            ssh_url: 'git@github.com:user/repo.git',
+            private: true,
+            default_branch: 'main',
+            language: null,
+            updated_at: '2026-01-01T00:00:00Z',
+            stargazers_count: 0,
+          }),
+        ),
+      );
+
+    await expect(provider.getRepo('user', 'repo')).resolves.toMatchObject({
+      fullName: 'user/repo',
+    });
+    expect(mockFetch()).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     ['server error', () => Promise.resolve(new Response('Unavailable', { status: 503 }))],
     ['network error', () => Promise.reject(new Error('socket closed'))],
-  ])('classifies %s as unreachable', async (_label, responseFactory) => {
-    mockFetch().mockImplementationOnce(responseFactory);
+  ])('classifies repeated %s as unreachable', async (_label, responseFactory) => {
+    mockFetch().mockImplementation(responseFactory);
 
     await expect(provider.getRepo('user', 'repo')).rejects.toMatchObject({
       details: { reason: 'unreachable' },
     });
+    expect(mockFetch()).toHaveBeenCalledTimes(2);
   });
 
   it('keeps 404 ambiguous between missing and unauthorized', async () => {
