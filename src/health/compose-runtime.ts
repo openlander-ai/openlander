@@ -4,6 +4,31 @@ export type ServiceLifecycle = 'long_running' | 'one_shot';
 export type ServiceHealthStrategy = 'http' | 'tcp' | 'docker_health' | 'exit_code' | 'none';
 export type ComposeAggregateStatus = 'running' | 'degraded' | 'error';
 
+type ComposeTrafficChild = Pick<ServiceRow, 'id' | 'name' | 'runtime_role' | 'assigned_port'>;
+
+function composeChildServiceName(service: Pick<ServiceRow, 'name'>): string {
+  return (
+    service.name
+      .replace(/__svc$/, '')
+      .split('/')
+      .at(-1) ?? service.name
+  );
+}
+
+export function resolveComposeTrafficTargetId(
+  children: readonly ComposeTrafficChild[],
+  trafficService?: string,
+): string | undefined {
+  if (trafficService) {
+    return children.find((child) => composeChildServiceName(child) === trafficService)?.id;
+  }
+
+  const candidates = children.filter(
+    (child) => child.runtime_role === 'application' && child.assigned_port != null,
+  );
+  return candidates.length === 1 ? candidates[0]?.id : undefined;
+}
+
 export function serviceLifecycle(service: Pick<ServiceRow, 'runtime_role'>): ServiceLifecycle {
   return service.runtime_role === 'job' ? 'one_shot' : 'long_running';
 }

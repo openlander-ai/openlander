@@ -262,6 +262,16 @@ describe('createDeployableServiceRoutes', () => {
       image_url: 'postgres:16',
       health_check_strategy: null,
     });
+    const apiService = makeServiceRow({
+      id: 'stack__api__svc',
+      project_id: 'stack',
+      name: 'demo-stack/api',
+      kind: 'compose-child',
+      parent_service_id: parent.id,
+      runtime_role: 'application',
+      assigned_port: 10007,
+      container_port: 4000,
+    });
     const migrate = makeServiceRow({
       id: 'stack__migrate__svc',
       project_id: 'stack',
@@ -285,7 +295,7 @@ describe('createDeployableServiceRoutes', () => {
       ],
     ]);
     const getDeployablesByGroup = vi.fn(async () => [parent]);
-    const getServices = vi.fn(async () => [parent, web, database, migrate]);
+    const getServices = vi.fn(async () => [parent, web, apiService, database, migrate]);
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
@@ -294,6 +304,13 @@ describe('createDeployableServiceRoutes', () => {
         getServices,
         getEnvironmentsByProject: vi.fn(async () => []),
         getLastDeployLogsForServices: vi.fn(async () => lastDeploys),
+        loadDeployConfig: vi.fn(async () => ({
+          config_json: JSON.stringify({
+            version: 2,
+            savedAt: '2026-01-02T00:00:00.000Z',
+            snapshot: { trafficService: 'web' },
+          }),
+        })),
       },
     });
 
@@ -306,7 +323,7 @@ describe('createDeployableServiceRoutes', () => {
     });
     expect(getDeployablesByGroup).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({
-      count: 4,
+      count: 5,
       aggregate_status: 'running',
       services: expect.arrayContaining([
         expect.objectContaining({
@@ -320,6 +337,10 @@ describe('createDeployableServiceRoutes', () => {
           id: database.id,
           runtime_role: 'resource',
           health_strategy: 'tcp',
+          is_traffic_target: false,
+        }),
+        expect.objectContaining({
+          id: apiService.id,
           is_traffic_target: false,
         }),
         expect.objectContaining({

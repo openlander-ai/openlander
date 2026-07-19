@@ -252,6 +252,81 @@ describe('compose network cleanup', () => {
     expect(secondContainers['web']).not.toBe(firstContainers['web']);
   });
 
+  it('synchronizes metadata for existing children excluded from a selective deploy', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  db:
+    image: postgres:16
+  migrate:
+    image: example/migrate
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    image: example/api
+    expose: ["4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+  web:
+    image: example/web
+    expose: ["3000"]
+    depends_on:
+      - api
+`,
+      'utf8',
+    );
+    const inspectContainer = vi.fn().mockImplementation(async (containerRef: string) => ({
+      State: {
+        Running: !containerRef.includes('migrate'),
+        ExitCode: 0,
+      },
+    }));
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(
+      createFakeDocker({ inspectContainer } as Partial<Docker>),
+      db,
+      createEventBus(),
+    );
+    const baseConfig: ComposeDeployConfig = {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trafficService: 'web',
+    };
+    const first = await deployWithEnv(pipeline, baseConfig);
+    expect(first.success).toBe(true);
+    const migrate = [...db._projects.values()].find(
+      (project) => project.name === 'stack/migrate',
+    );
+    expect(migrate).toBeDefined();
+    Object.assign(migrate!, {
+      runtime_role: 'application',
+      assigned_port: 10005,
+      container_port: 9000,
+      health_check_strategy: 'http',
+    });
+
+    const second = await deployWithEnv(pipeline, {
+      ...baseConfig,
+      _parentId: first.parentProjectId,
+      services: ['web'],
+      previousServiceFingerprints: first.serviceFingerprints,
+    });
+
+    expect(second.success).toBe(true);
+    expect(migrate).toMatchObject({
+      runtime_role: 'job',
+      assigned_port: null,
+      container_port: null,
+      health_check_strategy: 'none',
+    });
+  });
+
   it('blocks selected replacement when a reused resource is unhealthy', async () => {
     writeFileSync(
       composePath,
@@ -322,6 +397,9 @@ describe('compose network cleanup', () => {
         previousServiceFingerprints: first.serviceFingerprints,
       }),
     ).rejects.toMatchObject({ code: 'STATEFUL_SERVICE_CHANGE_BLOCKED' });
+
+    const existingDb = [...db._projects.values()].find((project) => project.name === 'stack/db');
+    Object.assign(existingDb!, { runtime_role: 'application' });
 
     writeFileSync(
       composePath,
