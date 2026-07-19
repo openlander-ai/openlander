@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.6] - 2026-07-19
+
+### Fixed
+
+- Synchronize Compose child roles, internal ports, container names, and health
+  strategies from the active specification even when a selective deploy does
+  not restart that child.
+- Resolve REST and MCP traffic-target metadata from the persisted Compose
+  traffic service when multiple applications expose ports.
+- Preserve stateful change and removal guards for legacy Compose resource rows
+  whose stored runtime role has not yet been reclassified.
+
 ## [0.2.6-rc.5] - 2026-07-19
 
 ### Fixed
