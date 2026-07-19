@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const { mockLogWarn, mockLogDebug } = vi.hoisted(() => ({
   mockLogWarn: vi.fn(),
@@ -315,5 +318,51 @@ describe('Docker sandbox race prevention', () => {
         }),
       }),
     );
+  });
+
+  it('copies imported Compose files before starting the container', async () => {
+    const sourceDir = mkdtempSync(join(tmpdir(), 'openlander-compose-file-copy-test-'));
+    try {
+      const sourcePath = join(sourceDir, 'migrate.sh');
+      writeFileSync(sourcePath, '#!/bin/sh\nexit 0\n', 'utf8');
+      chmodSync(sourcePath, 0o755);
+      const archiveChunks: Buffer[] = [];
+      const putArchive = vi.fn().mockImplementation(async (stream: NodeJS.ReadableStream) => {
+        for await (const chunk of stream) {
+          archiveChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        }
+      });
+      const container = {
+        id: 'ctr-job',
+        putArchive,
+        start: vi.fn().mockResolvedValue(undefined),
+      };
+      mockCreateContainer.mockResolvedValueOnce(container);
+
+      const docker = new Docker('/var/run/docker.sock', 'openlander');
+      await docker.runComposeService({
+        imageTag: 'app:latest',
+        name: 'ol-demo-stack-migrate',
+        envVars: {},
+        traefikLabels: {},
+        networks: ['ol-demo-stack'],
+        aliases: ['migrate'],
+        fileCopies: [
+          {
+            sourcePath,
+            targetPath: '/app/infra/migrate.sh',
+            readOnly: true,
+          },
+        ],
+      });
+
+      expect(putArchive).toHaveBeenCalledWith(expect.anything(), { path: '/' });
+      expect(putArchive.mock.invocationCallOrder[0]).toBeLessThan(
+        container.start.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      );
+      expect(Buffer.concat(archiveChunks).toString('utf8')).toContain('app/infra/migrate.sh');
+    } finally {
+      rmSync(sourceDir, { recursive: true, force: true });
+    }
   });
 });

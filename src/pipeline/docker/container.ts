@@ -7,6 +7,10 @@ import type {
   RunContainerOptions,
   WaitForHealthyResult,
 } from './types.js';
+import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, posix, resolve, sep } from 'node:path';
+import { spawn } from 'node:child_process';
 import {
   getProjectVolumeBinds,
   isContainerAlreadyRunning,
@@ -18,12 +22,73 @@ import {
 import { createModuleLogger } from '../../lib/logger.js';
 import { stripContainerPrefix } from '../helpers.js';
 import { DOCKER_LABELS } from '../../config/index.js';
-import { ContainerNotFoundError, isDockerNotFoundError } from '../../errors.js';
+import { ContainerNotFoundError, ServiceConfigError, isDockerNotFoundError } from '../../errors.js';
 import { sleep } from '../../lib/sleep.js';
 
 const log = createModuleLogger('docker:container');
 const DEFAULT_HEALTH_POLL_INTERVAL_MS = 500;
 const HEALTHCHECK_START_PERIOD_GRACE_MS = 500;
+
+async function copyFilesIntoContainer(
+  container: Dockerode.Container,
+  fileCopies: NonNullable<RunComposeServiceOptions['fileCopies']>,
+): Promise<void> {
+  if (fileCopies.length === 0) return;
+
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'openlander-compose-files-'));
+  let archive: ReturnType<typeof spawn> | undefined;
+  try {
+    for (const fileCopy of fileCopies) {
+      const normalizedTarget = posix.normalize(fileCopy.targetPath);
+      if (!normalizedTarget.startsWith('/') || normalizedTarget === '/') {
+        throw new ServiceConfigError(`Invalid Compose file mount target: ${fileCopy.targetPath}`);
+      }
+      const relativeTarget = normalizedTarget.slice(1);
+      const stagedPath = resolve(stagingRoot, relativeTarget);
+      if (!stagedPath.startsWith(`${stagingRoot}${sep}`)) {
+        throw new ServiceConfigError(`Invalid Compose file mount target: ${fileCopy.targetPath}`);
+      }
+
+      await mkdir(dirname(stagedPath), { recursive: true });
+      await copyFile(fileCopy.sourcePath, stagedPath);
+      const sourceMode = (await stat(fileCopy.sourcePath)).mode & 0o777;
+      await chmod(stagedPath, fileCopy.readOnly ? sourceMode & ~0o222 : sourceMode);
+    }
+
+    archive = spawn('tar', ['-C', stagingRoot, '-cf', '-', '.'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const archiveStdout = archive.stdout;
+    const archiveStderr = archive.stderr;
+    if (!archiveStdout || !archiveStderr) {
+      throw new ServiceConfigError('Failed to open Compose file mount archive streams');
+    }
+    let stderr = '';
+    archiveStderr.setEncoding('utf8');
+    archiveStderr.on('data', (chunk: string) => {
+      if (stderr.length < 8_192) stderr += chunk;
+    });
+    const exit = new Promise<number>((resolveExit, reject) => {
+      archive?.once('error', reject);
+      archive?.once('close', (code) => {
+        resolveExit(code ?? 1);
+      });
+    });
+    await Promise.all([
+      container.putArchive(archiveStdout, { path: '/' }),
+      exit.then((code) => {
+        if (code !== 0) {
+          throw new ServiceConfigError(
+            `Failed to prepare imported Compose file mount: ${stderr.trim() || `tar exited with code ${String(code)}`}`,
+          );
+        }
+      }),
+    ]);
+  } finally {
+    if (archive?.exitCode === null) archive.kill();
+    await rm(stagingRoot, { recursive: true, force: true });
+  }
+}
 
 function getHealthcheckStartPeriodMs(info: Dockerode.ContainerInspectInfo): number {
   const startPeriodNs = info.Config.Healthcheck?.StartPeriod;
@@ -233,6 +298,7 @@ export class ContainerOps {
       },
     });
 
+    await copyFilesIntoContainer(container, opts.fileCopies ?? []);
     await container.start();
 
     const additionalNetworks =
