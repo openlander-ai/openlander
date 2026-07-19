@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.9] - 2026-07-19
+
+### Fixed
+
+- Support repository-relative Compose file mounts for one-shot migration jobs
+  by copying files through the Docker API before container startup.
+- Reject relative bind symlinks that resolve outside the cloned repository.
+
 ## [0.2.6-rc.8] - 2026-07-19
 
 ### Fixed
