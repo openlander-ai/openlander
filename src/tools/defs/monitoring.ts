@@ -2079,10 +2079,14 @@ async function probeServiceHttp(
     } catch (err) {
       const latencyMs = Date.now() - startedAt;
       const errorMsg = err instanceof Error ? err.message : String(err);
+      const probeToolUnavailable = /executable file not found|no such file or directory/i.test(
+        errorMsg,
+      );
       return {
         reachable: false,
         latency_ms: latencyMs,
         error: errorMsg,
+        ...(probeToolUnavailable ? { probe_tool_unavailable: true } : {}),
         protocol_used: 'http',
         target_resolved: `${service.container_id.slice(0, 12)}:${String(containerPort)}${path}`,
         probed_from: 'service-container',
@@ -2119,10 +2123,12 @@ async function probeServiceHttp(
     const loopbackResult = await probeServiceHttp(appCtx, service, path, timeoutMs, {
       internal: true,
     });
-    return {
-      ...loopbackResult,
-      probe_mode: 'service_container_loopback',
-    };
+    if (loopbackResult['probe_tool_unavailable'] !== true || !service.assigned_port) {
+      return {
+        ...loopbackResult,
+        probe_mode: 'service_container_loopback',
+      };
+    }
   }
 
   if (!service.assigned_port) {
