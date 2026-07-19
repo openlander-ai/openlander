@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6-rc.4] - 2026-07-19
+
+### Fixed
+
+- Return Compose child services from the opt-in Project services endpoint while
+  preserving the parent-only default response and excluding managed resources.
+- Mock the OAuth browser opener in backend tests so release QA no longer opens
+  an external `example.com` tab on the developer machine.
+
 ## [0.2.6-rc.3] - 2026-07-19
 
 ### Fixed
