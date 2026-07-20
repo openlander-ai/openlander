@@ -5,23 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.8-rc.3] - 2026-07-20
-
-### Fixed
-
-- Run HTTP and HTTPS dependency probes from the diagnosed service network so
-  Compose DNS names resolve correctly, while keeping HTTP response failures
-  distinct from network-unreachable errors.
-
-## [0.2.8-rc.2] - 2026-07-20
-
-### Fixed
-
-- Diagnose a Compose parent through its persisted representative traffic child
-  and aggregate runtime status, avoiding false container and route failures for
-  the intentionally containerless parent.
-
-## [0.2.8-rc.1] - 2026-07-20
+## [0.2.8] - 2026-07-20
 
 ### Changed
 
@@ -47,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   credentials redacted.
 - Close detached stdio MCP sessions on EOF or process termination so monitors,
   database pools, and other runtime resources are released exactly once.
+- Diagnose a Compose parent through its persisted representative traffic child
+  and aggregate runtime status, avoiding false container and route failures for
+  the intentionally containerless parent.
+- Run HTTP and HTTPS dependency probes from the diagnosed service network so
+  Compose DNS names resolve correctly, while keeping HTTP response failures
+  distinct from network-unreachable errors.
 
 ## [0.2.7] - 2026-07-19
 
