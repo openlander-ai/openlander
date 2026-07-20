@@ -2661,8 +2661,43 @@ describe('service-targeted monitoring tools', () => {
       expect(result).toMatchObject({
         dependencies: { count: 0, checks: [] },
       });
+      expect(ctx.db.resolveAiOpsPendingInputsForServiceKeys).toHaveBeenCalledWith('app__svc', [
+        'API_URL',
+      ]);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('diagnose_service excludes generated service routes and resolves stale pending input', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const originalPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = '100.75.249.124';
+    service.name = 'incar/web__svc';
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      LOGTO_BASE_URL: 'http://incar-web.100.75.249.124.sslip.io',
+    });
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { service_id: service.id, lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        dependencies: { count: 0, checks: [] },
+      });
+      expect(result['diagnosis']).toBeUndefined();
+      expect(ctx.db.upsertAiOpsPendingInput).not.toHaveBeenCalled();
+      expect(ctx.db.resolveAiOpsPendingInputsForServiceKeys).toHaveBeenCalledWith(service.id, [
+        'LOGTO_BASE_URL',
+      ]);
+    } finally {
+      if (originalPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = originalPublicHost;
+      }
     }
   });
 
