@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8-rc.1] - 2026-07-20
+
+### Changed
+
+- Extend the existing service configuration action with saved Compose file,
+  profile, service, traffic-target, and environment selection.
+- Rebuild Compose applications when the checked-out source revision changes or
+  a no-cache redeploy is requested, while preserving stateful resources.
+- Probe application containers with curl, wget, or the Node.js HTTP client so
+  diagnostics do not depend on a single command being installed.
+
+### Fixed
+
+- Route Compose child redeploys through the parent-owned runtime while keeping
+  the selected replacement target, representative traffic child, and terminal
+  deployment status consistent across Web, REST, and MCP.
+- Preserve existing Compose child runtime state when cloning or building fails,
+  retain detailed Docker build errors, and retry only transient image-build
+  network failures.
+- Remove children excluded by the active Compose selection and resolve the
+  latest compatible revision across environment-scoped and legacy deploy logs.
+- Retry transient GitHub API, HTTPS, and Deploy Key SSH transport failures while
+  keeping deterministic authentication and repository errors fail-fast and
+  credentials redacted.
+- Close detached stdio MCP sessions on EOF or process termination so monitors,
+  database pools, and other runtime resources are released exactly once.
+
 ## [0.2.7] - 2026-07-19
 
 ### Fixed
