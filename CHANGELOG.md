@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.9-rc.1] - 2026-07-20
+
+### Fixed
+
+- Confirm transient HTTP and HTTPS dependency network failures with repeated
+  service-network probes before creating a high-confidence diagnosis or pending
+  user input, while preserving HTTP status evidence and single-attempt TCP checks.
+
 ## [0.2.8] - 2026-07-20
 
 ### Changed
