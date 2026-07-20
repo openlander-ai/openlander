@@ -2848,6 +2848,104 @@ describe('service-targeted monitoring tools', () => {
     }
   });
 
+  it('diagnose_service confirms transient HTTP dependency failures before creating user input', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      EXCHANGE_API_URL: 'https://api.exchange.test:443',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ exitCode: 124, stdout: '', stderr: 'request timed out' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection reset' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.execSimple).toHaveBeenCalledTimes(5);
+    expect(result).toMatchObject({
+      dependencies: {
+        count: 1,
+        checks: [
+          expect.objectContaining({
+            key: 'EXCHANGE_API_URL',
+            protocol: 'https',
+            reachable: true,
+            status_code: 200,
+          }),
+        ],
+      },
+    });
+    expect(result['diagnosis']).toBeUndefined();
+    expect(ctx.db.upsertAiOpsPendingInput).not.toHaveBeenCalled();
+    expect(ctx.db.resolveAiOpsPendingInputsForServiceKeys).toHaveBeenCalledWith('app__svc', [
+      'EXCHANGE_API_URL',
+    ]);
+  });
+
+  it('diagnose_service requires three HTTP network failures for high-confidence user input', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      EXCHANGE_API_URL: 'https://api.exchange.test:443',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ exitCode: 124, stdout: '', stderr: 'request timed out' })
+      .mockResolvedValueOnce({ exitCode: 124, stdout: '', stderr: 'request timed out' })
+      .mockResolvedValueOnce({ exitCode: 124, stdout: '', stderr: 'request timed out' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.execSimple).toHaveBeenCalledTimes(5);
+    expect(result).toMatchObject({
+      dependencies: {
+        checks: [
+          expect.objectContaining({
+            key: 'EXCHANGE_API_URL',
+            reachable: false,
+            error: 'request timed out',
+          }),
+        ],
+      },
+      diagnosis: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        confidence: 'high',
+        recoverability: 'needs_user_input',
+        input_required: { field: 'EXCHANGE_API_URL' },
+      },
+    });
+    expect(ctx.db.upsertAiOpsPendingInput).toHaveBeenCalledTimes(1);
+  });
+
   it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
@@ -2897,6 +2995,7 @@ describe('service-targeted monitoring tools', () => {
       expect(result['diagnosis']).toBeUndefined();
       expect(result['suggested_call']).toBeUndefined();
       expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(ctx.docker.execSimple).toHaveBeenCalledTimes(3);
       expect(JSON.stringify(result['_agent_guidance'] ?? {})).not.toContain(
         'declared dependency endpoints are unreachable',
       );

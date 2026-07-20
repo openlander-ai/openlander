@@ -1157,6 +1157,9 @@ skipped instead of reporting the containerless parent as `CONTAINER_NOT_RUNNING`
 
 Environment dependency checks, including HTTP and HTTPS endpoints, run from the diagnosed service
 container so Project-network DNS names are evaluated from the same network as the application.
+HTTP/HTTPS failures without an HTTP status are retried before OpenLander promotes them to a
+high-confidence dependency diagnosis or pending user input. HTTP error responses keep their status
+evidence and are not treated as network failures.
 
 High-confidence deterministic findings add `diagnosis: { code, summary,
 confidence, evidence }` and, when a safe next operation exists, top-level
