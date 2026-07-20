@@ -152,8 +152,19 @@ export async function cloneAndAnalyze(
     buildLog += `[pending-fix] Applied ${pendingFixFile}\n`;
   }
 
-  const environmentDeploy = await deps.db.getLastDeployLog(projectId, environmentId);
-  const previousDeploy = environmentDeploy ?? (await deps.db.getLastDeployLog(projectId));
+  const [environmentDeploy, latestProjectDeploy] = await Promise.all([
+    deps.db.getLastDeployLog(projectId, environmentId),
+    deps.db.getLastDeployLog(projectId),
+  ]);
+  const latestProjectEnvironmentId = latestProjectDeploy?.environment_id;
+  const latestProjectDeployMatchesEnvironment =
+    latestProjectDeploy !== undefined &&
+    (latestProjectEnvironmentId === null ||
+      latestProjectEnvironmentId === undefined ||
+      latestProjectEnvironmentId === environmentId);
+  const previousDeploy = latestProjectDeployMatchesEnvironment
+    ? latestProjectDeploy
+    : environmentDeploy;
   const previousSha = previousDeploy?.commit_sha;
   const sourceRevisionChanged =
     previousDeploy?.status !== 'success' || previousSha !== cloneResult.commitSha;

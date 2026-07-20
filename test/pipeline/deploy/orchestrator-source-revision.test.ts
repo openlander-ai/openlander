@@ -27,7 +27,11 @@ describe('cloneAndAnalyze source revision detection', () => {
     const getLastDeployLog = vi
       .fn()
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ status: 'success', commit_sha: 'same-commit' });
+      .mockResolvedValueOnce({
+        status: 'success',
+        commit_sha: 'same-commit',
+        environment_id: null,
+      });
     const deps = {
       db: { getLastDeployLog } as unknown as Database,
       env: { getAll: vi.fn().mockResolvedValue({}) },
@@ -45,5 +49,65 @@ describe('cloneAndAnalyze source revision detection', () => {
     expect(result.sourceRevisionChanged).toBe(false);
     expect(getLastDeployLog).toHaveBeenNthCalledWith(1, 'project-1', 'project-1-production');
     expect(getLastDeployLog).toHaveBeenNthCalledWith(2, 'project-1');
+  });
+
+  it('prefers a newer legacy Compose log over a stale environment-scoped deploy', async () => {
+    const getLastDeployLog = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'success',
+        commit_sha: 'old-commit',
+        environment_id: 'project-1-production',
+      })
+      .mockResolvedValueOnce({
+        status: 'success',
+        commit_sha: 'same-commit',
+        environment_id: null,
+      });
+    const deps = {
+      db: { getLastDeployLog } as unknown as Database,
+      env: { getAll: vi.fn().mockResolvedValue({}) },
+      applyPendingFix: vi.fn().mockResolvedValue(null),
+      secretScanEnabled: false,
+    } as unknown as DeployOrchestrationDeps;
+
+    const result = await cloneAndAnalyze(deps, {
+      projectId: 'project-1',
+      projectName: 'stack',
+      environmentId: 'project-1-production',
+      repoUrl: 'https://github.com/example/stack.git',
+    });
+
+    expect(result.sourceRevisionChanged).toBe(false);
+  });
+
+  it('ignores a latest deploy that belongs to another environment', async () => {
+    const getLastDeployLog = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'success',
+        commit_sha: 'same-commit',
+        environment_id: 'project-1-production',
+      })
+      .mockResolvedValueOnce({
+        status: 'success',
+        commit_sha: 'staging-commit',
+        environment_id: 'project-1-staging',
+      });
+    const deps = {
+      db: { getLastDeployLog } as unknown as Database,
+      env: { getAll: vi.fn().mockResolvedValue({}) },
+      applyPendingFix: vi.fn().mockResolvedValue(null),
+      secretScanEnabled: false,
+    } as unknown as DeployOrchestrationDeps;
+
+    const result = await cloneAndAnalyze(deps, {
+      projectId: 'project-1',
+      projectName: 'stack',
+      environmentId: 'project-1-production',
+      repoUrl: 'https://github.com/example/stack.git',
+    });
+
+    expect(result.sourceRevisionChanged).toBe(false);
   });
 });
