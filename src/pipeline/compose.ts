@@ -1145,7 +1145,9 @@ export class ComposePipeline {
 
     const deployOnlyActive = Boolean(config.services && config.services.length > 0);
     if (!deployOnlyActive) {
-      const composeServiceNames = new Set(composeProject.services.map((service) => service.name));
+      const composeServiceNames = new Set(
+        activeComposeProject.services.map((service) => service.name),
+      );
       const orphanChildren = existingChildren
         .map((child) => {
           const prefix = `${parentName}/`;
@@ -1724,8 +1726,8 @@ export class ComposePipeline {
           };
         }
 
-        const preservedExisting = existingReplacementByService.get(service.name);
-        if (preservedExisting && !createdDeploymentServiceNames.has(service.name)) {
+        const preservedExisting = existingByName.get(`${parentName}/${service.name}`);
+        if (preservedExisting?.container_id && !createdDeploymentServiceNames.has(service.name)) {
           const ports =
             preservedExisting.assigned_port != null && preservedExisting.container_port != null
               ? [
@@ -1738,7 +1740,7 @@ export class ComposePipeline {
             name: service.name,
             status: 'running' as const,
             ports,
-            containerId: preservedExisting.container_id ?? undefined,
+            containerId: preservedExisting.container_id,
             ...(orchestrationEntry?.error ? { error: orchestrationEntry.error } : {}),
           };
         }
@@ -2020,8 +2022,8 @@ export class ComposePipeline {
         }
         const childId = childrenByService.get(service.name);
         if (!childId) continue;
-        const preservedExisting = existingReplacementByService.get(service.name);
-        if (preservedExisting && !createdDeploymentServiceNames.has(service.name)) {
+        const preservedExisting = existingByName.get(`${parentName}/${service.name}`);
+        if (preservedExisting?.container_id && !createdDeploymentServiceNames.has(service.name)) {
           await this.db.updateProject(childId, {
             status: 'running',
             containerId: preservedExisting.container_id,

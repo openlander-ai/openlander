@@ -105,6 +105,10 @@ function createFakeDb() {
     }),
     deleteProjectDependenciesByProject: vi.fn(async () => undefined),
     createProjectDependency: vi.fn(async () => undefined),
+    deleteService: vi.fn(async () => undefined),
+    deleteProject: vi.fn(async (id: string) => {
+      projects.delete(id);
+    }),
     createDeployLog: vi.fn(async (log: unknown) => {
       deployLogs.push(log);
     }),
@@ -678,6 +682,9 @@ describe('compose network cleanup', () => {
     expect(apiAfterSuccess?.container_id).not.toBe(apiContainerBefore);
 
     const apiContainerAfterSuccess = apiAfterSuccess?.container_id;
+    const dbContainerBeforeBuildFailure = [...db._projects.values()].find(
+      (project) => project.name === 'stack/db',
+    )?.container_id;
     actions.length = 0;
     failBuild = true;
     const fourth = await deployWithEnv(pipeline, {
@@ -699,6 +706,12 @@ describe('compose network cleanup', () => {
         status: 'failed',
         buildLog: expect.stringContaining('failed to download package: operation timed out'),
       }),
+    );
+    expect([...db._projects.values()].find((project) => project.name === 'stack/db')).toMatchObject(
+      {
+        status: 'running',
+        container_id: dbContainerBeforeBuildFailure,
+      },
     );
   });
 
@@ -727,6 +740,59 @@ describe('compose network cleanup', () => {
     expect(docker.disconnectContainerFromNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'ol-stack-web',
       'stack-network',
+    );
+  });
+
+  it('cleans up an existing application when its profile becomes inactive', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx
+    expose: ["3000"]
+  caddy:
+    image: caddy:2
+    profiles: ["edge"]
+`,
+      'utf8',
+    );
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      profiles: ['edge'],
+      name: 'stack',
+      trigger: 'chat',
+    });
+    expect(first.success).toBe(true);
+    const caddyBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/caddy',
+    );
+    expect(caddyBefore?.container_id).toBe('container-ol-stack-caddy');
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      profiles: [],
+      name: 'stack',
+      _parentId: first.parentProjectId,
+      trigger: 'chat',
+    });
+
+    expect(second.success).toBe(true);
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-ol-stack-caddy',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-ol-stack-caddy',
+    );
+    expect([...db._projects.values()].some((project) => project.name === 'stack/caddy')).toBe(
+      false,
     );
   });
 
