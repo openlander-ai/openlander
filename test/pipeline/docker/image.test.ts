@@ -165,4 +165,46 @@ describe('buildComposeService', () => {
       }),
     );
   });
+
+  it('retries transient registry network failures', async () => {
+    const firstStream = { stream: 'first' } as unknown as NodeJS.ReadableStream;
+    const secondStream = { stream: 'second' } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(firstStream).mockResolvedValueOnce(secondStream);
+    mockFollowProgress
+      .mockImplementationOnce((_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) =>
+        done(new Error('context deadline exceeded')),
+      )
+      .mockImplementationOnce((_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) =>
+        done(null),
+      );
+
+    const docker = new Docker();
+    await docker.buildComposeService({
+      contextPath: '/tmp/compose-app',
+      dockerfile: 'Dockerfile',
+      tag: 'example/web:latest',
+    });
+
+    expect(mockBuildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry deterministic Dockerfile failures', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) =>
+        done(new Error('process exited with code 1')),
+    );
+
+    const docker = new Docker();
+    await expect(
+      docker.buildComposeService({
+        contextPath: '/tmp/compose-app',
+        dockerfile: 'Dockerfile',
+        tag: 'example/web:latest',
+      }),
+    ).rejects.toMatchObject({ code: 'DOCKER_BUILD_FAILED' });
+
+    expect(mockBuildImage).toHaveBeenCalledTimes(1);
+  });
 });
