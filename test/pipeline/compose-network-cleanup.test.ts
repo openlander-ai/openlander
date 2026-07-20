@@ -18,6 +18,7 @@ import {
   type ComposeDeployConfig,
 } from '../../src/pipeline/compose.js';
 import type { Docker } from '../../src/pipeline/docker.js';
+import { DockerBuildError } from '../../src/errors.js';
 import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/port.js';
 import type { EventBus } from '../../src/events/index.js';
 import type { Database, ProjectRow } from '../../src/db/index.js';
@@ -104,6 +105,10 @@ function createFakeDb() {
     }),
     deleteProjectDependenciesByProject: vi.fn(async () => undefined),
     createProjectDependency: vi.fn(async () => undefined),
+    deleteService: vi.fn(async () => undefined),
+    deleteProject: vi.fn(async (id: string) => {
+      projects.delete(id);
+    }),
     createDeployLog: vi.fn(async (log: unknown) => {
       deployLogs.push(log);
     }),
@@ -216,8 +221,8 @@ describe('compose network cleanup', () => {
     let runSequence = 0;
     const runComposeService = vi
       .fn()
-      .mockImplementation(async (config: { name: string }) =>
-        `container-${config.name}-${String(++runSequence)}`,
+      .mockImplementation(
+        async (config: { name: string }) => `container-${config.name}-${String(++runSequence)}`,
       );
     const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
     const db = createFakeDb();
@@ -380,9 +385,7 @@ describe('compose network cleanup', () => {
     };
     const first = await deployWithEnv(pipeline, baseConfig);
     expect(first.success).toBe(true);
-    const migrate = [...db._projects.values()].find(
-      (project) => project.name === 'stack/migrate',
-    );
+    const migrate = [...db._projects.values()].find((project) => project.name === 'stack/migrate');
     expect(migrate).toBeDefined();
     Object.assign(migrate!, {
       runtime_role: 'application',
@@ -578,17 +581,20 @@ describe('compose network cleanup', () => {
     let failBuild = false;
     const buildComposeService = vi.fn().mockImplementation(async () => {
       actions.push('build:api');
-      if (failBuild) throw new Error('api image build failed');
+      if (failBuild) {
+        throw new DockerBuildError(
+          'example/api',
+          'failed to download package: operation timed out',
+        );
+      }
     });
     const pullImage = vi.fn().mockImplementation(async (image: string) => {
       actions.push(`pull:${image}`);
     });
-    const runComposeService = vi
-      .fn()
-      .mockImplementation(async (config: { name: string }) => {
-        actions.push(`run:${config.name}`);
-        return `container-${config.name}-${String(++runSequence)}`;
-      });
+    const runComposeService = vi.fn().mockImplementation(async (config: { name: string }) => {
+      actions.push(`run:${config.name}`);
+      return `container-${config.name}-${String(++runSequence)}`;
+    });
     const safeRemoveContainer = vi.fn().mockImplementation(async (containerRef: string) => {
       actions.push(`remove:${containerRef}`);
     });
@@ -676,6 +682,9 @@ describe('compose network cleanup', () => {
     expect(apiAfterSuccess?.container_id).not.toBe(apiContainerBefore);
 
     const apiContainerAfterSuccess = apiAfterSuccess?.container_id;
+    const dbContainerBeforeBuildFailure = [...db._projects.values()].find(
+      (project) => project.name === 'stack/db',
+    )?.container_id;
     actions.length = 0;
     failBuild = true;
     const fourth = await deployWithEnv(pipeline, {
@@ -692,6 +701,18 @@ describe('compose network cleanup', () => {
       status: 'running',
       container_id: apiContainerAfterSuccess,
     });
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({
+        status: 'failed',
+        buildLog: expect.stringContaining('failed to download package: operation timed out'),
+      }),
+    );
+    expect([...db._projects.values()].find((project) => project.name === 'stack/db')).toMatchObject(
+      {
+        status: 'running',
+        container_id: dbContainerBeforeBuildFailure,
+      },
+    );
   });
 
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
@@ -719,6 +740,59 @@ describe('compose network cleanup', () => {
     expect(docker.disconnectContainerFromNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'ol-stack-web',
       'stack-network',
+    );
+  });
+
+  it('cleans up an existing application when its profile becomes inactive', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx
+    expose: ["3000"]
+  caddy:
+    image: caddy:2
+    profiles: ["edge"]
+`,
+      'utf8',
+    );
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      profiles: ['edge'],
+      name: 'stack',
+      trigger: 'chat',
+    });
+    expect(first.success).toBe(true);
+    const caddyBefore = [...db._projects.values()].find(
+      (project) => project.name === 'stack/caddy',
+    );
+    expect(caddyBefore?.container_id).toBe('container-ol-stack-caddy');
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      profiles: [],
+      name: 'stack',
+      _parentId: first.parentProjectId,
+      trigger: 'chat',
+    });
+
+    expect(second.success).toBe(true);
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-ol-stack-caddy',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-ol-stack-caddy',
+    );
+    expect([...db._projects.values()].some((project) => project.name === 'stack/caddy')).toBe(
+      false,
     );
   });
 

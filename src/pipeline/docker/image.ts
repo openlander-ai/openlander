@@ -13,6 +13,16 @@ import { withTimeout } from './helpers.js';
 const log = createModuleLogger('docker:image');
 
 const IMAGE_INSPECT_TIMEOUT_MS = 15_000;
+const COMPOSE_BUILD_NETWORK_RETRY_DELAYS_MS = [500, 1_500] as const;
+
+function isRetryableComposeBuildNetworkError(error: unknown): boolean {
+  if (!(error instanceof DockerBuildError)) return false;
+  const detail = error.details?.['buildLog'];
+  const evidence = `${error.message}\n${typeof detail === 'string' ? detail : ''}`;
+  return /(?:context deadline exceeded|i\/o timeout|connection (?:reset|refused)|network is unreachable|temporary failure in name resolution|no such host|tls handshake timeout|failed to do request|unexpected eof|no active session)/i.test(
+    evidence,
+  );
+}
 
 export class ImageOps {
   private readonly activeBuilds = new Map<string, Readable>();
@@ -112,6 +122,25 @@ export class ImageOps {
   }
 
   async buildComposeService(opts: BuildComposeServiceOptions): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.buildComposeServiceOnce(opts);
+        return;
+      } catch (error) {
+        const retryDelayMs = COMPOSE_BUILD_NETWORK_RETRY_DELAYS_MS[attempt];
+        if (retryDelayMs === undefined || !isRetryableComposeBuildNetworkError(error)) {
+          throw error;
+        }
+        log.warn(
+          { err: error, imageTag: opts.tag, attempt: attempt + 1, retryDelayMs },
+          'Compose image build hit a transient network error; retrying',
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
+    }
+  }
+
+  private async buildComposeServiceOnce(opts: BuildComposeServiceOptions): Promise<void> {
     const dockerfile = opts.dockerfile ?? 'Dockerfile';
 
     let stream: NodeJS.ReadableStream;
