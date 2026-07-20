@@ -1,5 +1,6 @@
 import net from 'node:net';
 import { createModuleLogger } from '../../lib/logger.js';
+import { sleep } from '../../lib/sleep.js';
 import { DOCKER_LABELS } from '../../config/index.js';
 import {
   OpenLanderError,
@@ -66,6 +67,7 @@ import {
 import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
 
 const log = createModuleLogger('monitoring-tools');
+const HTTP_DEPENDENCY_PROBE_RETRY_DELAYS_MS = [100, 300] as const;
 
 type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
@@ -2398,9 +2400,9 @@ async function probeEnvDependencies(
 
   const checks = await Promise.all(
     targets.map(async (target) => {
-      const result =
+      const probe = async (): Promise<Record<string, unknown>> =>
         target.protocol === 'tcp' || preferredContainerId || requirePreferredContainer
-          ? await probeInternal(
+          ? probeInternal(
               appCtx,
               target.protocol,
               target.host,
@@ -2411,13 +2413,20 @@ async function probeEnvDependencies(
               preferredContainerId,
               requirePreferredContainer,
             )
-          : await probeHttp(
+          : probeHttp(
               `${target.protocol}://${target.host}:${String(target.port)}/`,
               timeoutMs,
               target.protocol,
               target.display,
               Date.now(),
             );
+
+      let result = await probe();
+      for (const delayMs of HTTP_DEPENDENCY_PROBE_RETRY_DELAYS_MS) {
+        if (!shouldRetryHttpDependencyProbe(target.protocol, result)) break;
+        await sleep(delayMs);
+        result = await probe();
+      }
       return {
         key: target.key,
         target: target.display,
@@ -2434,6 +2443,18 @@ async function probeEnvDependencies(
   );
 
   return { count: checks.length, checks };
+}
+
+function shouldRetryHttpDependencyProbe(
+  protocol: DependencyTarget['protocol'],
+  result: Record<string, unknown>,
+): boolean {
+  if (protocol === 'tcp' || result['reachable'] === true) return false;
+  if (typeof result['status_code'] === 'number' || result['probe_tool_unavailable'] === true) {
+    return false;
+  }
+  const error = typeof result['error'] === 'string' ? result['error'] : '';
+  return !/no running (target project|managed) container/i.test(error);
 }
 
 function dependencyNetworkUnreachable(check: Record<string, unknown> | null | undefined): boolean {
