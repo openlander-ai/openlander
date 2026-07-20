@@ -740,7 +740,7 @@ export async function runUpdateApplicationSourceAction(
         `Call openlander_service.update_app with service_id="${service.id}" to apply the saved source settings.`,
         mode === undefined
           ? 'container_port was saved for the next redeploy. Use apply_route_config only when you need a live route change without rebuilding.'
-          : 'Use update_service_config separately for dockerfile_path, docker_target, or build_context.',
+          : 'Use update_service_config separately for Dockerfile, build context, or Compose selection settings.',
       ],
     },
   };

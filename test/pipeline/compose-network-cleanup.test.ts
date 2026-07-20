@@ -18,6 +18,7 @@ import {
   type ComposeDeployConfig,
 } from '../../src/pipeline/compose.js';
 import type { Docker } from '../../src/pipeline/docker.js';
+import { DockerBuildError } from '../../src/errors.js';
 import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/port.js';
 import type { EventBus } from '../../src/events/index.js';
 import type { Database, ProjectRow } from '../../src/db/index.js';
@@ -216,8 +217,8 @@ describe('compose network cleanup', () => {
     let runSequence = 0;
     const runComposeService = vi
       .fn()
-      .mockImplementation(async (config: { name: string }) =>
-        `container-${config.name}-${String(++runSequence)}`,
+      .mockImplementation(
+        async (config: { name: string }) => `container-${config.name}-${String(++runSequence)}`,
       );
     const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
     const db = createFakeDb();
@@ -380,9 +381,7 @@ describe('compose network cleanup', () => {
     };
     const first = await deployWithEnv(pipeline, baseConfig);
     expect(first.success).toBe(true);
-    const migrate = [...db._projects.values()].find(
-      (project) => project.name === 'stack/migrate',
-    );
+    const migrate = [...db._projects.values()].find((project) => project.name === 'stack/migrate');
     expect(migrate).toBeDefined();
     Object.assign(migrate!, {
       runtime_role: 'application',
@@ -578,17 +577,20 @@ describe('compose network cleanup', () => {
     let failBuild = false;
     const buildComposeService = vi.fn().mockImplementation(async () => {
       actions.push('build:api');
-      if (failBuild) throw new Error('api image build failed');
+      if (failBuild) {
+        throw new DockerBuildError(
+          'example/api',
+          'failed to download package: operation timed out',
+        );
+      }
     });
     const pullImage = vi.fn().mockImplementation(async (image: string) => {
       actions.push(`pull:${image}`);
     });
-    const runComposeService = vi
-      .fn()
-      .mockImplementation(async (config: { name: string }) => {
-        actions.push(`run:${config.name}`);
-        return `container-${config.name}-${String(++runSequence)}`;
-      });
+    const runComposeService = vi.fn().mockImplementation(async (config: { name: string }) => {
+      actions.push(`run:${config.name}`);
+      return `container-${config.name}-${String(++runSequence)}`;
+    });
     const safeRemoveContainer = vi.fn().mockImplementation(async (containerRef: string) => {
       actions.push(`remove:${containerRef}`);
     });
@@ -692,6 +694,12 @@ describe('compose network cleanup', () => {
       status: 'running',
       container_id: apiContainerAfterSuccess,
     });
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({
+        status: 'failed',
+        buildLog: expect.stringContaining('failed to download package: operation timed out'),
+      }),
+    );
   });
 
   it('retries once after Docker reports a stale network endpoint conflict', async () => {

@@ -30,6 +30,7 @@ import type { JobManager } from './job-manager.js';
 import {
   ComposeJobFailedError,
   ComposePrerequisiteUnhealthyError,
+  DockerBuildError,
   InvalidTrafficServiceError,
   ServiceConfigError,
   TrafficServiceRequiredError,
@@ -46,6 +47,18 @@ const COMPOSE_FILES = [
   'compose.yml',
   'compose.yaml',
 ] as const;
+
+function getDockerBuildLog(error: unknown): string | undefined {
+  if (!(error instanceof DockerBuildError)) return undefined;
+  const buildLog = error.details?.['buildLog'];
+  return typeof buildLog === 'string' && buildLog.trim().length > 0 ? buildLog : undefined;
+}
+
+function appendComposeError(buildLog: string, error: unknown): string {
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  const dockerBuildLog = getDockerBuildLog(error);
+  return `${buildLog}${dockerBuildLog ? `[docker build output]\n${dockerBuildLog.trimEnd()}\n` : ''}[error] ${errorMsg}\n`;
+}
 
 interface ProjectStateTransitioner {
   transition: (
@@ -127,7 +140,9 @@ export function knownComposeResourcePort(service: ComposeService): number | null
 }
 
 export type ComposeDependencyCondition =
-  'service_started' | 'service_healthy' | 'service_completed_successfully';
+  | 'service_started'
+  | 'service_healthy'
+  | 'service_completed_successfully';
 
 export interface ComposeEnvFile {
   path: string;
@@ -630,10 +645,9 @@ export class ComposePipeline {
     }
     const parsed = composePaths
       .map((path) => parseComposeDocument(path))
-      .reduce<Record<string, unknown>>(
-        (merged, overlay) => mergeComposeValues(merged, overlay) as Record<string, unknown>,
-        {},
-      );
+      .reduce<
+        Record<string, unknown>
+      >((merged, overlay) => mergeComposeValues(merged, overlay) as Record<string, unknown>, {});
     const servicesRaw = parsed['services'];
 
     if (!servicesRaw || typeof servicesRaw !== 'object' || Array.isArray(servicesRaw)) {
@@ -1576,6 +1590,7 @@ export class ComposePipeline {
               status: 'error',
             });
             this.jobManager?.updatePhase(childId, 'failed', errorMsg);
+            buildLog = appendComposeError(buildLog, error);
             buildLog += `[compose error ${service.name}] ${errorMsg}\n`;
 
             return {
@@ -1969,6 +1984,7 @@ export class ComposePipeline {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      const buildLogWithError = appendComposeError(buildLog, error);
 
       for (const [serviceName, deployment] of deploymentByService.entries()) {
         if (!createdDeploymentServiceNames.has(serviceName)) continue;
@@ -2028,11 +2044,12 @@ export class ComposePipeline {
         trigger,
         commitSha: config.commitSha,
         commitMessage,
-        buildLog: `${buildLog}[error] ${errorMsg}\n`,
+        buildLog: buildLogWithError,
         durationMs: Date.now() - startTime,
       });
 
-      this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg);
+      const buildLogTail = buildLogWithError.split('\n').filter(Boolean).slice(-30).join('\n');
+      this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg, buildLogTail);
 
       await this.events.emit('compose:failed', {
         projectId: parentProjectId,
