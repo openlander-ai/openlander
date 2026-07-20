@@ -859,6 +859,195 @@ describe('diagnose_host_resources tool', () => {
 });
 
 describe('diagnose_service tool', () => {
+  it('diagnoses a Compose parent through its persisted traffic child', async () => {
+    const project = { id: 'stack', name: 'stack', status: 'running', archived_at: null };
+    const childRuntimeProject = {
+      id: 'stack__web',
+      name: 'stack/web',
+      status: 'running',
+      archived_at: null,
+    };
+    const parent = {
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      kind: 'compose',
+      source: 'git',
+      status: 'running',
+      runtime_role: 'application',
+      assigned_port: null,
+      container_id: null,
+      container_name: null,
+      container_port: null,
+      health_check_path: '/',
+      created_at: '2026-07-20T00:00:00.000Z',
+      updated_at: '2026-07-20T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const web = {
+      ...parent,
+      id: 'stack__web__svc',
+      parent_service_id: parent.id,
+      name: 'stack/web__svc',
+      kind: 'compose-child',
+      assigned_port: 10001,
+      container_id: 'web-container-id',
+      container_name: 'ol-stack-web',
+      container_port: 3000,
+      health_check_path: '/health',
+    };
+    const db = {
+      ...parent,
+      id: 'stack__db__svc',
+      parent_service_id: parent.id,
+      name: 'stack/db__svc',
+      kind: 'compose-child',
+      runtime_role: 'resource',
+      status: 'running',
+      container_id: 'db-container-id',
+      container_name: 'ol-stack-db',
+      container_port: 5432,
+    };
+    const migrate = {
+      ...parent,
+      id: 'stack__migrate__svc',
+      parent_service_id: parent.id,
+      name: 'stack/migrate__svc',
+      kind: 'compose-child',
+      runtime_role: 'job',
+      status: 'stopped',
+      container_id: 'migrate-container-id',
+      container_name: 'ol-stack-migrate',
+    };
+    const inspectContainer = vi.fn(async () => ({
+      Name: '/ol-stack-web',
+      RestartCount: 0,
+      State: {
+        Running: true,
+        Status: 'running',
+        ExitCode: 0,
+        StartedAt: '2026-07-20T00:00:00.000Z',
+      },
+      Config: { Image: 'stack-web:latest' },
+    }));
+    const getLogs = vi.fn(async () => 'web is ready');
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) =>
+          id === project.id ? project : id === childRuntimeProject.id ? childRuntimeProject : null,
+        ),
+        getProjectByName: vi.fn(() => project),
+        getService: vi.fn((id: string) => (id === parent.id ? parent : undefined)),
+        getComposeChildren: vi.fn(async () => [web, db, migrate]),
+        loadDeployConfig: vi.fn(async () => ({
+          config_json: JSON.stringify({
+            version: 2,
+            savedAt: '2026-07-20T00:00:00.000Z',
+            snapshot: { trafficService: 'web' },
+          }),
+        })),
+        getLastDeployLogsForServices: vi.fn(
+          async () => new Map([[migrate.id, { service_id: migrate.id, status: 'success' }]]),
+        ),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({})),
+        getDeployLogs: vi.fn(async () => []),
+        listDomainMappingsForService: vi.fn(async () => []),
+        resolveAiOpsPendingInputsForServiceKeys: vi.fn(async () => 0),
+      },
+      pipeline: { getLogs },
+      docker: {
+        inspectContainer,
+        listManagedContainers: vi.fn(async () => [{ id: web.container_id, status: 'running' }]),
+        execSimple: vi.fn(async () => ({
+          exitCode: 0,
+          stdout: 'OPENLANDER_HTTP_STATUS=200',
+          stderr: '',
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: parent.id },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(result.service).toMatchObject({
+      id: web.id,
+      kind: 'compose-child',
+      status: 'running',
+    });
+    expect(result.aggregate_status).toBe('running');
+    expect(result.container).toMatchObject({ present: true, running: true, id: web.container_id });
+    expect(result.httpCheck).toMatchObject({ reachable: true, status_code: 200 });
+    expect(result).not.toHaveProperty('diagnosis');
+    expect(inspectContainer).toHaveBeenCalledWith(web.container_id);
+    expect(getLogs).toHaveBeenCalledWith(childRuntimeProject.id, 80);
+  });
+
+  it('skips live probes when a Compose parent has no resolvable traffic child', async () => {
+    const project = { id: 'stack', name: 'stack', status: 'running', archived_at: null };
+    const parent = {
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      kind: 'compose',
+      source: 'git',
+      status: 'running',
+      runtime_role: 'application',
+      assigned_port: null,
+      container_id: null,
+      container_name: null,
+      container_port: null,
+      created_at: '2026-07-20T00:00:00.000Z',
+      updated_at: '2026-07-20T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const children = ['web', 'api'].map((name, index) => ({
+      ...parent,
+      id: `stack__${name}__svc`,
+      parent_service_id: parent.id,
+      name: `stack/${name}__svc`,
+      kind: 'compose-child',
+      assigned_port: 10001 + index,
+      container_id: `${name}-container-id`,
+      container_name: `ol-stack-${name}`,
+      container_port: index === 0 ? 3000 : 4000,
+    }));
+    const inspectContainer = vi.fn();
+    const getLogs = vi.fn();
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => project),
+        getProjectByName: vi.fn(() => project),
+        getService: vi.fn(() => parent),
+        getComposeChildren: vi.fn(async () => children),
+        loadDeployConfig: vi.fn(async () => null),
+        getLastDeployLogsForServices: vi.fn(async () => new Map()),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({})),
+        getDeployLogs: vi.fn(async () => []),
+      },
+      pipeline: { getLogs },
+      docker: { inspectContainer },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: parent.id },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(result.service).toMatchObject({ id: parent.id, kind: 'compose' });
+    expect(result.aggregate_status).toBe('running');
+    expect(result.container).toMatchObject({ skipped: true, present: false });
+    expect(result.httpCheck).toMatchObject({ skipped: true });
+    expect(result).not.toHaveProperty('diagnosis');
+    expect(inspectContainer).not.toHaveBeenCalled();
+    expect(getLogs).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       role: 'resource' as const,

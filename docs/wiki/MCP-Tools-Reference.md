@@ -1148,6 +1148,13 @@ Docker health or a known internal TCP port, and one-shot jobs use container exit
 Resource and job responses return `roleCheck` and intentionally omit application-only `httpCheck`
 and `route` fields.
 
+When the supplied `service_id` is a Compose parent, OpenLander diagnoses the persisted
+`traffic_service` child and returns the Project's `aggregate_status`. The returned `service` is the
+actual child used for live container, log, HTTP, route, and dependency checks. If no representative
+traffic child can be resolved, the action returns the child status summary and marks live probes as
+skipped instead of reporting the containerless parent as `CONTAINER_NOT_RUNNING`; diagnose a child
+`service_id` directly after selecting it from `get_topology`.
+
 High-confidence deterministic findings add `diagnosis: { code, summary,
 confidence, evidence }` and, when a safe next operation exists, top-level
 `suggested_call`. Current codes include `PORT_MISMATCH`,
