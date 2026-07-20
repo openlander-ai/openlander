@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8-rc.2] - 2026-07-20
+
+### Fixed
+
+- Diagnose a Compose parent through its persisted representative traffic child
+  and aggregate runtime status, avoiding false container and route failures for
+  the intentionally containerless parent.
+
 ## [0.2.8-rc.1] - 2026-07-20
 
 ### Changed
