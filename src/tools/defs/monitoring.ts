@@ -65,6 +65,7 @@ import {
   serviceLifecycle,
 } from '../../health/compose-runtime.js';
 import { loadComposeTrafficService } from '../../pipeline/config-snapshot.js';
+import { getDeployableServiceUrls } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('monitoring-tools');
 const HTTP_DEPENDENCY_PROBE_RETRY_DELAYS_MS = [100, 300] as const;
@@ -820,13 +821,14 @@ export const monitoringToolDefs: ToolDef[] = [
         httpCheck['probed_from'] !== 'service-container'
           ? await probeServiceHttp(appCtx, service, probePath, timeoutMs, { internal: true })
           : null;
+      const excludedDependencyHosts = await managedPublicDependencyHosts(appCtx, service);
       const dependencies = await probeEnvDependencies(
         appCtx,
         effectiveEnv,
         timeoutMs,
         service.container_id ?? undefined,
         true,
-        { excludedHosts: await managedPublicDependencyHosts(appCtx, service) },
+        { excludedHosts: excludedDependencyHosts },
       );
       const nextSteps = buildDiagnoseNextSteps({
         service,
@@ -899,6 +901,7 @@ export const monitoringToolDefs: ToolDef[] = [
         diagnosis,
         dependencies,
         effectiveEnv,
+        excludedDependencyHosts,
       });
 
       return {
@@ -2309,7 +2312,10 @@ async function managedPublicDependencyHosts(
   service: ServiceRow,
 ): Promise<Set<string>> {
   const hosts = new Set<string>();
-  const candidates = [(service as { public_url?: string | null }).public_url];
+  const candidates = [
+    (service as { public_url?: string | null }).public_url,
+    ...getDeployableServiceUrls(service).map((route) => route.url),
+  ];
   for (const candidate of candidates) {
     const host = hostnameFromUrl(candidate);
     if (host) {
@@ -2532,6 +2538,15 @@ function reachableUserOwnedDependencyFields(dependencies: Record<string, unknown
   });
 }
 
+function managedPublicDependencyFields(
+  env: Record<string, string>,
+  excludedHosts: Set<string>,
+): string[] {
+  return envDependencyTargets(env).flatMap((target) =>
+    excludedHosts.has(target.host.toLowerCase()) ? [target.key] : [],
+  );
+}
+
 async function syncPendingUserInputFromDiagnosis(
   appCtx: AppCtx,
   input: {
@@ -2541,6 +2556,7 @@ async function syncPendingUserInputFromDiagnosis(
     diagnosis: SynthesizedServiceDiagnosis | null;
     dependencies: Record<string, unknown>;
     effectiveEnv: Record<string, string>;
+    excludedDependencyHosts: Set<string>;
   },
 ): Promise<void> {
   const diagnosis = input.diagnosis;
@@ -2566,10 +2582,11 @@ async function syncPendingUserInputFromDiagnosis(
     }
   }
 
-  await appCtx.db.resolveAiOpsPendingInputsForServiceKeys(
-    input.serviceId,
-    reachableUserOwnedDependencyFields(input.dependencies),
-  );
+  const resolvedFields = new Set([
+    ...reachableUserOwnedDependencyFields(input.dependencies),
+    ...managedPublicDependencyFields(input.effectiveEnv, input.excludedDependencyHosts),
+  ]);
+  await appCtx.db.resolveAiOpsPendingInputsForServiceKeys(input.serviceId, [...resolvedFields]);
 }
 
 function buildDiagnoseNextSteps(input: {
