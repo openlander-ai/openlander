@@ -2399,10 +2399,10 @@ async function probeEnvDependencies(
   const checks = await Promise.all(
     targets.map(async (target) => {
       const result =
-        target.protocol === 'tcp'
+        target.protocol === 'tcp' || preferredContainerId || requirePreferredContainer
           ? await probeInternal(
               appCtx,
-              'tcp',
+              target.protocol,
               target.host,
               target.port,
               '/',
@@ -2444,10 +2444,13 @@ function dependencyNetworkUnreachable(check: Record<string, unknown> | null | un
   if (protocol === 'tcp') {
     return true;
   }
+  if (typeof check['status_code'] === 'number') {
+    return false;
+  }
   if (typeof check['error'] === 'string' && check['error'].trim().length > 0) {
     return true;
   }
-  return typeof check['status_code'] !== 'number';
+  return true;
 }
 
 function firstUnreachableDependency(

@@ -2790,14 +2790,90 @@ describe('service-targeted monitoring tools', () => {
     expect(ctx.db.upsertAiOpsPendingInput).not.toHaveBeenCalled();
   });
 
+  it('diagnose_service probes HTTP dependencies from the target service container', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      EXCHANGE_API_URL: 'https://api.exchange.test:443',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('host probe must not be used');
+    });
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(ctx.docker.execSimple).toHaveBeenCalledTimes(3);
+      expect(vi.mocked(ctx.docker.execSimple).mock.calls[2]?.[0]).toBe('service-container');
+      expect(vi.mocked(ctx.docker.execSimple).mock.calls[2]?.[1]).toEqual(
+        expect.arrayContaining(['https://api.exchange.test:443/', '5']),
+      );
+      expect(result).toMatchObject({
+        dependencies: {
+          count: 1,
+          checks: [
+            expect.objectContaining({
+              key: 'EXCHANGE_API_URL',
+              protocol: 'https',
+              reachable: true,
+              status_code: 200,
+            }),
+          ],
+        },
+      });
+      expect(result['diagnosis']).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       EXCHANGE_API_URL: 'https://api.exchange.test:443',
     });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=200',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'OPENLANDER_HTTP_STATUS=400',
+        stderr: '',
+      });
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(async () => new Response('bad request', { status: 400 }));
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('host probe must not be used');
+    });
 
     try {
       const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
@@ -2820,6 +2896,7 @@ describe('service-targeted monitoring tools', () => {
       });
       expect(result['diagnosis']).toBeUndefined();
       expect(result['suggested_call']).toBeUndefined();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
       expect(JSON.stringify(result['_agent_guidance'] ?? {})).not.toContain(
         'declared dependency endpoints are unreachable',
       );
