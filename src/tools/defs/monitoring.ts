@@ -79,6 +79,13 @@ interface ResolvedDeployableService {
   runtimeProject: ProjectRow;
 }
 
+interface ResolvedDiagnosticService extends ResolvedDeployableService {
+  requestedService: ServiceRow;
+  deploymentRuntimeProject: ProjectRow;
+  composeChildren: ServiceRow[];
+  aggregateStatus?: ReturnType<typeof aggregateComposeStatus>;
+}
+
 interface DiagnosticWarning {
   code: 'TRAFFIC_HEALTH_MISMATCH';
   severity: 'warning';
@@ -631,10 +638,15 @@ export const monitoringToolDefs: ToolDef[] = [
     inputSchema: diagnoseServiceSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const { service, project, runtimeProject } = await resolveDeployableServiceForMonitoring(
-        args,
-        context,
-      );
+      const {
+        service,
+        requestedService,
+        project,
+        runtimeProject,
+        deploymentRuntimeProject,
+        composeChildren,
+        aggregateStatus,
+      } = await resolveDiagnosticServiceForMonitoring(args, context);
       const lines = (args['lines'] as number | undefined) ?? 80;
       const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
       const internal = (args['internal'] as boolean | undefined) ?? false;
@@ -642,11 +654,15 @@ export const monitoringToolDefs: ToolDef[] = [
       const healthCheckPathArg = (args['health_check_path'] as string | undefined)?.trim();
       const briefingId = (args['briefing_id'] as string | undefined)?.trim();
 
-      const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
+      const [groupEnv, requestedServiceEnv, targetServiceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
-        appCtx.db.getEnvVarsForService(project.id, service.id),
-        appCtx.db.getDeployLogs(runtimeProject.id, 5),
+        appCtx.db.getEnvVarsForService(project.id, requestedService.id),
+        service.id === requestedService.id
+          ? Promise.resolve({})
+          : appCtx.db.getEnvVarsForService(project.id, service.id),
+        appCtx.db.getDeployLogs(deploymentRuntimeProject.id, 5),
       ]);
+      const serviceEnv = { ...requestedServiceEnv, ...targetServiceEnv };
       const effectiveEnv = { ...groupEnv, ...serviceEnv };
       const probePath = selectServiceProbePath({
         requestedPath: pathArg || healthCheckPathArg,
@@ -654,10 +670,55 @@ export const monitoringToolDefs: ToolDef[] = [
         env: effectiveEnv,
       });
 
-      const container = await summarizeContainer(appCtx, service);
-      const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
       const recentDeployment = summarizeRecentDeployments(deployLogs);
       const buildDiagnostics = diagnoseBuildTimeEnv(effectiveEnv, deployLogs);
+
+      if (requestedService.kind === 'compose' && service.id === requestedService.id) {
+        const skippedReason =
+          'Compose traffic service is unresolved; diagnose a compose-child service_id directly.';
+        return {
+          project: {
+            id: project.id,
+            name: project.name,
+            runtimeProjectId: runtimeProject.id,
+          },
+          service: {
+            id: requestedService.id,
+            name: requestedService.name,
+            kind: requestedService.kind,
+            source: requestedService.source,
+            runtimeRole: normalizeRuntimeRole(requestedService.runtime_role),
+            lifecycle: serviceLifecycle(requestedService),
+            healthStrategy: serviceHealthStrategy(requestedService),
+            status: requestedService.status,
+          },
+          ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
+          services: composeChildren.map((child) => ({
+            id: child.id,
+            name: child.name,
+            status: child.status,
+            runtime_role: normalizeRuntimeRole(child.runtime_role),
+            is_traffic_target: false,
+          })),
+          env: summarizeEnvKeys(groupEnv, serviceEnv),
+          buildTimeEnv: buildDiagnostics,
+          recentDeployment,
+          container: { skipped: true, present: false, running: false, reason: skippedReason },
+          logs: { skipped: true, reason: skippedReason },
+          httpCheck: { skipped: true, reason: skippedReason },
+          route: { skipped: true, reason: skippedReason },
+          dependencies: { skipped: true, reason: skippedReason, count: 0, checks: [] },
+          _agent_guidance: {
+            message: skippedReason,
+            next_steps: [
+              'Use get_topology to choose an application compose-child, then call diagnose_service with that service_id.',
+            ],
+          },
+        };
+      }
+
+      const container = await summarizeContainer(appCtx, service);
+      const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
       const runtimeRole = normalizeRuntimeRole(service.runtime_role);
 
       if (runtimeRole !== 'application') {
@@ -713,6 +774,7 @@ export const monitoringToolDefs: ToolDef[] = [
             image: service.image_url ?? service.image_tag ?? null,
             containerPort: service.container_port,
           },
+          ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
           env: summarizeEnvKeys(groupEnv, serviceEnv),
           buildTimeEnv: buildDiagnostics,
           recentDeployment,
@@ -860,6 +922,7 @@ export const monitoringToolDefs: ToolDef[] = [
           assignedPort: service.assigned_port,
           containerPort: service.container_port,
         },
+        ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
         env: summarizeEnvKeys(groupEnv, serviceEnv),
         buildTimeEnv: buildDiagnostics,
         recentDeployment,
@@ -1598,6 +1661,58 @@ async function resolveDeployableServiceForMonitoring(
   const runtimeProjectId = deployableServiceIdToProjectId(service.id);
   const runtimeProject = (await context.appCtx.db.getProject(runtimeProjectId)) ?? project;
   return { service, project, runtimeProject };
+}
+
+async function resolveDiagnosticServiceForMonitoring(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<ResolvedDiagnosticService> {
+  const resolved = await resolveDeployableServiceForMonitoring(args, context);
+  if (resolved.service.kind !== 'compose') {
+    return {
+      ...resolved,
+      requestedService: resolved.service,
+      deploymentRuntimeProject: resolved.runtimeProject,
+      composeChildren: [],
+    };
+  }
+
+  const composeChildren = await context.appCtx.db.getComposeChildren(resolved.service.id);
+  const [trafficService, lastDeploys] = await Promise.all([
+    loadComposeTrafficService(context.appCtx.db, resolved.project.id),
+    context.appCtx.db.getLastDeployLogsForServices(composeChildren.map((child) => child.id)),
+  ]);
+  const trafficTargetId = resolveComposeTrafficTargetId(composeChildren, trafficService);
+  const trafficTarget = trafficTargetId
+    ? composeChildren.find((child) => child.id === trafficTargetId)
+    : undefined;
+  const aggregateStatus = aggregateComposeStatus(
+    composeChildren,
+    new Map([...lastDeploys].map(([id, deploy]) => [id, deploy.status])),
+  );
+
+  if (!trafficTarget) {
+    return {
+      ...resolved,
+      requestedService: resolved.service,
+      deploymentRuntimeProject: resolved.runtimeProject,
+      composeChildren,
+      aggregateStatus,
+    };
+  }
+
+  const runtimeProjectId = deployableServiceIdToProjectId(trafficTarget.id);
+  const runtimeProject =
+    (await context.appCtx.db.getProject(runtimeProjectId)) ?? resolved.runtimeProject;
+  return {
+    service: trafficTarget,
+    requestedService: resolved.service,
+    project: resolved.project,
+    runtimeProject,
+    deploymentRuntimeProject: resolved.runtimeProject,
+    composeChildren,
+    aggregateStatus,
+  };
 }
 
 function sanitizeRepoUrl(repoUrl: string | null): string | null {
