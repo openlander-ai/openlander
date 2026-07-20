@@ -3183,7 +3183,7 @@ describe('service-targeted monitoring tools', () => {
     expect(result['suggested_call']).toBeUndefined();
   });
 
-  it('diagnose_service includes persisted representative traffic evidence from recent deploys', async () => {
+  it('diagnose_service keeps persisted traffic failures historical when live probes are healthy', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.db.getDeployLogs).mockResolvedValueOnce([
       {
@@ -3218,6 +3218,7 @@ describe('service-targeted monitoring tools', () => {
 
     expect(result).toMatchObject({
       recentDeployment: {
+        scope: 'deployment_history',
         latest: {
           id: 'deploy-traffic',
           status: 'success',
@@ -3245,20 +3246,19 @@ describe('service-targeted monitoring tools', () => {
           },
         ],
       },
-      diagnosis: {
-        code: 'TRAFFIC_HEALTH_MISMATCH',
-        confidence: 'medium',
-        evidence: {
-          source: 'recent_deployment_representative_traffic',
-          deploy_id: 'deploy-traffic',
-          deploy_status: 'success',
-          effective_status: 'unhealthy',
-          path: '/',
-          status_code: 500,
-          message: 'Route probe returned HTTP 500',
+      evidence: {
+        representativeTraffic: {
+          status: 'passed',
+          severity: 'warning',
+          target: 'http://ol-app:3000/',
+        },
+        deployLog: {
+          id: 'deploy-traffic',
+          status: 'success',
         },
       },
     });
+    expect(result['diagnosis']).toBeUndefined();
   });
 
   it('diagnose_service does not let persisted traffic evidence mask current port mismatch', async () => {

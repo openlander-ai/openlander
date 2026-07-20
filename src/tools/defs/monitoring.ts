@@ -635,7 +635,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose an Application/Compose workload in one MCP call. Returns workload/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized runtime logs, local HTTP probe, dependency probes, and recommended next actions. Use this after update_app, redeploy_app, or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
+      'Diagnose an Application/Compose workload in one MCP call. Returns workload/source summary, masked env key inventory, build-time env warnings, sanitized deployment-time history, current container status, sanitized runtime logs, live HTTP and dependency probes, and recommended next actions. Historical deployment warnings remain under recentDeployment and do not override a healthy live diagnosis. Use this after update_app, redeploy_app, or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
     mcpDescription:
       'One-shot Application/Compose diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
@@ -1807,6 +1807,7 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
     ? 'unhealthy'
     : latest?.status;
   return {
+    scope: 'deployment_history',
     count: logs.length,
     latest: latest
       ? {
@@ -2803,7 +2804,6 @@ function routeHealthEvidenceFromCheck(check: Record<string, unknown>): Record<st
 }
 
 function representativeTrafficEvidenceFromDiagnosis(input: {
-  recentDeployment: Record<string, unknown>;
   trafficCheck: Record<string, unknown> | null;
 }): Record<string, unknown> | null {
   if (input.trafficCheck) {
@@ -2818,9 +2818,7 @@ function representativeTrafficEvidenceFromDiagnosis(input: {
     };
   }
 
-  const latest = asRecord(input.recentDeployment['latest']) ?? {};
-  const persisted = asRecord(latest['representativeTraffic']) ?? {};
-  return Object.keys(persisted).length > 0 ? persisted : null;
+  return null;
 }
 
 function deployLogEvidenceFromRecentDeployment(
@@ -2830,7 +2828,7 @@ function deployLogEvidenceFromRecentDeployment(
   if (!latest) return null;
   return {
     id: latest['id'] ?? null,
-    status: latest['effectiveStatus'] ?? latest['status'] ?? null,
+    status: latest['status'] ?? null,
     commitSha: latest['commitSha'] ?? null,
     createdAt: latest['createdAt'] ?? null,
     buildLogTail: latest['buildLogTail'] ?? null,
@@ -2872,7 +2870,6 @@ function buildDiagnoseServiceEvidence(input: {
     observedAt: input.observedAt,
     routeHealth: routeHealthEvidenceFromCheck(input.httpCheck),
     representativeTraffic: representativeTrafficEvidenceFromDiagnosis({
-      recentDeployment: input.recentDeployment,
       trafficCheck: input.trafficCheck,
     }),
     deployLog: deployLogEvidenceFromRecentDeployment(input.recentDeployment),
@@ -3698,7 +3695,7 @@ function buildSynthesizedServiceDiagnosis(input: {
     };
   }
 
-  const trafficHealthMismatch = buildTrafficHealthMismatchDiagnosis(input);
+  const trafficHealthMismatch = buildTrafficHealthMismatchDiagnosis(input.warnings);
   if (trafficHealthMismatch) {
     return trafficHealthMismatch;
   }
@@ -3706,12 +3703,10 @@ function buildSynthesizedServiceDiagnosis(input: {
   return null;
 }
 
-function buildTrafficHealthMismatchDiagnosis(input: {
-  httpCheck: Record<string, unknown>;
-  recentDeployment: Record<string, unknown>;
-  warnings: DiagnosticWarning[];
-}): SynthesizedServiceDiagnosis | null {
-  const liveWarning = input.warnings[0];
+function buildTrafficHealthMismatchDiagnosis(
+  warnings: DiagnosticWarning[],
+): SynthesizedServiceDiagnosis | null {
+  const liveWarning = warnings[0];
   if (liveWarning) {
     return {
       code: 'TRAFFIC_HEALTH_MISMATCH',
@@ -3720,30 +3715,6 @@ function buildTrafficHealthMismatchDiagnosis(input: {
       evidence: {
         ...liveWarning.evidence,
         source: 'live_probe',
-      },
-    };
-  }
-
-  const latestDeployment = asRecord(input.recentDeployment['latest']);
-  const representativeTraffic = asRecord(latestDeployment?.['representativeTraffic']);
-  if (
-    input.httpCheck['reachable'] === true &&
-    representativeTraffic?.['status'] === 'failed' &&
-    representativeTraffic['severity'] === 'fail'
-  ) {
-    return {
-      code: 'TRAFFIC_HEALTH_MISMATCH',
-      confidence: 'medium',
-      summary:
-        'Recent deploy status was recorded as successful, but the representative traffic probe failed.',
-      evidence: {
-        source: 'recent_deployment_representative_traffic',
-        deploy_id: latestDeployment?.['id'] ?? null,
-        deploy_status: latestDeployment?.['status'] ?? null,
-        effective_status: latestDeployment?.['effectiveStatus'] ?? null,
-        path: representativeTraffic['path'] ?? null,
-        status_code: representativeTraffic['status_code'] ?? null,
-        message: representativeTraffic['message'] ?? null,
       },
     };
   }

@@ -167,6 +167,16 @@ export class ServiceHealthMonitor {
         return { healthy: false, error: restartLoopError(info.State.ExitCode) };
       }
 
+      if (service.runtime_role === 'job') {
+        if (info.State.Running || info.State.ExitCode === 0) {
+          return { healthy: true };
+        }
+        return {
+          healthy: false,
+          error: `One-shot job exited with code ${String(info.State.ExitCode)}`,
+        };
+      }
+
       if (!info.State.Running) {
         return { healthy: false, error: 'Container is not running' };
       }
@@ -341,7 +351,10 @@ export class ServiceHealthMonitor {
 
   private isMonitorableContainerService(service: ServiceRow): boolean {
     return (
-      service.container_id != null && service.archived_at == null && service.kind !== 'compose'
+      service.container_id != null &&
+      service.archived_at == null &&
+      service.kind !== 'compose' &&
+      service.runtime_role !== 'job'
     );
   }
 
