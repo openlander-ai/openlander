@@ -131,7 +131,7 @@
     "release-it": "^20.2.1",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.64.0",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.0.18"
   },
   "keywords": [
