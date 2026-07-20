@@ -1155,6 +1155,9 @@ traffic child can be resolved, the action returns the child status summary and m
 skipped instead of reporting the containerless parent as `CONTAINER_NOT_RUNNING`; diagnose a child
 `service_id` directly after selecting it from `get_topology`.
 
+Environment dependency checks, including HTTP and HTTPS endpoints, run from the diagnosed service
+container so Project-network DNS names are evaluated from the same network as the application.
+
 High-confidence deterministic findings add `diagnosis: { code, summary,
 confidence, evidence }` and, when a safe next operation exists, top-level
 `suggested_call`. Current codes include `PORT_MISMATCH`,
