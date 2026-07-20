@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8-rc.3] - 2026-07-20
+
+### Fixed
+
+- Run HTTP and HTTPS dependency probes from the diagnosed service network so
+  Compose DNS names resolve correctly, while keeping HTTP response failures
+  distinct from network-unreachable errors.
+
 ## [0.2.8-rc.2] - 2026-07-20
 
 ### Fixed
