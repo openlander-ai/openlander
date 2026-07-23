@@ -1148,6 +1148,11 @@ Docker health or a known internal TCP port, and one-shot jobs use container exit
 Resource and job responses return `roleCheck` and intentionally omit application-only `httpCheck`
 and `route` fields.
 
+`recentDeployment` is explicitly marked with `scope: "deployment_history"`. Its persisted
+representative-traffic result describes the deploy-time observation only. Current diagnosis and
+the normalized `evidence.representativeTraffic` field use live probes, so an old timeout or HTTP
+failure remains available for history without overriding a healthy live result.
+
 When the supplied `service_id` is a Compose parent, OpenLander diagnoses the persisted
 `traffic_service` child and returns the Project's `aggregate_status`. The returned `service` is the
 actual child used for live container, log, HTTP, route, and dependency checks. If no representative

@@ -25,6 +25,7 @@ function createService(partial: Partial<ServiceRow> = {}): ServiceRow {
     container_id: partial.container_id ?? 'svc-1-container',
     container_name: partial.container_name ?? 'ol-svc-shared-pg',
     kind: partial.kind ?? 'postgres',
+    runtime_role: partial.runtime_role ?? 'resource',
     port: partial.port ?? 5432,
     env_vars: partial.env_vars ?? null,
     credentials: partial.credentials ?? null,
@@ -128,7 +129,7 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
     expect(recordMetricSample).toHaveBeenCalledTimes(1);
   });
 
-  it('samples compose children and managed services but skips compose parents and archived rows', async () => {
+  it('samples long-running compose children and managed services but skips parents, jobs, and archived rows', async () => {
     const composeParent = createService({
       id: 'compose-parent',
       kind: 'compose',
@@ -138,6 +139,13 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
       id: 'compose-child',
       kind: 'compose-child',
       container_id: 'compose-child-container',
+    });
+    const composeJob = createService({
+      id: 'compose-job',
+      kind: 'compose-child',
+      runtime_role: 'job',
+      status: 'stopped',
+      container_id: 'compose-job-container',
     });
     const redis = createService({
       id: 'redis',
@@ -150,7 +158,7 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
       container_id: 'archived-container',
       archived_at: '2026-01-02T00:00:00.000Z',
     });
-    const db = createMockDb([composeParent, composeChild, redis, archived]);
+    const db = createMockDb([composeParent, composeChild, composeJob, redis, archived]);
     const docker = createMockDocker(true);
     const events = createMockEvents();
 
@@ -168,7 +176,44 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
     expect(recordLightweightMetricSample).toHaveBeenCalledWith('compose-child');
     expect(recordLightweightMetricSample).toHaveBeenCalledWith('redis');
     expect(recordLightweightMetricSample).not.toHaveBeenCalledWith('compose-parent');
+    expect(recordLightweightMetricSample).not.toHaveBeenCalledWith('compose-job');
     expect(recordLightweightMetricSample).not.toHaveBeenCalledWith('archived');
+    expect(docker.inspectContainer).not.toHaveBeenCalledWith('compose-job-container');
+    expect(db.createRuntimeIncident).not.toHaveBeenCalled();
+  });
+
+  it('treats an exited-zero one-shot job as healthy when checked directly', async () => {
+    const service = createService({
+      id: 'compose-job',
+      kind: 'compose-child',
+      runtime_role: 'job',
+      status: 'stopped',
+    });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(false, { exitCode: 0 });
+    const monitor = new ServiceHealthMonitor(docker, db, createMockEvents());
+
+    await expect(monitor.checkService(service)).resolves.toEqual({ healthy: true });
+  });
+
+  it('reports a non-zero one-shot job exit without creating a passive service-down incident', async () => {
+    const service = createService({
+      id: 'compose-job',
+      kind: 'compose-child',
+      runtime_role: 'job',
+      status: 'stopped',
+    });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(false, { exitCode: 17 });
+    const monitor = new ServiceHealthMonitor(docker, db, createMockEvents());
+
+    await expect(monitor.checkService(service)).resolves.toEqual({
+      healthy: false,
+      error: 'One-shot job exited with code 17',
+    });
+    await monitor.checkAllServices();
+
+    expect(db.createRuntimeIncident).not.toHaveBeenCalled();
   });
 
   it('does not crash the health loop when recordMetricSample throws', async () => {
