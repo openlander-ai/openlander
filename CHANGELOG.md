@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.10-rc.1] - 2026-07-24
+
+### Fixed
+
+- Treat successful one-shot Compose jobs as completed in passive health
+  monitoring and resolve historical `service_down` false positives for jobs.
+- Keep deployment-time representative traffic failures available as history
+  without allowing them to override healthy live diagnostics.
+
 ## [0.2.9] - 2026-07-20
 
 ### Fixed
