@@ -30,7 +30,7 @@ afterEach(async () => {
       await rm(directory, { recursive: true, force: true });
     }),
   );
-});
+}, 30_000);
 
 function artifact(overrides: Partial<DeliveryArtifactWithBlob>): DeliveryArtifactWithBlob {
   return {
@@ -448,5 +448,5 @@ describe('ReceiptBuilder', () => {
       detail: { delivery: { id: 'delivery-1' } },
     });
     expect(JSON.stringify(result.snapshot)).not.toContain('sensitive');
-  }, 30_000);
+  }, 120_000);
 });

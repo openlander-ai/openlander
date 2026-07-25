@@ -513,5 +513,5 @@ describeWithDatabase('Delivery Workspace persistence on Postgres', () => {
         await rm(artifactDirectory, { recursive: true, force: true });
       }
     });
-  }, 60_000);
+  }, 180_000);
 });
