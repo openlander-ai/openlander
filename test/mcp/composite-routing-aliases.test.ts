@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
+import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -38,6 +39,7 @@ const allToolDefs: ToolDef[] = [
   ...gitToolDefs,
   ...monitoringToolDefs,
   ...debugToolDefs,
+  ...deliveryToolDefs,
 ];
 
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
@@ -246,6 +248,24 @@ describe('openlander_service direct deployable runtime actions', () => {
       expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
       expect(result).toHaveProperty('action', action);
     }
+  });
+
+  it('routes Receipt finalization aliases to the human Delivery UI', async () => {
+    const result = (await tool.execute(
+      { action: 'finalize_delivery_receipt', params: { delivery_id: 'delivery-1' } },
+      mockContext,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'HUMAN_UI_ONLY',
+      web_ui: { surface: 'delivery_receipt', requires_human: true },
+      safe_alternatives: [
+        {
+          tool: 'openlander_project',
+          action: 'generate_delivery_receipt_preview',
+        },
+      ],
+    });
   });
 });
 

@@ -14,9 +14,12 @@ describe('Project detail v0.1 tabs', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
-  it('exposes Resources, AI, and Settings tabs', () => {
-    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
+  it('exposes Resources, Deliveries, AI, and Settings tabs', () => {
+    expect(projectViewSource).toContain(
+      "type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings'",
+    );
     expect(projectViewSource).toContain("id: 'services'");
+    expect(projectViewSource).toContain("id: 'deliveries'");
     expect(projectViewSource).toContain("id: 'ai'");
     expect(projectViewSource).toContain("id: 'settings'");
     expect(projectViewSource).not.toMatch(/id:\s*'mcp'/);
@@ -24,9 +27,10 @@ describe('Project detail v0.1 tabs', () => {
   });
 
   it('falls through legacy ?tab=mcp to services without rendering an MCP panel', () => {
-    expect(projectViewSource).toContain(
-      "tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services'",
-    );
+    expect(projectViewSource).toContain("tabParam === 'settings'");
+    expect(projectViewSource).toContain("tabParam === 'deliveries'");
+    expect(projectViewSource).toContain("tabParam === 'ai'");
+    expect(projectViewSource).toContain(": 'services';");
     expect(projectViewSource).not.toContain('projectpanel-mcp');
     expect(projectViewSource).not.toContain('<ProjectMcpTab');
   });
@@ -70,8 +74,10 @@ describe('Project detail v0.1 tabs', () => {
     // Per docs/i18n-policy.md, tab labels are Chrome — same English
     // string in both locales (no Korean translation).
     expect(enTabs).toContain("services: 'Resources'");
+    expect(enTabs).toContain("deliveries: 'Deliveries'");
     expect(enTabs).toContain("settings: 'Settings'");
     expect(koTabs).toContain("services: 'Resources'");
+    expect(koTabs).toContain("deliveries: 'Deliveries'");
     expect(koTabs).toContain("settings: 'Settings'");
   });
 });

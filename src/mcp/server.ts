@@ -25,6 +25,7 @@ import { gitToolDefs } from '../tools/defs/git.js';
 import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
+import { deliveryToolDefs } from '../tools/defs/delivery.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import { platformReadToolDefs } from '../tools/defs/platform-read.js';
@@ -48,6 +49,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployableServiceToolDefs,
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
+    ...deliveryToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -82,8 +84,8 @@ Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_sta
 All actions: action="help"
 
 ## openlander_project
-Projects and shared config. A Project organizes Applications, Compose stacks, and Database/Cache/Storage resources; env actions route to workload targets.
-Key actions: create_project, list_projects, set_global_secret, upload_secret_file, expose_public
+Projects, shared config, and Delivery Workspace metadata. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
+Key actions: create_project, list_projects, create_delivery, record_delivery_feedback, submit_delivery_work_item_drafts, record_delivery_gate_result, get_delivery_readiness, generate_delivery_receipt_preview
 All actions: action="help"
 
 ## openlander_service
@@ -127,6 +129,12 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Do not delete or recreate existing data volumes during migration or recovery.
 - For existing Docker/PaaS workloads, treat network and volume adoption as an operator-assisted migration flow. Inspect first, back up data, then use platform recovery/diagnostic tools or an explicit human-approved runbook.
 - Do not issue ad-hoc Docker network changes unless the user is explicitly performing migration or incident recovery.
+
+## Delivery Workspace
+- MCP can create and inspect Deliveries, attach evidence URLs, record raw feedback, submit proposed work-item drafts, record Gate results, link a successful Production deployment, inspect readiness, and generate a Receipt preview.
+- MCP does not upload local binary files. Upload artifacts through the authenticated multipart web/API surface first, then reference their Artifact IDs.
+- AI-created work items remain proposed until an administrator confirms them in the web UI.
+- Receipt finalization is human UI-only. Never claim a Delivery is delivered from a preview response.
 
 ## Human UI-only operations
 Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;

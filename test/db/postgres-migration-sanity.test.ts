@@ -265,6 +265,8 @@ describe('Postgres migration sanity gate', () => {
       '0010_git_credentials',
       '0011_service_runtime_role',
       '0012_resolve_one_shot_service_down_incidents',
+      '0013_delivery_workspace',
+      '0014_delivery_evidence_hardening',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -280,6 +282,8 @@ describe('Postgres migration sanity gate', () => {
       '0010_git_credentials.sql',
       '0011_service_runtime_role.sql',
       '0012_resolve_one_shot_service_down_incidents.sql',
+      '0013_delivery_workspace.sql',
+      '0014_delivery_evidence_hardening.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -287,6 +291,11 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CONSTRAINT "pat_tokens_scope_kind_check"');
     expect(sql).toContain('"service"."runtime_role" = \'job\'');
     expect(sql).toContain('"incident"."category" = \'service_down\'');
+    expect(sql).toContain('CREATE TABLE "deliveries"');
+    expect(sql).toContain('CREATE TABLE "delivery_receipts"');
+    expect(sql).toContain('CREATE TABLE "delivery_idempotency_records"');
+    expect(sql).toContain('"evidence_version" integer DEFAULT 0 NOT NULL');
+    expect(sql).toContain('CONSTRAINT "deliveries_status_check"');
     expect(sql).toContain('CONSTRAINT "pat_tokens_scope_project_check"');
     expect(sql).toContain('CREATE INDEX "idx_pat_tokens_scope_service"');
     expect(sql).toContain('CREATE TABLE "ai_ops_pending_inputs"');
@@ -421,6 +430,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 14 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -441,7 +457,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 14 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 16 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

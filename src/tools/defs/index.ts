@@ -10,5 +10,6 @@ export { gitToolDefs } from './git.js';
 export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
 export { projectOpsToolDefs } from './project-ops.js';
+export { deliveryToolDefs } from './delivery.js';
 export { serviceToolDefs } from './service.js';
 export { volumeToolDefs } from './volume.js';

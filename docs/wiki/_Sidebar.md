@@ -9,6 +9,7 @@
 - [[Web Dashboard]]
 - [[Services]]
 - [[Domains & Public Access]]
+- [[Delivery Workspace]]
 
 ## Integration
 

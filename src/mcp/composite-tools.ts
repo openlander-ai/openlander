@@ -67,7 +67,9 @@ export const DEPLOY_ACTIONS = [
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
  * - Temporary public share URLs
- * Total: 17 tools
+ * Includes Delivery Workspace metadata, feedback, Gate, deployment-link,
+ * readiness, and Receipt-preview actions. Binary upload and finalization stay
+ * on the authenticated web/API surfaces.
  */
 export const PROJECT_ACTIONS = [
   'create_project',
@@ -87,6 +89,17 @@ export const PROJECT_ACTIONS = [
   'remove_secret_file',
   'expose_public',
   'unexpose_public',
+  'create_delivery',
+  'list_deliveries',
+  'get_delivery',
+  'update_delivery_draft',
+  'attach_delivery_url',
+  'record_delivery_feedback',
+  'submit_delivery_work_item_drafts',
+  'record_delivery_gate_result',
+  'link_delivery_deploy',
+  'get_delivery_readiness',
+  'generate_delivery_receipt_preview',
 ] as const;
 
 /**
@@ -219,7 +232,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 17 tools
+ * - PROJECT_ACTIONS: 28 tools
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 13 tools
@@ -359,6 +372,29 @@ function invalidParamsResponse(
 }
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
+  if (action === 'finalize_delivery' || action === 'finalize_delivery_receipt') {
+    return {
+      error: 'HUMAN_UI_ONLY',
+      action,
+      blocked_action: action,
+      composite: toolName,
+      web_ui: {
+        surface: 'delivery_receipt',
+        requires_human: true,
+      },
+      safe_alternatives: [
+        {
+          tool: 'openlander_project',
+          action: 'generate_delivery_receipt_preview',
+          effect: 'readiness_validation_and_preview',
+        },
+      ],
+      _agent_guidance: {
+        message:
+          'Receipt finalization is intentionally not exposed to MCP. Generate a preview, then ask an administrator to review and finalize it in the Delivery Receipt page.',
+      },
+    };
+  }
   const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
     ? ' For whole Projects, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one Application/worker, use archive_service or unarchive_service with service_id. Archive is reversible cleanup; use list_archived_services to inspect archived Applications.'
     : '';

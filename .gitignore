@@ -37,6 +37,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+output/
 
 # Web frontend build output
 /web/dist/

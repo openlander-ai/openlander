@@ -166,7 +166,9 @@ describe('AI Ops briefing web surface', () => {
   });
 
   it('adds Project-level and dashboard AI Ops briefing discovery surfaces', () => {
-    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
+    expect(projectViewSource).toContain(
+      "type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings'",
+    );
     expect(projectViewSource).toContain("id: 'ai'");
     expect(projectViewSource).toContain('<ProjectAiOpsTab');
     expect(projectViewSource).toContain("setSettingsInitialSection('ai')");

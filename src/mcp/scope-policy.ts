@@ -1,7 +1,13 @@
 import type { AppContext } from '../app.js';
 import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
 import type { ProjectRow, ServiceRow } from '../db/types.js';
-import { ProjectNotFoundError, ScopeViolationError, ServiceNotFoundError } from '../errors.js';
+import {
+  ArtifactNotFoundError,
+  DeliveryNotFoundError,
+  ProjectNotFoundError,
+  ScopeViolationError,
+  ServiceNotFoundError,
+} from '../errors.js';
 import type { RequestIdentity } from '../types/identity.js';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 
@@ -118,8 +124,28 @@ async function targetFromDeployId(
   deployId: string,
 ): Promise<ScopeTarget | null> {
   const deploy = await appCtx.db.getDeployLog(deployId);
-  if (!deploy) return null;
+  if (!deploy) throw new ServiceNotFoundError(deployId);
   return targetFromService(appCtx, deploy.service_id, 'deploy_id');
+}
+
+async function targetFromDeliveryId(
+  appCtx: AppContext,
+  deliveryId: string,
+  resolvedFrom = 'delivery_id',
+): Promise<ScopeTarget> {
+  const delivery = await appCtx.db.getDelivery(deliveryId);
+  if (!delivery) throw new DeliveryNotFoundError(deliveryId);
+  return { projectId: delivery.project_id, serviceId: null, resolvedFrom };
+}
+
+async function targetFromArtifactId(
+  appCtx: AppContext,
+  artifactId: string,
+  resolvedFrom = 'artifact_id',
+): Promise<ScopeTarget> {
+  const projectId = await appCtx.db.getDeliveryProjectIdByArtifactId(artifactId);
+  if (!projectId) throw new ArtifactNotFoundError(artifactId);
+  return { projectId, serviceId: null, resolvedFrom };
 }
 
 async function targetFromBriefingId(
@@ -252,6 +278,17 @@ async function resolveMcpScopeTargets(
   const deployId = readString(args, 'deploy_id', 'job_id');
   if (deployId) push(await targetFromDeployId(appCtx, deployId));
 
+  const deliveryId = readString(args, 'delivery_id');
+  if (deliveryId) push(await targetFromDeliveryId(appCtx, deliveryId));
+
+  const predecessorDeliveryId = readString(args, 'predecessor_delivery_id');
+  if (predecessorDeliveryId) {
+    push(await targetFromDeliveryId(appCtx, predecessorDeliveryId, 'predecessor_delivery_id'));
+  }
+
+  const artifactId = readString(args, 'artifact_id', 'report_artifact_id');
+  if (artifactId) push(await targetFromArtifactId(appCtx, artifactId));
+
   const briefingId = readString(args, 'briefing_id');
   if (briefingId) push(await targetFromBriefingId(appCtx, briefingId, identity));
 
@@ -328,7 +365,12 @@ export async function maybeRejectMcpScope(
   try {
     targets = await resolveMcpScopeTargets(context.appCtx, args, identity);
   } catch (err) {
-    if (err instanceof ProjectNotFoundError || err instanceof ServiceNotFoundError) {
+    if (
+      err instanceof ProjectNotFoundError ||
+      err instanceof ServiceNotFoundError ||
+      err instanceof DeliveryNotFoundError ||
+      err instanceof ArtifactNotFoundError
+    ) {
       return buildScopeViolationResponse(identity, null, 'target_not_found_or_out_of_scope');
     }
     throw err;

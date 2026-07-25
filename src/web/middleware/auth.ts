@@ -54,7 +54,7 @@ export function createAuthMiddleware(authService: AuthService) {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = parseCookie(cookieHeader, 'ol_session');
     let authed = false;
-    let authKind: 'session' | 'api_token' | null = null;
+    let authKind: 'session' | 'api_token' | 'project_pat' | null = null;
     if (sessionToken && (await authService.validateSession(sessionToken))) {
       authed = true;
       authKind = 'session';
@@ -65,6 +65,24 @@ export function createAuthMiddleware(authService: AuthService) {
         if (await authService.validateApiToken(token)) {
           authed = true;
           authKind = 'api_token';
+        } else if (token.startsWith('olp_')) {
+          const deliveryCiMatch =
+            method === 'POST'
+              ? /^\/api\/projects\/([^/]+)\/deliveries\/[^/]+\/(?:artifacts|gates\/[^/]+\/result)$/.exec(
+                  path,
+                )
+              : null;
+          if (deliveryCiMatch?.[1]) {
+            const identity = await authService.validateMcpBearerToken(token);
+            if (
+              identity?.scopeKind === 'project' &&
+              identity.scopeProjectId === decodeURIComponent(deliveryCiMatch[1])
+            ) {
+              authed = true;
+              authKind = 'project_pat';
+              c.set('deliveryPatIdentity', identity);
+            }
+          }
         }
       }
     }
