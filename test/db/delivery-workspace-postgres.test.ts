@@ -5,11 +5,13 @@ import { Readable } from 'node:stream';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { PDFDocument } from 'pdf-lib';
 import postgres from 'postgres';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Database } from '../../src/db/index.js';
 import { createDrizzleDatabase } from '../../src/db/drizzle.js';
 import { ArtifactStore } from '../../src/delivery/artifact-store.js';
 import { DeliveryService } from '../../src/delivery/delivery-service.js';
+import { ReceiptBuilder } from '../../src/delivery/receipt-builder.js';
+import type { ReceiptSnapshot } from '../../src/delivery/types.js';
 
 const databaseUrl = process.env.OPENLANDER_DATABASE_URL ?? process.env.DATABASE_URL ?? '';
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -362,11 +364,35 @@ describeWithDatabase('Delivery Workspace persistence on Postgres', () => {
     });
   });
 
-  it('dogfoods a synthetic storyboard flow through immutable Receipt download', async () => {
+  it('dogfoods a synthetic storyboard state flow through immutable Receipt download', async () => {
     await withIsolatedPostgresDatabase('dogfood', async (url) => {
       const artifactDirectory = await mkdtemp(join(tmpdir(), 'openlander-delivery-dogfood-'));
       const db = await Database.connect(url);
       const service = new DeliveryService(db, new ArtifactStore(artifactDirectory));
+      // Real CJK rendering, companion-PDF merging, and page limits are covered by
+      // delivery-workspace.test.ts. Keep this Postgres test focused on persisted workflow
+      // semantics so a low-CPU CI runner does not render the same Receipt twice.
+      const receiptBuildSpy = vi
+        .spyOn(ReceiptBuilder.prototype, 'build')
+        .mockImplementation(async (project, detail, readiness, generatedAt = NOW) => {
+          const document = await PDFDocument.create();
+          document.addPage([595, 842]);
+          return {
+            bytes: await document.save(),
+            pageCount: 1,
+            snapshot: {
+              schema_version: 1,
+              generated_at: generatedAt,
+              project: {
+                id: project.id,
+                name: project.name,
+                display_name: project.display_name || project.name,
+              },
+              detail: detail as unknown as ReceiptSnapshot['detail'],
+              readiness,
+            },
+          };
+        });
       try {
         const project = await db.createProject({
           id: 'project-demo',
@@ -496,7 +522,7 @@ describeWithDatabase('Delivery Workspace persistence on Postgres', () => {
 
         await expect(service.getReadiness(delivery.id)).resolves.toMatchObject({ ready: true });
         const preview = await service.generateReceiptPreview(delivery.id);
-        expect(preview.pageCount).toBeGreaterThan(1);
+        expect(preview.pageCount).toBe(1);
         const receipt = await service.finalizeReceipt(delivery.id, 'admin');
         const download = await service.getReceiptDownload(delivery.id);
         const receiptPdf = await PDFDocument.load(
@@ -509,9 +535,10 @@ describeWithDatabase('Delivery Workspace persistence on Postgres', () => {
           status: 'delivered',
         });
       } finally {
+        receiptBuildSpy.mockRestore();
         await db.close();
         await rm(artifactDirectory, { recursive: true, force: true });
       }
     });
-  }, 180_000);
+  }, 60_000);
 });
