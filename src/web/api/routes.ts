@@ -14,6 +14,7 @@ import { createDeployableServiceRoutes } from './deployable-service-routes.js';
 import { createGitProvidersRoutes } from './git-providers-routes.js';
 import { createGitCredentialRoutes } from './git-credential-routes.js';
 import { createDeliveryRoutes } from './delivery-routes.js';
+import { createEngagementRoutes } from './engagement-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
 import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectGroupRoutes } from './project-group-routes.js';
@@ -559,6 +560,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createGitProvidersRoutes(ctx));
   api.route('/', createGitCredentialRoutes(ctx));
   api.route('/', createDeliveryRoutes(ctx));
+  api.route('/', createEngagementRoutes(ctx));
 
   return api;
 }

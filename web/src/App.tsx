@@ -52,6 +52,12 @@ const DeploymentDetail = lazy(() =>
 const DeliveryDetail = lazy(() =>
   import('@/pages/DeliveryDetail').then((m) => ({ default: m.DeliveryDetailPage })),
 );
+const Engagements = lazy(() =>
+  import('@/pages/Engagements').then((m) => ({ default: m.Engagements })),
+);
+const EngagementDetail = lazy(() =>
+  import('@/pages/EngagementDetail').then((m) => ({ default: m.EngagementDetailPage })),
+);
 
 function RouteSuspense({ children }: { children: ReactNode }) {
   return (
@@ -238,6 +244,22 @@ function App() {
                       sits at /mcp (no content-negotiation). */}
                   <Route path="/mcp-server" element={<MCPServer />} />
                   <Route path="/monitoring" element={<MonitoringPage />} />
+                  <Route
+                    path="/engagements"
+                    element={
+                      <RouteSuspense>
+                        <Engagements />
+                      </RouteSuspense>
+                    }
+                  />
+                  <Route
+                    path="/engagements/:engagementId"
+                    element={
+                      <RouteSuspense>
+                        <EngagementDetail />
+                      </RouteSuspense>
+                    }
+                  />
                   {/* /logs retired in Phase 3a (ralplan-monitoring-logs).
                       Stale bookmarks land on /activity, where the new Kind
                       filter chip surfaces deploy/runtime events. */}

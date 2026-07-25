@@ -27,6 +27,7 @@ import {
   Code2,
   BrainCircuit,
   KeyRound,
+  BriefcaseBusiness,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,7 @@ import { AccountPopover } from '@/components/account/AccountPopover';
 interface NavItem {
   id: string;
   label: string;
+  labelKey?: string;
   icon: LucideIcon;
   to: string;
   /** Predicate: does the current pathname (+search) count as "active" for this item? */
@@ -87,6 +89,14 @@ const SECTIONS: NavSection[] = [
         to: '/projects',
         matches: startsWith('/projects'),
         // badge filled in per-render from useProjects() — see component body
+      },
+      {
+        id: 'engagements',
+        label: 'Engagements',
+        labelKey: 'engagements.sidebar',
+        icon: BriefcaseBusiness,
+        to: '/engagements',
+        matches: startsWith('/engagements'),
       },
       {
         id: 'activity',
@@ -208,6 +218,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             <ul className="flex flex-col gap-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const displayLabel = item.labelKey ? t(item.labelKey) : item.label;
                 const active = isActive(item);
                 const displayBadge = item.id === 'projects' ? projectsBadge : (item.badge ?? null);
                 const displayDot = item.id === 'your-agent' ? agentDot : (item.badgeDot ?? null);
@@ -216,7 +227,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                     <button
                       type="button"
                       onClick={() => navigate(item.to)}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? displayLabel : undefined}
                       className={cn(
                         'group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors',
                         active
@@ -231,7 +242,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                         )}
                       />
                       {!collapsed && (
-                        <span className="flex-1 truncate text-left">{item.label}</span>
+                        <span className="flex-1 truncate text-left">{displayLabel}</span>
                       )}
                       {!collapsed && displayDot && (
                         <span

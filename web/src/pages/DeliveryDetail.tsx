@@ -52,6 +52,7 @@ import {
 } from '@/lib/api/deliveries';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { EngagementChip } from '@/components/engagement/EngagementChip';
 
 function SectionCard({
   title,
@@ -217,6 +218,7 @@ export function DeliveryDetailPage() {
           <span className="flex items-center gap-2">
             <FileCheck2 className="h-5 w-5 text-[color:var(--ol-primary)]" />
             <span>{detail.delivery.title}</span>
+            <EngagementChip projectId={projectId} />
             <span
               className={cn(
                 'rounded-full border px-2 py-0.5 text-[10px] font-medium',

@@ -13,6 +13,7 @@ import { infraToolDefs } from './defs/infra.js';
 import { monitoringToolDefs } from './defs/monitoring.js';
 import { projectOpsToolDefs } from './defs/project-ops.js';
 import { deliveryToolDefs } from './defs/delivery.js';
+import { engagementToolDefs } from './defs/engagement.js';
 import { serviceToolDefs } from './defs/service.js';
 
 export { toAiSdkTools } from './adapters/ai-sdk.js';
@@ -29,6 +30,7 @@ export {
   monitoringToolDefs,
   projectOpsToolDefs,
   deliveryToolDefs,
+  engagementToolDefs,
   serviceToolDefs,
 } from './defs/index.js';
 export type { McpResultTransform, ToolContext, ToolDef, ToolTarget } from './defs/types.js';
@@ -40,6 +42,7 @@ const agentToolDefs: ToolDef[] = [
   ...composeToolDefs,
   ...projectOpsToolDefs,
   ...deliveryToolDefs,
+  ...engagementToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...infraToolDefs,

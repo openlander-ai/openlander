@@ -1228,3 +1228,66 @@ export class DeliveryIdempotencyConflictError extends OpenLanderError {
     this.name = 'DeliveryIdempotencyConflictError';
   }
 }
+
+// --- Engagement portfolio errors ---
+
+export class EngagementNotFoundError extends OpenLanderError {
+  constructor(engagementId: string) {
+    super(`Engagement "${engagementId}" was not found.`, 'ENGAGEMENT_NOT_FOUND', 404, {
+      engagementId,
+    });
+    this.name = 'EngagementNotFoundError';
+  }
+}
+
+export class EngagementStateError extends OpenLanderError {
+  constructor(engagementId: string, message: string, currentStatus?: string) {
+    super(message, 'ENGAGEMENT_STATE_INVALID', 409, {
+      engagementId,
+      ...(currentStatus ? { currentStatus } : {}),
+    });
+    this.name = 'EngagementStateError';
+  }
+}
+
+export class EngagementProjectConflictError extends OpenLanderError {
+  constructor(projectId: string, engagementId: string) {
+    super(
+      `Project "${projectId}" already belongs to another Engagement.`,
+      'PROJECT_ALREADY_ASSIGNED_TO_ENGAGEMENT',
+      409,
+      { projectId, engagementId },
+    );
+    this.name = 'EngagementProjectConflictError';
+  }
+}
+
+export class EngagementProjectNotLinkedError extends OpenLanderError {
+  constructor(engagementId: string, projectId: string) {
+    super(
+      `Project "${projectId}" is not linked to Engagement "${engagementId}".`,
+      'ENGAGEMENT_PROJECT_NOT_LINKED',
+      404,
+      { engagementId, projectId },
+    );
+    this.name = 'EngagementProjectNotLinkedError';
+  }
+}
+
+export class EngagementMutationWebSessionRequiredError extends OpenLanderError {
+  constructor() {
+    super(
+      'Engagement mutations require an authenticated administrator web session.',
+      'ENGAGEMENT_WEB_SESSION_REQUIRED',
+      403,
+    );
+    this.name = 'EngagementMutationWebSessionRequiredError';
+  }
+}
+
+export class EngagementValidationError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'ENGAGEMENT_VALIDATION_FAILED', 400, details);
+    this.name = 'EngagementValidationError';
+  }
+}

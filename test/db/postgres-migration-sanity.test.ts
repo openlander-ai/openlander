@@ -267,6 +267,7 @@ describe('Postgres migration sanity gate', () => {
       '0012_resolve_one_shot_service_down_incidents',
       '0013_delivery_workspace',
       '0014_delivery_evidence_hardening',
+      '0015_engagement_portfolio',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -284,6 +285,7 @@ describe('Postgres migration sanity gate', () => {
       '0012_resolve_one_shot_service_down_incidents.sql',
       '0013_delivery_workspace.sql',
       '0014_delivery_evidence_hardening.sql',
+      '0015_engagement_portfolio.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -294,6 +296,10 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "deliveries"');
     expect(sql).toContain('CREATE TABLE "delivery_receipts"');
     expect(sql).toContain('CREATE TABLE "delivery_idempotency_records"');
+    expect(sql).toContain('CREATE TABLE "engagements"');
+    expect(sql).toContain('CREATE TABLE "engagement_projects"');
+    expect(sql).toContain('"project_id" text PRIMARY KEY NOT NULL');
+    expect(sql).toContain('CONSTRAINT "engagements_status_check"');
     expect(sql).toContain('"evidence_version" integer DEFAULT 0 NOT NULL');
     expect(sql).toContain('CONSTRAINT "deliveries_status_check"');
     expect(sql).toContain('CONSTRAINT "pat_tokens_scope_project_check"');
@@ -437,6 +443,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 15 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -457,7 +470,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 16 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 17 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

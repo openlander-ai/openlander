@@ -12,3 +12,4 @@ export * from './ai-providers.js';
 export * from './data-access.js';
 export * from './git-credentials.js';
 export * from './deliveries.js';
+export * from './engagements.js';

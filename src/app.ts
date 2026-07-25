@@ -56,6 +56,7 @@ import type { OpsAgent } from './_ai-ops/ops-agent.js';
 import { GitCredentialManager, setActiveGitCredentialManager } from './git-credentials/manager.js';
 import { ArtifactStore } from './delivery/artifact-store.js';
 import { DeliveryService } from './delivery/delivery-service.js';
+import { EngagementService } from './engagement/engagement-service.js';
 
 const log = createModuleLogger('app');
 
@@ -205,6 +206,7 @@ export interface AppContext {
   planEngine: PlanEngine;
   artifactStore: ArtifactStore;
   deliveryService: DeliveryService;
+  engagementService: EngagementService;
   // v1.0: Recovery coordinator
   coordinator: RecoveryCoordinator;
   rollbackWatcher: RollbackWatcher;
@@ -306,6 +308,7 @@ export async function createAppContext(
   const db = await Database.connect(databaseUrl);
   const artifactStore = new ArtifactStore();
   const deliveryService = new DeliveryService(db, artifactStore);
+  const engagementService = new EngagementService(db);
   const gitCredentials = new GitCredentialManager(db);
   setActiveGitCredentialManager(gitCredentials);
   await migrateDefaultResourceProfile(db);
@@ -547,6 +550,7 @@ export async function createAppContext(
     planEngine,
     artifactStore,
     deliveryService,
+    engagementService,
     coordinator,
     rollbackWatcher,
     llmVerified: false,

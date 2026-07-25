@@ -57,6 +57,7 @@ npx playwright test --project=quality-gate \
   e2e/quality-gate/auth.spec.ts \
   e2e/quality-gate/mcp.spec.ts \
   e2e/quality-gate/deploy-git.spec.ts \
+  e2e/quality-gate/delivery-workspace-live.spec.ts \
   e2e/quality-gate/lifecycle.spec.ts \
   e2e/quality-gate/managed-services.spec.ts
 

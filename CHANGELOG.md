@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add an internal FDE Engagement Portfolio above Projects with one-Engagement-
+  per-Project membership, batched runtime and Delivery blocker rollups,
+  administrator-session-only mutation, and archive semantics that never alter
+  linked Project, Service, Delivery, or Receipt records.
+- Add `list_engagements` and `get_engagement` as organization-scoped,
+  read-only `openlander_project` MCP actions, with Project/service token
+  isolation and compact cross-Project guidance.
+- Add Engagement list/detail UI, Project linking, English/Korean copy, and
+  optional Engagement context chips on Project and Delivery pages.
+- Add an ephemeral RC quality gate that links a real Production deploy to
+  approved artifacts, resolved feedback, passed Gates, and an immutable
+  admin-finalized Receipt whose downloaded PDF hash is verified.
 - Add the Delivery Workspace Beta for project-scoped review artifacts, preserved
   customer feedback, human-confirmed decisions and approvals, external QA/Data
   Gate results, Production deployment evidence, and immutable Receipt PDFs.

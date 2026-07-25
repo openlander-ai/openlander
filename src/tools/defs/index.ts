@@ -11,5 +11,6 @@ export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
 export { projectOpsToolDefs } from './project-ops.js';
 export { deliveryToolDefs } from './delivery.js';
+export { engagementToolDefs } from './engagement.js';
 export { serviceToolDefs } from './service.js';
 export { volumeToolDefs } from './volume.js';

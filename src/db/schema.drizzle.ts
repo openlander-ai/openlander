@@ -1200,6 +1200,54 @@ export const activityLog = pgTable(
 
 export type ActivityLogRow = typeof activityLog.$inferSelect;
 
+export const engagements = pgTable(
+  'engagements',
+  {
+    id: text('id').primaryKey(),
+    customer_name: text('customer_name').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary').notNull().default(''),
+    status: text('status', {
+      enum: ['active', 'on_hold', 'completed', 'archived'],
+    })
+      .notNull()
+      .default('active'),
+    created_by: text('created_by').notNull().default('admin'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'engagements_status_check',
+      sql`${table.status} IN ('active', 'on_hold', 'completed', 'archived')`,
+    ),
+    check('engagements_customer_name_check', sql`length(trim(${table.customer_name})) > 0`),
+    check('engagements_title_check', sql`length(trim(${table.title})) > 0`),
+    index('idx_engagements_status_updated').on(table.status, table.updated_at),
+  ],
+);
+
+export const engagementProjects = pgTable(
+  'engagement_projects',
+  {
+    project_id: text('project_id')
+      .primaryKey()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    engagement_id: text('engagement_id')
+      .notNull()
+      .references(() => engagements.id, { onDelete: 'cascade' }),
+    linked_by: text('linked_by').notNull().default('admin'),
+    linked_at: text('linked_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [index('idx_engagement_projects_engagement').on(table.engagement_id, table.linked_at)],
+);
+
 export const artifactBlobs = pgTable(
   'artifact_blobs',
   {
@@ -1658,6 +1706,8 @@ export type DeliveryGateRow = typeof deliveryGates.$inferSelect;
 export type DeliveryIdempotencyRecordRow = typeof deliveryIdempotencyRecords.$inferSelect;
 export type DeliveryDeployLinkRow = typeof deliveryDeployLinks.$inferSelect;
 export type DeliveryReceiptRow = typeof deliveryReceipts.$inferSelect;
+export type EngagementRow = typeof engagements.$inferSelect;
+export type EngagementProjectRow = typeof engagementProjects.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
 
 /**
@@ -1718,6 +1768,8 @@ export const drizzleSchema = {
   serviceMetrics,
   settings,
   activityLog,
+  engagements,
+  engagementProjects,
   artifactBlobs,
   projectDeliverySettings,
   deliveries,

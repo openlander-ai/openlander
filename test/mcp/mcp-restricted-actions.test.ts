@@ -10,6 +10,7 @@ import { isHumanUiOnlyAction } from '../../src/mcp/composite-tools.js';
 import { isGroupBMcpHoldTool } from '../../src/mcp/destructive-safety.js';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
 import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
+import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -39,6 +40,7 @@ const ALL_DEFS = [
   ...monitoringToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
+  ...engagementToolDefs,
   ...platformReadToolDefs,
   ...platformDebugToolDefs,
   ...platformActionToolDefs,
