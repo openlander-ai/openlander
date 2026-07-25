@@ -193,7 +193,7 @@ The legacy multi-tab `/settings` host (System / Security / Proxy / GitHub / MCP)
 ### Sidebar
 
 - **Search** (⌘K): open command palette to jump to projects / pages, plus quick-links for Web Server + Git Providers.
-- **Workspace**: Home, Your Agent, Projects, Activity, Deployments, Monitoring, Web Server.
+- **Workspace**: Home, Your Agent, Projects, Engagements, Activity, Monitoring, Web Server.
 - **Settings**: Git Providers.
 - **Account footer**: admin avatar with Change Password / Sign Out popover.
 

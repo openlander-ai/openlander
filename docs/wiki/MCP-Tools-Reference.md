@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **98 unique default operations** surfaced through those composites
+- **100 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -31,6 +31,7 @@ Agent routing rule of thumb:
 | "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
 | "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
 | "Capture this customer review delivery"          | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
+| "Show FDE portfolio blockers across Projects"    | `openlander_project.list_engagements` / `get_engagement`                                                    |
 | "Classify the feedback into review items"        | `openlander_project.submit_delivery_work_item_drafts`                                                       |
 | "Is the customer Receipt ready?"                 | `openlander_project.get_delivery_readiness`                                                                 |
 
@@ -116,7 +117,7 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                             |
 | ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 22           | Deploy plans, execution, previews, rollbacks, build logs, Git                       |
-| `openlander_project`         | 28           | Projects, Delivery Workspace, lifecycle, secrets, temporary share URLs              |
+| `openlander_project`         | 30           | Projects, Delivery Workspace, Engagement reads, lifecycle, secrets, share URLs      |
 | `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes      |
@@ -131,6 +132,7 @@ Composite catalog:
 | [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                              |
 | [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
 | [Delivery Workspace](#delivery-workspace)                | 11    | Review evidence, feedback, Gates, deploy links, Receipt preview |
+| [Engagement Portfolio](#engagement-portfolio)            | 2     | Internal cross-Project FDE portfolio reads                      |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                                 |
 | [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources               |
 | [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection                        |
@@ -478,6 +480,24 @@ an `Idempotency-Key` header. Final Receipt confirmation is administrator
 web-session only; `finalize_delivery*` MCP requests return `HUMAN_UI_ONLY`.
 Finalization also requires the evidence version to match the most recently
 generated Receipt preview.
+
+## Engagement Portfolio
+
+Engagement Portfolio adds two read-only actions to `openlander_project`.
+Engagements are internal FDE classification and observability records, not
+customer accounts. They group existing Projects without changing Project
+runtime, Delivery evidence, or finalized Receipt snapshots.
+
+| Action             | Required parameters | Purpose                                                    |
+| ------------------ | ------------------- | ---------------------------------------------------------- |
+| `list_engagements` | None                | List runtime health, Delivery status counts, and blockers  |
+| `get_engagement`   | `engagement_id`     | Read linked Project health and compact blocker identifiers |
+
+Both actions require an instance/organization-scoped MCP token. Project- and
+service-scoped tokens receive `SCOPE_VIOLATION` before any sibling Project data
+is read. Engagement creation, editing, Project linking, archive, and unarchive
+remain administrator web-session actions. Use existing Delivery actions to
+retrieve artifacts, feedback, Gate evidence, and Receipt metadata.
 
 ### `update_app` / `redeploy_app` / `restart_service`
 
@@ -1028,6 +1048,22 @@ turning inventory calls into large probe fanouts.
 ---
 
 ## Git & Repository
+
+### Repository Deploy Key credentials
+
+| Action                  | Required parameters | Purpose                                                     |
+| ----------------------- | ------------------- | ----------------------------------------------------------- |
+| `create_git_deploy_key` | `repo_url`          | Generate a read-only public Deploy Key for one repository   |
+| `list_git_credentials`  | None                | List sanitized credentials and Application usage            |
+| `verify_git_credential` | `credential_id`     | Verify read access to the credential's exact Git repository |
+| `remove_git_credential` | `credential_id`     | Remove an unused credential after human approval            |
+
+`create_git_deploy_key` never returns private key material. Add its returned
+public key in the repository settings with write access disabled, then call
+`verify_git_credential`. `remove_git_credential` refuses credentials that are
+still referenced and enters the MCP approval hold; poll its returned
+`poll_call` with `mcp_action_status` after the administrator approves or rejects
+the request.
 
 ### `scan_dockerfiles`
 

@@ -26,6 +26,7 @@ import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { deliveryToolDefs } from '../tools/defs/delivery.js';
+import { engagementToolDefs } from '../tools/defs/engagement.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import { platformReadToolDefs } from '../tools/defs/platform-read.js';
@@ -50,6 +51,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
     ...deliveryToolDefs,
+    ...engagementToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -84,8 +86,8 @@ Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_sta
 All actions: action="help"
 
 ## openlander_project
-Projects, shared config, and Delivery Workspace metadata. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
-Key actions: create_project, list_projects, create_delivery, record_delivery_feedback, submit_delivery_work_item_drafts, record_delivery_gate_result, get_delivery_readiness, generate_delivery_receipt_preview
+Projects, shared config, Delivery Workspace metadata, and read-only Engagement portfolio summaries. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
+Key actions: create_project, list_projects, list_engagements, get_engagement, create_delivery, record_delivery_feedback, submit_delivery_work_item_drafts, record_delivery_gate_result, get_delivery_readiness, generate_delivery_receipt_preview
 All actions: action="help"
 
 ## openlander_service
@@ -135,6 +137,11 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - MCP does not upload local binary files. Upload artifacts through the authenticated multipart web/API surface first, then reference their Artifact IDs.
 - AI-created work items remain proposed until an administrator confirms them in the web UI.
 - Receipt finalization is human UI-only. Never claim a Delivery is delivered from a preview response.
+
+## Engagement Portfolio
+- list_engagements and get_engagement provide read-only internal FDE portfolio rollups across linked Projects.
+- Engagement reads require an instance/org-scoped token. Project/service-scoped tokens must not infer sibling Project data.
+- Engagement mutations and Project linking are human web-session actions only.
 
 ## Human UI-only operations
 Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;

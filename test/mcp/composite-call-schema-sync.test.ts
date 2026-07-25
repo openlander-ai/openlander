@@ -47,6 +47,8 @@ import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
   composeToolDefs,
   debugToolDefs,
+  deliveryToolDefs,
+  engagementToolDefs,
   deployToolDefs,
   deployableServiceToolDefs,
   deployPlanToolDefs,
@@ -76,6 +78,8 @@ const SCANNED_DOCS: readonly string[] = [
 const ALL_TOOL_DEFS: readonly ToolDef[] = [
   ...composeToolDefs,
   ...debugToolDefs,
+  ...deliveryToolDefs,
+  ...engagementToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,

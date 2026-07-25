@@ -183,6 +183,7 @@ jobs:
       - name: Run RC cold-agent smoke
         env:
           OPENLANDER_E2E_BASE_URL: http://localhost:10114
+          OPENLANDER_E2E_EPHEMERAL: '1'
           OPENLANDER_E2E_SLOW: ${{ inputs.rc_smoke_slow && '1' || '' }}
         run: npm run qa:rc-smoke
 

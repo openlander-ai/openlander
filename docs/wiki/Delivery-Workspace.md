@@ -98,3 +98,7 @@ key with different request content returns `IDEMPOTENCY_KEY_CONFLICT`.
 MCP can generate a Receipt preview but cannot finalize a Receipt. Calls named
 `finalize_delivery` or `finalize_delivery_receipt` return `HUMAN_UI_ONLY` and
 point to the Delivery Receipt page.
+
+For internal cross-Project oversight, see [[Engagement Portfolio]]. Linking or
+unlinking a Project from an Engagement never changes this Delivery's evidence
+version, finalized Receipt snapshot, or PDF SHA-256.

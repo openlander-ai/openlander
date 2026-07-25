@@ -66,9 +66,7 @@ async function deleteManagedServices(project: ProjectSummary): Promise<void> {
       method: 'DELETE',
     });
     if (deleteResponse.ok) {
-      console.log(
-        `    ✓ Deleted managed resource: ${project.name}/${service.name ?? service.id}`,
-      );
+      console.log(`    ✓ Deleted managed resource: ${project.name}/${service.name ?? service.id}`);
       continue;
     }
     console.warn(
@@ -108,7 +106,12 @@ export default async function globalTeardown() {
 
     const data = (await response.json()) as { projects?: ProjectSummary[] };
     const projects = data.projects ?? [];
-    const testProjects = projects.filter((p) => TEST_PROJECT_PATTERN.test(p.name));
+    const isEphemeral = process.env['OPENLANDER_E2E_EPHEMERAL'] === '1';
+    const testProjects = projects.filter(
+      (project) =>
+        TEST_PROJECT_PATTERN.test(project.name) &&
+        !(isEphemeral && project.name.startsWith('qg-delivery-live-')),
+    );
 
     if (testProjects.length === 0) {
       console.log('  ✓ No test projects to clean up');

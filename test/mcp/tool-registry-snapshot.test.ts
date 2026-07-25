@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
+import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
+import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -20,12 +22,14 @@ const EXPECTED_TOOLS = [
   'apply_route_config',
   'archive_project',
   'archive_service',
+  'attach_delivery_url',
   'backup_service',
   'bulk_delete_env_vars',
   'cancel_deploy',
   'cleanup_docker',
   'cleanup_preview',
   'create_bucket',
+  'create_delivery',
   'create_deploy_plan',
   'create_git_deploy_key',
   'create_project',
@@ -42,13 +46,17 @@ const EXPECTED_TOOLS = [
   'execute_deploy_plan',
   'export_env_vars',
   'expose_public',
+  'generate_delivery_receipt_preview',
   'get_ai_ops_briefing',
   'get_alerts',
   'get_build_log',
+  'get_delivery',
+  'get_delivery_readiness',
   'get_deploy_history',
   'get_deploy_plan',
   'get_deploy_status',
   'get_disk_usage',
+  'get_engagement',
   'get_env_var',
   'get_instance_info',
   'get_logs',
@@ -58,11 +66,14 @@ const EXPECTED_TOOLS = [
   'get_service_status',
   'get_system_stats',
   'get_topology',
+  'link_delivery_deploy',
   'list_ai_ops_briefings',
   'list_archived_services',
   'list_buckets',
   'list_data_sources',
+  'list_deliveries',
   'list_domain_routes',
+  'list_engagements',
   'list_env_vars',
   'list_git_credentials',
   'list_github_repos',
@@ -77,6 +88,8 @@ const EXPECTED_TOOLS = [
   'preview_deploy',
   'probe_host',
   'read_data_source',
+  'record_delivery_feedback',
+  'record_delivery_gate_result',
   'redeploy_app',
   'remove_git_credential',
   'remove_secret_file',
@@ -91,11 +104,13 @@ const EXPECTED_TOOLS = [
   'set_global_secret',
   'start_service',
   'stop_service',
+  'submit_delivery_work_item_drafts',
   'unarchive_project',
   'unarchive_service',
   'unexpose_public',
   'update_app',
   'update_application_source',
+  'update_delivery_draft',
   'update_deploy_plan',
   'update_service_config',
   'upload_secret_file',
@@ -125,6 +140,8 @@ function getMcpToolDefs(): ToolDef[] {
     ...gitToolDefs,
     ...monitoringToolDefs,
     ...debugToolDefs,
+    ...deliveryToolDefs,
+    ...engagementToolDefs,
   ];
 }
 
@@ -145,8 +162,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 87 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(87);
+  it('maintains exactly 100 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(100);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

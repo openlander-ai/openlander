@@ -2100,6 +2100,126 @@ export const translations = {
       notFound: 'Delivery not found',
     },
   },
+  engagements: {
+    sidebar: 'Engagements',
+    title: 'Engagement Portfolio',
+    subtitle:
+      'Group Projects into internal FDE delivery engagements and find cross-project blockers.',
+    search: 'Search customer or Engagement',
+    filterStatus: 'Status',
+    showArchived: 'Show archived',
+    loading: 'Loading Engagements',
+    emptyTitle: 'No Engagements yet',
+    emptyDescription:
+      'Create an internal Engagement, then link existing Projects without changing their runtime or Delivery history.',
+    emptySearchTitle: 'No matching Engagements',
+    emptySearchDescription: 'Adjust the search or status filters.',
+    notFound: 'Engagement not found',
+    recentActivity: 'Recent activity {time}',
+    chipAria: 'Open Engagement {title}',
+    projectDeliveryCount: '{count} Deliveries',
+    blockerCount: '{count} blockers',
+    status: {
+      all: 'All',
+      active: 'Active',
+      on_hold: 'On hold',
+      completed: 'Completed',
+      archived: 'Archived',
+    },
+    health: {
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      unknown: 'Unknown',
+    },
+    runtime: {
+      running: 'Running',
+      stopped: 'Stopped',
+      error: 'Error',
+      unknown: 'Unknown',
+    },
+    metrics: {
+      projects: 'Projects',
+      deliveries: 'Deliveries',
+      blockerDeliveries: 'Blocked Deliveries',
+      blockers: 'Blockers',
+    },
+    fields: {
+      customer: 'Customer name',
+      title: 'Engagement title',
+      summary: 'Summary',
+      status: 'Status',
+      project: 'Project',
+    },
+    actions: {
+      create: 'New Engagement',
+      creating: 'Creating...',
+      edit: 'Edit',
+      save: 'Save',
+      cancel: 'Cancel',
+      close: 'Close dialog',
+      archive: 'Archive',
+      unarchive: 'Unarchive',
+      back: 'Back to Engagements',
+      linkProject: 'Link Project',
+      unlinkProjectAria: 'Unlink {project}',
+    },
+    create: {
+      title: 'Create Engagement',
+      description:
+        'This is an internal FDE portfolio group. It does not create a customer account.',
+    },
+    edit: {
+      title: 'Edit Engagement',
+      description: 'Update internal classification without changing linked Delivery evidence.',
+    },
+    link: {
+      title: 'Link Project',
+      description:
+        'Only unassigned Projects are available. A Project can belong to one Engagement.',
+      selectProject: 'Select an unassigned Project',
+      noUnassigned: 'All active Projects are already assigned.',
+    },
+    sections: {
+      projects: {
+        title: 'Projects and runtime',
+        description: 'Linked Projects and their current aggregate runtime state.',
+        empty: 'No Projects are linked. Existing Projects remain unassigned until you link them.',
+      },
+      deliveries: {
+        title: 'Delivery progress',
+        description: 'Delivery maturity and status grouped by Project.',
+        empty: 'Link a Project to view its Deliveries.',
+        noneForProject: 'No Deliveries in this Project.',
+      },
+      blockers: {
+        title: 'Blockers',
+        description:
+          'Runtime errors, revision requests, failed required Gates, unacknowledged warnings, and unresolved confirmed work.',
+        empty: 'No current blockers.',
+      },
+      activity: {
+        title: 'Recent activity',
+        description: 'Engagement, Project, and Delivery activity in one timeline.',
+        empty: 'No recent activity.',
+      },
+    },
+    blocker: {
+      project_error: 'Project runtime error',
+      revision_requested: 'Revision requested',
+      required_gate_failed: 'Required Gate failed',
+      warning_unacknowledged: 'Gate warning not acknowledged',
+      work_item_unresolved: 'Confirmed work remains unresolved',
+    },
+    errors: {
+      load: 'Failed to load Engagements.',
+      create: 'Failed to create the Engagement.',
+      loadDetail: 'Failed to load the Engagement.',
+      update: 'Failed to update the Engagement.',
+      archive: 'Failed to change archive status.',
+      link: 'Failed to link the Project.',
+      unlink: 'Failed to unlink the Project.',
+    },
+  },
   // Canonical OpenLander vocabulary. Kept in English across locales by
   // project policy (see CONTRIBUTING / agent memory); descriptive copy
   // around these terms still translates normally. Chrome that names the

@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
 import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
+import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -40,6 +41,7 @@ const allToolDefs: ToolDef[] = [
   ...monitoringToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
+  ...engagementToolDefs,
 ];
 
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };

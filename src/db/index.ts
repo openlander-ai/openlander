@@ -41,6 +41,7 @@ import { SettingsRepo } from './repos/settings.repo.js';
 import { PatTokenRepo } from './repos/pat-token.repo.js';
 import { GitCredentialRepo } from './repos/git-credential.repo.js';
 import { DeliveryRepo } from './repos/delivery.repo.js';
+import { EngagementRepo } from './repos/engagement.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -92,6 +93,8 @@ export type {
   DeliveryGateRow,
   DeliveryDeployLinkRow,
   DeliveryReceiptRow,
+  EngagementRow,
+  EngagementProjectRow,
 } from './schema.drizzle.js';
 
 const log = createModuleLogger('db-migration');
@@ -304,6 +307,7 @@ export class Database implements AuthDatabase {
   private readonly patTokenRepo: PatTokenRepo;
   private readonly gitCredentialRepo: GitCredentialRepo;
   private readonly deliveryRepo: DeliveryRepo;
+  private readonly engagementRepo: EngagementRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -343,6 +347,7 @@ export class Database implements AuthDatabase {
     this.patTokenRepo = new PatTokenRepo(this.db, this.client);
     this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
     this.deliveryRepo = new DeliveryRepo(this.db, this.client);
+    this.engagementRepo = new EngagementRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -710,6 +715,19 @@ export class Database implements AuthDatabase {
   getDeliveryProjectIdByArtifactId(artifactId: string) { return this.deliveryRepo.getDeliveryProjectIdByArtifactId(artifactId); }
   getDeliveryProjectIdsByDeployId(deployId: string) { return this.deliveryRepo.getDeliveryProjectIdByDeployId(deployId); }
   getDeliveryArtifactsByIds(ids: string[]) { return this.deliveryRepo.getArtifactsByIds(ids); }
+  listEngagements(includeArchived?: boolean) { return this.engagementRepo.list(includeArchived); }
+  getEngagement(id: string) { return this.engagementRepo.get(id); }
+  requireEngagement(id: string) { return this.engagementRepo.require(id); }
+  createEngagement(input: Parameters<EngagementRepo['create']>[0]) { return this.engagementRepo.create(input); }
+  updateEngagement(id: string, input: Parameters<EngagementRepo['update']>[1]) { return this.engagementRepo.update(id, input); }
+  archiveEngagement(id: string, actor?: string) { return this.engagementRepo.archive(id, actor); }
+  unarchiveEngagement(id: string, actor?: string) { return this.engagementRepo.unarchive(id, actor); }
+  linkEngagementProject(engagementId: string, projectId: string, actor?: string) { return this.engagementRepo.linkProject(engagementId, projectId, actor); }
+  unlinkEngagementProject(engagementId: string, projectId: string, actor?: string) { return this.engagementRepo.unlinkProject(engagementId, projectId, actor); }
+  getProjectEngagement(projectId: string) { return this.engagementRepo.getProjectEngagement(projectId); }
+  listUnassignedEngagementProjects() { return this.engagementRepo.listUnassignedProjects(); }
+  getEngagementPortfolioRows(engagementIds: readonly string[]) { return this.engagementRepo.getPortfolioRows(engagementIds); }
+  listEngagementRecentActivity(engagementId: string, projectIds: readonly string[], limit?: number) { return this.engagementRepo.listRecentActivity(engagementId, projectIds, limit); }
   transaction<T>(fn: () => T | Promise<T>) { return this.db.transaction(async () => await fn()); }
   close() { return this.client.end({ timeout: 5 }); }
 }

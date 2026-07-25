@@ -52,6 +52,7 @@ import {
 import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
 import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
+import { EngagementChip } from '@/components/engagement/EngagementChip';
 
 type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings';
 
@@ -526,6 +527,7 @@ export function ProjectView() {
               {projectInitials}
             </span>
             <span>{projectDisplayName}</span>
+            <EngagementChip projectId={projectId} />
             {isProjectArchived && (
               <span className="rounded-full border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--ol-warning)]">
                 {t('projects.card.archivedBadge')}

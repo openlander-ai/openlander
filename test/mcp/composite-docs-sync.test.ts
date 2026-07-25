@@ -31,6 +31,8 @@ import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
   composeToolDefs,
   debugToolDefs,
+  deliveryToolDefs,
+  engagementToolDefs,
   deployToolDefs,
   deployableServiceToolDefs,
   deployPlanToolDefs,
@@ -61,6 +63,8 @@ const DOC_PATH = path.join(REPO_ROOT, 'docs', 'wiki', 'MCP-Tools-Reference.md');
 const ALL_TOOL_DEFS = [
   ...composeToolDefs,
   ...debugToolDefs,
+  ...deliveryToolDefs,
+  ...engagementToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,

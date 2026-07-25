@@ -540,6 +540,7 @@ export class PlanEngine {
     clonePath: string,
     userDockerfile: string,
     detectedEnv: PlanEnvEntry[],
+    sourceVarsRequired: boolean,
   ): void {
     // Scope env scanning to the build context directory (derived from dockerfile path).
     // e.g., 'services/api/Dockerfile' → scopeDir='services/api'
@@ -570,7 +571,11 @@ export class PlanEngine {
       detectedEnv.push({
         key: variable.key,
         source: variable.files[0]?.path ?? 'source',
-        required: !variable.optional,
+        // Compose is the explicit runtime contract. Source-only variables can
+        // belong to optional features, tests, or build tooling that the
+        // selected stack does not run, so keep them visible without blocking
+        // execution. Dockerfile deployments still require bare source usages.
+        required: sourceVarsRequired && !variable.optional,
       });
     }
   }
@@ -1319,7 +1324,7 @@ export class PlanEngine {
       resourceProject?.id,
       buildMethod === 'compose' ? composeBuildServices : undefined,
     );
-    this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
+    this.detectEnvVars(clonePath, userDockerfile, detectedEnv, buildMethod !== 'compose');
     this.detectPersistenceWarnings(clonePath, warnings);
     this.detectServiceDependencies(envVars, warnings);
     const services = this.filterServicesWithExplicitEnv({

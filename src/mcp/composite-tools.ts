@@ -68,8 +68,9 @@ export const DEPLOY_ACTIONS = [
  * - Secret files (encrypted credential files)
  * - Temporary public share URLs
  * Includes Delivery Workspace metadata, feedback, Gate, deployment-link,
- * readiness, and Receipt-preview actions. Binary upload and finalization stay
- * on the authenticated web/API surfaces.
+ * readiness, and Receipt-preview actions, plus read-only internal Engagement
+ * portfolio summaries. Binary upload, Engagement mutation, and finalization
+ * stay on the authenticated web/API surfaces.
  */
 export const PROJECT_ACTIONS = [
   'create_project',
@@ -100,6 +101,8 @@ export const PROJECT_ACTIONS = [
   'link_delivery_deploy',
   'get_delivery_readiness',
   'generate_delivery_receipt_preview',
+  'list_engagements',
+  'get_engagement',
 ] as const;
 
 /**
@@ -232,7 +235,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 28 tools
+ * - PROJECT_ACTIONS: 30 tools
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 13 tools
