@@ -890,6 +890,57 @@ describe('PlanEngine.createPlan', () => {
     }
   });
 
+  it('keeps source-only environment usage advisory for an explicit Compose runtime', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-compose-source-env-'));
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(
+      join(repoPath, 'server.ts'),
+      'const token = process.env.OPTIONAL_FEATURE_TOKEN;\n',
+    );
+    writeFileSync(
+      join(repoPath, 'docker-compose.yml'),
+      `services:
+  api:
+    build: .
+    environment:
+      OPTIONAL_FEATURE_TOKEN: configured-by-compose
+    ports:
+      - '3000:3000'
+`,
+    );
+    mockCloneRepo.mockResolvedValue({ path: repoPath, commitSha: 'compose-source-env' });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockExistsSync.mockImplementation(actualFs.existsSync);
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
+    const engineWithCompose = new PlanEngine({
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: new ComposePipeline({} as Docker, {} as Database, new EventBus()),
+    });
+
+    try {
+      const plan = await engineWithCompose.createPlan({
+        repoUrl: 'https://github.com/test/compose-source-env',
+      });
+
+      expect(plan.status).toBe('ready');
+      expect(plan.missing).not.toContain('OPTIONAL_FEATURE_TOKEN');
+      expect(plan.env.detected).toContainEqual(
+        expect.objectContaining({
+          key: 'OPTIONAL_FEATURE_TOKEN',
+          required: false,
+        }),
+      );
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it('skips compose detection when preferDockerfile is true (even without dockerfilePath)', async () => {
     const mockComposePipeline = {
       detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),

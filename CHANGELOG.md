@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   announced action results to guide FDEs through scope, artifacts, review,
   Gates, deployment evidence, and Receipt confirmation.
 
+### Fixed
+
+- Keep source-only environment variables advisory for Compose deploy plans so
+  optional features, tests, and build tooling do not block an explicit runtime
+  contract with unrelated input requests.
+
 ## [0.2.10] - 2026-07-24
 
 ### Fixed
