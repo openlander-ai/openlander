@@ -92,6 +92,20 @@
       "when": 1784592000000,
       "tag": "0012_resolve_one_shot_service_down_incidents",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784932259399,
+      "tag": "0013_delivery_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784952897449,
+      "tag": "0014_delivery_evidence_hardening",
+      "breakpoints": true
     }
   ]
 }

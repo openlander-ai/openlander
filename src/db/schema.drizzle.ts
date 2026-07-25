@@ -1086,6 +1086,8 @@ export type ServiceTableRow = typeof services.$inferSelect;
 export type NewServiceTableRow = typeof services.$inferInsert;
 export type ProjectTableRow = typeof projects.$inferSelect;
 export type NewProjectTableRow = typeof projects.$inferInsert;
+export type DeployLogTableRow = typeof deployLogs.$inferSelect;
+export type EnvironmentTableRow = typeof environments.$inferSelect;
 
 export type ProjectDependencyRow = typeof projectDependencies.$inferSelect;
 export type NewProjectDependency = typeof projectDependencies.$inferInsert;
@@ -1197,6 +1199,465 @@ export const activityLog = pgTable(
 );
 
 export type ActivityLogRow = typeof activityLog.$inferSelect;
+
+export const artifactBlobs = pgTable(
+  'artifact_blobs',
+  {
+    id: text('id').primaryKey(),
+    sha256: text('sha256').notNull().unique(),
+    mime_type: text('mime_type').notNull(),
+    size_bytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    storage_key: text('storage_key').notNull().unique(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('artifact_blobs_size_check', sql`${table.size_bytes} >= 0`),
+    check('artifact_blobs_sha256_check', sql`length(${table.sha256}) = 64`),
+  ],
+);
+
+export const projectDeliverySettings = pgTable(
+  'project_delivery_settings',
+  {
+    project_id: text('project_id')
+      .primaryKey()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    organization_name: text('organization_name'),
+    document_name: text('document_name').notNull().default('Delivery Receipt'),
+    primary_color: text('primary_color').notNull().default('#2563EB'),
+    logo_blob_id: text('logo_blob_id').references(() => artifactBlobs.id, {
+      onDelete: 'set null',
+    }),
+    footer_text: text('footer_text'),
+    locale: text('locale', { enum: ['ko', 'en'] })
+      .notNull()
+      .default('ko'),
+    default_gates_json: jsonb('default_gates_json')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('project_delivery_settings_locale_check', sql`${table.locale} IN ('ko', 'en')`),
+    check(
+      'project_delivery_settings_primary_color_check',
+      sql`${table.primary_color} ~ '^#[0-9A-Fa-f]{6}$'`,
+    ),
+  ],
+);
+
+export const deliveries = pgTable(
+  'deliveries',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    summary: text('summary').notNull().default(''),
+    delivery_type: text('delivery_type', {
+      enum: ['software_release', 'artifact_delivery'],
+    })
+      .notNull()
+      .default('software_release'),
+    maturity: text('maturity', {
+      enum: ['concept', 'functional_preview', 'customer_review', 'release_candidate', 'production'],
+    })
+      .notNull()
+      .default('customer_review'),
+    status: text('status', {
+      enum: [
+        'draft',
+        'in_review',
+        'revision_requested',
+        'approved',
+        'ready',
+        'delivered',
+        'cancelled',
+      ],
+    })
+      .notNull()
+      .default('draft'),
+    evidence_version: integer('evidence_version').notNull().default(0),
+    previewed_evidence_version: integer('previewed_evidence_version'),
+    limitations: text('limitations'),
+    predecessor_delivery_id: text('predecessor_delivery_id').references(
+      (): AnyPgColumn => deliveries.id,
+      { onDelete: 'set null' },
+    ),
+    created_by: text('created_by').notNull().default('admin'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'deliveries_type_check',
+      sql`${table.delivery_type} IN ('software_release', 'artifact_delivery')`,
+    ),
+    check(
+      'deliveries_maturity_check',
+      sql`${table.maturity} IN ('concept', 'functional_preview', 'customer_review', 'release_candidate', 'production')`,
+    ),
+    check(
+      'deliveries_status_check',
+      sql`${table.status} IN ('draft', 'in_review', 'revision_requested', 'approved', 'ready', 'delivered', 'cancelled')`,
+    ),
+    check('deliveries_evidence_version_check', sql`${table.evidence_version} >= 0`),
+    check(
+      'deliveries_previewed_evidence_version_check',
+      sql`${table.previewed_evidence_version} IS NULL OR ${table.previewed_evidence_version} >= 0`,
+    ),
+    index('idx_deliveries_project').on(table.project_id, table.created_at),
+    index('idx_deliveries_status').on(table.project_id, table.status),
+  ],
+);
+
+export const deliveryArtifacts = pgTable(
+  'delivery_artifacts',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    blob_id: text('blob_id')
+      .notNull()
+      .references(() => artifactBlobs.id, { onDelete: 'restrict' }),
+    logical_key: text('logical_key').notNull(),
+    revision: integer('revision').notNull(),
+    kind: text('kind', {
+      enum: [
+        'review_html',
+        'companion_pdf',
+        'markdown',
+        'qa_report',
+        'data_report',
+        'image',
+        'other',
+      ],
+    }).notNull(),
+    original_filename: text('original_filename').notNull(),
+    status: text('status', { enum: ['draft', 'approved', 'superseded'] })
+      .notNull()
+      .default('draft'),
+    companion_pdf_artifact_id: text('companion_pdf_artifact_id').references(
+      (): AnyPgColumn => deliveryArtifacts.id,
+      { onDelete: 'set null' },
+    ),
+    include_in_receipt: boolean('include_in_receipt').notNull().default(true),
+    receipt_order: integer('receipt_order').notNull().default(0),
+    idempotency_key: text('idempotency_key'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_artifacts_logical_kind_revision_unique').on(
+      table.delivery_id,
+      table.logical_key,
+      table.kind,
+      table.revision,
+    ),
+    uniqueIndex('delivery_artifacts_idempotency_unique')
+      .on(table.delivery_id, table.idempotency_key)
+      .where(sql`${table.idempotency_key} IS NOT NULL`),
+    check(
+      'delivery_artifacts_kind_check',
+      sql`${table.kind} IN ('review_html', 'companion_pdf', 'markdown', 'qa_report', 'data_report', 'image', 'other')`,
+    ),
+    check(
+      'delivery_artifacts_status_check',
+      sql`${table.status} IN ('draft', 'approved', 'superseded')`,
+    ),
+    check('delivery_artifacts_revision_check', sql`${table.revision} > 0`),
+    index('idx_delivery_artifacts_delivery').on(table.delivery_id, table.receipt_order),
+  ],
+);
+
+export const deliveryExternalRefs = pgTable(
+  'delivery_external_refs',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    provider: text('provider', {
+      enum: ['slack', 'teams', 'email', 'drive', 'github', 'other'],
+    }).notNull(),
+    label: text('label').notNull(),
+    url: text('url').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'delivery_external_refs_provider_check',
+      sql`${table.provider} IN ('slack', 'teams', 'email', 'drive', 'github', 'other')`,
+    ),
+    index('idx_delivery_external_refs_delivery').on(table.delivery_id),
+  ],
+);
+
+export const deliveryFeedbackSources = pgTable(
+  'delivery_feedback_sources',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    source_type: text('source_type', {
+      enum: ['slack', 'teams', 'email', 'meeting', 'other'],
+    }).notNull(),
+    source_url: text('source_url'),
+    author_display_name: text('author_display_name'),
+    raw_text: text('raw_text').notNull(),
+    occurred_at: text('occurred_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'delivery_feedback_sources_type_check',
+      sql`${table.source_type} IN ('slack', 'teams', 'email', 'meeting', 'other')`,
+    ),
+    index('idx_delivery_feedback_sources_delivery').on(table.delivery_id),
+  ],
+);
+
+export const deliveryWorkItems = pgTable(
+  'delivery_work_items',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    feedback_source_id: text('feedback_source_id').references(() => deliveryFeedbackSources.id, {
+      onDelete: 'set null',
+    }),
+    kind: text('kind', {
+      enum: ['decision', 'change_request', 'question', 'note'],
+    }).notNull(),
+    title: text('title').notNull(),
+    detail: text('detail').notNull().default(''),
+    status: text('status', {
+      enum: ['proposed', 'confirmed', 'rejected', 'resolved', 'superseded'],
+    })
+      .notNull()
+      .default('proposed'),
+    is_ai_draft: boolean('is_ai_draft').notNull().default(false),
+    resolution: text('resolution'),
+    created_by: text('created_by').notNull().default('admin'),
+    resolved_at: text('resolved_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'delivery_work_items_kind_check',
+      sql`${table.kind} IN ('decision', 'change_request', 'question', 'note')`,
+    ),
+    check(
+      'delivery_work_items_status_check',
+      sql`${table.status} IN ('proposed', 'confirmed', 'rejected', 'resolved', 'superseded')`,
+    ),
+    index('idx_delivery_work_items_delivery').on(table.delivery_id, table.status),
+    index('idx_delivery_work_items_feedback').on(table.feedback_source_id),
+  ],
+);
+
+export const deliveryApprovals = pgTable(
+  'delivery_approvals',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    artifact_ids: jsonb('artifact_ids').$type<string[]>().notNull(),
+    approver_display_name: text('approver_display_name').notNull(),
+    approval_excerpt: text('approval_excerpt').notNull(),
+    source_type: text('source_type', {
+      enum: ['slack', 'teams', 'email', 'meeting', 'other'],
+    }).notNull(),
+    source_url: text('source_url'),
+    approved_at: text('approved_at').notNull(),
+    invalidated_at: text('invalidated_at'),
+    invalidated_reason: text('invalidated_reason'),
+    recorded_by: text('recorded_by').notNull().default('admin'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'delivery_approvals_source_type_check',
+      sql`${table.source_type} IN ('slack', 'teams', 'email', 'meeting', 'other')`,
+    ),
+    index('idx_delivery_approvals_delivery').on(table.delivery_id, table.approved_at),
+  ],
+);
+
+export const deliveryGates = pgTable(
+  'delivery_gates',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    gate_key: text('gate_key').notNull(),
+    gate_type: text('gate_type', { enum: ['review', 'qa', 'data', 'custom'] }).notNull(),
+    label: text('label').notNull(),
+    required: boolean('required').notNull().default(false),
+    status: text('status', {
+      enum: ['pending', 'passed', 'warning', 'failed', 'waived'],
+    })
+      .notNull()
+      .default('pending'),
+    summary: text('summary'),
+    waiver_reason: text('waiver_reason'),
+    warning_accepted: boolean('warning_accepted').notNull().default(false),
+    report_artifact_id: text('report_artifact_id').references(() => deliveryArtifacts.id, {
+      onDelete: 'set null',
+    }),
+    idempotency_key: text('idempotency_key'),
+    recorded_by: text('recorded_by').notNull().default('admin'),
+    recorded_at: text('recorded_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_gates_key_unique').on(table.delivery_id, table.gate_key),
+    uniqueIndex('delivery_gates_idempotency_unique')
+      .on(table.delivery_id, table.idempotency_key)
+      .where(sql`${table.idempotency_key} IS NOT NULL`),
+    check(
+      'delivery_gates_type_check',
+      sql`${table.gate_type} IN ('review', 'qa', 'data', 'custom')`,
+    ),
+    check(
+      'delivery_gates_status_check',
+      sql`${table.status} IN ('pending', 'passed', 'warning', 'failed', 'waived')`,
+    ),
+    index('idx_delivery_gates_delivery').on(table.delivery_id),
+  ],
+);
+
+export const deliveryIdempotencyRecords = pgTable(
+  'delivery_idempotency_records',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotency_key: text('idempotency_key').notNull(),
+    request_sha256: text('request_sha256').notNull(),
+    response_json: jsonb('response_json').$type<Record<string, unknown>>().notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_idempotency_records_key_unique').on(
+      table.delivery_id,
+      table.operation,
+      table.idempotency_key,
+    ),
+    check(
+      'delivery_idempotency_records_request_sha256_check',
+      sql`length(${table.request_sha256}) = 64`,
+    ),
+    index('idx_delivery_idempotency_records_delivery').on(table.delivery_id, table.created_at),
+  ],
+);
+
+export const deliveryDeployLinks = pgTable(
+  'delivery_deploy_links',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    deploy_id: text('deploy_id')
+      .notNull()
+      .references(() => deployLogs.id, { onDelete: 'restrict' }),
+    relation: text('relation', { enum: ['candidate', 'released', 'rollback'] }).notNull(),
+    linked_at: text('linked_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'delivery_deploy_links_relation_check',
+      sql`${table.relation} IN ('candidate', 'released', 'rollback')`,
+    ),
+    uniqueIndex('delivery_deploy_links_unique').on(
+      table.delivery_id,
+      table.deploy_id,
+      table.relation,
+    ),
+    index('idx_delivery_deploy_links_delivery').on(table.delivery_id),
+  ],
+);
+
+export const deliveryReceipts = pgTable(
+  'delivery_receipts',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .unique()
+      .references(() => deliveries.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull().default(1),
+    snapshot_json: jsonb('snapshot_json').$type<Record<string, unknown>>().notNull(),
+    pdf_blob_id: text('pdf_blob_id')
+      .notNull()
+      .references(() => artifactBlobs.id, { onDelete: 'restrict' }),
+    pdf_sha256: text('pdf_sha256').notNull(),
+    finalized_by: text('finalized_by').notNull(),
+    finalized_at: text('finalized_at').notNull(),
+  },
+  (table) => [
+    check('delivery_receipts_revision_check', sql`${table.revision} > 0`),
+    check('delivery_receipts_sha256_check', sql`length(${table.pdf_sha256}) = 64`),
+  ],
+);
+
+export type ProjectDeliverySettingsRow = typeof projectDeliverySettings.$inferSelect;
+export type ArtifactBlobRow = typeof artifactBlobs.$inferSelect;
+export type DeliveryRow = typeof deliveries.$inferSelect;
+export type DeliveryArtifactRow = typeof deliveryArtifacts.$inferSelect;
+export type DeliveryExternalRefRow = typeof deliveryExternalRefs.$inferSelect;
+export type DeliveryFeedbackSourceRow = typeof deliveryFeedbackSources.$inferSelect;
+export type DeliveryWorkItemRow = typeof deliveryWorkItems.$inferSelect;
+export type DeliveryApprovalRow = typeof deliveryApprovals.$inferSelect;
+export type DeliveryGateRow = typeof deliveryGates.$inferSelect;
+export type DeliveryIdempotencyRecordRow = typeof deliveryIdempotencyRecords.$inferSelect;
+export type DeliveryDeployLinkRow = typeof deliveryDeployLinks.$inferSelect;
+export type DeliveryReceiptRow = typeof deliveryReceipts.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
 
 /**
@@ -1257,5 +1718,17 @@ export const drizzleSchema = {
   serviceMetrics,
   settings,
   activityLog,
+  artifactBlobs,
+  projectDeliverySettings,
+  deliveries,
+  deliveryArtifacts,
+  deliveryExternalRefs,
+  deliveryFeedbackSources,
+  deliveryWorkItems,
+  deliveryApprovals,
+  deliveryGates,
+  deliveryIdempotencyRecords,
+  deliveryDeployLinks,
+  deliveryReceipts,
   mcpSessionLog,
 };

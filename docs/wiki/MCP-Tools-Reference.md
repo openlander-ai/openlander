@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **83 unique default operations** surfaced through those composites
+- **98 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -30,6 +30,9 @@ Agent routing rule of thumb:
 | "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
 | "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
 | "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
+| "Capture this customer review delivery"          | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
+| "Classify the feedback into review items"        | `openlander_project.submit_delivery_work_item_drafts`                                                       |
+| "Is the customer Receipt ready?"                 | `openlander_project.get_delivery_readiness`                                                                 |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
@@ -57,7 +60,8 @@ distinguish a missing target from an out-of-scope target. `list_projects` is the
 exception: it returns only Projects and Application/Compose `service_id` values visible to the token.
 When an action supplies more than one target selector, every supplied selector must be inside the
 token scope; agents should not mix `service_id`, `project_id`, `deploy_id`, or `action_run_id`
-values from different targets in one call. `mcp_action_status` may be polled with a service-scoped
+values from different targets in one call. Delivery selectors (`delivery_id`, `artifact_id`,
+`report_artifact_id`, and `predecessor_delivery_id`) follow the same rule. `mcp_action_status` may be polled with a service-scoped
 token for held actions in the scoped service's Project, so handoff flows can follow their own
 approval/status lifecycle without broadening the token.
 
@@ -109,33 +113,34 @@ from trusted human surfaces (for example, saving the value in the web UI) or by 
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                               |
-| ---------------------------- | ------------ | ------------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                         |
-| `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
-| `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                      |
-| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage   |
-| `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes        |
+| Composite                    | Action slots | Purpose                                                                             |
+| ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 22           | Deploy plans, execution, previews, rollbacks, build logs, Git                       |
+| `openlander_project`         | 28           | Projects, Delivery Workspace, lifecycle, secrets, temporary share URLs              |
+| `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
+| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
+| `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes      |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
 ## Tool Categories
 
-| Category                                                 | Tools | Description                                           |
-| -------------------------------------------------------- | ----- | ----------------------------------------------------- |
-| [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans         |
-| [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                    |
-| [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config |
-| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                       |
-| [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources     |
-| [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection              |
-| [Domains](#domains)                                      | 2     | Register Host/path domain routes                      |
-| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                         |
-| [Monitoring](#monitoring--logs)                          | 12    | Logs, stats, alerts, AI Ops briefings, host diagnosis |
-| [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis                |
-| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                          |
-| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                             |
-| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect                        |
+| Category                                                 | Tools | Description                                                     |
+| -------------------------------------------------------- | ----- | --------------------------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans                   |
+| [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                              |
+| [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
+| [Delivery Workspace](#delivery-workspace)                | 11    | Review evidence, feedback, Gates, deploy links, Receipt preview |
+| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                                 |
+| [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources               |
+| [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection                        |
+| [Domains](#domains)                                      | 2     | Register Host/path domain routes                                |
+| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                                   |
+| [Monitoring](#monitoring--logs)                          | 12    | Logs, stats, alerts, AI Ops briefings, host diagnosis           |
+| [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis                          |
+| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                                    |
+| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                                       |
+| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect                                  |
 
 ---
 
@@ -438,6 +443,41 @@ Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
 `poll_call`; poll `mcp_action_status` after the user approves or rejects the
 request.
+
+## Delivery Workspace
+
+Delivery actions live under `openlander_project` and operate on evidence
+metadata. They do not activate an internal LLM, upload local binary files, or
+finalize a Receipt.
+
+| Action                              | Required parameters                       | Purpose                                                        |
+| ----------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| `create_delivery`                   | `project_id`, `title`                     | Create a Delivery and its project-default Gates                |
+| `list_deliveries`                   | `project_id`                              | List one Project's Deliveries                                  |
+| `get_delivery`                      | `delivery_id`                             | Read artifacts, raw feedback, items, approvals, Gates, deploys |
+| `update_delivery_draft`             | `delivery_id`                             | Update title, summary, type, maturity, or limitations          |
+| `attach_delivery_url`               | `delivery_id`, `provider`, `label`, `url` | Add optional external evidence metadata                        |
+| `record_delivery_feedback`          | `delivery_id`, `source_type`, `raw_text`  | Preserve pasted feedback verbatim                              |
+| `submit_delivery_work_item_drafts`  | `delivery_id`, `items`                    | Submit AI/external drafts as `proposed` only                   |
+| `record_delivery_gate_result`       | `delivery_id`, `gate_key`, `status`       | Store an external Gate result and optional report artifact     |
+| `link_delivery_deploy`              | `delivery_id`, `deploy_id`                | Link same-Project successful Production evidence               |
+| `get_delivery_readiness`            | `delivery_id`                             | Return deterministic finalization checks and blockers          |
+| `generate_delivery_receipt_preview` | `delivery_id`                             | Build a preview and return page metadata                       |
+
+`record_delivery_gate_result` accepts `summary`, `waiver_reason`,
+`report_artifact_id`, and `idempotency_key`. A waiver requires a reason. A
+JUnit artifact is normalized by OpenLander, and a report containing failures or
+errors cannot be recorded as `passed`. Gate idempotency records are durable:
+the same key replays its original response, while using that key with different
+request content returns `IDEMPOTENCY_KEY_CONFLICT`.
+
+Upload artifacts through the authenticated multipart endpoint
+`POST /api/projects/:projectId/deliveries/:deliveryId/artifacts` before
+referencing their IDs. Project PAT uploads and Gate-result submissions require
+an `Idempotency-Key` header. Final Receipt confirmation is administrator
+web-session only; `finalize_delivery*` MCP requests return `HUMAN_UI_ONLY`.
+Finalization also requires the evidence version to match the most recently
+generated Receipt preview.
 
 ### `update_app` / `redeploy_app` / `restart_service`
 

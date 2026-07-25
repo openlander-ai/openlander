@@ -40,6 +40,8 @@ export const HUMAN_UI_ONLY_ALIASES = [
   'remove_app',
   'remove_project',
   'unarchive_app',
+  'finalize_delivery',
+  'finalize_delivery_receipt',
 ] as const;
 
 export const PROJECT_LIFECYCLE_ALIASES = ['archive_app', 'unarchive_app'] as const;

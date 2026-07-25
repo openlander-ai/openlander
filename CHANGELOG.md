@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add the Delivery Workspace Beta for project-scoped review artifacts, preserved
+  customer feedback, human-confirmed decisions and approvals, external QA/Data
+  Gate results, Production deployment evidence, and immutable Receipt PDFs.
+- Add content-addressed artifact storage with streaming validation, 100 MiB
+  limits, HTML download isolation, approved companion-PDF merging, Korean font
+  support, project Receipt themes/logos, and a 250-page finalization gate.
+- Add 11 `openlander_project` Delivery actions for external MCP agents while
+  keeping binary uploads on authenticated web/CI APIs and final Receipt
+  confirmation human-only.
+- Bind final Receipt confirmation to the exact evidence version that produced
+  the latest preview, and keep durable Gate idempotency records so CI retries
+  cannot overwrite newer results or reuse a key with different content.
+- Add a persistent Delivery progress rail plus accessible tab panels and
+  announced action results to guide FDEs through scope, artifacts, review,
+  Gates, deployment evidence, and Receipt confirmation.
+
 ## [0.2.10] - 2026-07-24
 
 ### Fixed

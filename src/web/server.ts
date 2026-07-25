@@ -61,10 +61,7 @@ export function getServerUptime(): number {
 }
 
 export type AiOpsBriefingHealthStatus =
-  | 'configured'
-  | 'not_configured'
-  | 'provider_missing'
-  | 'credential_missing';
+  'configured' | 'not_configured' | 'provider_missing' | 'credential_missing';
 
 export interface AiOpsBriefingHealth {
   configured: boolean;
@@ -361,7 +358,10 @@ function createApp(
     return c.json({ name: 'OpenLander' });
   });
 
-  const WEB_DIST = join(dirname(new URL(import.meta.url).pathname), '../web/dist');
+  const serverDirectory = dirname(new URL(import.meta.url).pathname);
+  const bundledWebDist = join(serverDirectory, '../web/dist');
+  const sourceWebDist = join(serverDirectory, '../../web/dist');
+  const WEB_DIST = existsSync(join(bundledWebDist, 'index.html')) ? bundledWebDist : sourceWebDist;
 
   const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html',

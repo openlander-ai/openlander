@@ -1143,3 +1143,88 @@ export class ServiceInUseError extends OpenLanderError {
     this.name = 'ServiceInUseError';
   }
 }
+
+// --- Delivery workspace errors ---
+
+export class DeliveryNotFoundError extends OpenLanderError {
+  constructor(deliveryId: string) {
+    super(`Delivery "${deliveryId}" was not found.`, 'DELIVERY_NOT_FOUND', 404, { deliveryId });
+    this.name = 'DeliveryNotFoundError';
+  }
+}
+
+export class DeliveryStateError extends OpenLanderError {
+  constructor(deliveryId: string, message: string, currentStatus?: string) {
+    super(message, 'DELIVERY_STATE_INVALID', 409, {
+      deliveryId,
+      ...(currentStatus ? { currentStatus } : {}),
+    });
+    this.name = 'DeliveryStateError';
+  }
+}
+
+export class ArtifactValidationError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'ARTIFACT_VALIDATION_FAILED', 400, details);
+    this.name = 'ArtifactValidationError';
+  }
+}
+
+export class ArtifactNotFoundError extends OpenLanderError {
+  constructor(artifactId: string) {
+    super(`Artifact "${artifactId}" was not found.`, 'ARTIFACT_NOT_FOUND', 404, { artifactId });
+    this.name = 'ArtifactNotFoundError';
+  }
+}
+
+export class ReceiptNotReadyError extends OpenLanderError {
+  constructor(deliveryId: string, blockers: string[]) {
+    super('Delivery is not ready to finalize.', 'RECEIPT_NOT_READY', 409, {
+      deliveryId,
+      blockers,
+    });
+    this.name = 'ReceiptNotReadyError';
+  }
+}
+
+export class ReceiptGenerationError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'RECEIPT_GENERATION_FAILED', 500, details);
+    this.name = 'ReceiptGenerationError';
+  }
+}
+
+export class DeliveryScopeError extends OpenLanderError {
+  constructor() {
+    super(
+      'The requested Delivery resource is outside the authenticated project scope.',
+      'SCOPE_VIOLATION',
+      403,
+      { reason: 'target_not_found_or_out_of_scope' },
+    );
+    this.name = 'DeliveryScopeError';
+  }
+}
+
+export class DeliveryIdempotencyError extends OpenLanderError {
+  constructor() {
+    super(
+      'Idempotency-Key is required for CI Delivery mutations.',
+      'IDEMPOTENCY_KEY_REQUIRED',
+      400,
+    );
+    this.name = 'DeliveryIdempotencyError';
+  }
+}
+
+export class DeliveryIdempotencyConflictError extends OpenLanderError {
+  constructor(deliveryId: string, operation: string, idempotencyKey: string) {
+    super(
+      'Idempotency-Key was already used with a different Delivery request.',
+      'IDEMPOTENCY_KEY_CONFLICT',
+      409,
+      { deliveryId, operation, idempotencyKey },
+    );
+    this.name = 'DeliveryIdempotencyConflictError';
+  }
+}

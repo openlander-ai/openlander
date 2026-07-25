@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveRestore,
   Database,
+  FileCheck2,
   KeyRound,
   LockKeyhole,
   ShieldCheck,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useLanguage } from '@/i18n/context';
 import {
@@ -32,9 +34,51 @@ import {
 import { cn } from '@/lib/utils';
 import type { ServiceHealth } from '@/lib/projectTopology';
 import type { Project } from '@/types';
+import {
+  getDeliverySettings,
+  updateDeliverySettings,
+  uploadDeliveryLogo,
+  type DeliverySettings,
+} from '@/lib/api/deliveries';
 
-export type SettingsSection = 'general' | 'ai' | 'data' | 'danger';
+export type SettingsSection = 'general' | 'delivery' | 'ai' | 'data' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
+type SettingsDeliveryType = 'software_release' | 'artifact_delivery';
+type SettingsGateType = 'review' | 'qa' | 'data' | 'custom';
+interface SettingsGateTemplate {
+  gate_key: string;
+  gate_type: SettingsGateType;
+  label: string;
+  required: boolean;
+}
+
+const FALLBACK_GATE_TEMPLATES: Record<SettingsDeliveryType, SettingsGateTemplate[]> = {
+  software_release: [
+    { gate_key: 'review', gate_type: 'review', label: 'Review', required: true },
+    { gate_key: 'qa', gate_type: 'qa', label: 'QA', required: true },
+    { gate_key: 'data', gate_type: 'data', label: 'Data', required: false },
+  ],
+  artifact_delivery: [
+    { gate_key: 'review', gate_type: 'review', label: 'Review', required: true },
+    { gate_key: 'qa', gate_type: 'qa', label: 'QA', required: false },
+    { gate_key: 'data', gate_type: 'data', label: 'Data', required: false },
+  ],
+};
+
+function settingsGateTemplates(
+  settings: DeliverySettings,
+): Record<SettingsDeliveryType, SettingsGateTemplate[]> {
+  const configured = settings.default_gates_json;
+  const read = (type: SettingsDeliveryType): SettingsGateTemplate[] => {
+    const value = configured[type];
+    if (!Array.isArray(value)) return FALLBACK_GATE_TEMPLATES[type].map((gate) => ({ ...gate }));
+    return value as SettingsGateTemplate[];
+  };
+  return {
+    software_release: read('software_release'),
+    artifact_delivery: read('artifact_delivery'),
+  };
+}
 
 interface SettingsTabProps {
   projectId: string;
@@ -66,6 +110,7 @@ export function SettingsTab({
 
   const navItems: { id: SettingsSection; label: string }[] = [
     { id: 'general', label: t('settings.nav.general') },
+    { id: 'delivery', label: t('delivery.settings.nav') },
     { id: 'ai', label: t('settings.nav.ai') },
     { id: 'data', label: t('settings.nav.data') },
     { id: 'danger', label: t('projectDetail.danger.nav') },
@@ -174,6 +219,7 @@ export function SettingsTab({
         {activeSection === 'general' && (
           <ProjectGeneralPanel project={project} onProjectChanged={onProjectChanged} />
         )}
+        {activeSection === 'delivery' && <DeliverySettingsPanel projectId={projectId} />}
         {activeSection === 'ai' && (
           <ProjectAiOpsPanel projectId={projectId} onOpenAiOps={onOpenAiOps} />
         )}
@@ -281,6 +327,266 @@ export function SettingsTab({
         }}
       />
     </div>
+  );
+}
+
+function DeliverySettingsPanel({ projectId }: { projectId: string }) {
+  const { t } = useLanguage();
+  const [settings, setSettings] = useState<DeliverySettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getDeliverySettings(projectId)
+      .then((value) => {
+        if (active) setSettings(value);
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err instanceof Error ? err.message : t('delivery.settings.loadError'));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId, t]);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!settings) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      setSettings(
+        await updateDeliverySettings(projectId, {
+          organization_name: settings.organization_name,
+          document_name: settings.document_name,
+          primary_color: settings.primary_color,
+          footer_text: settings.footer_text,
+          locale: settings.locale,
+          default_gates_json: settings.default_gates_json,
+        }),
+      );
+      setMessage(t('delivery.settings.saved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('delivery.settings.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadLogo = async () => {
+    if (!logoFile) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      setSettings(await uploadDeliveryLogo(projectId, logoFile));
+      setLogoFile(null);
+      setMessage(t('delivery.settings.logoSaved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('delivery.settings.logoError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setDefaultGateRequired = (
+    deliveryType: SettingsDeliveryType,
+    gateKey: string,
+    required: boolean,
+  ) => {
+    if (!settings) return;
+    const templates = settingsGateTemplates(settings);
+    templates[deliveryType] = templates[deliveryType].map((gate) =>
+      gate.gate_key === gateKey ? { ...gate, required } : gate,
+    );
+    setSettings({ ...settings, default_gates_json: templates });
+  };
+
+  if (!settings && !error) {
+    return <p className="text-xs text-foreground/70">{t('delivery.loading')}</p>;
+  }
+
+  return (
+    <form onSubmit={(event) => void save(event)} className="flex max-w-2xl flex-col gap-4">
+      <div className="flex items-start gap-3">
+        <span className="rounded-lg bg-[color:var(--ol-primary-soft)] p-2 text-[color:var(--ol-primary)]">
+          <FileCheck2 className="h-4 w-4" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{t('delivery.settings.title')}</h3>
+          <p className="mt-1 text-xs leading-5 text-foreground/70">
+            {t('delivery.settings.description')}
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          {error}
+        </div>
+      )}
+      {message && (
+        <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+          {message}
+        </div>
+      )}
+
+      {settings && (
+        <div className="grid gap-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="receipt-organization" className="text-xs font-medium">
+              {t('delivery.settings.organization')}
+            </label>
+            <Input
+              id="receipt-organization"
+              className="mt-1.5"
+              value={settings.organization_name ?? ''}
+              onChange={(event) =>
+                setSettings({ ...settings, organization_name: event.target.value || null })
+              }
+            />
+          </div>
+          <div>
+            <label htmlFor="receipt-document-name" className="text-xs font-medium">
+              {t('delivery.settings.documentName')}
+            </label>
+            <Input
+              id="receipt-document-name"
+              className="mt-1.5"
+              value={settings.document_name}
+              onChange={(event) => setSettings({ ...settings, document_name: event.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="receipt-primary-color" className="text-xs font-medium">
+              {t('delivery.settings.primaryColor')}
+            </label>
+            <div className="mt-1.5 flex gap-2">
+              <input
+                id="receipt-primary-color"
+                type="color"
+                value={settings.primary_color}
+                onChange={(event) =>
+                  setSettings({ ...settings, primary_color: event.target.value })
+                }
+                className="h-9 w-12 rounded border border-[hsl(var(--border))] bg-transparent p-1"
+              />
+              <Input
+                value={settings.primary_color}
+                onChange={(event) =>
+                  setSettings({ ...settings, primary_color: event.target.value })
+                }
+                pattern="^#[0-9A-Fa-f]{6}$"
+              />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="receipt-locale" className="text-xs font-medium">
+              {t('delivery.settings.locale')}
+            </label>
+            <select
+              id="receipt-locale"
+              value={settings.locale}
+              onChange={(event) =>
+                setSettings({ ...settings, locale: event.target.value as 'ko' | 'en' })
+              }
+              className="mt-1.5 h-9 w-full rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs"
+            >
+              <option value="ko">{t('delivery.settings.korean')}</option>
+              <option value="en">{t('delivery.settings.english')}</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="receipt-logo" className="text-xs font-medium">
+              {t('delivery.settings.logo')}
+            </label>
+            <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="receipt-logo"
+                type="file"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!logoFile || saving}
+                onClick={() => void uploadLogo()}
+              >
+                {t('delivery.settings.uploadLogo')}
+              </Button>
+            </div>
+            {settings.logo_blob_id && (
+              <p className="ol-mono mt-1 truncate text-[10px] text-foreground/60">
+                {t('delivery.settings.logoConfigured')}: {settings.logo_blob_id}
+              </p>
+            )}
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="receipt-footer" className="text-xs font-medium">
+              {t('delivery.settings.footer')}
+            </label>
+            <Input
+              id="receipt-footer"
+              className="mt-1.5"
+              value={settings.footer_text ?? ''}
+              onChange={(event) =>
+                setSettings({ ...settings, footer_text: event.target.value || null })
+              }
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium">{t('delivery.settings.defaultGates')}</p>
+            <p className="mt-1 text-[11px] leading-5 text-foreground/60">
+              {t('delivery.settings.defaultGatesDescription')}
+            </p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {(['software_release', 'artifact_delivery'] as SettingsDeliveryType[]).map(
+                (deliveryType) => (
+                  <div
+                    key={deliveryType}
+                    className="rounded-md border border-[hsl(var(--border))] p-3"
+                  >
+                    <p className="text-xs font-semibold">{t(`delivery.type.${deliveryType}`)}</p>
+                    <div className="mt-2 space-y-2">
+                      {settingsGateTemplates(settings)[deliveryType].map((gate) => (
+                        <label key={gate.gate_key} className="flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={gate.required}
+                            onChange={(event) =>
+                              setDefaultGateRequired(
+                                deliveryType,
+                                gate.gate_key,
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          {gate.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end sm:col-span-2">
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? t('delivery.settings.saving') : t('delivery.settings.save')}
+            </Button>
+          </div>
+        </div>
+      )}
+    </form>
   );
 }
 

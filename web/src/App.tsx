@@ -49,6 +49,9 @@ const ServiceDetailV2 = lazy(() =>
 const DeploymentDetail = lazy(() =>
   import('@/pages/DeploymentDetail').then((m) => ({ default: m.DeploymentDetail })),
 );
+const DeliveryDetail = lazy(() =>
+  import('@/pages/DeliveryDetail').then((m) => ({ default: m.DeliveryDetailPage })),
+);
 
 function RouteSuspense({ children }: { children: ReactNode }) {
   return (
@@ -312,6 +315,14 @@ function App() {
                     element={
                       <RouteSuspense>
                         <DeploymentDetail />
+                      </RouteSuspense>
+                    }
+                  />
+                  <Route
+                    path="/projects/:projectId/deliveries/:deliveryId"
+                    element={
+                      <RouteSuspense>
+                        <DeliveryDetail />
                       </RouteSuspense>
                     }
                   />

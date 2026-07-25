@@ -98,7 +98,14 @@ Detailed view for a Project and its resources.
 | **Recovery**    | Historical incident/status information when available                                        |
 | **Runtime**     | Service logs + web terminal (xterm.js), ANSI colors, runtime state                           |
 | **AI Ops**      | Project-level briefing feed with status filters and agent handoff actions                    |
-| **Settings**    | Project metadata and danger actions. Application config lives on detail pages.               |
+| **Deliveries**  | Review artifacts, feedback, decisions, Gates, deployment evidence, and Receipt finalization  |
+| **Settings**    | Project metadata, Receipt theme/default Gates, and danger actions                            |
+
+The **Deliveries** tab creates a project-scoped delivery record. Its detail
+page separates Overview, Artifacts, Review, Gates, Deployments, and Receipt.
+External agents may submit proposed review items, but only an administrator can
+confirm decisions, record customer approval evidence, acknowledge warnings,
+and finalize an immutable Receipt.
 
 Project Settings includes **AI Ops Briefing** controls. The Project **AI Ops** tab is the read
 surface for recent briefings. Briefings are read-only: OpenLander can summarize deterministic

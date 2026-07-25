@@ -7,6 +7,7 @@ import {
   createOpenLanderMonitorCompositeTool,
   createOpenLanderProjectCompositeTool,
 } from '../../src/mcp/composite-tools.js';
+import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
 import type { RequestIdentity } from '../../src/types/identity.js';
@@ -82,7 +83,21 @@ function createScopedContext(identity: RequestIdentity) {
       services.filter((service) => service.project_id === projectId),
     ),
     getDeployLog: vi.fn(async (deployId: string) =>
-      deployId === 'deploy-service-1' ? { id: deployId, service_id: 'service-1' } : null,
+      deployId === 'deploy-service-1'
+        ? { id: deployId, service_id: 'service-1' }
+        : deployId === 'deploy-service-2'
+          ? { id: deployId, service_id: 'service-2' }
+          : null,
+    ),
+    getDelivery: vi.fn(async (deliveryId: string) =>
+      deliveryId === 'delivery-1'
+        ? { id: deliveryId, project_id: 'project-1' }
+        : deliveryId === 'delivery-2'
+          ? { id: deliveryId, project_id: 'project-2' }
+          : null,
+    ),
+    getDeliveryProjectIdByArtifactId: vi.fn(async (artifactId: string) =>
+      artifactId === 'artifact-1' ? 'project-1' : artifactId === 'artifact-2' ? 'project-2' : null,
     ),
     getAiOpsBriefing: vi.fn(async () => null),
     getActionRun: vi.fn(async () => null),
@@ -630,5 +645,73 @@ describe('MCP scoped token enforcement', () => {
     ]);
     expect(JSON.stringify(projects[0])).not.toContain('service-sibling');
     expect(JSON.stringify(result)).not.toContain('project-2');
+  });
+
+  it('hides a Delivery from a token scoped to another Project', async () => {
+    const tool = createOpenLanderProjectCompositeTool(deliveryToolDefs);
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const result = (await tool.execute(
+      { action: 'get_delivery', params: { delivery_id: 'delivery-2' } },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeProjectId: 'project-1',
+        targetProjectId: 'project-2',
+        resolvedFrom: 'delivery_id',
+        reason: 'project_mismatch',
+      },
+    });
+  });
+
+  it('rejects mixed Delivery, deployment, and report artifact selectors across Projects', async () => {
+    const tool = createOpenLanderProjectCompositeTool(deliveryToolDefs);
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const deployResult = (await tool.execute(
+      {
+        action: 'link_delivery_deploy',
+        params: {
+          delivery_id: 'delivery-1',
+          deploy_id: 'deploy-service-2',
+          relation: 'released',
+        },
+      },
+      context,
+    )) as Record<string, unknown>;
+    const artifactResult = (await tool.execute(
+      {
+        action: 'record_delivery_gate_result',
+        params: {
+          delivery_id: 'delivery-1',
+          gate_key: 'qa',
+          status: 'passed',
+          report_artifact_id: 'artifact-2',
+        },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(deployResult).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      details: { targetProjectId: 'project-2', resolvedFrom: 'deploy_id' },
+    });
+    expect(artifactResult).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      details: { targetProjectId: 'project-2', resolvedFrom: 'artifact_id' },
+    });
   });
 });

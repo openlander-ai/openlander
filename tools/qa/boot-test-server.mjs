@@ -33,14 +33,27 @@ const { loadConfig } = await import('../../src/config/index.ts');
 const { createAppContext } = await import('../../src/app.ts');
 const { createServer } = await import('../../src/web/server.ts');
 const { setupPassword } = await import('../../src/auth/auth-service.ts');
+const { ArtifactStore } = await import('../../src/delivery/artifact-store.ts');
+const { DeliveryService } = await import('../../src/delivery/delivery-service.ts');
 
 const config = await loadConfig();
 config.server.port = port;
+const isolatedDockerSocket = process.env.OPENLANDER_TEST_DOCKER_SOCKET?.trim();
+if (isolatedDockerSocket) {
+  config.docker.socketPath = isolatedDockerSocket;
+  console.log(`[boot-test-server] Docker isolated on ${isolatedDockerSocket}`);
+}
 
 // createAppContext constructs Docker/Traefik objects but does NOT connect to
 // Docker. The health endpoint and DB-backed routes work without a live Docker
 // daemon, which keeps contract tests runnable in CI.
 const ctx = await createAppContext(config, databaseUrl);
+const isolatedDataDir = process.env.OPENLANDER_TEST_DATA_DIR?.trim();
+if (isolatedDataDir) {
+  ctx.artifactStore = new ArtifactStore(isolatedDataDir);
+  ctx.deliveryService = new DeliveryService(ctx.db, ctx.artifactStore);
+  console.log(`[boot-test-server] Delivery artifacts isolated under ${isolatedDataDir}`);
+}
 
 // Set up auth with a known test password so the auth middleware lets through
 // API requests. The generated API token is written to .test-backend-token so

@@ -40,6 +40,7 @@ import { ServiceMetricRepo } from './repos/service-metric.repo.js';
 import { SettingsRepo } from './repos/settings.repo.js';
 import { PatTokenRepo } from './repos/pat-token.repo.js';
 import { GitCredentialRepo } from './repos/git-credential.repo.js';
+import { DeliveryRepo } from './repos/delivery.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -78,6 +79,20 @@ export type {
   GitCredentialStatus,
   GitCredentialServiceUsage,
 } from './types.js';
+
+export type {
+  ProjectDeliverySettingsRow,
+  ArtifactBlobRow,
+  DeliveryRow,
+  DeliveryArtifactRow,
+  DeliveryExternalRefRow,
+  DeliveryFeedbackSourceRow,
+  DeliveryWorkItemRow,
+  DeliveryApprovalRow,
+  DeliveryGateRow,
+  DeliveryDeployLinkRow,
+  DeliveryReceiptRow,
+} from './schema.drizzle.js';
 
 const log = createModuleLogger('db-migration');
 const OPENLANDER_MIGRATION_LOCK_ID = 10114;
@@ -288,6 +303,7 @@ export class Database implements AuthDatabase {
   private readonly settingsRepo: SettingsRepo;
   private readonly patTokenRepo: PatTokenRepo;
   private readonly gitCredentialRepo: GitCredentialRepo;
+  private readonly deliveryRepo: DeliveryRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -326,6 +342,7 @@ export class Database implements AuthDatabase {
     this.settingsRepo = new SettingsRepo(this.db, this.client);
     this.patTokenRepo = new PatTokenRepo(this.db, this.client);
     this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
+    this.deliveryRepo = new DeliveryRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -657,6 +674,42 @@ export class Database implements AuthDatabase {
   getSetting(key: string) { return this.settingsRepo.getSetting(key); }
   upsertSetting(key: string, value: string) { return this.settingsRepo.upsertSetting(key, value); }
   deleteSetting(key: string) { return this.settingsRepo.deleteSetting(key); }
+  createDelivery(input: Parameters<DeliveryRepo['createDelivery']>[0]) { return this.deliveryRepo.createDelivery(input); }
+  getDelivery(id: string) { return this.deliveryRepo.getDelivery(id); }
+  requireDelivery(id: string) { return this.deliveryRepo.requireDelivery(id); }
+  listDeliveries(projectId: string) { return this.deliveryRepo.listDeliveries(projectId); }
+  updateDelivery(id: string, patch: Parameters<DeliveryRepo['updateDelivery']>[1]) { return this.deliveryRepo.updateDelivery(id, patch); }
+  setDeliveryStatus(id: string, status: Parameters<DeliveryRepo['setDeliveryStatus']>[1]) { return this.deliveryRepo.setDeliveryStatus(id, status); }
+  upsertArtifactBlob(input: Parameters<DeliveryRepo['upsertArtifactBlob']>[0]) { return this.deliveryRepo.upsertArtifactBlob(input); }
+  getArtifactBlob(id: string) { return this.deliveryRepo.getArtifactBlob(id); }
+  createDeliveryArtifact(input: Parameters<DeliveryRepo['createArtifact']>[0]) { return this.deliveryRepo.createArtifact(input); }
+  getDeliveryArtifact(id: string) { return this.deliveryRepo.getArtifact(id); }
+  listDeliveryArtifacts(deliveryId: string) { return this.deliveryRepo.listArtifacts(deliveryId); }
+  updateDeliveryArtifact(id: string, patch: Parameters<DeliveryRepo['updateArtifact']>[1]) { return this.deliveryRepo.updateArtifact(id, patch); }
+  createDeliveryExternalRef(input: Parameters<DeliveryRepo['createExternalRef']>[0]) { return this.deliveryRepo.createExternalRef(input); }
+  listDeliveryExternalRefs(deliveryId: string) { return this.deliveryRepo.listExternalRefs(deliveryId); }
+  createDeliveryFeedbackSource(input: Parameters<DeliveryRepo['createFeedbackSource']>[0]) { return this.deliveryRepo.createFeedbackSource(input); }
+  listDeliveryFeedbackSources(deliveryId: string) { return this.deliveryRepo.listFeedbackSources(deliveryId); }
+  createDeliveryWorkItems(deliveryId: string, items: Parameters<DeliveryRepo['createWorkItems']>[1]) { return this.deliveryRepo.createWorkItems(deliveryId, items); }
+  listDeliveryWorkItems(deliveryId: string) { return this.deliveryRepo.listWorkItems(deliveryId); }
+  updateDeliveryWorkItem(id: string, status: Parameters<DeliveryRepo['updateWorkItem']>[1], resolution?: string | null) { return this.deliveryRepo.updateWorkItem(id, status, resolution); }
+  createDeliveryApproval(input: Parameters<DeliveryRepo['createApproval']>[0]) { return this.deliveryRepo.createApproval(input); }
+  listDeliveryApprovals(deliveryId: string) { return this.deliveryRepo.listApprovals(deliveryId); }
+  listDeliveryGates(deliveryId: string) { return this.deliveryRepo.listGates(deliveryId); }
+  updateDeliveryGateTemplate(deliveryId: string, gateKey: string, patch: Parameters<DeliveryRepo['updateGateTemplate']>[2]) { return this.deliveryRepo.updateGateTemplate(deliveryId, gateKey, patch); }
+  resetDeliveryGatesForType(deliveryId: string, deliveryType: Parameters<DeliveryRepo['resetGatesForType']>[1]) { return this.deliveryRepo.resetGatesForType(deliveryId, deliveryType); }
+  recordDeliveryGateResult(input: Parameters<DeliveryRepo['recordGateResult']>[0]) { return this.deliveryRepo.recordGateResult(input); }
+  linkDeliveryDeploy(input: Parameters<DeliveryRepo['linkDeploy']>[0]) { return this.deliveryRepo.linkDeploy(input); }
+  unlinkDeliveryDeploy(deliveryId: string, deployId: string) { return this.deliveryRepo.unlinkDeploy(deliveryId, deployId); }
+  listDeliveryDeployEvidence(deliveryId: string) { return this.deliveryRepo.listDeployEvidence(deliveryId); }
+  getProjectDeliverySettings(projectId: string) { return this.deliveryRepo.getSettings(projectId); }
+  upsertProjectDeliverySettings(projectId: string, input: Parameters<DeliveryRepo['upsertSettings']>[1]) { return this.deliveryRepo.upsertSettings(projectId, input); }
+  getDeliveryReceipt(deliveryId: string) { return this.deliveryRepo.getReceipt(deliveryId); }
+  recordDeliveryReceiptPreview(deliveryId: string, expectedEvidenceVersion: number) { return this.deliveryRepo.recordReceiptPreview(deliveryId, expectedEvidenceVersion); }
+  finalizeDeliveryReceipt(input: Parameters<DeliveryRepo['finalizeReceipt']>[0]) { return this.deliveryRepo.finalizeReceipt(input); }
+  getDeliveryProjectIdByArtifactId(artifactId: string) { return this.deliveryRepo.getDeliveryProjectIdByArtifactId(artifactId); }
+  getDeliveryProjectIdsByDeployId(deployId: string) { return this.deliveryRepo.getDeliveryProjectIdByDeployId(deployId); }
+  getDeliveryArtifactsByIds(ids: string[]) { return this.deliveryRepo.getArtifactsByIds(ids); }
   transaction<T>(fn: () => T | Promise<T>) { return this.db.transaction(async () => await fn()); }
   close() { return this.client.end({ timeout: 5 }); }
 }

@@ -22,6 +22,7 @@ import {
   Box,
   Database,
   ExternalLink,
+  FileCheck2,
   Plus,
   Settings as SettingsIcon,
   Sparkles,
@@ -50,8 +51,9 @@ import {
 } from '@/lib/api/services';
 import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
+import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 
-type ProjectTabId = 'services' | 'ai' | 'settings';
+type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings';
 
 function hasRuntimeMetricValue(value: string): boolean {
   const normalized = value.trim();
@@ -169,7 +171,13 @@ export function ProjectView() {
   //   tokens deferred to v0.2).
   const tabParam = searchParams.get('tab');
   const initialTab: ProjectTabId =
-    tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services';
+    tabParam === 'settings'
+      ? 'settings'
+      : tabParam === 'deliveries'
+        ? 'deliveries'
+        : tabParam === 'ai'
+          ? 'ai'
+          : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('general');
 
@@ -478,6 +486,11 @@ export function ProjectView() {
       icon: Box,
       count: projectServiceRows.length,
     },
+    {
+      id: 'deliveries',
+      label: t('projectDetail.tabs.deliveries'),
+      icon: FileCheck2,
+    },
     { id: 'ai', label: t('projectDetail.tabs.aiOps'), icon: Sparkles },
     { id: 'settings', label: t('projectDetail.tabs.settings'), icon: SettingsIcon },
   ];
@@ -612,6 +625,22 @@ export function ProjectView() {
             dataAccessByServiceId={dataAccessByServiceId}
             composeAggregateStatus={composeAggregateStatus}
           />
+        </TabPanel>
+        <TabPanel
+          active={activeTab === 'deliveries'}
+          panelId="projectpanel-deliveries"
+          labelledBy="project-deliveries"
+          className="p-0"
+        >
+          {projectId && (
+            <DeliveriesTab
+              projectId={projectId}
+              onConfigure={() => {
+                setSettingsInitialSection('delivery');
+                setActiveTab('settings');
+              }}
+            />
+          )}
         </TabPanel>
         <TabPanel
           active={activeTab === 'ai'}
