@@ -319,7 +319,8 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
   `diagnose_service` findings, safe route re-pointing, same-image runtime env
   apply, verification details, and rollback when a hot path fails.
 - Delivery Workspace Beta for FDE review, approval, Gate, deployment evidence,
-  and immutable customer-facing Receipt PDFs.
+  and immutable customer-facing Receipt PDFs, plus an Engagement Portfolio for
+  cross-Project runtime health and delivery blocker rollups.
 
 **Next**
 
