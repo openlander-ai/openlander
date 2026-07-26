@@ -199,17 +199,23 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         }
         await ctx.db.deleteDomainMappingsByService(service.id);
 
-        const containerRef = service.container_id ?? service.container_name;
-        let containerRemoved = false;
-        if (containerRef) {
+        const environments = await ctx.db.getEnvironmentsByServiceId(service.id);
+        const containerRefs = new Set<string>();
+        const primaryContainerRef = service.container_id ?? service.container_name;
+        if (primaryContainerRef) containerRefs.add(primaryContainerRef);
+        for (const environment of environments) {
+          if (environment.container_id) containerRefs.add(environment.container_id);
+        }
+
+        for (const containerRef of containerRefs) {
           try {
             await ctx.docker.stopContainer(containerRef);
           } catch (err) {
-            log.debug({ err, serviceId: service.id }, 'Service delete stop skipped');
+            log.debug({ err, serviceId: service.id, containerRef }, 'Service delete stop skipped');
           }
           await ctx.docker.removeContainer(containerRef);
-          containerRemoved = true;
         }
+        const containerRemoved = containerRefs.size > 0;
 
         const deleteVolumes = body.deleteVolumes === true;
         const siblingDeployables = (await ctx.db.getDeployablesByGroup(project.id)).filter(
@@ -241,6 +247,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
           // preserve the row until the last runtime-scoped service is gone.
           const remainingRuntimeDeployables = await ctx.db.getDeployablesByGroup(runtimeProject.id);
           if (remainingRuntimeDeployables.length === 0) {
+            await ctx.docker.removeProjectNetwork(runtimeProject.name);
             await ctx.db.deleteProject(runtimeProject.id);
           }
         }

@@ -155,6 +155,14 @@ export class EnvironmentRepo {
     return rows.map((r) => ({ ...r, project_id: projectId }));
   }
 
+  async getEnvironmentsByServiceId(serviceId: string): Promise<EnvironmentRow[]> {
+    return (await this.db
+      .select()
+      .from(environments)
+      .where(eq(environments.service_id, serviceId))
+      .orderBy(asc(environments.created_at))) as EnvironmentRow[];
+  }
+
   async getEnvironmentsByProjectIds(projectIds: string[]): Promise<Map<string, EnvironmentRow[]>> {
     if (projectIds.length === 0) {
       return new Map();

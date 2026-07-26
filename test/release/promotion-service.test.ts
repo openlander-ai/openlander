@@ -125,6 +125,7 @@ function createHarness(
     service,
     db,
     docker,
+    promotion,
     allocateRuntimePort,
     releaseRuntimePort,
     smokeProbe,
@@ -133,6 +134,35 @@ function createHarness(
 }
 
 describe('ReleasePromotionService', () => {
+  it('persists a queryable Promotion before start returns', async () => {
+    const harness = createHarness({ priorSucceeded: true });
+    let releaseInspection: (() => void) | undefined;
+    const inspectionBlocked = new Promise<void>((resolve) => {
+      releaseInspection = resolve;
+    });
+    harness.docker.inspectImage.mockImplementation(async () => {
+      await inspectionBlocked;
+      return { Id: digest };
+    });
+
+    await harness.service.start({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+
+    expect(harness.db.createReleasePromotion).toHaveBeenCalledOnce();
+    await expect(harness.service.evaluate('promotion-1')).resolves.toMatchObject({
+      id: 'promotion-1',
+      status: expect.stringMatching(/^(pending|deploying)$/),
+    });
+
+    releaseInspection?.();
+    await vi.waitFor(() => expect(harness.promotion.status).toBe('succeeded'));
+  });
+
   it('reuses the exact Release digest without rebuilding', async () => {
     const harness = createHarness({ priorSucceeded: true });
     const result = await harness.service.execute({

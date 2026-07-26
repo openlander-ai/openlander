@@ -232,7 +232,7 @@ the same database.
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **122 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **127 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                           |
 | ---------------------------- | ------- | --------------------------------------------------------------------------------- |
@@ -267,11 +267,13 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | Evidence  | `openlander_project` → `create_evidence_upload`       | Issue a short-lived upload URL for one artifact     |
 | Update    | `openlander_project` → `record_project_update`        | Record source-linked decisions, actions, and risks  |
 
-`bootstrap_engagement`, `update_engagement_from_brief`, `list_engagements`, and `get_engagement` require an
-instance/organization MCP token. Project- and service-scoped tokens cannot use
-these Engagement-wide operations because they could reveal or mutate sibling
-Projects. Engagement mutation commands and `bootstrap_engagement` also require `idempotency_key`; retrying the
-same payload returns the original operation result.
+`bootstrap_engagement`, `update_engagement_from_brief`, `archive_engagement`,
+`unarchive_engagement`, `list_engagements`, and `get_engagement` require an
+instance/organization MCP token. `link_project_to_engagement` and
+`unlink_project_from_engagement` also accept a Project token only when
+`project_id` is that token's own Project; sibling Project and service tokens get
+`SCOPE_VIOLATION`. Every Engagement mutation requires `idempotency_key`; retrying
+the same payload returns the original operation result.
 
 Application Operations are also available to authenticated automation at
 `POST /api/v1/operations/:name`. Send the operation input as the JSON body and

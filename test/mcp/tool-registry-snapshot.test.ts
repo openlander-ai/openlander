@@ -27,6 +27,7 @@ const EXPECTED_TOOLS = [
   'analyze_infrastructure',
   'apply_project_manifest',
   'apply_route_config',
+  'archive_engagement',
   'archive_project',
   'archive_service',
   'attach_delivery_url',
@@ -75,6 +76,7 @@ const EXPECTED_TOOLS = [
   'get_env_var',
   'get_instance_info',
   'get_logs',
+  'get_project_manifest',
   'get_project_stats',
   'get_release',
   'get_service_credentials',
@@ -84,6 +86,7 @@ const EXPECTED_TOOLS = [
   'get_topology',
   'get_weekly_report',
   'link_delivery_deploy',
+  'link_project_to_engagement',
   'list_ai_ops_briefings',
   'list_archived_services',
   'list_buckets',
@@ -132,9 +135,11 @@ const EXPECTED_TOOLS = [
   'start_service',
   'stop_service',
   'submit_delivery_work_item_drafts',
+  'unarchive_engagement',
   'unarchive_project',
   'unarchive_service',
   'unexpose_public',
+  'unlink_project_from_engagement',
   'update_app',
   'update_application_source',
   'update_delivery_draft',
@@ -194,8 +199,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 122 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(122);
+  it('maintains exactly 127 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(127);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

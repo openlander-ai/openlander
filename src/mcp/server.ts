@@ -94,7 +94,7 @@ All actions: action="help"
 
 ## openlander_project
 Projects, shared config, Agent Delivery Runs, Delivery Workspace metadata, and Engagement portfolio summaries. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
-Key actions: create_project, list_projects, bootstrap_engagement, list_engagements, get_engagement, apply_project_manifest, plan_delivery, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
+Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
 All actions: action="help"
 
 ## openlander_service
@@ -146,9 +146,9 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Receipt finalization is human UI-only. Never claim a Delivery is delivered from a preview response.
 
 ## Engagement Portfolio
-- list_engagements and get_engagement provide read-only internal FDE portfolio rollups across linked Projects.
-- Engagement reads require an instance/org-scoped token. Project/service-scoped tokens must not infer sibling Project data.
-- bootstrap_engagement lets an instance/org Agent atomically create an Engagement and initial Project. Other Engagement mutations and Project linking remain human web-session actions.
+- list_engagements and get_engagement provide read-only internal FDE portfolio rollups across linked Projects and require instance/org scope.
+- bootstrap_engagement, update_engagement_from_brief, archive_engagement, and unarchive_engagement require instance/org scope.
+- link_project_to_engagement and unlink_project_from_engagement also accept a project-scoped token only when project_id exactly matches that token. Service-scoped tokens cannot infer or mutate Engagement membership.
 
 ## Agent Delivery Run
 - plan_delivery stores the objective, Definition of Done, manifest path, and manifest-defined Gates.

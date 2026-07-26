@@ -81,6 +81,10 @@ export const DEPLOY_ACTIONS = [
 export const PROJECT_ACTIONS = [
   'bootstrap_engagement',
   'update_engagement_from_brief',
+  'link_project_to_engagement',
+  'unlink_project_from_engagement',
+  'archive_engagement',
+  'unarchive_engagement',
   'plan_delivery',
   'create_evidence_upload',
   'start_delivery_run',
@@ -94,6 +98,7 @@ export const PROJECT_ACTIONS = [
   'publish_weekly_report',
   'get_weekly_report',
   'apply_project_manifest',
+  'get_project_manifest',
   'record_project_update',
   'create_project',
   'list_projects',

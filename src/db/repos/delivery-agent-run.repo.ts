@@ -445,6 +445,54 @@ export class DeliveryAgentRunRepo {
     );
   }
 
+  async reconcileInterruptedOnStartup(): Promise<{
+    pausedRuns: number;
+    cancelledChecks: number;
+  }> {
+    return await this.db.transaction(async (tx) => {
+      const now = new Date().toISOString();
+      const cancelledChecks = await tx
+        .update(deliveryRunChecks)
+        .set({
+          status: 'cancelled',
+          details_json: {
+            code: 'CHECK_INTERRUPTED',
+            message: 'OpenLander restarted while this quality check was running.',
+          },
+          finished_at: now,
+          updated_at: now,
+        })
+        .where(eq(deliveryRunChecks.status, 'running'))
+        .returning({ id: deliveryRunChecks.id });
+      const running = await tx
+        .select()
+        .from(deliveryAgentRuns)
+        .where(eq(deliveryAgentRuns.status, 'running'))
+        .for('update');
+      for (const current of running) {
+        const handoffSummary =
+          'OpenLander restarted while this Agent Run was active. Review the latest event and check evidence, then resume explicitly.';
+        await tx
+          .update(deliveryAgentRuns)
+          .set({
+            status: 'paused',
+            handoff_summary: handoffSummary,
+            updated_at: now,
+          })
+          .where(eq(deliveryAgentRuns.id, current.id));
+        await appendEvent(tx, {
+          runId: current.id,
+          eventType: 'interrupted',
+          phase: current.current_phase,
+          summary: handoffSummary,
+          detail: { code: 'AGENT_RUN_INTERRUPTED' },
+          actor: 'openlander-startup',
+        });
+      }
+      return { pausedRuns: running.length, cancelledChecks: cancelledChecks.length };
+    });
+  }
+
   async fail(input: {
     runId: string;
     summary: string;

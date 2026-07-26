@@ -231,3 +231,48 @@ describe('ensureProjectNetwork', () => {
     });
   });
 });
+
+describe('removeProjectNetwork', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('disconnects only the owning managed Traefik endpoint before removing its network', async () => {
+    const inspect = vi.fn().mockResolvedValue({
+      Labels: { 'openlander.instance': 'olinst_a' },
+      Containers: { 'traefik-id': { Name: 'traefik-ol' } },
+    });
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const remove = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({ inspect, disconnect, remove });
+    mockGetContainer.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Config: {
+          Labels: {
+            'openlander.managed': 'true',
+            'openlander.role': 'traefik',
+            'openlander.instance': 'olinst_a',
+          },
+        },
+      }),
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.removeProjectNetwork('demo')).resolves.toBeUndefined();
+
+    expect(disconnect).toHaveBeenCalledWith({ Container: 'traefik-id', Force: true });
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to remove a network without an exact instance ownership match', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Labels: {}, Containers: {} }),
+      remove,
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.removeProjectNetwork('legacy')).resolves.toBeUndefined();
+
+    expect(remove).not.toHaveBeenCalled();
+  });
+});

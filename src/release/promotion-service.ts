@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 import type { OpenLanderConfig } from '../config/index.js';
-import type { Database } from '../db/index.js';
+import type {
+  Database,
+  DeliveryRow,
+  ProjectEnvironmentRow,
+  ReleasePromotionRow,
+  ReleaseRow,
+} from '../db/index.js';
 import {
   ProjectEnvironmentNotFoundError,
   ReleaseArtifactDigestMismatchError,
@@ -44,6 +50,13 @@ export type PromotionSmokeProbe = (
   timeoutMs: number,
 ) => Promise<PromotionSmokeResult>;
 
+interface PreparedPromotion {
+  release: ReleaseRow;
+  delivery: DeliveryRow;
+  projectEnvironment: ProjectEnvironmentRow;
+  promotion: ReleasePromotionRow;
+}
+
 async function defaultSmokeProbe(
   port: number,
   path: string,
@@ -77,7 +90,7 @@ export class ReleasePromotionService {
     private readonly waitForSoak: (milliseconds: number) => Promise<void> = wait,
   ) {}
 
-  start(input: {
+  async start(input: {
     id: string;
     releaseId: string;
     projectEnvironmentId: string;
@@ -90,9 +103,12 @@ export class ReleasePromotionService {
         'This Environment already has a Promotion running.',
       );
     }
-    const task = this.execute(input).finally(() => {
-      this.activePromotions.delete(input.projectEnvironmentId);
-    });
+    const prepared = this.prepare(input);
+    const task = prepared
+      .then(async (promotion) => await this.executePrepared(promotion))
+      .finally(() => {
+        this.activePromotions.delete(input.projectEnvironmentId);
+      });
     this.activePromotions.set(input.projectEnvironmentId, task);
     void task.catch((error: unknown) => {
       log.error(
@@ -100,7 +116,7 @@ export class ReleasePromotionService {
         'Release Promotion failed',
       );
     });
-    return Promise.resolve();
+    await prepared;
   }
 
   async execute(input: {
@@ -111,6 +127,17 @@ export class ReleasePromotionService {
     actor: string;
     bypassOrder?: boolean;
   }): Promise<Record<string, unknown>> {
+    return await this.executePrepared(await this.prepare(input));
+  }
+
+  private async prepare(input: {
+    id: string;
+    releaseId: string;
+    projectEnvironmentId: string;
+    idempotencyKey: string;
+    actor: string;
+    bypassOrder?: boolean;
+  }): Promise<PreparedPromotion> {
     const release = await this.db.requireRelease(input.releaseId);
     if (release.status !== 'ready') {
       throw new ReleaseStateError(
@@ -124,9 +151,6 @@ export class ReleasePromotionService {
     if (!projectEnvironment || projectEnvironment.project_id !== delivery.project_id) {
       throw new ProjectEnvironmentNotFoundError(input.projectEnvironmentId);
     }
-    const healthTimeoutSeconds = projectEnvironment.health_timeout_seconds;
-    const smokePath = projectEnvironment.smoke_path ?? null;
-    const soakSeconds = projectEnvironment.soak_seconds;
     const orderedEnvironments = await this.db.listProjectEnvironments(delivery.project_id);
     const prior = [...orderedEnvironments]
       .filter((environment) => environment.promotion_order < projectEnvironment.promotion_order)
@@ -152,6 +176,14 @@ export class ReleasePromotionService {
       idempotencyKey: input.idempotencyKey,
       initiatedBy: input.actor,
     });
+    return { release, delivery, projectEnvironment, promotion };
+  }
+
+  private async executePrepared(prepared: PreparedPromotion): Promise<Record<string, unknown>> {
+    const { release, delivery, projectEnvironment, promotion } = prepared;
+    const healthTimeoutSeconds = projectEnvironment.health_timeout_seconds;
+    const smokePath = projectEnvironment.smoke_path ?? null;
+    const soakSeconds = projectEnvironment.soak_seconds;
     if (promotion.status === 'succeeded') return promotion;
     await this.db.updateReleasePromotion(promotion.id, {
       status: 'deploying',

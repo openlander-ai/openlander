@@ -360,4 +360,35 @@ export class ReleaseRepo {
       .limit(1);
     return row ?? null;
   }
+
+  async reconcileInterruptedOnStartup(): Promise<{
+    failedReleases: number;
+    failedPromotions: number;
+  }> {
+    return await this.db.transaction(async (tx) => {
+      const now = new Date().toISOString();
+      const failedReleases = await tx
+        .update(releases)
+        .set({ status: 'failed', updated_at: now })
+        .where(eq(releases.status, 'building'))
+        .returning({ id: releases.id });
+      const failedPromotions = await tx
+        .update(releasePromotions)
+        .set({
+          status: 'failed',
+          health_status: 'unhealthy',
+          soak_status: 'failed',
+          error_code: 'PROMOTION_INTERRUPTED',
+          error_message: 'OpenLander restarted while this Release Promotion was running.',
+          completed_at: now,
+          updated_at: now,
+        })
+        .where(inArray(releasePromotions.status, ['pending', 'deploying']))
+        .returning({ id: releasePromotions.id });
+      return {
+        failedReleases: failedReleases.length,
+        failedPromotions: failedPromotions.length,
+      };
+    });
+  }
 }

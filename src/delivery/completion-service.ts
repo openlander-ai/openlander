@@ -65,6 +65,8 @@ export class DeliveryCompletionService {
       );
     }
 
+    await this.db.updateDelivery(delivery.id, { limitations: input.limitations.trim() });
+
     const gates = await this.db.listDeliveryGates(delivery.id);
     const reviewRequired = gates.some((gate) => gate.gate_type === 'review' && gate.required);
     if (!reviewRequired) {
@@ -108,7 +110,6 @@ export class DeliveryCompletionService {
           }
         }
       }
-      await this.db.updateDelivery(delivery.id, { limitations: input.limitations.trim() });
       await this.db.setDeliveryStatus(delivery.id, 'approved');
     }
 

@@ -105,6 +105,11 @@ describe('Delivery REST human and idempotency gates', () => {
       release_artifacts: [],
       release_promotions: [],
     }));
+    const getProjectManifestComparison = vi.fn(async () => ({
+      status: 'not_applied' as const,
+      state: null,
+      drift: [],
+    }));
     const app = new Hono();
     app.onError((error, c) => {
       if (error instanceof OpenLanderError) {
@@ -129,9 +134,10 @@ describe('Delivery REST human and idempotency gates', () => {
           })),
         },
         deliveryService: { finalizeReceipt, getDeliveryExecution },
+        projectManifestService: { getComparison: getProjectManifestComparison },
       } as unknown as AppContext),
     );
-    return { app, finalizeReceipt, getDeliveryExecution };
+    return { app, finalizeReceipt, getDeliveryExecution, getProjectManifestComparison };
   }
 
   it('requires Idempotency-Key before a Project PAT can upload CI evidence', async () => {
@@ -183,12 +189,17 @@ describe('Delivery REST human and idempotency gates', () => {
     );
     expect(allowed.status).toBe(200);
     expect(harness.getDeliveryExecution).toHaveBeenCalledWith('delivery-1');
+    expect(harness.getProjectManifestComparison).toHaveBeenCalledWith('project-1');
+    await expect(allowed.json()).resolves.toMatchObject({
+      project_manifest: { status: 'not_applied', state: null, drift: [] },
+    });
 
     const denied = await harness.app.request(
       '/api/projects/project-2/deliveries/delivery-1/execution',
     );
     expect(denied.status).toBe(404);
     expect(harness.getDeliveryExecution).toHaveBeenCalledTimes(1);
+    expect(harness.getProjectManifestComparison).toHaveBeenCalledTimes(1);
   });
 
   it('always downloads HTML as an attachment with a restrictive content policy', async () => {

@@ -146,9 +146,46 @@ export class NetworkOps {
   /** Remove a project-scoped Docker network. Silently succeeds if not found or has active endpoints. */
   async removeProjectNetwork(projectName: string): Promise<void> {
     const networkName = containerName(projectName);
+    const network = this.ctx.client.getNetwork(networkName);
 
     try {
-      await this.ctx.client.getNetwork(networkName).remove();
+      const info = await withTimeout(
+        network.inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${networkName})`,
+      );
+      if (this.ctx.instanceId && info.Labels?.[DOCKER_LABELS.INSTANCE] !== this.ctx.instanceId) {
+        log.warn(
+          {
+            projectName,
+            networkName,
+            instanceId: this.ctx.instanceId,
+            ownerInstanceId: info.Labels?.[DOCKER_LABELS.INSTANCE],
+          },
+          'Refusing to remove a project network owned by another or unknown instance',
+        );
+        return;
+      }
+
+      if (this.ctx.instanceId) {
+        for (const containerId of Object.keys(info.Containers ?? {})) {
+          try {
+            const container = await this.ctx.client.getContainer(containerId).inspect();
+            const labels = container.Config.Labels;
+            const isOwnedTraefik =
+              labels[DOCKER_LABELS.MANAGED] === 'true' &&
+              labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+              labels[DOCKER_LABELS.INSTANCE] === this.ctx.instanceId;
+            if (isOwnedTraefik) {
+              await network.disconnect({ Container: containerId, Force: true });
+            }
+          } catch (error) {
+            if (!isDockerNotFoundError(error)) throw error;
+          }
+        }
+      }
+
+      await network.remove();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (isDockerNotFoundError(error)) {

@@ -83,6 +83,28 @@ export const projectEnvironments = pgTable(
   ],
 );
 
+export const projectManifestStates = pgTable(
+  'project_manifest_states',
+  {
+    project_id: text('project_id')
+      .primaryKey()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    manifest_path: text('manifest_path').notNull(),
+    manifest_sha256: text('manifest_sha256').notNull(),
+    definition_json: jsonb('definition_json').$type<Record<string, unknown>>().notNull(),
+    applied_by: text('applied_by').notNull(),
+    applied_at: text('applied_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'project_manifest_states_manifest_sha256_check',
+      sql`length(${table.manifest_sha256}) = 64`,
+    ),
+  ],
+);
+
 export const environments = pgTable(
   'environments',
   {
@@ -2087,7 +2109,7 @@ export const deliveryReceipts = pgTable(
     delivery_id: text('delivery_id')
       .notNull()
       .unique()
-      .references(() => deliveries.id, { onDelete: 'restrict' }),
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
     revision: integer('revision').notNull().default(1),
     snapshot_json: jsonb('snapshot_json').$type<Record<string, unknown>>().notNull(),
     pdf_blob_id: text('pdf_blob_id')
@@ -2105,6 +2127,7 @@ export const deliveryReceipts = pgTable(
 
 export type ProjectDeliverySettingsRow = typeof projectDeliverySettings.$inferSelect;
 export type ProjectEnvironmentRow = typeof projectEnvironments.$inferSelect;
+export type ProjectManifestStateRow = typeof projectManifestStates.$inferSelect;
 export type ArtifactBlobRow = typeof artifactBlobs.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 export type DeliveryArtifactRow = typeof deliveryArtifacts.$inferSelect;
@@ -2152,6 +2175,7 @@ export type NewMcpSessionLog = typeof mcpSessionLog.$inferInsert;
 export const drizzleSchema = {
   projects,
   projectEnvironments,
+  projectManifestStates,
   environments,
   envVars,
   deployLogs,

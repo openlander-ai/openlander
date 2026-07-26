@@ -286,7 +286,11 @@ export function createDeliveryRoutes(ctx: AppContext): Hono {
     const projectId = c.req.param('projectId');
     const deliveryId = c.req.param('deliveryId');
     await assertDeliveryProject(ctx, c, projectId, deliveryId);
-    return c.json(await ctx.deliveryService.getDeliveryExecution(deliveryId));
+    const [execution, projectManifest] = await Promise.all([
+      ctx.deliveryService.getDeliveryExecution(deliveryId),
+      ctx.projectManifestService.getComparison(projectId),
+    ]);
+    return c.json({ ...execution, project_manifest: projectManifest });
   });
 
   api.patch('/projects/:projectId/deliveries/:deliveryId', async (c) => {

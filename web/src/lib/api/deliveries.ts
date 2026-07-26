@@ -145,6 +145,23 @@ export interface DeliveryDetail {
 }
 
 export interface DeliveryExecutionView {
+  project_manifest: {
+    status: 'not_applied' | 'in_sync' | 'drifted';
+    state: {
+      project_id: string;
+      manifest_path: string;
+      manifest_sha256: string;
+      definition_json: Record<string, unknown>;
+      applied_by: string;
+      applied_at: string;
+    } | null;
+    drift: Array<{
+      scope: 'environment' | 'service';
+      kind: 'missing' | 'retained' | 'changed';
+      key: string;
+      fields: string[];
+    }>;
+  };
   agent_runs: Array<{
     id: string;
     status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';

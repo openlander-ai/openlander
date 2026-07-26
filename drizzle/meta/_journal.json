@@ -148,6 +148,20 @@
       "when": 1785050447036,
       "tag": "0020_delivery-deploy-link-hard-delete-cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785051610527,
+      "tag": "0021_project-manifest-state",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785054890575,
+      "tag": "0022_receipt-hard-delete-cascade",
+      "breakpoints": true
     }
   ]
 }

@@ -2984,6 +2984,28 @@ export const translations = {
       duration: '소요 {duration}ms',
       recentEvents: '최근 실행 내역',
       noEvents: '기록된 실행 내역이 없습니다.',
+      projectManifest: {
+        title: '프로젝트 manifest 적용 상태',
+        description:
+          '적용한 .openlander/project.yml snapshot과 현재 프로젝트의 서비스·환경 기록을 비교합니다. manifest에서 빠진 리소스도 자동으로 삭제하지 않습니다.',
+        notApplied: '아직 적용한 프로젝트 manifest snapshot이 없습니다.',
+        applied: '{actor} 적용 · {date}',
+        drift: '프로젝트 manifest 차이',
+        status: {
+          in_sync: '일치',
+          drifted: '차이 있음',
+          not_applied: '적용 전',
+        },
+        scope: {
+          environment: '환경',
+          service: '서비스',
+        },
+        kind: {
+          missing: 'DB에 없음',
+          retained: 'Manifest 밖에서 유지 중',
+          changed: '설정이 다름',
+        },
+      },
       runStatus: {
         running: '실행 중',
         paused: '일시 중지',

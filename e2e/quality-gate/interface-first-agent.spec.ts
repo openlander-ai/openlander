@@ -74,6 +74,61 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
       replayed: true,
     });
 
+    const sibling = await callProjectAction('create_project', {
+      name: `${projectName}-sibling`,
+      display_name: 'Interface-first sibling Project',
+      tags: ['synthetic', 'quality-gate'],
+    });
+    const siblingProjectId = requiredString(sibling['project_id'], 'sibling.project_id');
+    const siblingLink = await callProjectAction('link_project_to_engagement', {
+      idempotency_key: `${projectName}-link-sibling`,
+      engagement_id: engagementId,
+      project_id: siblingProjectId,
+    });
+    expect(siblingLink).toMatchObject({ status: 'linked', project_count: 2 });
+
+    const secondProjectName = uniqueProjectName('qg-interface-portfolio');
+    const secondBootstrap = await callProjectAction('bootstrap_engagement', {
+      idempotency_key: `${secondProjectName}-bootstrap`,
+      customer_name: 'Second Synthetic Customer',
+      title: 'Portfolio isolation acceptance',
+      summary: 'Second synthetic Engagement for cross-Project isolation.',
+      project: {
+        name: secondProjectName,
+        display_name: 'Portfolio isolation acceptance',
+        tags: ['synthetic', 'quality-gate'],
+      },
+    });
+    const secondEngagementId = requiredString(
+      secondBootstrap['engagement_id'],
+      'second.engagement_id',
+    );
+    const secondSibling = await callProjectAction('create_project', {
+      name: `${secondProjectName}-sibling`,
+      display_name: 'Portfolio isolation sibling Project',
+      tags: ['synthetic', 'quality-gate'],
+    });
+    const secondSiblingProjectId = requiredString(
+      secondSibling['project_id'],
+      'second.sibling.project_id',
+    );
+    await callProjectAction('link_project_to_engagement', {
+      idempotency_key: `${secondProjectName}-link-sibling`,
+      engagement_id: secondEngagementId,
+      project_id: secondSiblingProjectId,
+    });
+
+    const [firstPortfolio, secondPortfolio] = await Promise.all([
+      callProjectAction('get_engagement', { engagement_id: engagementId }),
+      callProjectAction('get_engagement', { engagement_id: secondEngagementId }),
+    ]);
+    expect(firstPortfolio['summary']).toMatchObject({ project_count: 2 });
+    expect(secondPortfolio['summary']).toMatchObject({ project_count: 2 });
+    const firstPortfolioJson = JSON.stringify(firstPortfolio);
+    const secondPortfolioJson = JSON.stringify(secondPortfolio);
+    expect(firstPortfolioJson).not.toContain(secondProjectName);
+    expect(secondPortfolioJson).not.toContain(projectName);
+
     const projectManifestSha = '1'.repeat(64);
     const environmentResult = await callProjectAction('apply_project_manifest', {
       idempotency_key: `${projectName}-environments`,
@@ -112,6 +167,21 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
     });
     expect(environmentResult['status']).toBe('applied');
     expect(environmentResult['environments']).toHaveLength(3);
+    expect(environmentResult['comparison']).toMatchObject({ status: 'in_sync', drift: [] });
+    const manifestState = await callProjectAction('get_project_manifest', {
+      project_id: projectId,
+    });
+    expect(manifestState).toMatchObject({
+      status: 'ok',
+      comparison: {
+        status: 'in_sync',
+        state: {
+          manifest_path: '.openlander/project.yml',
+          manifest_sha256: projectManifestSha,
+        },
+        drift: [],
+      },
+    });
 
     const deliveryPlan = await callProjectAction('plan_delivery', {
       idempotency_key: `${projectName}-delivery`,
@@ -247,5 +317,20 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
         }),
       ]),
     );
+
+    const archived = await callProjectAction('archive_engagement', {
+      idempotency_key: `${secondProjectName}-archive`,
+      engagement_id: secondEngagementId,
+    });
+    expect(archived).toMatchObject({ status: 'archived', project_count: 2 });
+    const unarchived = await callProjectAction('unarchive_engagement', {
+      idempotency_key: `${secondProjectName}-unarchive`,
+      engagement_id: secondEngagementId,
+    });
+    expect(unarchived).toMatchObject({
+      status: 'unarchived',
+      engagement_status: 'active',
+      project_count: 2,
+    });
   });
 });

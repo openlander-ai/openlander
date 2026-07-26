@@ -22,6 +22,20 @@ function createHarness() {
     project_id: 'prj_operation',
     project_name: 'acme-platform',
   });
+  const engagementDetail = {
+    id: 'eng_operation',
+    status: 'active' as const,
+    project_count: 2,
+    delivery_summary: { total: 1 },
+    blocker_count: 0,
+  };
+  const linkProject = vi.fn().mockResolvedValue(engagementDetail);
+  const unlinkProject = vi.fn().mockResolvedValue({
+    ...engagementDetail,
+    project_count: 1,
+  });
+  const archive = vi.fn().mockResolvedValue({ ...engagementDetail, status: 'archived' as const });
+  const unarchive = vi.fn().mockResolvedValue(engagementDetail);
   const db = {
     claimApplicationOperation: vi.fn(
       async (input: {
@@ -72,7 +86,7 @@ function createHarness() {
   const ctx = {
     config: { mcp: { instanceId: 'olinst_test' } },
     db,
-    engagementService: { bootstrap },
+    engagementService: { bootstrap, linkProject, unlinkProject, archive, unarchive },
     operations,
   } as unknown as AppContext;
   const actor = {
@@ -86,7 +100,18 @@ function createHarness() {
     title: 'Platform rollout',
     project: { name: 'acme-platform' },
   };
-  return { ctx, operations, actor, input, bootstrap, db };
+  return {
+    ctx,
+    operations,
+    actor,
+    input,
+    bootstrap,
+    linkProject,
+    unlinkProject,
+    archive,
+    unarchive,
+    db,
+  };
 }
 
 function createAgentDeliveryHarness() {
@@ -287,6 +312,78 @@ describe('Application Operation contract', () => {
         idempotencyKey: 'brief-1',
       }),
     ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+    expect(db.claimApplicationOperation).not.toHaveBeenCalled();
+  });
+
+  it('lets a project-scoped Agent link only its own Project', async () => {
+    const { ctx, operations, linkProject } = createHarness();
+    const actor = {
+      source: 'mcp' as const,
+      scope: 'project' as const,
+      instanceId: 'olinst_test',
+      projectId: 'project-a',
+      label: 'project-agent',
+    };
+
+    const linked = await operations.execute(
+      ctx,
+      'link_project_to_engagement',
+      { engagement_id: 'eng_operation', project_id: 'project-a' },
+      { actor, idempotencyKey: 'link-own-project' },
+    );
+    expect(linked.result).toMatchObject({
+      status: 'linked',
+      engagement_id: 'eng_operation',
+      project_count: 2,
+    });
+    expect(linkProject).toHaveBeenCalledWith('eng_operation', 'project-a', 'project-agent');
+  });
+
+  it('rejects project-scoped Engagement linking for a sibling Project', async () => {
+    const { ctx, operations, linkProject, db } = createHarness();
+
+    await expect(
+      operations.execute(
+        ctx,
+        'link_project_to_engagement',
+        { engagement_id: 'eng_operation', project_id: 'project-b' },
+        {
+          actor: {
+            source: 'mcp',
+            scope: 'project',
+            instanceId: 'olinst_test',
+            projectId: 'project-a',
+            label: 'project-agent',
+          },
+          idempotencyKey: 'link-sibling-project',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+    expect(linkProject).not.toHaveBeenCalled();
+    expect(db.claimApplicationOperation).not.toHaveBeenCalled();
+  });
+
+  it('keeps Engagement archive commands at instance or org scope', async () => {
+    const { ctx, operations, archive, db } = createHarness();
+
+    await expect(
+      operations.execute(
+        ctx,
+        'archive_engagement',
+        { engagement_id: 'eng_operation' },
+        {
+          actor: {
+            source: 'mcp',
+            scope: 'project',
+            instanceId: 'olinst_test',
+            projectId: 'project-a',
+            label: 'project-agent',
+          },
+          idempotencyKey: 'archive-from-project',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+    expect(archive).not.toHaveBeenCalled();
     expect(db.claimApplicationOperation).not.toHaveBeenCalled();
   });
 

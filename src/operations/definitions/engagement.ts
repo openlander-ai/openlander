@@ -198,7 +198,206 @@ export const updateEngagementFromBriefOperation: ApplicationOperationDefinition 
   },
 };
 
+const engagementMutationSummarySchema = z.object({
+  engagement_id: z.string().min(1),
+  engagement_status: z.enum(['active', 'on_hold', 'completed', 'archived']),
+  project_count: z.number().int().nonnegative(),
+  delivery_count: z.number().int().nonnegative(),
+  blocker_count: z.number().int().nonnegative(),
+});
+
+function engagementMutationSummary(engagement: {
+  id: string;
+  status: 'active' | 'on_hold' | 'completed' | 'archived';
+  project_count: number;
+  delivery_summary: { total: number };
+  blocker_count: number;
+}) {
+  return {
+    engagement_id: engagement.id,
+    engagement_status: engagement.status,
+    project_count: engagement.project_count,
+    delivery_count: engagement.delivery_summary.total,
+    blocker_count: engagement.blocker_count,
+  };
+}
+
+export const linkProjectToEngagementOperation: ApplicationOperationDefinition = {
+  name: 'link_project_to_engagement',
+  version: 1,
+  description: 'Link one existing Project to an active Engagement.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance', 'org', 'project'],
+  projectIdField: 'project_id',
+  inputSchema: z
+    .object({ engagement_id: z.string().min(1), project_id: z.string().min(1) })
+    .strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('linked'),
+      ...engagementMutationSummarySchema.shape,
+      suggested_call: z.object({
+        operation: z.literal('get_engagement'),
+        input: z.object({ engagement_id: z.string().min(1) }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: false },
+  execute: async (input, context) => {
+    const engagementId = String(input['engagement_id']);
+    const engagement = await context.appCtx.engagementService.linkProject(
+      engagementId,
+      String(input['project_id']),
+      context.actor.label,
+    );
+    return {
+      status: 'linked',
+      ...engagementMutationSummary(engagement),
+      suggested_call: { operation: 'get_engagement', input: { engagement_id: engagementId } },
+      _agent_guidance: {
+        message:
+          'The Project is linked. Its runtime and Delivery state are now included in the Engagement rollup.',
+        next_steps: ['Inspect the updated Engagement summary before planning cross-Project work.'],
+      },
+    };
+  },
+};
+
+export const unlinkProjectFromEngagementOperation: ApplicationOperationDefinition = {
+  name: 'unlink_project_from_engagement',
+  version: 1,
+  description:
+    'Remove one Project from an active Engagement without changing the Project or its evidence.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance', 'org', 'project'],
+  projectIdField: 'project_id',
+  inputSchema: z
+    .object({ engagement_id: z.string().min(1), project_id: z.string().min(1) })
+    .strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('unlinked'),
+      project_id: z.string().min(1),
+      ...engagementMutationSummarySchema.shape,
+      suggested_call: z.object({
+        operation: z.literal('get_engagement'),
+        input: z.object({ engagement_id: z.string().min(1) }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: false },
+  execute: async (input, context) => {
+    const engagementId = String(input['engagement_id']);
+    const projectId = String(input['project_id']);
+    const engagement = await context.appCtx.engagementService.unlinkProject(
+      engagementId,
+      projectId,
+      context.actor.label,
+    );
+    return {
+      status: 'unlinked',
+      project_id: projectId,
+      ...engagementMutationSummary(engagement),
+      suggested_call: { operation: 'get_engagement', input: { engagement_id: engagementId } },
+      _agent_guidance: {
+        message:
+          'The Project was unlinked. Its runtime, Delivery evidence, and finalized Receipts were not changed.',
+        next_steps: ['Inspect the updated Engagement summary.'],
+      },
+    };
+  },
+};
+
+export const archiveEngagementOperation: ApplicationOperationDefinition = {
+  name: 'archive_engagement',
+  version: 1,
+  description: 'Archive an Engagement while preserving its Project links and all runtime state.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance', 'org'],
+  inputSchema: z.object({ engagement_id: z.string().min(1) }).strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('archived'),
+      ...engagementMutationSummarySchema.shape,
+      suggested_call: z.object({
+        operation: z.literal('get_engagement'),
+        input: z.object({ engagement_id: z.string().min(1) }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: false },
+  execute: async (input, context) => {
+    const engagementId = String(input['engagement_id']);
+    const engagement = await context.appCtx.engagementService.archive(
+      engagementId,
+      context.actor.label,
+    );
+    return {
+      status: 'archived',
+      ...engagementMutationSummary(engagement),
+      suggested_call: { operation: 'get_engagement', input: { engagement_id: engagementId } },
+      _agent_guidance: {
+        message:
+          'The Engagement was archived. Linked Projects, Deliveries, and runtime state were not changed.',
+        next_steps: ['Use unarchive_engagement before changing metadata or Project links.'],
+      },
+    };
+  },
+};
+
+export const unarchiveEngagementOperation: ApplicationOperationDefinition = {
+  name: 'unarchive_engagement',
+  version: 1,
+  description: 'Restore an archived Engagement to active status.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance', 'org'],
+  inputSchema: z.object({ engagement_id: z.string().min(1) }).strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('unarchived'),
+      ...engagementMutationSummarySchema.shape,
+      suggested_call: z.object({
+        operation: z.literal('get_engagement'),
+        input: z.object({ engagement_id: z.string().min(1) }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: false },
+  execute: async (input, context) => {
+    const engagementId = String(input['engagement_id']);
+    const engagement = await context.appCtx.engagementService.unarchive(
+      engagementId,
+      context.actor.label,
+    );
+    return {
+      status: 'unarchived',
+      ...engagementMutationSummary(engagement),
+      suggested_call: { operation: 'get_engagement', input: { engagement_id: engagementId } },
+      _agent_guidance: {
+        message: 'The Engagement is active again and can accept metadata or Project-link changes.',
+        next_steps: ['Inspect the Engagement summary before making further changes.'],
+      },
+    };
+  },
+};
+
 export const engagementOperations = [
   bootstrapEngagementOperation,
   updateEngagementFromBriefOperation,
+  linkProjectToEngagementOperation,
+  unlinkProjectFromEngagementOperation,
+  archiveEngagementOperation,
+  unarchiveEngagementOperation,
 ] as const;

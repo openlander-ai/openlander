@@ -105,6 +105,7 @@ export type {
   DeliveryAgentRunEventRow,
   DeliveryRunCheckRow,
   ProjectEnvironmentRow,
+  ProjectManifestStateRow,
   ReleaseRow,
   ReleaseArtifactRow,
   ReleasePromotionRow,
@@ -394,6 +395,15 @@ export class Database implements AuthDatabase {
     if (interruptedOperations > 0) {
       log.warn({ interruptedOperations }, 'Marked interrupted application operations as failed');
     }
+    const interruptedDelivery =
+      await database.deliveryAgentRunRepo.reconcileInterruptedOnStartup();
+    if (interruptedDelivery.pausedRuns > 0 || interruptedDelivery.cancelledChecks > 0) {
+      log.warn(interruptedDelivery, 'Paused interrupted Agent Runs and cancelled active checks');
+    }
+    const interruptedRelease = await database.releaseRepo.reconcileInterruptedOnStartup();
+    if (interruptedRelease.failedReleases > 0 || interruptedRelease.failedPromotions > 0) {
+      log.warn(interruptedRelease, 'Failed interrupted Release and Promotion work');
+    }
     const repairedManagedKinds = await database.serviceRepo.repairManagedServiceKindAliases();
     if (repairedManagedKinds > 0) {
       log.info(
@@ -474,12 +484,14 @@ export class Database implements AuthDatabase {
   getEnvironmentByServiceAndProjectEnvironment(serviceId: string, projectEnvironmentId: string) { return this.environmentRepo.getEnvironmentByServiceAndProjectEnvironment(serviceId, projectEnvironmentId); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
+  getEnvironmentsByServiceId(serviceId: string) { return this.environmentRepo.getEnvironmentsByServiceId(serviceId); }
   getEnvironmentsByProjectIds(projectIds: string[]) { return this.environmentRepo.getEnvironmentsByProjectIds(projectIds); }
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { return this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { return this.environmentRepo.deleteEnvironment(id); }
-  syncProjectEnvironments(projectId: string, manifestSha256: string, inputs: Parameters<ProjectEnvironmentRepo['sync']>[2]) { return this.projectEnvironmentRepo.sync(projectId, manifestSha256, inputs); }
+  syncProjectEnvironments(projectId: string, manifestSha256: string, inputs: Parameters<ProjectEnvironmentRepo['sync']>[2], manifestState?: Parameters<ProjectEnvironmentRepo['sync']>[3]) { return this.projectEnvironmentRepo.sync(projectId, manifestSha256, inputs, manifestState); }
   getProjectEnvironment(id: string) { return this.projectEnvironmentRepo.get(id); }
   listProjectEnvironments(projectId: string) { return this.projectEnvironmentRepo.list(projectId); }
+  getProjectManifestState(projectId: string) { return this.projectEnvironmentRepo.getManifestState(projectId); }
   createRelease(input: Parameters<ReleaseRepo['create']>[0]) { return this.releaseRepo.create(input); }
   getRelease(id: string) { return this.releaseRepo.get(id); }
   requireRelease(id: string) { return this.releaseRepo.require(id); }

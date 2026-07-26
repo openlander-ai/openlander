@@ -2779,6 +2779,28 @@ export const translations = {
       duration: '{duration} ms',
       recentEvents: 'Recent execution events',
       noEvents: 'No execution events have been recorded.',
+      projectManifest: {
+        title: 'Project manifest snapshot',
+        description:
+          'Compares the applied .openlander/project.yml snapshot with current Project services and Environment records. Retained resources are never deleted automatically.',
+        notApplied: 'No Project manifest snapshot has been applied.',
+        applied: 'Applied by {actor} · {date}',
+        drift: 'Project manifest drift',
+        status: {
+          in_sync: 'In sync',
+          drifted: 'Drift detected',
+          not_applied: 'Not applied',
+        },
+        scope: {
+          environment: 'Environment',
+          service: 'Service',
+        },
+        kind: {
+          missing: 'Missing from DB',
+          retained: 'Retained outside manifest',
+          changed: 'Configuration differs',
+        },
+      },
       runStatus: {
         running: 'Running',
         paused: 'Paused',

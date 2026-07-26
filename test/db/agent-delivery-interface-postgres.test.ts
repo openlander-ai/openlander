@@ -217,4 +217,152 @@ describeWithDatabase('Agent Delivery interface persistence on Postgres', () => {
       }
     });
   });
+
+  it('reconciles interrupted Agent, check, Release, and Promotion state on restart', async () => {
+    await withIsolatedPostgresDatabase('restart_reconciliation', async (url) => {
+      const initial = await Database.connect(url);
+      const project = await initial.createProject({
+        id: 'project-restart',
+        name: 'project-restart',
+      });
+      const delivery = await initial.createDelivery({
+        id: 'delivery-restart',
+        projectId: project.id,
+        title: 'Restart-safe Delivery',
+        manifestPath: '.openlander/delivery.yml',
+        gates: [
+          {
+            gate_key: 'qa',
+            gate_type: 'qa',
+            label: 'Quality',
+            required: true,
+            source: 'manifest',
+            definition_sha256: 'd'.repeat(64),
+          },
+        ],
+      });
+      const run = await initial.startDeliveryAgentRun({
+        id: 'run-restart',
+        deliveryId: delivery.id,
+        commitSha: 'a'.repeat(40),
+        manifestPath: '.openlander/delivery.yml',
+        manifestSha256: 'b'.repeat(64),
+        runnerImage: 'node:22',
+        actor: 'agent-a',
+      });
+      const [gate] = await initial.listDeliveryGates(delivery.id);
+      if (!gate) throw new Error('Restart test Gate was not created.');
+      const check = await initial.startDeliveryRunCheck({
+        runId: run.id,
+        gateId: gate.id,
+        checkKey: 'unit',
+        command: ['npm', 'test'],
+      });
+      const [environment] = await initial.syncProjectEnvironments(project.id, 'c'.repeat(64), [
+        {
+          key: 'production',
+          displayName: 'Production',
+          tier: 'production',
+          promotionOrder: 0,
+        },
+      ]);
+      if (!environment) throw new Error('Restart test Environment was not created.');
+      const release = await initial.createRelease({
+        id: 'release-restart',
+        deliveryId: delivery.id,
+        agentRunId: run.id,
+        version: '1.0.0',
+        commitSha: run.commit_sha,
+        createdBy: 'agent-a',
+      });
+      const promotion = await initial.createReleasePromotion({
+        id: 'promotion-restart',
+        releaseId: release.id,
+        projectEnvironmentId: environment.id,
+        idempotencyKey: 'promotion-restart',
+        initiatedBy: 'agent-a',
+      });
+      await initial.close();
+
+      const restarted = await Database.connect(url);
+      try {
+        await expect(restarted.requireDeliveryAgentRun(run.id)).resolves.toMatchObject({
+          status: 'paused',
+          handoff_summary: expect.stringContaining('restarted'),
+        });
+        await expect(restarted.listDeliveryRunChecks(run.id)).resolves.toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: check.id, status: 'cancelled' })]),
+        );
+        await expect(restarted.requireRelease(release.id)).resolves.toMatchObject({
+          status: 'failed',
+        });
+        await expect(restarted.getReleasePromotion(promotion.id)).resolves.toMatchObject({
+          status: 'failed',
+          error_code: 'PROMOTION_INTERRUPTED',
+        });
+        await expect(restarted.listDeliveryAgentRunEvents(run.id)).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ event_type: 'interrupted', actor: 'openlander-startup' }),
+          ]),
+        );
+        await expect(
+          restarted.resumeDeliveryAgentRun({
+            runId: run.id,
+            summary: 'A new Agent reviewed the interruption and resumed the Run.',
+            actor: 'agent-b',
+          }),
+        ).resolves.toMatchObject({ status: 'running' });
+      } finally {
+        await restarted.close();
+      }
+    });
+  });
+
+  it('allows an explicit Project hard delete to cascade an immutable Receipt', async () => {
+    await withIsolatedPostgresDatabase('receipt_hard_delete', async (url) => {
+      const db = await Database.connect(url);
+      const client = postgres(url, { max: 1, prepare: false });
+      try {
+        const project = await db.createProject({
+          id: 'project-receipt-delete',
+          name: 'project-receipt-delete',
+        });
+        const delivery = await db.createDelivery({
+          id: 'delivery-receipt-delete',
+          projectId: project.id,
+          title: 'Finalized Delivery',
+          gates: [],
+        });
+        const blobId = 'f'.repeat(64);
+        await client`
+          INSERT INTO artifact_blobs (id, sha256, mime_type, size_bytes, storage_key)
+          VALUES (${blobId}, ${blobId}, 'application/pdf', 1, 'receipts/delete.pdf')
+        `;
+        await client`
+          INSERT INTO delivery_receipts (
+            id, delivery_id, revision, snapshot_json, pdf_blob_id, pdf_sha256,
+            finalized_by, finalized_at
+          ) VALUES (
+            'receipt-hard-delete', ${delivery.id}, 1, '{}'::jsonb, ${blobId}, ${blobId},
+            'admin', '2026-07-26T00:00:00.000Z'
+          )
+        `;
+
+        await expect(db.deleteProject(project.id)).resolves.toBeUndefined();
+
+        const [counts] = await client<
+          Array<{ projects: number; deliveries: number; receipts: number }>
+        >`
+          SELECT
+            (SELECT count(*)::integer FROM projects WHERE id = ${project.id}) AS projects,
+            (SELECT count(*)::integer FROM deliveries WHERE id = ${delivery.id}) AS deliveries,
+            (SELECT count(*)::integer FROM delivery_receipts WHERE delivery_id = ${delivery.id}) AS receipts
+        `;
+        expect(counts).toEqual({ projects: 0, deliveries: 0, receipts: 0 });
+      } finally {
+        await client.end({ timeout: 5 });
+        await db.close();
+      }
+    });
+  });
 });

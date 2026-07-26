@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 import { applicationOperationActorFromToolContext } from '../../operations/index.js';
 import { agentDeliveryOperations } from '../../operations/definitions/delivery.js';
-import { applyProjectManifestOperation } from '../../operations/definitions/project-manifest.js';
+import {
+  applyProjectManifestOperation,
+  getProjectManifestOperation,
+} from '../../operations/definitions/project-manifest.js';
 import { projectUpdateOperations } from '../../operations/definitions/project-update.js';
 import type { ApplicationOperationDefinition } from '../../operations/types.js';
 import type { ToolDef } from './types.js';
@@ -86,5 +89,6 @@ export const agentDeliveryToolDefs: ToolDef[] = agentDeliveryOperations.map((def
 );
 export const projectManifestToolDefs: ToolDef[] = [
   applyProjectManifestOperation,
+  getProjectManifestOperation,
   ...projectUpdateOperations,
 ].map((definition) => operationToolDef(definition));

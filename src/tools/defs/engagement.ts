@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { applicationOperationActorFromToolContext } from '../../operations/index.js';
-import { updateEngagementFromBriefOperation } from '../../operations/definitions/engagement.js';
+import {
+  archiveEngagementOperation,
+  linkProjectToEngagementOperation,
+  unarchiveEngagementOperation,
+  unlinkProjectFromEngagementOperation,
+  updateEngagementFromBriefOperation,
+} from '../../operations/definitions/engagement.js';
 import { operationToolDef } from './agent-delivery.js';
 import type { ToolDef } from './types.js';
 
@@ -62,6 +68,10 @@ export const engagementToolDefs: ToolDef[] = [
     },
   },
   operationToolDef(updateEngagementFromBriefOperation),
+  operationToolDef(linkProjectToEngagementOperation),
+  operationToolDef(unlinkProjectFromEngagementOperation),
+  operationToolDef(archiveEngagementOperation),
+  operationToolDef(unarchiveEngagementOperation),
   {
     name: 'list_engagements',
     riskLevel: 'low',

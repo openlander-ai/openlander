@@ -552,17 +552,84 @@ function OverviewPanel({
   );
 }
 
+function ProjectManifestPanel({ execution }: { execution: DeliveryExecutionView | null }) {
+  const { t, language } = useLanguage();
+  const comparison = execution?.project_manifest;
+  return (
+    <SectionCard
+      title={t('delivery.execution.projectManifest.title')}
+      description={t('delivery.execution.projectManifest.description')}
+    >
+      {!comparison || comparison.status === 'not_applied' || !comparison.state ? (
+        <EmptyEvidence>{t('delivery.execution.projectManifest.notApplied')}</EmptyEvidence>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-[color:var(--ol-border-subtle)] p-3">
+            <div className="min-w-0">
+              <p className="ol-mono break-all text-xs">{comparison.state.manifest_path}</p>
+              <p className="ol-mono mt-1 break-all text-[9px] text-[color:var(--ol-fg-muted)]">
+                sha256:{comparison.state.manifest_sha256}
+              </p>
+              <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                {t('delivery.execution.projectManifest.applied', {
+                  actor: comparison.state.applied_by,
+                  date: new Date(comparison.state.applied_at).toLocaleString(language),
+                })}
+              </p>
+            </div>
+            <span
+              className={cn(
+                'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                comparison.status === 'in_sync'
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : 'border-warning/30 bg-warning/10 text-warning',
+              )}
+            >
+              {t(`delivery.execution.projectManifest.status.${comparison.status}`)}
+            </span>
+          </div>
+          {comparison.drift.length > 0 && (
+            <ul className="space-y-2" aria-label={t('delivery.execution.projectManifest.drift')}>
+              {comparison.drift.map((item) => (
+                <li
+                  key={`${item.scope}:${item.kind}:${item.key}`}
+                  className="rounded-md border border-warning/25 bg-warning/5 px-3 py-2 text-xs"
+                >
+                  <span className="font-medium">
+                    {t(`delivery.execution.projectManifest.scope.${item.scope}`)} · {item.key}
+                  </span>
+                  <span className="ml-2 text-warning">
+                    {t(`delivery.execution.projectManifest.kind.${item.kind}`)}
+                  </span>
+                  {item.fields.length > 0 && (
+                    <p className="ol-mono mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                      {item.fields.join(', ')}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null }) {
   const { t, language } = useLanguage();
   const run = execution?.agent_runs[0];
   if (!execution || !run) {
     return (
-      <SectionCard
-        title={t('delivery.execution.title')}
-        description={t('delivery.execution.description')}
-      >
-        <EmptyEvidence>{t('delivery.execution.empty')}</EmptyEvidence>
-      </SectionCard>
+      <div className="space-y-4">
+        <ProjectManifestPanel execution={execution} />
+        <SectionCard
+          title={t('delivery.execution.title')}
+          description={t('delivery.execution.description')}
+        >
+          <EmptyEvidence>{t('delivery.execution.empty')}</EmptyEvidence>
+        </SectionCard>
+      </div>
     );
   }
 
@@ -575,120 +642,129 @@ function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null
   const events = execution.run_events.filter((event) => event.run_id === run.id).slice(0, 5);
 
   return (
-    <SectionCard
-      title={t('delivery.execution.title')}
-      description={t('delivery.execution.description')}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <strong className="text-xs">{t('delivery.execution.latestRun')}</strong>
-            <span className="rounded-full border border-[color:var(--ol-border)] px-2 py-0.5 text-[10px]">
-              {t(`delivery.execution.runStatus.${run.status}`)}
-            </span>
+    <div className="space-y-4">
+      <ProjectManifestPanel execution={execution} />
+      <SectionCard
+        title={t('delivery.execution.title')}
+        description={t('delivery.execution.description')}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-xs">{t('delivery.execution.latestRun')}</strong>
+              <span className="rounded-full border border-[color:var(--ol-border)] px-2 py-0.5 text-[10px]">
+                {t(`delivery.execution.runStatus.${run.status}`)}
+              </span>
+            </div>
+            <dl className="mt-3 space-y-2 text-[10px]">
+              <div>
+                <dt className="text-[color:var(--ol-fg-subtle)]">
+                  {t('delivery.execution.phase')}
+                </dt>
+                <dd className="mt-0.5 text-xs">{run.current_phase}</dd>
+              </div>
+              <div>
+                <dt className="text-[color:var(--ol-fg-subtle)]">
+                  {t('delivery.execution.commit')}
+                </dt>
+                <dd className="ol-mono mt-0.5 break-all">{run.commit_sha}</dd>
+              </div>
+              <div>
+                <dt className="text-[color:var(--ol-fg-subtle)]">
+                  {t('delivery.execution.manifest')}
+                </dt>
+                <dd className="ol-mono mt-0.5 break-all">
+                  {run.manifest_path} · sha256:{run.manifest_sha256}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[color:var(--ol-fg-subtle)]">
+                  {t('delivery.execution.runner')}
+                </dt>
+                <dd className="ol-mono mt-0.5 break-all">
+                  {run.runner_image_digest ?? run.runner_image}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[color:var(--ol-fg-subtle)]">
+                  {t('delivery.execution.started')}
+                </dt>
+                <dd className="mt-0.5">{new Date(run.started_at).toLocaleString(language)}</dd>
+              </div>
+            </dl>
+            {run.handoff_summary && (
+              <p className="mt-3 rounded bg-[color:var(--ol-panel-2)] px-2 py-1.5 text-xs leading-5">
+                <span className="font-medium">{t('delivery.execution.handoff')}: </span>
+                {run.handoff_summary}
+              </p>
+            )}
           </div>
-          <dl className="mt-3 space-y-2 text-[10px]">
-            <div>
-              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.phase')}</dt>
-              <dd className="mt-0.5 text-xs">{run.current_phase}</dd>
-            </div>
-            <div>
-              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.commit')}</dt>
-              <dd className="ol-mono mt-0.5 break-all">{run.commit_sha}</dd>
-            </div>
-            <div>
-              <dt className="text-[color:var(--ol-fg-subtle)]">
-                {t('delivery.execution.manifest')}
-              </dt>
-              <dd className="ol-mono mt-0.5 break-all">
-                {run.manifest_path} · sha256:{run.manifest_sha256}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.runner')}</dt>
-              <dd className="ol-mono mt-0.5 break-all">
-                {run.runner_image_digest ?? run.runner_image}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[color:var(--ol-fg-subtle)]">
-                {t('delivery.execution.started')}
-              </dt>
-              <dd className="mt-0.5">{new Date(run.started_at).toLocaleString(language)}</dd>
-            </div>
-          </dl>
-          {run.handoff_summary && (
-            <p className="mt-3 rounded bg-[color:var(--ol-panel-2)] px-2 py-1.5 text-xs leading-5">
-              <span className="font-medium">{t('delivery.execution.handoff')}: </span>
-              {run.handoff_summary}
-            </p>
-          )}
+
+          <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
+            <strong className="text-xs">{t('delivery.execution.checks')}</strong>
+            {latestChecks.size === 0 ? (
+              <p className="mt-3 text-xs text-[color:var(--ol-fg-muted)]">
+                {t('delivery.execution.noChecks')}
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {[...latestChecks.values()].map((check) => (
+                  <li
+                    key={check.id}
+                    className="rounded border border-[color:var(--ol-border-subtle)] px-2 py-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-medium">{check.check_key}</span>
+                      <span>{t(`delivery.execution.checkStatus.${check.status}`)}</span>
+                    </div>
+                    <p className="ol-mono mt-1 break-all text-[10px] text-[color:var(--ol-fg-muted)]">
+                      {check.command}
+                    </p>
+                    <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                      {t('delivery.execution.attempt', { attempt: check.attempt })}
+                      {check.duration_ms !== null
+                        ? ` · ${t('delivery.execution.duration', { duration: check.duration_ms })}`
+                        : ''}
+                      {check.exit_code !== null ? ` · exit ${check.exit_code}` : ''}
+                    </p>
+                    {(check.log_sha256 || check.report_artifact_id) && (
+                      <p className="ol-mono mt-1 break-all text-[9px] text-[color:var(--ol-fg-subtle)]">
+                        {check.log_sha256 ? `log sha256:${check.log_sha256}` : ''}
+                        {check.log_sha256 && check.report_artifact_id ? ' · ' : ''}
+                        {check.report_artifact_id ? `report:${check.report_artifact_id}` : ''}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
-        <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
-          <strong className="text-xs">{t('delivery.execution.checks')}</strong>
-          {latestChecks.size === 0 ? (
-            <p className="mt-3 text-xs text-[color:var(--ol-fg-muted)]">
-              {t('delivery.execution.noChecks')}
+        <div className="mt-4 border-t border-[color:var(--ol-border-subtle)] pt-4">
+          <strong className="text-xs">{t('delivery.execution.recentEvents')}</strong>
+          {events.length === 0 ? (
+            <p className="mt-2 text-xs text-[color:var(--ol-fg-muted)]">
+              {t('delivery.execution.noEvents')}
             </p>
           ) : (
-            <ul className="mt-3 space-y-2">
-              {[...latestChecks.values()].map((check) => (
-                <li
-                  key={check.id}
-                  className="rounded border border-[color:var(--ol-border-subtle)] px-2 py-2"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="font-medium">{check.check_key}</span>
-                    <span>{t(`delivery.execution.checkStatus.${check.status}`)}</span>
-                  </div>
-                  <p className="ol-mono mt-1 break-all text-[10px] text-[color:var(--ol-fg-muted)]">
-                    {check.command}
-                  </p>
-                  <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
-                    {t('delivery.execution.attempt', { attempt: check.attempt })}
-                    {check.duration_ms !== null
-                      ? ` · ${t('delivery.execution.duration', { duration: check.duration_ms })}`
-                      : ''}
-                    {check.exit_code !== null ? ` · exit ${check.exit_code}` : ''}
-                  </p>
-                  {(check.log_sha256 || check.report_artifact_id) && (
-                    <p className="ol-mono mt-1 break-all text-[9px] text-[color:var(--ol-fg-subtle)]">
-                      {check.log_sha256 ? `log sha256:${check.log_sha256}` : ''}
-                      {check.log_sha256 && check.report_artifact_id ? ' · ' : ''}
-                      {check.report_artifact_id ? `report:${check.report_artifact_id}` : ''}
-                    </p>
-                  )}
+            <ol className="mt-2 space-y-2">
+              {events.map((event) => (
+                <li key={event.id} className="flex gap-3 text-xs">
+                  <time className="shrink-0 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                    {new Date(event.created_at).toLocaleString(language)}
+                  </time>
+                  <span>
+                    {event.phase && <span className="font-medium">[{event.phase}] </span>}
+                    {event.summary}
+                  </span>
                 </li>
               ))}
-            </ul>
+            </ol>
           )}
         </div>
-      </div>
-
-      <div className="mt-4 border-t border-[color:var(--ol-border-subtle)] pt-4">
-        <strong className="text-xs">{t('delivery.execution.recentEvents')}</strong>
-        {events.length === 0 ? (
-          <p className="mt-2 text-xs text-[color:var(--ol-fg-muted)]">
-            {t('delivery.execution.noEvents')}
-          </p>
-        ) : (
-          <ol className="mt-2 space-y-2">
-            {events.map((event) => (
-              <li key={event.id} className="flex gap-3 text-xs">
-                <time className="shrink-0 text-[10px] text-[color:var(--ol-fg-subtle)]">
-                  {new Date(event.created_at).toLocaleString(language)}
-                </time>
-                <span>
-                  {event.phase && <span className="font-medium">[{event.phase}] </span>}
-                  {event.summary}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    </SectionCard>
+      </SectionCard>
+    </div>
   );
 }
 

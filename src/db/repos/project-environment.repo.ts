@@ -2,7 +2,12 @@ import { asc, eq } from 'drizzle-orm';
 
 import { RepoPersistenceError } from '../../errors.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { projectEnvironments, type ProjectEnvironmentRow } from '../schema.drizzle.js';
+import {
+  projectEnvironments,
+  projectManifestStates,
+  type ProjectEnvironmentRow,
+  type ProjectManifestStateRow,
+} from '../schema.drizzle.js';
 import { ulid } from './activity-log.repo.js';
 
 export class ProjectEnvironmentRepo {
@@ -25,6 +30,11 @@ export class ProjectEnvironmentRepo {
       smokePath?: string | null;
       soakSeconds?: number;
     }>,
+    manifestState?: {
+      manifestPath: string;
+      definition: Record<string, unknown>;
+      appliedBy: string;
+    },
   ): Promise<ProjectEnvironmentRow[]> {
     return await this.db.transaction(async (tx) => {
       const existing = await tx
@@ -67,6 +77,27 @@ export class ProjectEnvironmentRepo {
           if (!created) throw new RepoPersistenceError('project environment', input.key);
         }
       }
+      if (manifestState) {
+        await tx
+          .insert(projectManifestStates)
+          .values({
+            project_id: projectId,
+            manifest_path: manifestState.manifestPath,
+            manifest_sha256: manifestSha256,
+            definition_json: manifestState.definition,
+            applied_by: manifestState.appliedBy,
+          })
+          .onConflictDoUpdate({
+            target: projectManifestStates.project_id,
+            set: {
+              manifest_path: manifestState.manifestPath,
+              manifest_sha256: manifestSha256,
+              definition_json: manifestState.definition,
+              applied_by: manifestState.appliedBy,
+              applied_at: new Date().toISOString(),
+            },
+          });
+      }
       return await tx
         .select()
         .from(projectEnvironments)
@@ -90,5 +121,14 @@ export class ProjectEnvironmentRepo {
       .from(projectEnvironments)
       .where(eq(projectEnvironments.project_id, projectId))
       .orderBy(asc(projectEnvironments.promotion_order));
+  }
+
+  async getManifestState(projectId: string): Promise<ProjectManifestStateRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(projectManifestStates)
+      .where(eq(projectManifestStates.project_id, projectId))
+      .limit(1);
+    return row ?? null;
   }
 }
