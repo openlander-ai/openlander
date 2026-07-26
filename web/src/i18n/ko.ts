@@ -3013,6 +3013,16 @@ export const translations = {
         failed: '실패',
         cancelled: '취소',
       },
+      phaseValue: {
+        planning: '계획 수립',
+        implementation: '구현',
+        implementationFixed: '수정 구현',
+        qa: 'QA',
+        scenarioQa: 'Scenario QA',
+        verification: '검증',
+        qualityGatesPassed: 'Quality Gate 통과',
+        completed: '완료',
+      },
       checkStatus: {
         pending: '대기 중',
         running: '실행 중',

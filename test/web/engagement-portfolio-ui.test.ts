@@ -3,7 +3,10 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { translations as en } from '../../web/src/i18n/en.js';
 import { translations as ko } from '../../web/src/i18n/ko.js';
-import { formatReadinessCheck } from '../../web/src/pages/DeliveryDetail.js';
+import {
+  formatDeliveryRunPhase,
+  formatReadinessCheck,
+} from '../../web/src/pages/DeliveryDetail.js';
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
@@ -76,6 +79,16 @@ describe('Engagement Portfolio UI contract', () => {
       'formatReadinessCheck(check, detail.delivery.delivery_type, t)',
     );
     expect(deliverySource).not.toContain('{check.message}');
+  });
+
+  it('localizes known Agent Run phases and humanizes unknown machine values', () => {
+    const keyOnly = (key: string) => key;
+    expect(formatDeliveryRunPhase('quality_gates_passed', keyOnly)).toBe(
+      'delivery.execution.phaseValue.qualityGatesPassed',
+    );
+    expect(formatDeliveryRunPhase('customer_validation', keyOnly)).toBe('customer validation');
+    expect(deliverySource).not.toContain('{run.current_phase}');
+    expect(deliverySource).not.toContain('[{event.phase}]');
   });
 
   it('uses truthful generic Korean copy for legacy readiness responses without params', () => {
