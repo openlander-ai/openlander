@@ -295,10 +295,11 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
       `기간: ${String(snapshot['period_start'])} – ${String(snapshot['period_end'])}`,
       `실행 상태: ${statusLabel(detail['runtime_health'], locale)} · 진행을 막는 항목 ${String(detail['blocker_count'])}건`,
       `프로젝트 ${String(projects.length)}개 · 납품 ${String(deliveries.length)}건`,
-      ...runs.map(
-        (run) =>
-          `Agent 실행 ${String(run['id'])}: ${statusLabel(run['status'], locale)} · ${statusLabel(run['current_phase'], locale)}`,
-      ),
+      ...runs.map((run) => {
+        const runStatus = statusLabel(run['status'], locale);
+        const runPhase = statusLabel(run['current_phase'], locale);
+        return `Agent 실행 ${String(run['id'])}: ${runStatus}${runPhase === runStatus ? '' : ` · ${runPhase}`}`;
+      }),
       ...checks.map(
         (check) =>
           `검사 ${String(check['check_key'])} #${String(check['attempt'])}: ${statusLabel(check['status'], locale)} · 로그 SHA-256 ${display(check['log_sha256'] ?? '없음')}`,
@@ -355,6 +356,9 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   );
   const blockers = detail['blockers'] as Array<Record<string, unknown>>;
   const releases = evidence['releases'] as Array<Record<string, unknown>>;
+  const customerReleases = releases.filter(
+    (release) => !String(release['id']).startsWith('rel_implicit_'),
+  );
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
   const environments = evidence['environments'] as Array<Record<string, unknown>>;
   const environmentById = new Map(environments.map((entry) => [entry['id'], entry]));
@@ -372,7 +376,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
         (delivery) =>
           `납품 ${String(delivery['title'])}: ${statusLabel(delivery['status'], locale)}`,
       ),
-      ...releases.map(
+      ...customerReleases.map(
         (release) =>
           `릴리스 ${String(release['version'])}: ${statusLabel(release['status'], locale)}`,
       ),
@@ -397,7 +401,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
     ...customerDeliveries.map(
       (delivery) => `Delivery ${String(delivery['title'])}: ${String(delivery['status'])}`,
     ),
-    ...releases.map(
+    ...customerReleases.map(
       (release) => `Release ${String(release['version'])}: ${String(release['status'])}`,
     ),
     ...promotions.map((promotion) => {

@@ -209,6 +209,12 @@ describe('WeeklyReportService', () => {
         metadata: JSON.stringify({ engagement_title: 'Claims modernization' }),
       },
     );
+    harness.evidence.releases.push({
+      id: 'rel_implicit_deploy-1',
+      version: 'deploy-1',
+      status: 'ready',
+      commit_sha: 'e'.repeat(40),
+    });
     const draft = await harness.service.generate({
       engagementId: 'engagement-1',
       periodStart: '2026-07-20',
@@ -238,6 +244,7 @@ describe('WeeklyReportService', () => {
     expect(customerHtml.toString()).toContain('확인할 이슈 없음');
     expect(customerHtml.toString()).not.toContain('Agent Run');
     expect(customerHtml.toString()).not.toContain('Deployment deploy-1');
+    expect(customerHtml.toString()).not.toContain('릴리스 deploy-1');
     expect(customerHtml.toString()).not.toContain('customer-secret');
   }, 120_000);
 
