@@ -3018,9 +3018,9 @@ export const translations = {
         implementation: '구현',
         implementationFixed: '수정 완료',
         qa: 'QA',
-        scenarioQa: 'Scenario QA',
+        scenarioQa: '시나리오 QA',
         verification: '검증',
-        qualityGatesPassed: 'Quality Gate 통과',
+        qualityGatesPassed: '품질 검증 통과',
         completed: '완료',
       },
       checkStatus: {
