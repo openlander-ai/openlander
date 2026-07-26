@@ -3016,7 +3016,7 @@ export const translations = {
       phaseValue: {
         planning: '계획 수립',
         implementation: '구현',
-        implementationFixed: '수정 구현',
+        implementationFixed: '수정 완료',
         qa: 'QA',
         scenarioQa: 'Scenario QA',
         verification: '검증',
