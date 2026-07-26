@@ -321,29 +321,32 @@ export class WeeklyReportService {
     const customerTitle = 'Customer weekly delivery report';
     const internalHtml = reportHtml(internalTitle, internalLines(snapshot));
     const customerHtml = reportHtml(customerTitle, customerLines(snapshot));
-    const [storedInternalHtml, storedCustomerHtml, storedInternalPdf, storedCustomerPdf] =
-      await Promise.all([
-        this.artifacts.storeBuffer(Buffer.from(internalHtml), {
-          filename: `${report.id}-internal.html`,
-          declaredMimeType: 'text/html',
-        }),
-        this.artifacts.storeBuffer(Buffer.from(customerHtml), {
-          filename: `${report.id}-customer.html`,
-          declaredMimeType: 'text/html',
-        }),
-        reportPdf(internalTitle, internalLines(snapshot)).then((bytes) =>
-          this.artifacts.storeBuffer(bytes, {
-            filename: `${report.id}-internal.pdf`,
-            declaredMimeType: 'application/pdf',
-          }),
-        ),
-        reportPdf(customerTitle, customerLines(snapshot)).then((bytes) =>
-          this.artifacts.storeBuffer(bytes, {
-            filename: `${report.id}-customer.pdf`,
-            declaredMimeType: 'application/pdf',
-          }),
-        ),
-      ]);
+    const [storedInternalHtml, storedCustomerHtml] = await Promise.all([
+      this.artifacts.storeBuffer(Buffer.from(internalHtml), {
+        filename: `${report.id}-internal.html`,
+        declaredMimeType: 'text/html',
+      }),
+      this.artifacts.storeBuffer(Buffer.from(customerHtml), {
+        filename: `${report.id}-customer.html`,
+        declaredMimeType: 'text/html',
+      }),
+    ]);
+    // Font subsetting is CPU intensive. Keep the two renders sequential so one report cannot
+    // saturate a small runner (or the self-hosted instance) with duplicate fontkit work.
+    const storedInternalPdf = await this.artifacts.storeBuffer(
+      await reportPdf(internalTitle, internalLines(snapshot)),
+      {
+        filename: `${report.id}-internal.pdf`,
+        declaredMimeType: 'application/pdf',
+      },
+    );
+    const storedCustomerPdf = await this.artifacts.storeBuffer(
+      await reportPdf(customerTitle, customerLines(snapshot)),
+      {
+        filename: `${report.id}-customer.pdf`,
+        declaredMimeType: 'application/pdf',
+      },
+    );
     const [internalHtmlBlob, customerHtmlBlob, internalPdfBlob, customerPdfBlob] =
       await Promise.all([
         this.db.upsertArtifactBlob(storedInternalHtml),

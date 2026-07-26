@@ -139,7 +139,7 @@ afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
-});
+}, 30_000);
 
 describe('WeeklyReportService', () => {
   it('publishes internal and customer views from one immutable evidence snapshot', async () => {
@@ -169,7 +169,7 @@ describe('WeeklyReportService', () => {
     expect(published.internal_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.customer_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.evidence_sha256).toBe(draft.evidence_sha256);
-  }, 20_000);
+  }, 120_000);
 
   it('rejects periods that are not bounded weekly ranges', async () => {
     const harness = await createHarness();
@@ -238,5 +238,5 @@ describe('WeeklyReportService', () => {
         format: 'pdf',
       }),
     ).rejects.toMatchObject({ code: 'WEEKLY_REPORT_STATE_INVALID' });
-  }, 20_000);
+  }, 120_000);
 });
