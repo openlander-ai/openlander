@@ -79,7 +79,7 @@ async function createHarness(clonedCommit = 'a'.repeat(40)) {
     docker as unknown as Docker,
     cloneRepository,
   );
-  return { service, db, docker, run };
+  return { service, db, docker, run, release };
 }
 
 describe('ReleaseService', () => {
@@ -187,6 +187,24 @@ describe('ReleaseService', () => {
       }),
     );
     expect(result.release.status).toBe('ready');
+  });
+
+  it('normalizes uppercase ULID Release ids into valid lowercase Docker repository names', async () => {
+    const harness = await createHarness();
+    harness.release.id = 'rel_01KYFE209RPJFFYYK41AW76V0D';
+
+    await harness.service.create({
+      id: harness.release.id,
+      runId: harness.run.id,
+      version: '2026.07.26-RC.4',
+      actor: 'agent-a',
+    });
+
+    expect(harness.docker.buildImage).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringMatching(/^openlander\/release-[a-z0-9_.-]+-[a-z0-9_.-]+:2026\.07\.26-rc\.4$/),
+      expect.any(Object),
+    );
   });
 
   it('fails without building when the cloned commit differs from the passed Run', async () => {

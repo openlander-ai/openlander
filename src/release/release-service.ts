@@ -136,6 +136,10 @@ export class ReleaseService {
         );
       }
       const safeVersion = input.version.toLowerCase().replace(/[^a-z0-9_.-]+/g, '-');
+      const releaseSuffix = release.id
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]+/g, '-')
+        .slice(-12);
       const artifacts = [];
       for (const source of sources) {
         const contextPath = resolveManifestReportPath(clone.path, source.build_context || '.');
@@ -147,7 +151,7 @@ export class ReleaseService {
           .toLowerCase()
           .replace(/[^a-z0-9_.-]+/g, '-')
           .slice(-24);
-        const tag = `openlander/release-${release.id.slice(-12)}-${serviceSuffix}:${safeVersion}`;
+        const tag = `openlander/release-${releaseSuffix}-${serviceSuffix}:${safeVersion}`;
         await this.docker.buildImage(contextPath, tag, {
           dockerfile: dockerfilePath,
           target: source.docker_target ?? undefined,
