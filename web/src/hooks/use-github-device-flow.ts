@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { pollGithubDeviceFlow, startGithubDeviceFlow } from '@/lib/api';
-
-const DEFAULT_START_ERROR_MESSAGE = 'Failed to start GitHub authorization';
+import { useLanguage } from '@/i18n/context';
 
 export interface GithubDeviceFlowState {
   userCode: string;
@@ -18,8 +17,9 @@ export interface UseGithubDeviceFlowOptions {
 
 export function useGithubDeviceFlow({
   onComplete,
-  startErrorMessage = DEFAULT_START_ERROR_MESSAGE,
+  startErrorMessage,
 }: UseGithubDeviceFlowOptions = {}) {
+  const { t } = useLanguage();
   const [deviceFlow, setDeviceFlow] = useState<GithubDeviceFlowState | null>(null);
   const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
   const [githubError, setGithubError] = useState('');
@@ -51,9 +51,9 @@ export function useGithubDeviceFlow({
       });
       setDeviceFlowPolling(true);
     } catch {
-      setGithubError(startErrorMessage);
+      setGithubError(startErrorMessage ?? t('common.githubAuthorization.startFailed'));
     }
-  }, [startErrorMessage]);
+  }, [startErrorMessage, t]);
 
   useEffect(() => {
     if (!deviceFlowPolling || !deviceFlow) return;
@@ -83,7 +83,7 @@ export function useGithubDeviceFlow({
         ) {
           clearInterval(pollInterval);
           resetDeviceFlow();
-          setGithubError(result.message || `Authorization ${result.status}`);
+          setGithubError(t(`common.githubAuthorization.${result.status}`));
         }
       } catch {
         // Ignore transient network errors and continue polling.
@@ -91,7 +91,7 @@ export function useGithubDeviceFlow({
     }, deviceFlow.interval * 1000);
 
     return () => clearInterval(pollInterval);
-  }, [deviceFlowPolling, deviceFlow, resetDeviceFlow]);
+  }, [deviceFlowPolling, deviceFlow, resetDeviceFlow, t]);
 
   return {
     deviceFlow,

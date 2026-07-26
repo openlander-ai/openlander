@@ -8,6 +8,9 @@
  */
 import { useCallback, useState } from 'react';
 import { fetchWithAuth } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { usePollingTask } from './use-polling-task';
 
 const POLL_MS = 15_000;
@@ -46,6 +49,7 @@ export interface UseMcpStatusReturn {
 }
 
 export function useMcpStatus(): UseMcpStatusReturn {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<McpStatusSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,17 +58,17 @@ export function useMcpStatus(): UseMcpStatusReturn {
     try {
       const res = await fetchWithAuth('/api/mcp/status');
       if (!res.ok) {
-        throw new Error(`MCP status fetch failed: ${res.status}`);
+        throw new ApiError('MCP status request failed', res.status);
       }
       const body = (await res.json()) as McpStatusSnapshot;
       setStatus(body);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch MCP status');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const disconnect = useCallback(
     async (sessionId: string): Promise<boolean> => {

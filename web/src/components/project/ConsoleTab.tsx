@@ -4,6 +4,7 @@ import { TerminalPanel } from '@/components/deploy-terminal/TerminalPanel';
 import { SquareTerminal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_CONSOLE_VIEW_STATE } from '@/types';
+import { useLanguage } from '@/i18n/context';
 
 interface ConsoleTabProps {
   projectId: string;
@@ -12,14 +13,17 @@ interface ConsoleTabProps {
 }
 
 export function ConsoleTab({ projectId, isActive, projectStatus }: ConsoleTabProps) {
+  const { t } = useLanguage();
   const [showTerminal, setShowTerminal] = useState(DEFAULT_CONSOLE_VIEW_STATE.showTerminal);
   const isRunning = projectStatus === 'running';
-  const terminalToggleLabel = showTerminal ? 'Hide terminal' : 'Show terminal';
+  const terminalToggleLabel = showTerminal
+    ? t('logs.terminalToggle.hide')
+    : t('logs.terminalToggle.show');
   const terminalToggleTitle = showTerminal
-    ? 'Hide the shell and keep logs primary'
+    ? t('logs.terminalToggle.hideTitle')
     : isRunning
-      ? 'Show the shell beside live logs'
-      : 'Show terminal status and availability';
+      ? t('logs.terminalToggle.showTitle')
+      : t('logs.terminalToggle.showAvailabilityTitle');
 
   return (
     <div className="flex flex-col h-full min-h-0 p-6 bg-bg-app">

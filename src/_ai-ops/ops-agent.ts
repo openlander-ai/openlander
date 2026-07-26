@@ -382,8 +382,8 @@ export class OpsAgent {
           'Disk threshold reached — running cleanup',
         );
 
-        const { diskThresholdCleanup } = await import('../pipeline/cleanup.js');
-        diskThresholdCleanup();
+        const { auditDiskThresholdCleanup } = await import('../pipeline/cleanup.js');
+        auditDiskThresholdCleanup();
 
         this.lastCleanupAt = Date.now();
 

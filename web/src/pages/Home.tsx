@@ -13,9 +13,10 @@
  * additive schema still populates on group rows during transition.
  */
 import { useMemo, useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { StatusPill, TriggerChip } from '@/components/Shell/DeployRow';
@@ -42,6 +43,7 @@ interface ServiceDotsProps {
 }
 
 function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
+  const { t } = useLanguage();
   const { services, isLoading } = useProjectTopology(projectId);
 
   if (isLoading || services.length === 0) return null;
@@ -55,7 +57,7 @@ function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
         <button
           key={svc.id}
           type="button"
-          title={`${svc.name} · ${svc.health}`}
+          title={`${svc.name} · ${t(`topology.health.${svc.health}`)}`}
           onClick={(e) => onDotClick(projectId, svc.id, e)}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] leading-none transition-colors',
@@ -182,7 +184,7 @@ export function Home() {
         setAiOpsBriefings(response.briefings ?? []);
       } catch (err) {
         if (isCancelled?.()) return;
-        setAiOpsError(err instanceof Error ? err.message : t('aiOps.error.load'));
+        setAiOpsError(localizeApiError(err, t, 'aiOps.error.load', 'aiOps.error.codes'));
         setAiOpsBriefings([]);
       } finally {
         if (!isCancelled?.()) {

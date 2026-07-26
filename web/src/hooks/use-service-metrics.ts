@@ -20,6 +20,8 @@
 import { useCallback, useState } from 'react';
 import { fetchServiceMetrics, type MetricsRange, type ServiceMetrics } from '../lib/api/services';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const POLL_MS = 10_000;
 
@@ -35,6 +37,7 @@ export function useServiceMetrics(
   serviceId: string | null,
   range: MetricsRange,
 ): UseServiceMetricsResult {
+  const { t } = useLanguage();
   const [metrics, setMetrics] = useState<ServiceMetrics | null>(null);
   const [isEmpty, setIsEmpty] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,11 +59,11 @@ export function useServiceMetrics(
       }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setIsLoading(false);
     }
-  }, [serviceId, range]);
+  }, [serviceId, range, t]);
 
   usePollingTask(fetcher, { intervalMs: POLL_MS, enabled: serviceId != null });
 

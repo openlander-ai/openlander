@@ -1,5 +1,5 @@
 import { fetchWithAuth } from './auth';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, ApiError } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, throwApiError } from './client';
 
 export type DeliveryType = 'software_release' | 'artifact_delivery';
 export type DeliveryStatus =
@@ -144,9 +144,121 @@ export interface DeliveryDetail {
   receipt: DeliveryReceipt | null;
 }
 
+export interface DeliveryExecutionView {
+  project_manifest: {
+    status: 'not_applied' | 'in_sync' | 'drifted';
+    state: {
+      project_id: string;
+      manifest_path: string;
+      manifest_sha256: string;
+      definition_json: Record<string, unknown>;
+      applied_by: string;
+      applied_at: string;
+    } | null;
+    drift: Array<{
+      scope: 'environment' | 'service';
+      kind: 'missing' | 'retained' | 'changed';
+      key: string;
+      fields: string[];
+    }>;
+  };
+  agent_runs: Array<{
+    id: string;
+    status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+    commit_sha: string;
+    manifest_path: string;
+    manifest_sha256: string;
+    runner_image: string;
+    runner_image_digest: string | null;
+    current_phase: string;
+    handoff_summary: string | null;
+    started_by: string;
+    started_at: string;
+    updated_at: string;
+    completed_at: string | null;
+  }>;
+  run_events: Array<{
+    id: string;
+    run_id: string;
+    sequence: number;
+    event_type: string;
+    phase: string | null;
+    summary: string;
+    actor: string;
+    created_at: string;
+  }>;
+  run_checks: Array<{
+    id: string;
+    run_id: string;
+    check_key: string;
+    attempt: number;
+    status: 'pending' | 'running' | 'passed' | 'failed' | 'cancelled';
+    command: string;
+    exit_code: number | null;
+    duration_ms: number | null;
+    log_sha256: string | null;
+    report_artifact_id: string | null;
+    runner_image_digest: string | null;
+  }>;
+  project_environments: Array<{
+    id: string;
+    key: string;
+    display_name: string;
+    tier: 'development' | 'validation' | 'production';
+    promotion_order: number;
+    health_timeout_seconds: number;
+    smoke_path: string | null;
+    soak_seconds: number;
+    manifest_sha256: string;
+  }>;
+  releases: Array<{
+    id: string;
+    version: string;
+    commit_sha: string;
+    status: 'building' | 'ready' | 'recalled' | 'failed';
+    created_at: string;
+  }>;
+  release_artifacts: Array<{
+    id: string;
+    release_id: string;
+    service_id: string;
+    image_reference: string;
+    image_digest: string;
+  }>;
+  release_promotions: Array<{
+    id: string;
+    release_id: string;
+    project_environment_id: string;
+    status: 'pending' | 'deploying' | 'succeeded' | 'failed' | 'rolled_back';
+    health_status: 'pending' | 'healthy' | 'unhealthy';
+    soak_status: 'pending' | 'passed' | 'failed' | 'skipped';
+    deploy_ids: string[];
+    error_code: string | null;
+    error_message: string | null;
+    created_at: string;
+  }>;
+}
+
+export interface DeliveryReadinessCheck {
+  key:
+    | 'delivery_approved'
+    | 'approved_artifact'
+    | 'customer_approval'
+    | 'work_items_resolved'
+    | 'required_gates'
+    | 'warnings_acknowledged'
+    | 'limitations_recorded'
+    | 'html_companion_pdf'
+    | 'production_deploy'
+    | 'page_limit';
+  passed: boolean;
+  message: string;
+  params?: Record<string, number>;
+}
+
 export interface DeliveryReadiness {
   ready: boolean;
-  checks: Array<{ key: string; passed: boolean; message: string }>;
+  checks: DeliveryReadinessCheck[];
   blockers: string[];
   estimated_pages: number;
 }
@@ -157,17 +269,7 @@ function base(projectId: string): string {
 
 async function blobRequest(url: string, method: 'GET' | 'POST'): Promise<Blob> {
   const response = await fetchWithAuth(url, { method });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    let message = text || `Request failed (${String(response.status)})`;
-    try {
-      const payload = JSON.parse(text) as { message?: string };
-      message = payload.message ?? message;
-    } catch {
-      // Keep the plain response body.
-    }
-    throw new ApiError(message, response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Delivery document request failed');
   return await response.blob();
 }
 
@@ -192,6 +294,15 @@ export function createDelivery(
 
 export function getDelivery(projectId: string, deliveryId: string): Promise<DeliveryDetail> {
   return apiGet<DeliveryDetail>(`${base(projectId)}/${encodeURIComponent(deliveryId)}`);
+}
+
+export function getDeliveryExecution(
+  projectId: string,
+  deliveryId: string,
+): Promise<DeliveryExecutionView> {
+  return apiGet<DeliveryExecutionView>(
+    `${base(projectId)}/${encodeURIComponent(deliveryId)}/execution`,
+  );
 }
 
 export function updateDelivery(
@@ -245,10 +356,7 @@ export async function uploadDeliveryArtifact(
     `${base(projectId)}/${encodeURIComponent(deliveryId)}/artifacts`,
     { method: 'POST', body: form },
   );
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new ApiError(text || 'Artifact upload failed.', response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Artifact upload failed');
   return response.json();
 }
 
@@ -427,10 +535,7 @@ export async function uploadDeliveryLogo(projectId: string, file: File): Promise
     `/api/projects/${encodeURIComponent(projectId)}/delivery-settings/logo`,
     { method: 'POST', body: form },
   );
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new ApiError(text || 'Receipt logo upload failed.', response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Receipt logo upload failed');
   const result = (await response.json()) as { settings: DeliverySettings };
   return result.settings;
 }

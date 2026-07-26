@@ -34,6 +34,8 @@ import {
   recentAgentFor,
 } from '@/lib/projectTopology';
 import type { ActivityEvent } from '@/lib/agentActivity';
+import { localizedActivityRelativeTime, localizedActivityTitle } from '@/lib/activity-presentation';
+import { useLanguage } from '@/i18n/context';
 import './InfraMap.css';
 
 interface InfraMapProps {
@@ -57,12 +59,6 @@ const HEALTH_PULSE: Record<ServiceHealth, boolean> = {
   healthy: false,
   crashed: true,
   deploying: true,
-};
-
-const HEALTH_LABEL: Record<ServiceHealth, string> = {
-  healthy: 'healthy',
-  crashed: 'crashed',
-  deploying: 'deploying',
 };
 
 export function InfraMap(props: InfraMapProps) {
@@ -93,15 +89,15 @@ export function InfraMap(props: InfraMapProps) {
 // Empty / Lonely
 
 function InfraMapEmpty() {
+  const { t } = useLanguage();
+
   return (
-    <div className="topology-strip empty" role="status" aria-label="Empty topology">
+    <div className="topology-strip empty" role="status" aria-label={t('topology.emptyAria')}>
       <div className="empty-strip-inner">
         <span className="empty-strip-pip">
           <Box className="h-3.5 w-3.5" />
         </span>
-        <span className="topology-muted">
-          No resources yet — your topology will appear here once you create one.
-        </span>
+        <span className="topology-muted">{t('topology.empty')}</span>
       </div>
     </div>
   );
@@ -124,12 +120,13 @@ function InfraMapLonely({
   onSelect,
   isDemo,
 }: LonelyProps) {
+  const { t } = useLanguage();
   const recent = recentAgentFor(projectId, service.id, agentActivity);
   return (
     <div className="topology-strip lonely">
       <div className="topology-eyebrow">
-        <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· 1 resource</span>
+        <span className="topology-eyebrow-label">{t('topology.title')}</span>
+        <span className="topology-eyebrow-meta">{t('topology.oneResource')}</span>
         {isDemo && <DemoChip />}
       </div>
       <div className="lonely-row">
@@ -140,10 +137,7 @@ function InfraMapLonely({
           recentAgent={recent}
           onSelect={onSelect}
         />
-        <span className="lonely-hint topology-muted">
-          No dependencies declared. Add one in <code className="topology-mono">compose.yml</code>{' '}
-          with <code className="topology-mono">depends_on</code>.
-        </span>
+        <span className="lonely-hint topology-muted">{t('topology.noDependencies')}</span>
       </div>
     </div>
   );
@@ -153,6 +147,7 @@ function InfraMapLonely({
 // Standard (2–8 services, single horizontal row with SVG edges)
 
 function InfraMapStandard(props: InfraMapProps) {
+  const { t } = useLanguage();
   const { services, projectId, agentActivity, activeNodeId, onSelect, isDemo } =
     asNormalizedProps(props);
   const ordered = useMemo(() => orderForFlow(services), [services]);
@@ -202,8 +197,10 @@ function InfraMapStandard(props: InfraMapProps) {
   return (
     <div className="topology-strip">
       <div className="topology-eyebrow">
-        <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· {services.length} resources</span>
+        <span className="topology-eyebrow-label">{t('topology.title')}</span>
+        <span className="topology-eyebrow-meta">
+          {t('topology.resources', { count: services.length })}
+        </span>
         {isDemo && <DemoChip />}
         <HealthSummary counts={counts} />
       </div>
@@ -235,6 +232,7 @@ function InfraMapStandard(props: InfraMapProps) {
 // Dense (>8 services, 3-lane grouped layout)
 
 function InfraMapDense(props: InfraMapProps) {
+  const { t } = useLanguage();
   const { services, projectId, agentActivity, activeNodeId, onSelect, isDemo } =
     asNormalizedProps(props);
   const lanes = useMemo(() => {
@@ -249,14 +247,16 @@ function InfraMapDense(props: InfraMapProps) {
   return (
     <div className="topology-strip dense">
       <div className="topology-eyebrow">
-        <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· {services.length} resources · grouped view</span>
+        <span className="topology-eyebrow-label">{t('topology.title')}</span>
+        <span className="topology-eyebrow-meta">
+          {t('topology.groupedResources', { count: services.length })}
+        </span>
         {isDemo && <DemoChip />}
         <HealthSummary counts={counts} />
       </div>
       <div className="topology-lanes">
         <DenseLane
-          label="Entry"
+          label={t('topology.lanes.entry')}
           tone="entry"
           services={lanes.entry}
           projectId={projectId}
@@ -265,7 +265,7 @@ function InfraMapDense(props: InfraMapProps) {
           onSelect={onSelect}
         />
         <DenseLane
-          label="App"
+          label={t('topology.lanes.app')}
           tone="app"
           services={lanes.app}
           projectId={projectId}
@@ -274,7 +274,7 @@ function InfraMapDense(props: InfraMapProps) {
           onSelect={onSelect}
         />
         <DenseLane
-          label="Data"
+          label={t('topology.lanes.data')}
           tone="data"
           services={lanes.data}
           projectId={projectId}
@@ -347,9 +347,16 @@ function TopologyNode({
   onSelect,
   dense = false,
 }: TopologyNodeProps) {
+  const { t } = useLanguage();
   const [hovered, setHovered] = useState(false);
   const pulse = HEALTH_PULSE[service.health];
-  const label = HEALTH_LABEL[service.health];
+  const labels: Record<ServiceHealth, string> = {
+    healthy: t('topology.health.healthy'),
+    crashed: t('topology.health.crashed'),
+    deploying: t('topology.health.deploying'),
+  };
+  const label = labels[service.health];
+  const recentAgentTitle = recentAgent ? localizedActivityTitle(recentAgent, t) : null;
 
   return (
     <div
@@ -370,8 +377,8 @@ function TopologyNode({
           {recentAgent && (
             <span
               className="topology-node-agent"
-              title={`Agent: ${recentAgent.title}`}
-              aria-label={`Recent agent activity: ${recentAgent.title}`}
+              title={t('topology.agentTitle', { title: recentAgentTitle ?? '' })}
+              aria-label={t('topology.recentAgent', { title: recentAgentTitle ?? '' })}
             >
               <Bot className="h-2 w-2" />
             </span>
@@ -394,27 +401,42 @@ function NodePopover({
   service: ServiceNode;
   recentAgent: ActivityEvent | null;
 }) {
-  const label = HEALTH_LABEL[service.health];
+  const { t } = useLanguage();
+  const labels: Record<ServiceHealth, string> = {
+    healthy: t('topology.health.healthy'),
+    crashed: t('topology.health.crashed'),
+    deploying: t('topology.health.deploying'),
+  };
+  const label = labels[service.health];
+  const kindLabels: Record<ServiceNode['kind'], string> = {
+    Application: t('topology.kind.application'),
+    Compose: t('topology.kind.compose'),
+    Database: t('topology.kind.database'),
+    Cache: t('topology.kind.cache'),
+    Storage: t('topology.kind.storage'),
+  };
+  const recentAgentTitle = recentAgent ? localizedActivityTitle(recentAgent, t) : null;
+  const recentAgentAt = recentAgent ? localizedActivityRelativeTime(recentAgent, t) : null;
   return (
     <div className="topology-popover" role="tooltip">
       <div className="popover-head">
         <span className={`popover-pip h-${service.health}`} />
         <span className="popover-name">{service.name}</span>
-        <span className="popover-kind topology-muted">· {service.kind.toLowerCase()}</span>
+        <span className="popover-kind topology-muted">· {kindLabels[service.kind]}</span>
       </div>
       <div className="popover-row">
-        <span className="topology-muted">status</span>
+        <span className="topology-muted">{t('topology.field.status')}</span>
         <b>{label}</b>
       </div>
       {service.image && (
         <div className="popover-row">
-          <span className="topology-muted">image</span>
+          <span className="topology-muted">{t('topology.field.image')}</span>
           <span className="topology-mono popover-image">{service.image}</span>
         </div>
       )}
       {service.cpu !== '—' && (
         <div className="popover-row">
-          <span className="topology-muted">cpu · mem</span>
+          <span className="topology-muted">{t('topology.field.cpuMemory')}</span>
           <span className="popover-tabular">
             {service.cpu} · {service.mem}
           </span>
@@ -423,11 +445,11 @@ function NodePopover({
       {recentAgent && (
         <div className="popover-agent">
           <Bot className="h-3 w-3" />
-          <span>{recentAgent.title.replace(/`/g, '')}</span>
-          <span className="topology-muted popover-agent-time">{recentAgent.at}</span>
+          <span>{recentAgentTitle?.replace(/`/g, '')}</span>
+          <span className="topology-muted popover-agent-time">{recentAgentAt}</span>
         </div>
       )}
-      <div className="popover-cta topology-muted">Click to open resource →</div>
+      <div className="popover-cta topology-muted">{t('topology.openResource')}</div>
     </div>
   );
 }
@@ -436,6 +458,12 @@ function NodePopover({
 // HealthSummary
 
 function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
+  const { t } = useLanguage();
+  const labels: Record<ServiceHealth, string> = {
+    healthy: t('topology.health.healthy'),
+    crashed: t('topology.health.crashed'),
+    deploying: t('topology.health.deploying'),
+  };
   // Order matters — `crashed` and `deploying` are the actionable
   // states, surfaced before `healthy` so the summary reads from
   // "needs attention" → "fine".
@@ -444,7 +472,7 @@ function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
   if (items.length === 1 && items[0].k === 'healthy') {
     return (
       <span className="health-summary all-good">
-        <span className="health-pip healthy" /> all healthy
+        <span className="health-pip healthy" /> {t('topology.health.allHealthy')}
       </span>
     );
   }
@@ -452,7 +480,7 @@ function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
     <span className="health-summary">
       {items.map(({ k, n }) => (
         <span key={k} className={`health-summary-item h-${k}`}>
-          <span className={`health-pip ${k}`} /> {n} {HEALTH_LABEL[k]}
+          <span className={`health-pip ${k}`} /> {n} {labels[k]}
         </span>
       ))}
     </span>
@@ -460,12 +488,11 @@ function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
 }
 
 function DemoChip() {
+  const { t } = useLanguage();
+
   return (
-    <span
-      className="topology-demo-chip"
-      title="Backend topology endpoint unavailable — sample data"
-    >
-      Sample
+    <span className="topology-demo-chip" title={t('topology.sampleTitle')}>
+      {t('topology.sample')}
     </span>
   );
 }

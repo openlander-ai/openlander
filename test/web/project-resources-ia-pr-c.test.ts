@@ -13,7 +13,9 @@ describe('Project resources IA', () => {
   const infraMapSource = readRepoFile('web/src/components/Shell/InfraMap.tsx');
 
   it('keeps the Services tab id as a compatibility alias while rendering Resources copy', () => {
-    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
+    expect(projectViewSource).toContain(
+      "type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings'",
+    );
     expect(projectViewSource).toContain("label: t('projectDetail.tabs.services')");
     expect(projectViewSource).toContain('panelId="projectpanel-services"');
     expect(projectViewSource).not.toContain('Add service');
@@ -65,10 +67,10 @@ describe('Project resources IA', () => {
   });
 
   it('uses resource wording in the Project topology strip', () => {
-    expect(infraMapSource).toContain('No resources yet');
-    expect(infraMapSource).toContain('· 1 resource');
-    expect(infraMapSource).toContain('{services.length} resources');
-    expect(infraMapSource).toContain('Click to open resource');
+    expect(infraMapSource).toContain("t('topology.empty')");
+    expect(infraMapSource).toContain("t('topology.oneResource')");
+    expect(infraMapSource).toContain("t('topology.resources'");
+    expect(infraMapSource).toContain("t('topology.openResource')");
     expect(infraMapSource).not.toContain('Click to open service');
   });
 });

@@ -212,8 +212,7 @@ async function deleteDeployableServices(projectId: string): Promise<void> {
   if (!servicesRes.ok) return;
 
   const servicesPayload = (await servicesRes.json()) as
-    | { services?: Array<{ id?: string; name?: string }> }
-    | Array<{ id?: string; name?: string }>;
+    { services?: Array<{ id?: string; name?: string }> } | Array<{ id?: string; name?: string }>;
   const services = Array.isArray(servicesPayload)
     ? servicesPayload
     : (servicesPayload.services ?? []);
@@ -603,7 +602,14 @@ function collectProjectUrlCandidates(project: Record<string, unknown>): string[]
 export function resolveProjectAccessibleUrl(project: Record<string, unknown>): string {
   const assignedPort = project['assigned_port'] ?? project['port'];
   if (typeof assignedPort === 'number' && assignedPort > 0) {
-    return `http://127.0.0.1:${String(assignedPort)}`;
+    const offsetText = process.env['OPENLANDER_E2E_RUNTIME_PORT_OFFSET']?.trim();
+    const offset = offsetText ? Number(offsetText) : 0;
+    if (!Number.isSafeInteger(offset) || offset < 0 || assignedPort + offset > 65_535) {
+      throw new Error(
+        `OPENLANDER_E2E_RUNTIME_PORT_OFFSET must map assigned ports to a valid TCP port: ${offsetText ?? ''}`,
+      );
+    }
+    return `http://127.0.0.1:${String(assignedPort + offset)}`;
   }
 
   const url = collectProjectUrlCandidates(project)[0];

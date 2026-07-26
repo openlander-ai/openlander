@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import { getTerminalAvailabilityState } from './terminalAvailability';
+import { formatTerminalControlFrame } from './terminal-presentation';
 import { terminalTokens } from './terminal-tokens';
 import '@xterm/xterm/css/xterm.css';
 
@@ -63,13 +64,13 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
 
     ws.onopen = () => {
       setConnectionState('connected');
-      term.writeln('\x1b[32mConnected to container\x1b[0m');
+      term.writeln(`\x1b[32m${t('logs.terminalStream.connected')}\x1b[0m`);
       ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     };
 
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
-        term.write(e.data);
+        term.write(formatTerminalControlFrame(e.data, t));
       } else {
         term.write(new Uint8Array(e.data));
       }
@@ -77,12 +78,12 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
 
     ws.onclose = () => {
       setConnectionState('disconnected');
-      term.writeln('\r\n\x1b[33mConnection closed\x1b[0m');
+      term.writeln(`\r\n\x1b[33m${t('logs.terminalStream.closed')}\x1b[0m`);
     };
 
     ws.onerror = () => {
       setConnectionState('error');
-      term.writeln('\r\n\x1b[31mConnection error\x1b[0m');
+      term.writeln(`\r\n\x1b[31m${t('logs.terminalStream.connectionError')}\x1b[0m`);
     };
 
     term.onData((data) => {
@@ -116,7 +117,7 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [availability.canConnect, projectId, reconnectKey]);
+  }, [availability.canConnect, projectId, reconnectKey, t]);
 
   if (!availability.canConnect) {
     return (

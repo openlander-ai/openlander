@@ -14,7 +14,7 @@
  * keys on `service_id` and is exposed inside ServiceDetailV2's Activity
  * surface (rc.2 will route service rows accordingly).
  */
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { useActivityFeed } from '@/hooks/use-activity-feed';

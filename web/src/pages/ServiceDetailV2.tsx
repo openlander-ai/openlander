@@ -23,7 +23,7 @@
  */
 /* eslint-disable openlander-internal/no-dropped-columns */
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   Activity as ActivityIcon,
   Archive,
@@ -108,9 +108,11 @@ import { cn } from '@/lib/utils';
 import { isValidEnvKey } from '@/lib/env-key';
 import { parseEnvContent } from '@/lib/parse-env';
 import { toast } from 'sonner';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
 type ManagedServiceTabId = 'overview' | 'logs' | 'connections';
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'overview',
@@ -264,9 +266,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       setServiceDetailError(null);
     } catch (err) {
       setServiceDetail(null);
-      setServiceDetailError(err instanceof Error ? err.message : 'Failed to load resource details');
+      setServiceDetailError(
+        localizeApiError(err, t, 'serviceDetail.loadError', 'common.apiError.codes'),
+      );
     }
-  }, [projectId, id]);
+  }, [projectId, id, t]);
 
   useEffect(() => {
     void loadServiceDetail();
@@ -343,7 +347,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         setDeployError(t('serviceDetail.deploy.locked'));
       } else {
         setDeployError(
-          err instanceof Error ? err.message : t('serviceDetail.deploy.fallbackError'),
+          localizeApiError(err, t, 'serviceDetail.deploy.fallbackError', 'common.apiError.codes'),
         );
       }
     } finally {
@@ -445,9 +449,9 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
               // (from topology), not a fresh reading. PR7 follow-up.
               <span
                 className="inline-flex items-center gap-1 rounded-full border border-dashed border-[color:var(--ol-warning)] px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-[color:var(--ol-warning)]"
-                title={`Live health stream offline — showing last topology snapshot. ${liveHealth.error}`}
+                title={t('serviceDetail.staleTitle', { error: liveHealth.error })}
               >
-                stale
+                {t('serviceDetail.stale')}
               </span>
             )}
           </span>
@@ -457,7 +461,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             <span className="text-[color:var(--ol-fg-subtle)]">{t('vocab.deployableService')}</span>
             <span className="ol-mono">
               {' · '}
-              {resolvedService.kind} · {resolvedService.image}
+              {formatServiceKind(resolvedService.kind, t)} · {resolvedService.image}
             </span>
           </span>
         }
@@ -471,7 +475,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
                 className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
               >
                 <ExternalLink className="h-3 w-3" />
-                Open
+                {t('services.detail.runtime.openInNewTab')}
               </a>
             )}
             {!resolvedService.isComposeChild && (
@@ -488,7 +492,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
                 aria-disabled={deploying}
               >
                 <Rocket className="h-3.5 w-3.5" />
-                {deploying ? 'Deploying…' : 'Deploy'}
+                {deploying ? t('project.header.action.deploying') : t('serviceDetail.deployAction')}
               </button>
             )}
           </>
@@ -500,12 +504,12 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           active={activeTab}
           onChange={setActiveTab}
           idPrefix="service"
-          ariaLabel="Service sections"
+          ariaLabel={t('services.managedDetail.tabs.aria')}
         />
 
         {serviceDetailError && (
           <div className="mx-5 mt-4 rounded-md border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-warning)]">
-            Service metadata could not be loaded. Showing last known topology data.{' '}
+            {t('serviceDetail.metadataFallback')}{' '}
             <span className="ol-mono">{serviceDetailError}</span>
           </div>
         )}
@@ -657,19 +661,22 @@ function GeneralTab({
   if (service.repoUrl) {
     const parsed = parseRepoUrl(service.repoUrl);
     if (parsed) {
-      sourceRows.push(['Provider', parsed.provider]);
-      sourceRows.push(['Repository', parsed.path]);
+      sourceRows.push([t('services.detail.source.field.provider'), parsed.provider]);
+      sourceRows.push([t('services.detail.source.field.repository'), parsed.path]);
     } else {
-      sourceRows.push(['Source', service.repoUrl]);
+      sourceRows.push([t('services.detail.source.field.source'), service.repoUrl]);
     }
     const branch = service.branch ?? service.deployedBranch;
     if (branch) {
-      sourceRows.push(['Branch', branch]);
+      sourceRows.push([t('services.detail.source.field.branch'), branch]);
     }
     if (service.branch && service.deployedBranch && service.branch !== service.deployedBranch) {
-      sourceRows.push(['Deployed branch', service.deployedBranch]);
+      sourceRows.push([t('services.detail.source.field.deployedBranch'), service.deployedBranch]);
     }
-    sourceRows.push(['Build path', formatBuildPath(service.buildContext)]);
+    sourceRows.push([
+      t('services.detail.source.field.buildPath'),
+      formatBuildPath(service.buildContext),
+    ]);
     sourceRows.push([
       t('repositoryKeys.source.title'),
       service.gitCredential
@@ -677,16 +684,25 @@ function GeneralTab({
         : t('repositoryKeys.source.automatic'),
     ]);
   } else if (service.image) {
-    sourceRows.push(['Source', 'Container image']);
-    sourceRows.push(['Image', service.image]);
+    sourceRows.push([
+      t('services.detail.source.field.source'),
+      t('services.detail.source.containerImage'),
+    ]);
+    sourceRows.push([t('services.detail.source.field.image'), service.image]);
   }
 
-  const buildMethod = getBuildMethodLabel(service);
+  const buildMethod = getBuildMethodLabel(service, t);
   const buildRows: [string, string][] = [
-    ['Method', buildMethod],
-    ['Dockerfile', service.dockerfilePath ?? (buildMethod === 'Dockerfile' ? 'Dockerfile' : '—')],
-    ['Target stage', service.dockerTarget ?? '—'],
-    ['Build context', service.buildContext ?? (buildMethod === 'Dockerfile' ? '.' : '—')],
+    [t('services.detail.build.field.method'), buildMethod],
+    [
+      t('services.detail.build.field.dockerfile'),
+      service.dockerfilePath ?? (buildMethod === 'Dockerfile' ? 'Dockerfile' : '—'),
+    ],
+    [t('services.detail.build.field.targetStage'), service.dockerTarget ?? '—'],
+    [
+      t('services.detail.build.field.buildContext'),
+      service.buildContext ?? (buildMethod === 'Dockerfile' ? '.' : '—'),
+    ],
   ];
 
   return (
@@ -819,7 +835,7 @@ function RepositoryAuthenticationDialog({
       })
       .catch((err: unknown) => {
         if (!cancelled)
-          setError(err instanceof Error ? err.message : t('repositoryKeys.errors.load'));
+          setError(localizeApiError(err, t, 'repositoryKeys.errors.load', 'common.apiError.codes'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -838,7 +854,7 @@ function RepositoryAuthenticationDialog({
       toast.success(t('repositoryKeys.messages.saved'));
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('repositoryKeys.errors.save'));
+      setError(localizeApiError(err, t, 'repositoryKeys.errors.save', 'common.apiError.codes'));
     } finally {
       setSaving(false);
     }
@@ -954,7 +970,9 @@ function EnvironmentTab({
         }
       } catch (err) {
         if (!cancelled) {
-          setEnvError(err instanceof Error ? err.message : t('projectDetail.env.loadError'));
+          setEnvError(
+            localizeApiError(err, t, 'projectDetail.env.loadError', 'common.apiError.codes'),
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -1070,7 +1088,7 @@ function EnvironmentTab({
         needsRedeploy ? t('projectDetail.env.savedNeedsRedeploy') : t('projectDetail.env.saved'),
       );
     } catch (err) {
-      setEnvError(err instanceof Error ? err.message : t('projectDetail.env.saveError'));
+      setEnvError(localizeApiError(err, t, 'projectDetail.env.saveError', 'common.apiError.codes'));
     } finally {
       setSaving(false);
     }
@@ -1256,10 +1274,11 @@ function DomainsTab({
       // Do NOT silently set domains=[] — that masks the failure as an
       // empty state. Surface the error explicitly so the operator knows
       // the list might be stale and Add can be blocked when needed.
-      const message = err instanceof Error ? err.message : 'Failed to load domains';
-      setLoadError(message);
+      setLoadError(
+        localizeApiError(err, t, 'projectDetail.domains.loadError', 'common.apiError.codes'),
+      );
     }
-  }, [projectId, service.id]);
+  }, [projectId, service.id, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1325,7 +1344,7 @@ function DomainsTab({
                 {service.url}
               </span>
               <span className="shrink-0 rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
-                Auto
+                {t('serviceDetail.automatic')}
               </span>
             </div>
           </div>
@@ -1625,8 +1644,10 @@ function AddDomainDialog({
       setFieldError({ msg: t('projectDetail.domains.error.notFound') });
       return;
     }
-    // INVALID_FIELD or unknown — surface backend message
-    setFieldError({ msg: err.message || t('projectDetail.domains.error.serverError') });
+    // INVALID_FIELD or unknown — keep server prose in diagnostics, not localized UI copy.
+    setFieldError({
+      msg: `${t('projectDetail.domains.error.serverError')} (${err.code || `HTTP ${String(err.status)}`})`,
+    });
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -1772,6 +1793,8 @@ function DeploymentsTab({
   loading: boolean;
   onOpenDeploy: (d: DeployLogSummary) => void;
 }) {
+  const { t } = useLanguage();
+
   if (loading) {
     return (
       <div className="flex flex-col gap-2 p-5">
@@ -1784,7 +1807,7 @@ function DeploymentsTab({
   if (deployments.length === 0) {
     return (
       <div className="px-6 py-10 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-        No deploys yet for this project.
+        {t('serviceDetail.noDeployments')}
       </div>
     );
   }
@@ -1800,10 +1823,12 @@ function DeploymentsTab({
 }
 
 function RuntimeLogsTab({ projectId, serviceId }: { projectId: string | null; serviceId: string }) {
+  const { t } = useLanguage();
+
   if (!projectId) {
     return (
       <div className="px-6 py-12 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-        Logs unavailable until the project context resolves.
+        {t('serviceDetail.projectContextLogsUnavailable')}
       </div>
     );
   }
@@ -1852,13 +1877,12 @@ function ServiceDangerZone({
       onServiceArchived();
     } catch (err) {
       setArchiveError(
-        err instanceof Error
-          ? err.message
-          : t(
-              isArchived
-                ? 'projectDetail.serviceRestore.error'
-                : 'projectDetail.serviceArchive.error',
-            ),
+        localizeApiError(
+          err,
+          t,
+          isArchived ? 'projectDetail.serviceRestore.error' : 'projectDetail.serviceArchive.error',
+          'common.apiError.codes',
+        ),
       );
     } finally {
       setArchiving(false);
@@ -1878,7 +1902,9 @@ function ServiceDangerZone({
       });
       onServiceDeleted();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : t('projectDetail.serviceDelete.error'));
+      setDeleteError(
+        localizeApiError(err, t, 'projectDetail.serviceDelete.error', 'common.apiError.codes'),
+      );
     } finally {
       setDeleting(false);
     }
@@ -2092,14 +2118,14 @@ function MonitoringTab({ service, showTraffic }: { service: ServiceNode; showTra
       <div className="flex flex-wrap items-center gap-3">
         <RangeToggle range={range} setRange={setRange} ranges={ranges} />
         <span className="ml-auto inline-flex items-center gap-2 text-[12px] text-[color:var(--ol-fg-muted)]">
-          Container
+          {t('serviceDetail.monitoring.container')}
           <select
             value="primary"
             className="ol-mono rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2 py-1 text-[11.5px]"
             onChange={() => {}}
           >
-            <option value="primary">{`ol-${service.name} (primary)`}</option>
-            <option value="prev">{`ol-${service.name} (replaced)`}</option>
+            <option value="primary">{`ol-${service.name} (${t('serviceDetail.monitoring.primary')})`}</option>
+            <option value="prev">{`ol-${service.name} (${t('serviceDetail.monitoring.replaced')})`}</option>
           </select>
         </span>
       </div>
@@ -2217,15 +2243,58 @@ function parseRepoUrl(url: string): { provider: string; path: string } | null {
   }
 }
 
-function getBuildMethodLabel(service: ServiceNode): string {
+function formatServiceKind(kind: string, t: Translate): string {
+  switch (kind) {
+    case 'Application':
+      return t('vocab.application');
+    case 'Compose':
+      return t('vocab.compose');
+    case 'Database':
+      return t('vocab.database');
+    case 'Cache':
+      return t('vocab.cache');
+    case 'Storage':
+      return t('vocab.storage');
+    default:
+      return kind;
+  }
+}
+
+function formatManagedServiceKind(kind: string | null | undefined, t: Translate): string {
+  switch (kind?.toLowerCase()) {
+    case 'postgres':
+    case 'postgresql':
+      return t('services.managedDetail.kind.postgres');
+    case 'mysql':
+      return t('services.managedDetail.kind.mysql');
+    case 'redis':
+      return t('services.managedDetail.kind.redis');
+    case 'mongo':
+    case 'mongodb':
+      return t('services.managedDetail.kind.mongo');
+    case 'minio':
+      return t('services.managedDetail.kind.minio');
+    case 'database':
+      return t('vocab.database');
+    case 'cache':
+      return t('vocab.cache');
+    case 'storage':
+      return t('vocab.storage');
+    default:
+      return kind ?? '—';
+  }
+}
+
+function getBuildMethodLabel(service: ServiceNode, t: Translate): string {
   const method = service.buildMethod?.trim();
   const normalized = method?.toLowerCase();
-  if (normalized === 'compose') return 'Compose';
+  if (normalized === 'compose') return t('vocab.compose');
   if (normalized === 'dockerfile') return 'Dockerfile';
-  if (normalized === 'image') return 'Image';
-  if (service.source === 'image') return 'Image';
+  if (normalized === 'image') return t('services.detail.build.methodValue.image');
+  if (normalized === 'auto') return t('services.detail.build.methodValue.automatic');
+  if (service.source === 'image') return t('services.detail.build.methodValue.image');
   if (service.dockerfilePath || service.repoUrl || service.source === 'git') return 'Dockerfile';
-  return method && method.length > 0 ? method : 'Auto';
+  return method && method.length > 0 ? method : t('services.detail.build.methodValue.automatic');
 }
 
 function formatBuildPath(value: string | null | undefined): string {
@@ -2260,6 +2329,8 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
 }
 
 function HealthBadge({ health }: { health: 'healthy' | 'crashed' | 'deploying' }) {
+  const { t } = useLanguage();
+
   if (health === 'crashed') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-error-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-error)]">
@@ -2268,7 +2339,7 @@ function HealthBadge({ health }: { health: 'healthy' | 'crashed' | 'deploying' }
           className="h-1 w-1 rounded-full"
           style={{ backgroundColor: 'var(--ol-error)' }}
         />
-        crashed
+        {t('topology.health.crashed')}
       </span>
     );
   }
@@ -2280,7 +2351,7 @@ function HealthBadge({ health }: { health: 'healthy' | 'crashed' | 'deploying' }
           className="h-1 w-1 animate-pulse rounded-full"
           style={{ backgroundColor: 'var(--ol-info)' }}
         />
-        deploying
+        {t('topology.health.deploying')}
       </span>
     );
   }
@@ -2291,7 +2362,7 @@ function HealthBadge({ health }: { health: 'healthy' | 'crashed' | 'deploying' }
         className="h-1 w-1 rounded-full"
         style={{ backgroundColor: 'var(--ol-success)' }}
       />
-      healthy
+      {t('topology.health.healthy')}
     </span>
   );
 }
@@ -2402,11 +2473,13 @@ function ManagedServiceDetail({
     try {
       setService(await managedServices.get(id));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load service');
+      setError(
+        localizeApiError(e, t, 'services.managedDetail.loadFailed', 'common.apiError.codes'),
+      );
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   const loadConnections = useCallback(async () => {
     setConnectionsLoading(true);
@@ -2415,11 +2488,13 @@ function ManagedServiceDetail({
       setConnections(await managedServices.connectedProjects(id));
     } catch (e: unknown) {
       setConnections([]);
-      setConnectionsError(e instanceof Error ? e.message : 'Failed to load connections');
+      setConnectionsError(
+        localizeApiError(e, t, 'services.managedDetail.connections.error', 'common.apiError.codes'),
+      );
     } finally {
       setConnectionsLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2430,7 +2505,11 @@ function ManagedServiceDetail({
         const nextService = await managedServices.get(id);
         if (!cancelled) setService(nextService);
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load service');
+        if (!cancelled) {
+          setError(
+            localizeApiError(e, t, 'services.managedDetail.loadFailed', 'common.apiError.codes'),
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -2438,7 +2517,7 @@ function ManagedServiceDetail({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2451,7 +2530,14 @@ function ManagedServiceDetail({
       } catch (e: unknown) {
         if (!cancelled) {
           setConnections([]);
-          setConnectionsError(e instanceof Error ? e.message : 'Failed to load connections');
+          setConnectionsError(
+            localizeApiError(
+              e,
+              t,
+              'services.managedDetail.connections.error',
+              'common.apiError.codes',
+            ),
+          );
         }
       } finally {
         if (!cancelled) setConnectionsLoading(false);
@@ -2460,7 +2546,7 @@ function ManagedServiceDetail({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   const owningProjectId = service
     ? getInfrastructureProjectId(service, connections, routeProjectId)
@@ -2535,7 +2621,7 @@ function ManagedServiceDetail({
             </span>
             <span className="ol-mono">
               {' · '}
-              {service.kind ?? service.type} · {service.image}
+              {formatManagedServiceKind(service.kind ?? service.type, t)} · {service.image}
             </span>
           </span>
         }
@@ -2633,7 +2719,7 @@ function ManagedOverviewTab({
   onDeleted: () => void;
 }) {
   const { t } = useLanguage();
-  const kind = service.kind ?? service.type ?? '—';
+  const kind = formatManagedServiceKind(service.kind ?? service.type, t);
   const image = service.image || '—';
   const port = getManagedServicePortLabel(service);
   const status =
@@ -2705,7 +2791,12 @@ function ManagedCredentialCard({ serviceId }: { serviceId: string }) {
       setRevealedEnv(result.env_vars);
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : t('services.managedDetail.credentials.error'),
+        localizeApiError(
+          cause,
+          t,
+          'services.managedDetail.credentials.error',
+          'common.apiError.codes',
+        ),
       );
     } finally {
       setLoading(false);
@@ -2774,7 +2865,9 @@ function ManagedLogsTab({ serviceId }: { serviceId: string }) {
       setLogs(await managedServices.logs(serviceId, 300));
     } catch (e: unknown) {
       setLogs('');
-      setError(e instanceof Error ? e.message : t('services.managedDetail.logs.error'));
+      setError(
+        localizeApiError(e, t, 'services.managedDetail.logs.error', 'common.apiError.codes'),
+      );
     } finally {
       setLoading(false);
     }
@@ -2939,7 +3032,12 @@ function ManagedOperationsSection({
       setFeedback(t('services.managedDetail.settings.updated'));
     } catch (e: unknown) {
       setFeedback(
-        e instanceof Error ? e.message : t('services.managedDetail.settings.actionError'),
+        localizeApiError(
+          e,
+          t,
+          'services.managedDetail.settings.actionError',
+          'common.apiError.codes',
+        ),
       );
     } finally {
       setBusyAction(null);
@@ -2956,7 +3054,12 @@ function ManagedOperationsSection({
     } catch (e: unknown) {
       onConnectionsChanged();
       setFeedback(
-        e instanceof Error ? e.message : t('services.managedDetail.settings.deleteError'),
+        localizeApiError(
+          e,
+          t,
+          'services.managedDetail.settings.deleteError',
+          'common.apiError.codes',
+        ),
       );
     } finally {
       setBusyAction(null);
@@ -3104,26 +3207,27 @@ function ManagedOperationsSection({
 }
 
 function ManagedHealthBadge({ status }: { status: 'running' | 'stopped' | 'error' }) {
+  const { t } = useLanguage();
   const cfg =
     status === 'running'
       ? {
           bg: 'var(--ol-success-soft)',
           fg: 'var(--ol-success)',
           dot: 'var(--ol-success)',
-          label: 'running',
+          label: t('services.status.running'),
         }
       : status === 'error'
         ? {
             bg: 'var(--ol-error-soft)',
             fg: 'var(--ol-error)',
             dot: 'var(--ol-error)',
-            label: 'error',
+            label: t('services.status.error'),
           }
         : {
             bg: 'var(--ol-panel-2)',
             fg: 'var(--ol-fg-muted)',
             dot: 'var(--ol-fg-subtle)',
-            label: 'stopped',
+            label: t('services.status.stopped'),
           };
   return (
     <span

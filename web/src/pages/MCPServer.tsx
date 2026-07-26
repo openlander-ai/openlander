@@ -27,7 +27,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Cable, Check, Copy, Eye, EyeOff, Plus, RefreshCw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
@@ -38,6 +38,7 @@ import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useMcpInstance } from '@/hooks/use-mcp-instance';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import {
   ensureOrgMcpToken,
   getOrgMcpToken,
@@ -129,7 +130,7 @@ export function MCPServer() {
         toast.warning(t('mcpServer.tokens.legacyTokenRotated'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('mcpServer.tokens.issueFailed'));
+      toast.error(localizeApiError(err, t, 'mcpServer.tokens.issueFailed', 'common.errors.codes'));
     } finally {
       setWorking(false);
     }
@@ -157,7 +158,9 @@ export function MCPServer() {
         toast.warning(t('mcpServer.tokens.legacyTokenRotated'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('mcpServer.tokens.regenerateFailed'));
+      toast.error(
+        localizeApiError(err, t, 'mcpServer.tokens.regenerateFailed', 'common.errors.codes'),
+      );
       // Reload on failure so the UI reflects whatever the backend
       // ended up with.
       await loadToken();

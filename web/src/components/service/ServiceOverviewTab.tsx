@@ -6,7 +6,7 @@
  * no-dropped-columns rule is name-based and would misfire here.
  */
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLanguage } from '@/i18n/context';
 import {
   Clock,

@@ -1,6 +1,14 @@
 import type { ServiceHealth } from '../projectTopology';
-import { apiGet, apiPost, apiPostVoid, apiPatch, apiDelete } from './client';
-import { fetchWithAuth } from './auth';
+import {
+  ApiError,
+  apiDelete,
+  apiDeleteWithBody,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPostVoid,
+  throwApiError,
+} from './client';
 import type { GitCredentialSummary } from './git-credentials';
 
 export interface ServiceTemplate {
@@ -243,7 +251,7 @@ export async function getGroupService(groupId: string, serviceId: string): Promi
     `/api/projects/${groupId}/services/${serviceId}`,
   );
   if (!data.service) {
-    throw new Error('Service not found');
+    throw new ApiError('Service not found', 404, { code: 'SERVICE_NOT_FOUND' });
   }
   return normalizeGroupService(data.service);
 }
@@ -279,16 +287,10 @@ export async function deleteGroupService(
   serviceId: string,
   input: { confirmation: string; deleteVolumes?: boolean },
 ): Promise<DeleteGroupServiceResult> {
-  const res = await fetchWithAuth(`/api/projects/${groupId}/services/${serviceId}/instance`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const error = await res.text().catch(() => '');
-    throw new Error(error || 'Failed to delete service');
-  }
-  return res.json();
+  return apiDeleteWithBody<DeleteGroupServiceResult>(
+    `/api/projects/${groupId}/services/${serviceId}/instance`,
+    input,
+  );
 }
 
 export interface ArchiveGroupServiceResult {
@@ -330,16 +332,7 @@ export async function createService(opts: {
   port?: number;
   env_vars?: Array<{ key: string; value: string }>;
 }): Promise<Service> {
-  const res = await fetchWithAuth('/api/services', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(opts),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ message: 'Failed to create service' }));
-    throw new Error(data.message || 'Failed to create service');
-  }
-  return res.json();
+  return apiPost<Service>('/api/services', opts);
 }
 
 export async function removeService(id: string): Promise<void> {
@@ -378,9 +371,7 @@ export async function getConnectedProjects(id: string): Promise<ConnectedProject
 }
 
 export async function getServiceLogs(id: string, lines: number = 100): Promise<string> {
-  const res = await fetchWithAuth(`/api/services/${id}/logs?lines=${lines}`);
-  if (!res.ok) throw new Error('Failed to fetch service logs');
-  const data = await res.json();
+  const data = await apiGet<{ logs: string }>(`/api/services/${id}/logs?lines=${lines}`);
   return data.logs;
 }
 
@@ -404,9 +395,7 @@ export interface ServiceUser {
 }
 
 export async function getServiceDatabases(id: string): Promise<ServiceDatabase[]> {
-  const res = await fetchWithAuth(`/api/services/${id}/databases`);
-  if (!res.ok) throw new Error('Failed to fetch service databases');
-  const data = await res.json();
+  const data = await apiGet<{ databases: ServiceDatabase[] }>(`/api/services/${id}/databases`);
   return data.databases;
 }
 
@@ -418,9 +407,7 @@ export async function createServiceDatabase(
 }
 
 export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
-  const res = await fetchWithAuth(`/api/services/${id}/users`);
-  if (!res.ok) throw new Error('Failed to fetch service users');
-  const data = await res.json();
+  const data = await apiGet<{ users: ServiceUser[] }>(`/api/services/${id}/users`);
   return data.users;
 }
 
@@ -473,9 +460,6 @@ export async function fetchServiceMetrics(
   const { fetchWithAuth } = await import('./auth');
   const res = await fetchWithAuth(`/api/services/${id}/metrics?range=${range}`);
   if (res.status === 204) return null;
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `GET /api/services/${id}/metrics failed (${res.status})`);
-  }
+  if (!res.ok) await throwApiError(res, `GET /api/services/${id}/metrics failed`);
   return res.json() as Promise<ServiceMetrics>;
 }

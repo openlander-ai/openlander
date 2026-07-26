@@ -287,6 +287,31 @@ export const ERROR_CLASSES: Record<ErrorClass, ErrorClassDef> = {
 
 export const ERROR_CLASS_LIST: ErrorClass[] = Object.keys(ERROR_CLASSES) as ErrorClass[];
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const PHASE_TRANSLATION_KEYS: Record<Exclude<DeployPhase, '—'>, string> = {
+  clone: 'deployShell.phase.clone',
+  image_pull: 'deployShell.phase.pull',
+  build: 'deployShell.phase.build',
+  container_create: 'deployShell.phase.create',
+  container_start: 'deployShell.phase.start',
+  healthcheck_wait: 'deployShell.phase.health',
+};
+
+export function localizeErrorClass(def: ErrorClassDef, t: Translate): ErrorClassDef {
+  const prefix = `deployErrors.${def.id}`;
+  return {
+    ...def,
+    title: t(`${prefix}.title`),
+    target: t(`${prefix}.target`),
+    fixHint: t(`${prefix}.hint`),
+  };
+}
+
+export function localizeDeployPhase(phase: DeployPhase, t: Translate): string {
+  return phase === '—' ? phase : t(PHASE_TRANSLATION_KEYS[phase]);
+}
+
 export function getErrorClass(id: string | undefined | null): ErrorClassDef {
   if (id && (id as ErrorClass) in ERROR_CLASSES) {
     return ERROR_CLASSES[id as ErrorClass];

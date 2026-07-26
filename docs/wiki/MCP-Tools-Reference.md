@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **100 unique default operations** surfaced through those composites
+- **127 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -16,24 +16,30 @@ Model note: **Project = workspace**. **Application**, **Compose**, **Database**,
 
 Agent routing rule of thumb:
 
-| User asks for                                    | Call                                                                                                        |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                                                              |
-| "Create a new app project before DB/cache"       | `openlander_project.create_project`                                                                         |
-| "Update this existing app to latest code/config" | `openlander_service.update_app`                                                                             |
-| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`                                                   |
-| "Change app branch/repo/image source"            | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
-| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                                        |
-| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
-| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
-| "Inspect this project's database/cache safely"   | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
-| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
-| "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
-| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
-| "Capture this customer review delivery"          | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
-| "Show FDE portfolio blockers across Projects"    | `openlander_project.list_engagements` / `get_engagement`                                                    |
-| "Classify the feedback into review items"        | `openlander_project.submit_delivery_work_item_drafts`                                                       |
-| "Is the customer Receipt ready?"                 | `openlander_project.get_delivery_readiness`                                                                 |
+| User asks for                                      | Call                                                                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"                   | `openlander_deploy.deploy_app`                                                                              |
+| "Create a new app project before DB/cache"         | `openlander_project.create_project`                                                                         |
+| "Update this existing app to latest code/config"   | `openlander_service.update_app`                                                                             |
+| "Restart/rollback this existing app"               | `openlander_service.restart_service` / `rollback_service`                                                   |
+| "Change app branch/repo/image source"              | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
+| "Set env vars or connect DB/Redis to an app"       | `openlander_service.set_env_vars`, then `update_app`                                                        |
+| "Fix route port mismatch without rebuild"          | `openlander_service.apply_route_config`                                                                     |
+| "Create PostgreSQL/Redis/MySQL/etc."               | `openlander_managed_service.create_service`                                                                 |
+| "Inspect this project's database/cache safely"     | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
+| "Why is this failing?"                             | `openlander_monitor.diagnose_service` with `service_id`                                                     |
+| "What did AI Ops notice?"                          | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
+| "Was this killed by host memory/Docker?"           | `openlander_monitor.diagnose_host_resources`                                                                |
+| "Capture this customer review delivery"            | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
+| "Show FDE portfolio blockers across Projects"      | `openlander_project.list_engagements` / `get_engagement`                                                    |
+| "Start a customer engagement and Project"          | `openlander_project.bootstrap_engagement`                                                                   |
+| "Plan and hand off an Agent delivery run"          | `openlander_project.plan_delivery` / `record_delivery_run_progress` / `resume_delivery_run`                 |
+| "Apply or inspect the repository Project manifest" | `openlander_project.apply_project_manifest` / `get_project_manifest`                                        |
+| "Build once and promote the same artifact"         | `openlander_deploy.create_release` / `promote_release` / `evaluate_promotion`                               |
+| "Stop or roll back a Release"                      | `openlander_deploy.recall_release` / `rollback_environment`                                                 |
+| "Create this week's internal and customer report"  | `openlander_project.generate_weekly_report` / `publish_weekly_report`                                       |
+| "Classify the feedback into review items"          | `openlander_project.submit_delivery_work_item_drafts`                                                       |
+| "Is the customer Receipt ready?"                   | `openlander_project.get_delivery_readiness`                                                                 |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
@@ -116,8 +122,8 @@ Composite catalog:
 
 | Composite                    | Action slots | Purpose                                                                             |
 | ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 22           | Deploy plans, execution, previews, rollbacks, build logs, Git                       |
-| `openlander_project`         | 30           | Projects, Delivery Workspace, Engagement reads, lifecycle, secrets, share URLs      |
+| `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git              |
+| `openlander_project`         | 46           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
 | `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes      |
@@ -132,7 +138,11 @@ Composite catalog:
 | [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                              |
 | [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
 | [Delivery Workspace](#delivery-workspace)                | 11    | Review evidence, feedback, Gates, deploy links, Receipt preview |
-| [Engagement Portfolio](#engagement-portfolio)            | 2     | Internal cross-Project FDE portfolio reads                      |
+| [Agent Delivery Run](#agent-delivery-run)                | 8     | Plan, verify, hand off, resume, cancel, or complete             |
+| [Project Manifest](#project-manifest)                    | 1     | Apply ordered Project Environments from Git                     |
+| [Release and Promotion](#release-and-promotion)          | 6     | Build once, promote an immutable digest, recall, or roll back   |
+| [Weekly Reporting](#weekly-reporting)                    | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
+| [Engagement Portfolio](#engagement-portfolio)            | 3     | Engagement bootstrap and cross-Project portfolio reads          |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                                 |
 | [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources               |
 | [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection                        |
@@ -240,6 +250,10 @@ v0.1 MCP surface.
 One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
 project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
 For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
+After a successful `deploy_app`, OpenLander records the deployed image digest as an implicit
+Delivery/Agent Run/Release compatibility record. This adoption does not rebuild the image, so a
+later Promotion can reuse the exact immutable artifact. Existing-app calls return the Release as
+pending because the delegated `update_app` path is asynchronous.
 When `deploy_app` resolves an existing app and includes source-only changes (`repo_url`, `branch`,
 `source`, `image`, or `port`), OpenLander saves those source settings first and then starts
 `update_app`. Dockerfile/build config changes still require `update_service_config`, then
@@ -481,23 +495,142 @@ web-session only; `finalize_delivery*` MCP requests return `HUMAN_UI_ONLY`.
 Finalization also requires the evidence version to match the most recently
 generated Receipt preview.
 
+## Agent Delivery Run
+
+Agent Delivery actions live under `openlander_project`. They pin work to an
+exact commit, manifest hash, and runner image, so another Agent can inspect or
+resume the same execution record without relying on chat history.
+
+| Action                         | Required parameters                                                                                | Purpose                                                |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `plan_delivery`                | `idempotency_key`, `project_id`, `title`, `objective`, `definition_of_done`, `gates`               | Store the Delivery objective, manifest path, and Gates |
+| `start_delivery_run`           | `idempotency_key`, `delivery_id`, `commit_sha`, `manifest_path`, `manifest_sha256`, `runner_image` | Start one active Run pinned to exact inputs            |
+| `get_delivery_run`             | `run_id`                                                                                           | Read the Run and its ordered progress/handoff events   |
+| `run_quality_gates`            | `idempotency_key`, `run_id`                                                                        | Run manifest commands in disposable containers         |
+| `record_delivery_run_progress` | `idempotency_key`, `run_id`, `phase`, `summary`                                                    | Record progress or pause with `handoff_summary`        |
+| `resume_delivery_run`          | `idempotency_key`, `run_id`, `summary`                                                             | Resume a paused Run with an explicit takeover summary  |
+| `cancel_delivery_run`          | `idempotency_key`, `run_id`, `reason`                                                              | Cancel an active Run while preserving its evidence     |
+| `complete_delivery`            | `idempotency_key`, `delivery_id`, `run_id`, `release_id`, `promotion_id`, `limitations`            | Finalize Completion Evidence after Production          |
+
+`plan_delivery` defaults `manifest_path` to `.openlander/delivery.yml`. Commit
+that file before `start_delivery_run`, then pass the exact Git commit and
+SHA-256 of the committed manifest. `run_quality_gates` clones the Project's
+single Git-backed Application at that exact commit, verifies the manifest and
+runner-image digest, and executes only argv arrays declared in the manifest.
+Each attempt records exit code, duration, a redacted-log SHA-256, and an
+optional JUnit/Playwright/JSON report artifact. A Delivery can have only one `running` or
+`paused` Run. Supplying `handoff_summary` to
+`record_delivery_run_progress` pauses the Run; the next Agent must call
+`resume_delivery_run` before continuing. Commands require a stable
+`idempotency_key`; exact retries replay the stored result and changed payloads
+return `OPERATION_IDEMPOTENCY_CONFLICT`.
+
+## Project Manifest
+
+`apply_project_manifest` applies `.openlander/project.yml` through
+`openlander_project`. It stores the exact path, SHA-256, optional Service
+composition, Project Environment policy, and optional weekly-report schedule.
+It synchronizes stable Environment keys, display names, tiers, Promotion order,
+health/Smoke/soak policy, and the manifest SHA-256. The manifest must have
+unique keys and orders and exactly one `production` Environment. Removed
+entries are not deleted automatically, so an Agent cannot orphan a running
+Environment merely by changing Git configuration.
+
+`get_project_manifest(project_id)` compares that applied snapshot with current
+Service and Environment rows. It returns `in_sync`, `drifted`, or `not_applied`
+plus machine-readable `missing`, `retained`, and `changed` entries. The Web
+Delivery view renders the same comparison instead of offering an Environment
+authoring form.
+
+Each Environment may also declare `health_timeout_seconds` (1–600), an optional
+absolute `smoke_path`, and `soak_seconds` (0–3600). Promotion waits for container
+health, probes the exposed local port when a Smoke path is present, waits the
+soak window, then repeats health and Smoke checks before recording success.
+
+## Release and Promotion
+
+Release actions live under `openlander_deploy`. A Release builds one immutable
+image digest per Git-backed service and reuses those exact service digests
+across every Environment.
+
+| Action                 | Required parameters                                       | Purpose                                             |
+| ---------------------- | --------------------------------------------------------- | --------------------------------------------------- |
+| `create_release`       | `idempotency_key`, `run_id`, `version`                    | Build one Release after required quality Gates pass |
+| `get_release`          | `release_id`                                              | Read artifacts and Promotion history                |
+| `promote_release`      | `idempotency_key`, `release_id`, `project_environment_id` | Deploy the existing digest to the next Environment  |
+| `evaluate_promotion`   | `promotion_id`                                            | Read health, soak, deploy IDs, and failure details  |
+| `recall_release`       | `idempotency_key`, `release_id`                           | Block additional Promotion of a ready Release       |
+| `rollback_environment` | `idempotency_key`, `project_environment_id`               | Restore the previous successful Release digest      |
+
+All services in one Agent Run must share the same repository and commit;
+unrelated repositories require separate Deliveries. `promote_release` never rebuilds. A missing image fails with
+`ARTIFACT_UNAVAILABLE`; a changed image identifier fails with
+`ARTIFACT_DIGEST_MISMATCH`. Environments must be promoted in manifest order.
+The asynchronous create and promote commands return compact `status_call`
+links for `get_release` and `evaluate_promotion`.
+
+## Weekly Reporting
+
+Weekly reporting lives under `openlander_project` but requires an
+instance/organization-scoped token because one Engagement may contain multiple
+Projects.
+
+| Action                   | Required parameters                                              | Purpose                                                        |
+| ------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| `generate_weekly_report` | `idempotency_key`, `engagement_id`, `period_start`, `period_end` | Freeze a one-to-eight-day Engagement evidence snapshot         |
+| `publish_weekly_report`  | `idempotency_key`, `report_id`                                   | Render internal and customer HTML/PDF from that exact snapshot |
+| `get_weekly_report`      | `report_id`                                                      | Read revision, publication state, blob IDs, and SHA-256 values |
+
+`period_start` and `period_end` use `YYYY-MM-DD`. A published report is
+immutable; changed evidence produces another revision. The internal view may
+include Agent Run phases, check log hashes, Activity, and technical failure
+details. The customer view contains outcomes, Project and Delivery status,
+Release/Environment status, and open-issue titles, but excludes check details
+and internal Activity. Both views retain their own PDF SHA-256 and point back
+to one `evidence_sha256`.
+
 ## Engagement Portfolio
 
-Engagement Portfolio adds two read-only actions to `openlander_project`.
+Engagement Portfolio adds six idempotent mutation commands and two read actions
+to `openlander_project`.
 Engagements are internal FDE classification and observability records, not
 customer accounts. They group existing Projects without changing Project
 runtime, Delivery evidence, or finalized Receipt snapshots.
 
-| Action             | Required parameters | Purpose                                                    |
-| ------------------ | ------------------- | ---------------------------------------------------------- |
-| `list_engagements` | None                | List runtime health, Delivery status counts, and blockers  |
-| `get_engagement`   | `engagement_id`     | Read linked Project health and compact blocker identifiers |
+| Action                           | Required parameters                                    | Purpose                                                      |
+| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| `bootstrap_engagement`           | `idempotency_key`, `customer_name`, `title`, `project` | Atomically create an Engagement and its initial Project      |
+| `update_engagement_from_brief`   | `idempotency_key`, `engagement_id`                     | Apply agent-structured brief fields with source artifact IDs |
+| `link_project_to_engagement`     | `idempotency_key`, `engagement_id`, `project_id`       | Add one existing Project to an active Engagement             |
+| `unlink_project_from_engagement` | `idempotency_key`, `engagement_id`, `project_id`       | Remove membership without changing the Project or evidence   |
+| `archive_engagement`             | `idempotency_key`, `engagement_id`                     | Archive the portfolio record while preserving Project links  |
+| `unarchive_engagement`           | `idempotency_key`, `engagement_id`                     | Restore an archived Engagement to active status              |
+| `list_engagements`               | None                                                   | List runtime health, Delivery status counts, and blockers    |
+| `get_engagement`                 | `engagement_id`                                        | Read linked Project health and compact blocker identifiers   |
 
-Both actions require an instance/organization-scoped MCP token. Project- and
-service-scoped tokens receive `SCOPE_VIOLATION` before any sibling Project data
-is read. Engagement creation, editing, Project linking, archive, and unarchive
-remain administrator web-session actions. Use existing Delivery actions to
-retrieve artifacts, feedback, Gate evidence, and Receipt metadata.
+Portfolio reads and Engagement-wide mutations require an instance/organization-
+scoped MCP token. `link_project_to_engagement` and
+`unlink_project_from_engagement` also accept a project-scoped token when the
+input `project_id` exactly matches that token; sibling Project access and all
+service-scoped access return `SCOPE_VIOLATION`. Mutations are backed by the same
+Application Operations available at `POST /api/v1/operations/:name`; MCP and
+REST do not call one another. Use Delivery actions to retrieve artifacts,
+feedback, Gate evidence, and Receipt metadata.
+
+## Evidence intake and structured project updates
+
+| Action                   | Required parameters                                                            | Purpose                                                        |
+| ------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `create_evidence_upload` | `idempotency_key`, Project/Delivery IDs, filename, logical key, revision, kind | Issue a 15-minute upload capability and reserve an artifact ID |
+| `record_project_update`  | `idempotency_key`, Project/Delivery IDs, source artifact IDs, entries          | Record decisions, actions, risks, questions, and facts         |
+
+`create_evidence_upload` returns a relative HTTP `upload_url`, `PUT` method,
+expiry, size limit, and the reserved `artifact_id`. The URL is a bearer
+capability: do not log or share it. Uploading validates type, size, hash, Project
+ownership, Delivery mutability, and artifact revision. Replaying the same upload
+is idempotent. `record_project_update` accepts only artifacts from the specified
+Delivery and stores the structured update in Activity history for weekly report
+snapshots.
 
 ### `update_app` / `redeploy_app` / `restart_service`
 

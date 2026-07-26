@@ -16,7 +16,7 @@
  * MCP Server item folded into Workspace as "Your Agent"
  * pointing at /mcp-server. Cloudflare Tunnel surface deferred to v0.2.
  */
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   Home,
   Folder,
@@ -40,8 +40,7 @@ import { AccountPopover } from '@/components/account/AccountPopover';
 
 interface NavItem {
   id: string;
-  label: string;
-  labelKey?: string;
+  labelKey: string;
   icon: LucideIcon;
   to: string;
   /** Predicate: does the current pathname (+search) count as "active" for this item? */
@@ -54,7 +53,7 @@ interface NavItem {
 
 interface NavSection {
   id: string;
-  label: string;
+  labelKey: string;
   items: NavItem[];
 }
 
@@ -71,12 +70,12 @@ const isActivityView = startsWith('/activity');
 const SECTIONS: NavSection[] = [
   {
     id: 'workspace',
-    label: 'Workspace',
+    labelKey: 'sidebar.sections.workspace',
     items: [
-      { id: 'home', label: 'Home', icon: Home, to: '/home' },
+      { id: 'home', labelKey: 'sidebar.items.home', icon: Home, to: '/home' },
       {
         id: 'your-agent',
-        label: 'Your Agent',
+        labelKey: 'sidebar.items.agent',
         icon: Bot,
         to: '/mcp-server',
         matches: startsWith('/mcp-server'),
@@ -84,7 +83,7 @@ const SECTIONS: NavSection[] = [
       },
       {
         id: 'projects',
-        label: 'Projects',
+        labelKey: 'sidebar.items.projects',
         icon: Folder,
         to: '/projects',
         matches: startsWith('/projects'),
@@ -92,29 +91,28 @@ const SECTIONS: NavSection[] = [
       },
       {
         id: 'engagements',
-        label: 'Engagements',
-        labelKey: 'engagements.sidebar',
+        labelKey: 'sidebar.items.engagements',
         icon: BriefcaseBusiness,
         to: '/engagements',
         matches: startsWith('/engagements'),
       },
       {
         id: 'activity',
-        label: 'Activity',
+        labelKey: 'sidebar.items.activity',
         icon: Activity,
         to: '/activity',
         matches: isActivityView,
       },
       {
         id: 'monitoring',
-        label: 'Monitoring',
+        labelKey: 'sidebar.items.monitoring',
         icon: BarChart3,
         to: '/monitoring',
         matches: startsWith('/monitoring'),
       },
       {
         id: 'web-server',
-        label: 'Web Server',
+        labelKey: 'sidebar.items.webServer',
         icon: Server,
         to: '/settings/web-server',
         matches: startsWith('/settings/web-server'),
@@ -123,25 +121,25 @@ const SECTIONS: NavSection[] = [
   },
   {
     id: 'settings',
-    label: 'Settings',
+    labelKey: 'sidebar.sections.settings',
     items: [
       {
         id: 'git',
-        label: 'Git Providers',
+        labelKey: 'sidebar.items.gitProviders',
         icon: Code2,
         to: '/settings/git-providers',
         matches: startsWith('/settings/git-providers'),
       },
       {
         id: 'repository-keys',
-        label: 'Repository Keys',
+        labelKey: 'sidebar.items.repositoryKeys',
         icon: KeyRound,
         to: '/settings/ssh-keys',
         matches: startsWith('/settings/ssh-keys'),
       },
       {
         id: 'ai-providers',
-        label: 'AI Providers',
+        labelKey: 'sidebar.items.aiProviders',
         icon: BrainCircuit,
         to: '/settings/ai-providers',
         matches: startsWith('/settings/ai-providers'),
@@ -212,13 +210,13 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           <div key={section.id} className="mb-4">
             {!collapsed && (
               <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
-                {section.label}
+                {t(section.labelKey)}
               </div>
             )}
             <ul className="flex flex-col gap-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const displayLabel = item.labelKey ? t(item.labelKey) : item.label;
+                const displayLabel = t(item.labelKey);
                 const active = isActive(item);
                 const displayBadge = item.id === 'projects' ? projectsBadge : (item.badge ?? null);
                 const displayDot = item.id === 'your-agent' ? agentDot : (item.badgeDot ?? null);

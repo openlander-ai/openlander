@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { getDeploymentDetail } from '@/lib/api';
 import {
   formatDeploymentDuration,
@@ -178,7 +178,7 @@ export function DeploymentDetail() {
     );
   }
 
-  const statusMeta = getDeploymentStatusMeta(deployment.status);
+  const statusMeta = getDeploymentStatusMeta(deployment.status, t);
   const shortCommitSha = getShortCommitSha(deployment.commitSha);
 
   const StatusIcon =
@@ -219,7 +219,7 @@ export function DeploymentDetail() {
                     {statusMeta.label}
                   </span>
                   <span className="capitalize">
-                    {getDeploymentTriggerMetaLabel(deployment.trigger)}
+                    {getDeploymentTriggerMetaLabel(deployment.trigger, t)}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />

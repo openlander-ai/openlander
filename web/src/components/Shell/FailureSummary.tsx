@@ -12,7 +12,13 @@
  */
 import type { ReactNode } from 'react';
 import { AlertOctagon, Code2, Copy, Edit, RefreshCw, Sparkles } from 'lucide-react';
-import { getErrorClass, type ErrorClassDef } from '@/lib/errorClasses';
+import { useLanguage } from '@/i18n/context';
+import {
+  getErrorClass,
+  localizeDeployPhase,
+  localizeErrorClass,
+  type ErrorClassDef,
+} from '@/lib/errorClasses';
 
 export interface FailureSummaryProps {
   /** Error class id (e.g. `BUILD_CONTEXT_MISMATCH`). */
@@ -33,7 +39,10 @@ export function FailureSummary({
   onViewCompose,
   onRedeploy,
 }: FailureSummaryProps) {
-  const def = override ?? getErrorClass(errorClass);
+  const { t } = useLanguage();
+  const sourceDef = override ?? getErrorClass(errorClass);
+  const def = override ? override : localizeErrorClass(sourceDef, t);
+  const phaseLabel = localizeDeployPhase(def.phase, t);
   return (
     <div
       role="alert"
@@ -46,8 +55,13 @@ export function FailureSummary({
           {def.id}
         </span>
         <span className="text-[11px] text-[color:var(--ol-fg-muted)]">
-          Phase: <b className="text-[color:var(--ol-fg)]">{def.phase}</b>
-          {def.step && def.step !== '—' && <> · step {def.step}</>}
+          {t('failureSummary.phase')}: <b className="text-[color:var(--ol-fg)]">{phaseLabel}</b>
+          {def.step && def.step !== '—' && (
+            <>
+              {' '}
+              · {t('failureSummary.step')} {def.step}
+            </>
+          )}
           {def.target && <> · {def.target}</>}
         </span>
       </div>
@@ -62,7 +76,8 @@ export function FailureSummary({
           aria-hidden
         />
         <span>
-          <b className="font-semibold">Likely fix:</b> {renderFixHint(def.fixHint)}
+          <b className="font-semibold">{t('failureSummary.likelyFix')}</b>{' '}
+          {renderFixHint(def.fixHint)}
         </span>
       </p>
 
@@ -86,16 +101,16 @@ export function FailureSummary({
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <SecondaryAction icon={<Copy className="h-3 w-3" />} onClick={onCopySummary}>
-          Copy summary
+          {t('failureSummary.copySummary')}
         </SecondaryAction>
         <SecondaryAction icon={<Sparkles className="h-3 w-3" />} onClick={onCopyAsAiPrompt}>
-          Copy as Claude prompt
+          {t('failureSummary.copyAiPrompt')}
         </SecondaryAction>
         <SecondaryAction icon={<Edit className="h-3 w-3" />} onClick={onViewCompose}>
-          View compose
+          {t('failureSummary.viewCompose')}
         </SecondaryAction>
         <PrimaryAction icon={<RefreshCw className="h-3 w-3" />} onClick={onRedeploy}>
-          Re-deploy
+          {t('failureSummary.redeploy')}
         </PrimaryAction>
       </div>
     </div>

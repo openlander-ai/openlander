@@ -18,6 +18,12 @@ import {
   type AiOpsBriefingStatus,
 } from '@/lib/api/ai-ops';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
+import {
+  localizedBriefingClassification,
+  localizedBriefingSummary,
+  localizedBriefingTitle,
+} from '@/lib/ai-ops-presentation';
 
 interface AiOpsBriefingFeedProps {
   briefings: AiOpsBriefing[];
@@ -88,7 +94,7 @@ export function AiOpsBriefingFeed({
       const detail = await getAiOpsBriefing(briefing.briefing_id);
       setSelectedBriefing(detail.briefing);
     } catch (err) {
-      onError?.(err instanceof Error ? err.message : t('aiOps.error.load'));
+      onError?.(localizeApiError(err, t, 'aiOps.error.load', 'aiOps.error.codes'));
     } finally {
       setDetailLoading(false);
     }
@@ -118,7 +124,7 @@ export function AiOpsBriefingFeed({
       );
       await onStatusChanged?.(response.briefing);
     } catch (err) {
-      onError?.(err instanceof Error ? err.message : t('aiOps.error.status'));
+      onError?.(localizeApiError(err, t, 'aiOps.error.status', 'aiOps.error.codes'));
     } finally {
       setStatusUpdating(null);
     }
@@ -208,7 +214,7 @@ export function AiOpsBriefingFeed({
                       severityClass(briefing.severity),
                     )}
                   >
-                    {briefing.severity}
+                    {t(`aiOps.severity.${briefing.severity}`)}
                   </span>
                   <span
                     className={cn(
@@ -216,7 +222,7 @@ export function AiOpsBriefingFeed({
                       statusClass(briefing.status),
                     )}
                   >
-                    {briefing.status}
+                    {t(`aiOps.status.${briefing.status}`)}
                   </span>
                   {showScope && (
                     <span className="ol-mono truncate text-[10.5px] text-foreground/50">
@@ -225,10 +231,10 @@ export function AiOpsBriefingFeed({
                   )}
                 </div>
                 <div className="mt-2 truncate text-xs font-medium text-foreground">
-                  {briefing.title}
+                  {localizedBriefingTitle(briefing, t)}
                 </div>
                 <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-foreground/70">
-                  {briefing.summary}
+                  {localizedBriefingSummary(briefing, t)}
                 </p>
               </button>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -286,7 +292,11 @@ export function AiOpsBriefingFeed({
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedBriefing?.title ?? t('aiOps.detailTitle')}</DialogTitle>
+            <DialogTitle>
+              {selectedBriefing
+                ? localizedBriefingTitle(selectedBriefing, t)
+                : t('aiOps.detailTitle')}
+            </DialogTitle>
             <DialogDescription>{t('aiOps.detailDescription')}</DialogDescription>
           </DialogHeader>
           {selectedBriefing && (
@@ -298,10 +308,10 @@ export function AiOpsBriefingFeed({
                     severityClass(selectedBriefing.severity),
                   )}
                 >
-                  {selectedBriefing.severity}
+                  {t(`aiOps.severity.${selectedBriefing.severity}`)}
                 </span>
                 <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
-                  {selectedBriefing.classification}
+                  {localizedBriefingClassification(selectedBriefing, t)}
                 </span>
                 {detailLoading && (
                   <span className="text-[11px] text-foreground/60">{t('aiOps.loading')}</span>
@@ -342,7 +352,7 @@ export function AiOpsBriefingFeed({
                 {renderStatusActions(selectedBriefing)}
               </div>
               <p className="text-sm leading-relaxed text-foreground/80">
-                {selectedBriefing.summary}
+                {localizedBriefingSummary(selectedBriefing, t)}
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Metric

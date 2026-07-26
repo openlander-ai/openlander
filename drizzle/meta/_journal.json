@@ -113,6 +113,55 @@
       "when": 1784962687176,
       "tag": "0015_engagement_portfolio",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785042646334,
+      "tag": "0016_agent_delivery_interface",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785044408542,
+      "tag": "0017_release_promotion_reporting",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785047279499,
+      "tag": "0018_release_promotion_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785050378897,
+      "tag": "0019_release-hard-delete-cascade",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785050447036,
+      "tag": "0020_delivery-deploy-link-hard-delete-cascade",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785051610527,
+      "tag": "0021_project-manifest-state",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785054890575,
+      "tag": "0022_receipt-hard-delete-cascade",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCopy } from '@/hooks/use-copy';
 import { useGithubDeviceFlow } from '@/hooks/use-github-device-flow';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface GithubSettingsTabProps {
   status: SetupStatus | null;
@@ -52,8 +53,9 @@ export function GithubSettingsTab({
       setGithubToken('');
       await onComplete?.();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to connect GitHub';
-      setGithubError(message);
+      setGithubError(
+        localizeApiError(err, t, 'settings.github.connectFailed', 'common.errors.codes'),
+      );
     } finally {
       setGithubConnecting(false);
     }
@@ -67,8 +69,9 @@ export function GithubSettingsTab({
       resetDeviceFlow();
       await refetch();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
-      setGithubError(message);
+      setGithubError(
+        localizeApiError(err, t, 'settings.github.disconnectFailed', 'common.errors.codes'),
+      );
     } finally {
       setGithubDisconnecting(false);
     }

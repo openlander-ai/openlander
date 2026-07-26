@@ -4,7 +4,56 @@ import { ToolResultCard } from '../../web/src/components/timeline/ToolResultCard
 
 vi.mock('@/i18n/context', () => ({
   useLanguage: () => ({
-    t: (key: string) => key,
+    t: (key: string, params?: Record<string, string | number>) => {
+      const values: Record<string, string> = {
+        'toolResults.unknown': 'Unknown',
+        'toolResults.composeProject': 'Compose project',
+        'toolResults.port': 'Port',
+        'toolResults.service': 'Service',
+        'toolResults.container': 'Container',
+        'toolResults.status': 'Status',
+        'toolResults.ports': 'Ports',
+        'toolResults.from': 'From',
+        'toolResults.to': 'To',
+        'toolResults.changes': 'Changes',
+        'toolResults.diff': 'Diff',
+        'toolResults.before': 'Before',
+        'toolResults.after': 'After',
+        'toolResults.viewDockerfile': 'View Dockerfile ▾',
+        'toolResults.name': 'Name',
+        'toolResults.url': 'URL',
+        'toolResults.link': 'Link',
+        'toolResults.moreProjects': '{count} more projects',
+        'toolResults.viewLogs': 'View logs ▾',
+        'toolResults.memory': 'Memory',
+        'toolResults.disk': 'Disk',
+        'toolResults.envUpdated': 'Environment variables updated.',
+        'toolResults.updatedKeys': 'Updated keys:',
+        'toolResults.viewResult': 'View result ▾',
+        'toolResults.statusValue.running': 'Running',
+        'toolResults.statusValue.up': 'Up',
+        'toolResults.statusValue.success': 'Success',
+        'toolResults.statusValue.failed': 'Failed',
+        'toolResults.statusValue.error': 'Error',
+        'toolResults.statusValue.healthy': 'Healthy',
+        'toolResults.statusValue.unhealthy': 'Unhealthy',
+        'toolResults.statusValue.ready': 'Ready',
+        'toolResults.statusValue.completed': 'Completed',
+        'toolResults.statusValue.stopped': 'Stopped',
+        'toolResults.statusValue.starting': 'Starting',
+        'toolResults.statusValue.stopping': 'Stopping',
+        'toolResults.statusValue.building': 'Building',
+        'toolResults.statusValue.deploying': 'Deploying',
+        'toolResults.statusValue.pending': 'Pending',
+        'toolResults.statusValue.cancelled': 'Cancelled',
+        'toolResults.statusValue.unknown': 'Status unavailable',
+      };
+      let value = values[key] ?? key;
+      for (const [name, replacement] of Object.entries(params ?? {})) {
+        value = value.replace(`{${name}}`, String(replacement));
+      }
+      return value;
+    },
   }),
 }));
 
@@ -158,10 +207,29 @@ describe('ToolResultCard', () => {
 
     const tree = ToolResultCard({ item });
     expect(findTextInTree(tree, 'demo-app')).toBe(true);
-    expect(findTextInTree(tree, 'running')).toBe(true);
+    expect(findTextInTree(tree, 'Running')).toBe(true);
     expect(findTextInTree(tree, 'demo.example.com')).toBe(true);
-    expect(findTextInTree(tree, 'Port:')).toBe(true);
+    expect(findTextInTree(tree, 'Port')).toBe(true);
     expect(findTextInTree(tree, '10114')).toBe(true);
+  });
+
+  it('does not render an unmapped raw status value', () => {
+    const item: TimelineItem = {
+      id: '5b',
+      type: 'agent_tool_result',
+      timestamp: new Date().toISOString(),
+      title: 'Deploy Project',
+      percent: -1,
+      toolName: 'deploy_project',
+      toolResult: {
+        projectName: 'demo-app',
+        status: 'future_internal_state',
+      },
+    };
+
+    const tree = ToolResultCard({ item });
+    expect(findTextInTree(tree, 'Status unavailable')).toBe(true);
+    expect(findTextInTree(tree, 'future_internal_state')).toBe(false);
   });
 
   it('renders list_projects table with remaining-count summary', () => {

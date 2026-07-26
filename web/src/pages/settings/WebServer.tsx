@@ -30,6 +30,7 @@ import {
   getWebServerSummary,
   type ExternalContainer,
   type PortAllocation,
+  type ProxyStatusCode,
   type ProxyType,
   type WebServerConfigurationIssue,
   type WebRouteIssue,
@@ -60,12 +61,14 @@ function useFetch<T>(fn: () => Promise<T>): FetchState<T> & { reload: () => void
       .then((data) => {
         if (!cancelled) setState({ data, loading: false, error: null });
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (!cancelled) {
           setState({
             data: null,
             loading: false,
-            error: err instanceof Error ? err.message : 'Failed',
+            // The detail is not rendered; keep only an internal sentinel so
+            // backend prose can never leak if this state is reused later.
+            error: 'request_failed',
           });
         }
       });
@@ -78,21 +81,19 @@ function useFetch<T>(fn: () => Promise<T>): FetchState<T> & { reload: () => void
 }
 
 /**
- * Translate a route issue by its `code`, falling back to the backend's
- * raw `message` field if no localized variant exists. The backend
- * messages are English; without this layer, Korean UI showed mixed
- * locales (Codex CCG round 2 #2).
+ * Translate a route issue by its stable code. Unknown server prose remains
+ * available in the response for diagnostics, but does not leak into the UI.
  */
 function translateIssue(issue: WebRouteIssue, t: Translate): string {
   const key = `webServer.issues.codes.${issue.code}`;
   const localized = t(key);
-  return localized === key ? issue.message : localized;
+  return localized === key ? t('webServer.issues.unknown') : localized;
 }
 
 function translateConfigurationIssue(issue: WebServerConfigurationIssue, t: Translate): string {
   const key = `webServer.configuration.codes.${issue.code}`;
   const localized = t(key);
-  return localized === key ? issue.message : localized;
+  return localized === key ? t('webServer.configuration.unknown') : localized;
 }
 
 // Wrap lib's formatRelativeTime to preserve the '—' fallback that this
@@ -373,41 +374,32 @@ function ProxyPip({ summary, t }: { summary: FetchState<WebServerSummary>; t: Tr
   }
   const proxy = summary.data.proxy;
 
-  // PR #242 added the structured `proxy.statusCode` + `proxy.statusSeverity`
-  // enum. When present, prefer the i18n-mapped label and the
-  // server-derived severity. Older OpenLander builds (and this same
-  // code talking to a stale backend during a rolling upgrade) won't
-  // include those fields, so we fall back to the legacy free-form
-  // `proxy.status` string + the type/docker-provider derivation.
-  const code = proxy.statusCode;
-  if (code) {
-    const label = t(`webServer.proxy.statusCode.${code}`, {
-      versionLabel: formatProxyVersionLabel(proxy.version),
-      type: formatProxyBrandLabel(proxy.type),
-    });
-    const kind: PipKind =
-      proxy.statusSeverity === 'error'
-        ? 'danger'
-        : proxy.statusSeverity === 'warning'
-          ? 'warning'
-          : proxy.statusSeverity === 'ok'
-            ? 'ok'
-            : 'muted';
-    return <Pip kind={kind}>{label}</Pip>;
-  }
-
-  // Legacy backend fallback — render the free-form status verbatim and
-  // derive pip color from `proxy.type` + `traefikDockerProvider`.
-  let kind: PipKind = 'muted';
-  if (proxy.type === 'none') {
-    kind = 'warning';
-  } else if (proxy.type === 'traefik') {
-    kind = proxy.traefikDockerProvider === false ? 'warning' : 'ok';
-  } else {
-    // nginx / caddy / haproxy — detected but not integrated.
-    kind = 'warning';
-  }
-  return <Pip kind={kind}>{proxy.status}</Pip>;
+  // Older backends omit the structured code, but still provide enough
+  // locale-neutral fields to derive the same display state. Never surface
+  // their free-form English `proxy.status` in the selected UI locale.
+  const legacyCode = (): ProxyStatusCode => {
+    if (summary.data?.dockerUnavailable) return 'docker_unavailable';
+    if (proxy.type === 'none') {
+      return proxy.mode === 'managed' ? 'no_proxy_managed' : 'no_proxy_external';
+    }
+    if (proxy.type === 'traefik') {
+      if (proxy.traefikDockerProvider === false) return 'traefik_provider_disabled';
+      return proxy.mode === 'managed' ? 'traefik_managed' : 'traefik_external';
+    }
+    return 'unsupported_proxy';
+  };
+  const code = proxy.statusCode ?? legacyCode();
+  const label = t(`webServer.proxy.statusCode.${code}`, {
+    versionLabel: formatProxyVersionLabel(proxy.version),
+    type: formatProxyBrandLabel(proxy.type),
+  });
+  const kind: PipKind =
+    proxy.statusSeverity === 'error' || code === 'docker_unavailable'
+      ? 'danger'
+      : proxy.statusSeverity === 'ok' || code === 'traefik_managed' || code === 'traefik_external'
+        ? 'ok'
+        : 'warning';
+  return <Pip kind={kind}>{label}</Pip>;
 }
 
 type PipKind = 'ok' | 'warning' | 'danger' | 'muted';

@@ -47,6 +47,7 @@ Requirements:
 - run this on a fresh or dedicated QA host, not a dogfood/shared Docker daemon
 - start OpenLander from the exact RC artifact before invoking this script
 - ensure Docker and the public test repositories are reachable
+- for an isolated VM whose runtime ports are SSH-forwarded with an offset, set OPENLANDER_E2E_RUNTIME_PORT_OFFSET
 MSG
 
 check_clean_docker_surface

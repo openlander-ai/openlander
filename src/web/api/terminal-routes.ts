@@ -15,6 +15,15 @@ type TerminalExec = {
   resize: (opts: { w: number; h: number }) => Promise<void>;
 };
 
+type TerminalErrorCode =
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'CONTAINER_NOT_RUNNING'
+  | 'SHELL_UNAVAILABLE'
+  | 'TERMINAL_IDLE_TIMEOUT'
+  | 'TERMINAL_OPEN_FAILED'
+  | 'RATE_LIMIT_EXCEEDED';
+
 export function createTerminalRoutes(
   ctx: AppContext,
   upgradeWebSocket?: NodeWebSocket['upgradeWebSocket'],
@@ -38,9 +47,10 @@ export function createTerminalRoutes(
 
   const closeWithError = (
     ws: { send: (data: string) => void; close: () => void },
+    code: TerminalErrorCode,
     message: string,
   ): void => {
-    ws.send(JSON.stringify({ type: 'error', message }));
+    ws.send(JSON.stringify({ type: 'error', code, message }));
     ws.close();
   };
 
@@ -76,7 +86,7 @@ export function createTerminalRoutes(
                 const cookieHeader = c.req.header('cookie');
                 const sessionToken = parseCookie(cookieHeader, 'ol_session');
                 if (!sessionToken || !(await authService.validateSession(sessionToken))) {
-                  closeWithError(ws, 'Unauthorized');
+                  closeWithError(ws, 'UNAUTHORIZED', 'Unauthorized');
                   return;
                 }
               }
@@ -89,18 +99,18 @@ export function createTerminalRoutes(
 
               if (!isLocalhostServer) {
                 if (!originHeader || !hostHeader) {
-                  closeWithError(ws, 'Forbidden');
+                  closeWithError(ws, 'FORBIDDEN', 'Forbidden');
                   return;
                 }
                 let originHost: string;
                 try {
                   originHost = new URL(originHeader).host.toLowerCase();
                 } catch (_err) {
-                  closeWithError(ws, 'Forbidden');
+                  closeWithError(ws, 'FORBIDDEN', 'Forbidden');
                   return;
                 }
                 if (originHost !== hostHeader.toLowerCase()) {
-                  closeWithError(ws, 'Forbidden');
+                  closeWithError(ws, 'FORBIDDEN', 'Forbidden');
                   return;
                 }
               }
@@ -115,14 +125,14 @@ export function createTerminalRoutes(
               // that bottom case stays inert here.
               const view = await loadServiceView(ctx.db, project);
               if (!view.containerId || view.status !== 'running') {
-                closeWithError(ws, 'Container is not running');
+                closeWithError(ws, 'CONTAINER_NOT_RUNNING', 'Container is not running');
                 return;
               }
 
               const containerId = view.containerId;
               const containerInfo = await ctx.docker.inspectContainer(containerId);
               if (!containerInfo.State.Running) {
-                closeWithError(ws, 'Container is not running');
+                closeWithError(ws, 'CONTAINER_NOT_RUNNING', 'Container is not running');
                 return;
               }
 
@@ -144,6 +154,7 @@ export function createTerminalRoutes(
               if (!shellCmd) {
                 closeWithError(
                   ws,
+                  'SHELL_UNAVAILABLE',
                   'No shell available (/bin/bash and /bin/sh not found). This container may be a distroless image.',
                 );
                 return;
@@ -154,8 +165,7 @@ export function createTerminalRoutes(
               const stream = terminal.stream as unknown as Duplex;
 
               const idleTimer = setTimeout(() => {
-                ws.send(JSON.stringify({ type: 'error', message: 'Terminal idle timeout (30m)' }));
-                ws.close();
+                closeWithError(ws, 'TERMINAL_IDLE_TIMEOUT', 'Terminal idle timeout (30m)');
               }, IDLE_TIMEOUT_MS);
 
               const rateResetTimer = setInterval(() => {
@@ -185,7 +195,7 @@ export function createTerminalRoutes(
               });
             } catch (err) {
               log.debug({ err, projectId: id }, 'Failed to open terminal session');
-              closeWithError(ws, 'Failed to open terminal session');
+              closeWithError(ws, 'TERMINAL_OPEN_FAILED', 'Failed to open terminal session');
             }
           })();
         },
@@ -195,7 +205,7 @@ export function createTerminalRoutes(
 
           session.messageCount += 1;
           if (session.messageCount > 100) {
-            closeWithError(ws, 'Rate limit exceeded');
+            closeWithError(ws, 'RATE_LIMIT_EXCEEDED', 'Rate limit exceeded');
             return;
           }
 
@@ -205,8 +215,7 @@ export function createTerminalRoutes(
 
           clearTimeout(session.idleTimer);
           session.idleTimer = setTimeout(() => {
-            ws.send(JSON.stringify({ type: 'error', message: 'Terminal idle timeout (30m)' }));
-            ws.close();
+            closeWithError(ws, 'TERMINAL_IDLE_TIMEOUT', 'Terminal idle timeout (30m)');
           }, IDLE_TIMEOUT_MS);
 
           const text = payload.toString('utf8');

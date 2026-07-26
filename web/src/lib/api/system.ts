@@ -1,5 +1,5 @@
 import type { SystemStats } from '../../types';
-import { apiGet, apiPost, apiPostVoid } from './client';
+import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
 
 export interface NetworkIp {
   address: string;
@@ -81,9 +81,7 @@ export async function setGlobalSecret(
 }
 
 export async function deleteGlobalSecret(key: string): Promise<unknown> {
-  const res = await fetch(`/api/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete secret');
-  return res.json();
+  return apiDelete(`/api/secrets/${encodeURIComponent(key)}`);
 }
 
 export interface OAuthStatus {
@@ -103,23 +101,11 @@ export async function disconnectOAuth(provider: string): Promise<void> {
 }
 
 export async function connectGithub(token: string): Promise<void> {
-  const res = await fetch('/api/setup/github', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to connect GitHub');
-  }
+  return apiPostVoid('/api/setup/github', { token });
 }
 
 export async function disconnectGithub(): Promise<void> {
-  const res = await fetch('/api/setup/github', { method: 'DELETE' });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to disconnect GitHub');
-  }
+  return apiDelete('/api/setup/github');
 }
 
 export async function startGithubDeviceFlow(): Promise<{

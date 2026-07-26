@@ -7,6 +7,26 @@ export type AiOpsBriefingStatusFilter = AiOpsBriefingStatus | 'unresolved';
 export type AiOpsBriefingSeverity = 'info' | 'warning' | 'high' | 'critical';
 export type AiOpsBriefingSummarySource = 'llm' | 'deterministic';
 export type AiOpsBriefingSummaryStatus = 'llm' | 'fallback' | 'skipped' | 'deterministic';
+export type AiOpsBriefingPresentationCode =
+  | 'traffic_health_mismatch'
+  | 'traffic_health_mismatch_http'
+  | 'route_failure'
+  | 'route_failure_http'
+  | 'container_exited'
+  | 'container_exited_with_code'
+  | 'restart_loop'
+  | 'restart_loop_with_count'
+  | 'dependency_failure'
+  | 'runtime_incident'
+  | 'deploy_failed'
+  | 'no_issue_detected'
+  | 'unknown';
+
+export interface AiOpsBriefingPresentation {
+  title_code: AiOpsBriefingPresentationCode;
+  summary_code: AiOpsBriefingPresentationCode;
+  params: Record<string, string | number>;
+}
 
 export interface AiOpsPolicy {
   project_id: string;
@@ -72,6 +92,8 @@ export interface AiOpsBriefing {
   classification: string;
   title: string;
   summary: string;
+  /** Locale-neutral UI copy. Legacy `title` and `summary` remain for agents and API clients. */
+  presentation?: AiOpsBriefingPresentation;
   summary_source: AiOpsBriefingSummarySource;
   summary_status: AiOpsBriefingSummaryStatus;
   summary_truncated: boolean;

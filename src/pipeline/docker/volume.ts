@@ -36,8 +36,9 @@ export class VolumeOps {
     await this.ctx.client.createVolume({
       Name: opts.name,
       Labels: {
-        [DOCKER_LABELS.MANAGED]: 'true',
         ...opts.labels,
+        [DOCKER_LABELS.MANAGED]: 'true',
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
       },
     });
   }
@@ -81,6 +82,7 @@ export class VolumeOps {
       Labels: {
         [DOCKER_LABELS.MANAGED]: 'true',
         'openlander.role': 'volume-seed',
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
       },
       HostConfig: {
         Binds: [`${opts.name}:/openlander-seed`],

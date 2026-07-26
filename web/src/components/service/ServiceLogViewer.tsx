@@ -4,6 +4,7 @@ import { useLanguage } from '@/i18n/context';
 import { getServiceLogs } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { parseAnsiLine } from '@/lib/ansi';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface ServiceLogViewerProps {
   serviceId: string;
@@ -30,11 +31,13 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
       const data = await getServiceLogs(serviceId, lines);
       setLogs(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch logs');
+      setError(
+        localizeApiError(err, t, 'services.managedDetail.logs.error', 'common.errors.codes'),
+      );
     } finally {
       setLoading(false);
     }
-  }, [serviceId, lines, status]);
+  }, [serviceId, lines, status, t]);
 
   useEffect(() => {
     void fetchLogs();
@@ -79,13 +82,13 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
             className="bg-transparent text-xs font-mono text-foreground focus:outline-none border border-[hsl(var(--border))] rounded px-2 py-1 cursor-pointer hover:border-muted-foreground"
           >
             <option value={100} className="bg-bg-panel">
-              100 lines
+              {t('services.detail.linesCount', { count: '100' })}
             </option>
             <option value={200} className="bg-bg-panel">
-              200 lines
+              {t('services.detail.linesCount', { count: '200' })}
             </option>
             <option value={500} className="bg-bg-panel">
-              500 lines
+              {t('services.detail.linesCount', { count: '500' })}
             </option>
           </select>
         </div>

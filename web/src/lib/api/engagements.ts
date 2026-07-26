@@ -11,6 +11,37 @@ export type EngagementBlockerKind =
   | 'warning_unacknowledged'
   | 'work_item_unresolved';
 
+export interface EngagementBlockerMetadataByKind {
+  project_error: {
+    runtime_status: 'error';
+    error_service_count: number;
+  };
+  revision_requested: {
+    delivery_status: 'revision_requested';
+  };
+  required_gate_failed: {
+    gate_key: string;
+    gate_label: string;
+    gate_summary: string | null;
+    gate_required: true;
+    gate_status: 'failed';
+  };
+  warning_unacknowledged: {
+    gate_key: string;
+    gate_label: string;
+    gate_summary: string | null;
+    gate_required: boolean;
+    gate_status: 'warning';
+    warning_accepted: false;
+  };
+  work_item_unresolved: {
+    work_item_kind: 'question' | 'change_request';
+    work_item_status: 'confirmed';
+    work_item_title: string;
+    work_item_detail: string;
+  };
+}
+
 export interface EngagementDeliverySummary {
   total: number;
   blocker_count: number;
@@ -56,8 +87,7 @@ export interface EngagementDelivery {
   updated_at: string;
 }
 
-export interface EngagementBlocker {
-  kind: EngagementBlockerKind;
+interface EngagementBlockerBase {
   project_id: string;
   project_name: string;
   delivery_id: string | null;
@@ -66,6 +96,30 @@ export interface EngagementBlocker {
   title: string;
   detail: string;
   deep_link: string;
+}
+
+export type EngagementBlocker = {
+  [Kind in EngagementBlockerKind]: EngagementBlockerBase & {
+    kind: Kind;
+    metadata: EngagementBlockerMetadataByKind[Kind];
+  };
+}[EngagementBlockerKind];
+
+export interface EngagementActivityMetadata extends Record<string, unknown> {
+  schema_version: 1;
+  engagement_id: string;
+  actor?: string;
+  engagement_title?: string;
+  previous_engagement_title?: string;
+  customer_name?: string;
+  engagement_status?: EngagementStatus;
+  previous_status?: EngagementStatus;
+  changed_fields?: string[];
+  project_id?: string;
+  project_name?: string;
+  delivery_id?: string;
+  linked_projects_changed?: boolean;
+  deliveries_changed?: boolean;
 }
 
 export interface EngagementActivity {
@@ -77,7 +131,7 @@ export interface EngagementActivity {
   title: string;
   description: string;
   status: string;
-  metadata: Record<string, unknown>;
+  metadata: EngagementActivityMetadata;
   created_at: string;
   deep_link: string | null;
 }
@@ -87,6 +141,20 @@ export interface EngagementDetail extends EngagementSummary {
   deliveries: EngagementDelivery[];
   blockers: EngagementBlocker[];
   recent_activity: EngagementActivity[];
+}
+
+export interface EngagementWeeklyReport {
+  id: string;
+  engagement_id: string;
+  period_start: string;
+  period_end: string;
+  revision: number;
+  status: 'draft' | 'published';
+  evidence_sha256: string;
+  internal_sha256: string | null;
+  customer_sha256: string | null;
+  created_at: string;
+  published_at: string | null;
 }
 
 export interface ProjectEngagementReference {
@@ -117,6 +185,25 @@ export async function listEngagements(options?: {
 
 export function getEngagement(id: string): Promise<EngagementDetail> {
   return apiGet(`/api/engagements/${encodeURIComponent(id)}`);
+}
+
+export async function listEngagementWeeklyReports(
+  engagementId: string,
+): Promise<EngagementWeeklyReport[]> {
+  const response = await apiGet<{ reports: EngagementWeeklyReport[] }>(
+    `/api/engagements/${encodeURIComponent(engagementId)}/weekly-reports`,
+  );
+  return response.reports;
+}
+
+export function engagementWeeklyReportUrl(
+  engagementId: string,
+  reportId: string,
+  audience: 'internal' | 'customer',
+  options?: { download?: boolean },
+): string {
+  const base = `/api/engagements/${encodeURIComponent(engagementId)}/weekly-reports/${encodeURIComponent(reportId)}/${audience}/pdf`;
+  return options?.download ? `${base}?download=1` : base;
 }
 
 export function createEngagement(input: {

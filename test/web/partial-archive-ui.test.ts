@@ -47,12 +47,12 @@ describe('partial archive UI wiring', () => {
     }
   });
 
-  it('keeps partial-archive chrome labels English in Korean locale', () => {
-    expect(koSource).toContain("partiallyArchivedBadge: 'Partially archived'");
-    expect(koSource).toContain("remainingButton: 'Archive remaining'");
-    expect(koSource).toContain("partialArchiveTitle: 'Archive remaining Applications'");
-    expect(koSource).toContain("showArchived: 'Show archived Applications'");
-    expect(koSource).toContain("hideArchived: 'Hide archived Applications'");
+  it('uses plain Korean for partial-archive controls', () => {
+    expect(koSource).toContain("partiallyArchivedBadge: '일부 보관됨'");
+    expect(koSource).toContain("remainingButton: '나머지 보관'");
+    expect(koSource).toContain("partialArchiveTitle: '남은 애플리케이션 보관'");
+    expect(koSource).toContain("showArchived: '보관된 애플리케이션 표시'");
+    expect(koSource).toContain("hideArchived: '보관된 애플리케이션 숨기기'");
   });
 
   it('keeps archived service cleanup reachable after default lists hide archived rows', () => {
@@ -67,6 +67,8 @@ describe('partial archive UI wiring', () => {
     expect(settingsSource).toContain('deleteGroupService(projectId, service.id');
     expect(settingsSource).toContain('`${projectName}/${service.name}`');
     expect(settingsSource).toContain("'projectDetail.danger.archivedServicesTitle'");
+    expect(settingsSource).toContain('archivedServiceStatusLabel(service.status, t)');
+    expect(settingsSource).not.toContain('{service.status}');
     expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceHint'");
     expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceInputLabel'");
     expect(projectViewSource).toContain('showArchivedServices');
@@ -99,6 +101,6 @@ describe('partial archive UI wiring', () => {
   });
 
   it('keeps Korean loading copy localized for archived-service cleanup', () => {
-    expect(koSource).toContain("archivedServicesLoading: '아카이브된 Application을 불러오는 중…'");
+    expect(koSource).toContain("archivedServicesLoading: '보관된 애플리케이션을 불러오는 중…'");
   });
 });

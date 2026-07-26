@@ -1,6 +1,6 @@
 import type Dockerode from 'dockerode';
-import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import { isDockerNotFoundError } from '../../errors.js';
+import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
+import { isDockerNotFoundError, NetworkAddressPoolExhaustedError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName } from '../helpers.js';
 import type { DockerContext } from './context.js';
@@ -9,6 +9,15 @@ import { isAlreadyConnectedError, isNotConnectedToNetwork, withTimeout } from '.
 const NETWORK_INSPECT_TIMEOUT_MS = 15_000;
 
 const log = createModuleLogger('docker:network');
+
+function isAddressPoolExhausted(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('all predefined address pools have been fully subnetted') ||
+    message.includes('could not find an available, non-overlapping ipv4 address pool')
+  );
+}
 
 export class NetworkOps {
   constructor(private readonly ctx: DockerContext) {}
@@ -112,12 +121,23 @@ export class NetworkOps {
     }
 
     try {
-      await this.ctx.client.createNetwork({ Name: networkName, Driver: 'bridge' });
+      await this.ctx.client.createNetwork({
+        Name: networkName,
+        Driver: 'bridge',
+        Labels: {
+          [DOCKER_LABELS.MANAGED]: 'true',
+          [DOCKER_LABELS.PROJECT]: projectName,
+          ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
+        },
+      });
       return networkName;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('already exists')) {
         return networkName;
+      }
+      if (isAddressPoolExhausted(error)) {
+        throw new NetworkAddressPoolExhaustedError(networkName);
       }
       throw error;
     }
@@ -126,9 +146,46 @@ export class NetworkOps {
   /** Remove a project-scoped Docker network. Silently succeeds if not found or has active endpoints. */
   async removeProjectNetwork(projectName: string): Promise<void> {
     const networkName = containerName(projectName);
+    const network = this.ctx.client.getNetwork(networkName);
 
     try {
-      await this.ctx.client.getNetwork(networkName).remove();
+      const info = await withTimeout(
+        network.inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${networkName})`,
+      );
+      if (this.ctx.instanceId && info.Labels?.[DOCKER_LABELS.INSTANCE] !== this.ctx.instanceId) {
+        log.warn(
+          {
+            projectName,
+            networkName,
+            instanceId: this.ctx.instanceId,
+            ownerInstanceId: info.Labels?.[DOCKER_LABELS.INSTANCE],
+          },
+          'Refusing to remove a project network owned by another or unknown instance',
+        );
+        return;
+      }
+
+      if (this.ctx.instanceId) {
+        for (const containerId of Object.keys(info.Containers ?? {})) {
+          try {
+            const container = await this.ctx.client.getContainer(containerId).inspect();
+            const labels = container.Config.Labels;
+            const isOwnedTraefik =
+              labels[DOCKER_LABELS.MANAGED] === 'true' &&
+              labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+              labels[DOCKER_LABELS.INSTANCE] === this.ctx.instanceId;
+            if (isOwnedTraefik) {
+              await network.disconnect({ Container: containerId, Force: true });
+            }
+          } catch (error) {
+            if (!isDockerNotFoundError(error)) throw error;
+          }
+        }
+      }
+
+      await network.remove();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (isDockerNotFoundError(error)) {
@@ -160,12 +217,22 @@ export class NetworkOps {
       }
     }
     try {
-      await this.ctx.client.createNetwork({ Name: name, Driver: 'bridge' });
+      await this.ctx.client.createNetwork({
+        Name: name,
+        Driver: 'bridge',
+        Labels: {
+          [DOCKER_LABELS.MANAGED]: 'true',
+          ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
+        },
+      });
       return name;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('already exists')) {
         return name;
+      }
+      if (isAddressPoolExhausted(error)) {
+        throw new NetworkAddressPoolExhaustedError(name);
       }
       throw error;
     }

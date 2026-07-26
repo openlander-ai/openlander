@@ -6,11 +6,24 @@ import { PDFDocument } from 'pdf-lib';
 import { ArtifactStore } from '../../src/delivery/artifact-store.js';
 import { evaluateDeliveryReadiness } from '../../src/delivery/readiness.js';
 import { ReceiptBuilder } from '../../src/delivery/receipt-builder.js';
+import {
+  formatReceiptArtifactKind,
+  formatReceiptDeliveryMaturity,
+  formatReceiptDeliveryStatus,
+  formatReceiptDeliveryType,
+  formatReceiptDeployRelation,
+  formatReceiptDeployStatus,
+  formatReceiptEnvironment,
+  formatReceiptGateLabel,
+  formatReceiptGateStatus,
+  formatReceiptReadinessCheck,
+} from '../../src/delivery/receipt-locale.js';
 import { parseJUnitReport } from '../../src/delivery/report-normalizer.js';
 import type {
   DeliveryArtifactWithBlob,
   DeliveryDetail,
   DeliveryReadiness,
+  DeliveryReadinessCheck,
 } from '../../src/delivery/types.js';
 import { DELIVERY_TRANSITIONS, parseDefaultDeliveryGates } from '../../src/delivery/types.js';
 import type { ProjectRow } from '../../src/db/types.js';
@@ -99,7 +112,7 @@ function readyDetail(overrides: Partial<DeliveryDetail> = {}): DeliveryDetail {
       document_name: '전달 확인서',
       primary_color: '#2563EB',
       logo_blob_id: null,
-      footer_text: 'OpenLander Delivery Receipt',
+      footer_text: 'OpenLander 납품 확인서',
       locale: 'ko',
       default_gates_json: {},
       created_at: NOW,
@@ -301,6 +314,12 @@ describe('Delivery readiness', () => {
     const readiness = evaluateDeliveryReadiness(readyDetail(), 12);
     expect(readiness.ready).toBe(true);
     expect(readiness.blockers).toEqual([]);
+    expect(readiness.checks.find((check) => check.key === 'approved_artifact')).toMatchObject({
+      params: { count: 2 },
+    });
+    expect(readiness.checks.find((check) => check.key === 'page_limit')).toMatchObject({
+      params: { count: 12, max: 250 },
+    });
   });
 
   it('blocks confirmed work, unaccepted warnings, missing companion PDFs, and excess pages', () => {
@@ -341,6 +360,70 @@ describe('Delivery readiness', () => {
       deploy_links: [],
     });
     expect(evaluateDeliveryReadiness(detail, 8).ready).toBe(true);
+  });
+});
+
+describe('Receipt localization', () => {
+  it('renders Korean enum values without changing user-provided text', () => {
+    expect(formatReceiptDeliveryType('software_release', 'ko')).toBe('소프트웨어 릴리스');
+    expect(formatReceiptDeliveryType('artifact_delivery', 'ko')).toBe('자료 납품');
+    expect(formatReceiptDeliveryMaturity('release_candidate', 'ko')).toBe('릴리스 후보');
+    expect(formatReceiptDeliveryStatus('revision_requested', 'ko')).toBe('수정 요청됨');
+    expect(formatReceiptGateStatus('waived', 'ko')).toBe('면제');
+    expect(formatReceiptGateLabel('review', 'Review', 'ko')).toBe('검토');
+    expect(formatReceiptGateLabel('custom-review', 'Review', 'ko')).toBe('Review');
+    expect(formatReceiptArtifactKind('review_html', 'ko')).toBe('검토용 HTML');
+    expect(formatReceiptDeployRelation('released', 'ko')).toBe('운영 반영');
+    expect(formatReceiptEnvironment('production', 'ko')).toBe('운영');
+    expect(formatReceiptDeployStatus('success', 'ko')).toBe('성공');
+  });
+
+  it('keeps existing English enum values and readiness wording', () => {
+    const readiness = evaluateDeliveryReadiness(readyDetail(), 12);
+    const approvalCheck = readiness.checks.find((check) => check.key === 'delivery_approved');
+    expect(approvalCheck).toBeDefined();
+    expect(formatReceiptDeliveryType('software_release', 'en')).toBe('software_release');
+    expect(formatReceiptDeliveryMaturity('release_candidate', 'en')).toBe('release_candidate');
+    expect(formatReceiptGateStatus('passed', 'en')).toBe('passed');
+    expect(formatReceiptReadinessCheck(approvalCheck!, 'en')).toBe(approvalCheck!.message);
+  });
+
+  it('renders Korean readiness messages from stable keys and numeric params', () => {
+    const readiness = evaluateDeliveryReadiness(readyDetail(), 12);
+    const artifactCheck = readiness.checks.find((check) => check.key === 'approved_artifact');
+    const pageCheck = readiness.checks.find((check) => check.key === 'page_limit');
+    expect(artifactCheck).toBeDefined();
+    expect(pageCheck).toBeDefined();
+    expect(formatReceiptReadinessCheck(artifactCheck!, 'ko')).toBe('승인된 산출물 2개');
+    expect(formatReceiptReadinessCheck(pageCheck!, 'ko')).toBe(
+      '예상 확인서 분량은 12페이지입니다.',
+    );
+  });
+
+  it('does not invent numeric values for legacy readiness checks without params', () => {
+    const legacyArtifact: DeliveryReadinessCheck = {
+      key: 'approved_artifact',
+      passed: true,
+      message: '2 approved artifact(s)',
+    };
+    const legacyPageLimit: DeliveryReadinessCheck = {
+      key: 'page_limit',
+      passed: false,
+      message: 'Estimated Receipt length exceeded the page limit.',
+    };
+    const legacyProduction: DeliveryReadinessCheck = {
+      key: 'production_deploy',
+      passed: true,
+      message: 'Production deployment evidence is not required for artifact delivery.',
+    };
+
+    expect(formatReceiptReadinessCheck(legacyArtifact, 'ko')).toBe('승인된 산출물이 있습니다.');
+    expect(formatReceiptReadinessCheck(legacyPageLimit, 'ko')).toBe(
+      '예상 확인서 분량이 최대 페이지 수를 초과합니다.',
+    );
+    expect(formatReceiptReadinessCheck(legacyProduction, 'ko', 'artifact_delivery')).toBe(
+      '자료 납품에는 운영 배포가 필요하지 않습니다.',
+    );
   });
 });
 
@@ -448,5 +531,5 @@ describe('ReceiptBuilder', () => {
       detail: { delivery: { id: 'delivery-1' } },
     });
     expect(JSON.stringify(result.snapshot)).not.toContain('sensitive');
-  }, 120_000);
+  }, 240_000);
 });

@@ -106,7 +106,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
                 : t('timeline.recovery.options')}
             {item.tokenCount != null && (
               <span className="text-xs text-muted-foreground ml-2 font-normal">
-                — {item.tokenCount.toLocaleString()} tokens
+                — {t('timeline.tokenCount', { count: item.tokenCount.toLocaleString() })}
                 {item.costUsd != null && item.costUsd > 0 && (
                   <span> (${item.costUsd.toFixed(3)})</span>
                 )}

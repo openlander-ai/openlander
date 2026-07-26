@@ -10,6 +10,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { listProjects, type ProjectWithOptionalEnvironments } from '../lib/api';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
@@ -32,6 +34,7 @@ export function useProjects(
   includeArchived = false,
   options: UseProjectsOptions = {},
 ): UseProjectsReturn {
+  const { t } = useLanguage();
   const { enabled = true } = options;
   const [projects, setProjects] = useState<ProjectWithOptionalEnvironments[]>([]);
   const [loading, setLoading] = useState(enabled);
@@ -43,11 +46,11 @@ export function useProjects(
       setProjects(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch projects');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [includeArchived]);
+  }, [includeArchived, t]);
 
   const hasBuilding = useMemo(() => projects.some((p) => p.status === 'building'), [projects]);
   const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;

@@ -1535,9 +1535,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed single Application/worker to an existing Project after successful deploy. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Successful deploy_app runs are adopted into the Delivery ledger as an implicit immutable Release without rebuilding the image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed single Application/worker to an existing Project after successful deploy. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
-      'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. For approved safe Database/Cache proposals, keep the deploy-plan path; OpenLander provisions them on the same Project/network as the app. To add one new Application/worker into an existing Project, pass target_project_id without expose=true. Poll get_deploy_status; diagnose failures with diagnose_service.',
+      'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. A successful run records an implicit immutable Release without rebuilding. For approved safe Database/Cache proposals, keep the deploy-plan path; OpenLander provisions them on the same Project/network as the app. To add one new Application/worker into an existing Project, pass target_project_id without expose=true. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1622,8 +1622,12 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const redeployParams =
           Object.keys(envVars).length > 0
-            ? { ...frontDoorTarget.params, env_vars: envVars }
-            : frontDoorTarget.params;
+            ? {
+                ...frontDoorTarget.params,
+                env_vars: envVars,
+                __adopt_implicit_release: true,
+              }
+            : { ...frontDoorTarget.params, __adopt_implicit_release: true };
         const redeployResult = await runDeployableServiceAction(
           redeployParams,
           context,
@@ -2153,6 +2157,41 @@ export const deployPlanToolDefs: ToolDef[] = [
               const trafficFailure = representativeTrafficFailed(representativeTraffic);
               const trafficWarning = representativeTrafficWarning(representativeTraffic);
               const effectiveCompletionStatus = trafficFailure ? 'unhealthy' : completionStatus;
+              let implicitRelease: Record<string, unknown> | undefined;
+              let implicitReleaseWarning: string | undefined;
+              try {
+                const adoptionServiceId =
+                  planBuild?.method === 'compose'
+                    ? undefined
+                    : (attachedServiceId ?? resolvedRouteService?.id ?? serviceRecord?.service?.id);
+                const adoptionDeployLog = adoptionServiceId
+                  ? await appCtx.db.getLastDeployLogForService(adoptionServiceId)
+                  : await appCtx.db.getLastDeployLog(projectId);
+                const adopted = await appCtx.releaseService.adoptSuccessfulDeploy({
+                  projectId: finalProjectId,
+                  ...(adoptionServiceId ? { serviceId: adoptionServiceId } : {}),
+                  ...(adoptionDeployLog ? { deployId: adoptionDeployLog.id } : {}),
+                  actor: context.identity?.initiatedBy ?? 'external-mcp-agent',
+                });
+                implicitRelease = {
+                  status: adopted.release.status,
+                  delivery_id: adopted.delivery.id,
+                  run_id: adopted.run.id,
+                  release_id: adopted.release.id,
+                  image_digests: Object.fromEntries(
+                    adopted.artifacts.map((artifact) => [
+                      artifact.service_id,
+                      artifact.image_digest,
+                    ]),
+                  ),
+                };
+              } catch (err) {
+                implicitReleaseWarning = `deployment evidence warning: implicit Release adoption failed (${err instanceof Error ? err.message : String(err)})`;
+                log.error(
+                  { err, projectId: finalProjectId, planId: plan.plan_id },
+                  'Deployment succeeded, but implicit Release adoption failed',
+                );
+              }
               resolve({
                 plan_id: plan.plan_id,
                 status: effectiveCompletionStatus,
@@ -2219,12 +2258,14 @@ export const deployPlanToolDefs: ToolDef[] = [
                 ...(payload.totalDurationMs
                   ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
                   : {}),
+                ...(implicitRelease ? { implicit_release: implicitRelease } : {}),
                 ...(timedOut || completionStatus === 'timeout' ? { timeout: true } : {}),
                 ...postDeploy,
                 ...([
                   ...readinessWarnings,
                   ...(stabilityWarning ? [stabilityWarning] : []),
                   ...(trafficWarning ? [trafficWarning] : []),
+                  ...(implicitReleaseWarning ? [implicitReleaseWarning] : []),
                   ...(postDeployWarnings ?? []),
                   ...targetAttach.warnings,
                 ].length > 0
@@ -2233,6 +2274,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                         ...readinessWarnings,
                         ...(stabilityWarning ? [stabilityWarning] : []),
                         ...(trafficWarning ? [trafficWarning] : []),
+                        ...(implicitReleaseWarning ? [implicitReleaseWarning] : []),
                         ...(postDeployWarnings ?? []),
                         ...targetAttach.warnings,
                       ],

@@ -29,7 +29,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.22.0"
   },
   "scripts": {
     "dev": "tsup --watch",
@@ -49,7 +49,8 @@
     "test:api-contract": "vitest run --config vitest.release.config.ts test/contract/system-routes-services.test.ts test/console-contract.test.ts",
     "test:watch": "vitest --config vitest.release.config.ts --watch",
     "test:coverage": "vitest run --config vitest.release.config.ts --coverage",
-    "qa:release": "npm run lint -- --quiet && npm run typecheck && npm run test:backend:release && npm run build",
+    "qa:i18n": "vitest run test/web/korean-localization-quality.test.ts",
+    "qa:release": "npm run qa:i18n && npm run lint -- --quiet && npm run typecheck && npm run test:backend:release && npm run build",
     "qa:rc-smoke": "bash scripts/rc-cold-agent-smoke.sh",
     "clean": "rm -rf dist",
     "release": "node -e \"console.error('Use npm run release:rc or npm run release:final. Raw npm run release is disabled to avoid skipping RC validation.'); process.exit(1)\"",
@@ -88,7 +89,7 @@
     "duck-duck-scrape": "^2.2.7",
     "hono": "^4.12.28",
     "nanoid": "^5.1.16",
-    "nodemailer": "^8.0.11",
+    "nodemailer": "^9.0.3",
     "ollama-ai-provider-v2": "^3.6.0",
     "pdf-fontkit": "^1.8.9",
     "pdf-lib": "^1.17.1",

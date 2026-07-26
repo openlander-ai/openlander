@@ -169,6 +169,9 @@ function makeDeleteRuntimeContext(
       container_name: null,
     });
   const siblings = overrides.siblings ?? [service];
+  const environments = [
+    makeEnvironmentRow({ id: 'env-production', container_id: 'container-production' }),
+  ];
   const db = {
     getProject: vi.fn(async (id: string) =>
       id === group.id ? group : id === runtime.id ? runtime : undefined,
@@ -179,6 +182,7 @@ function makeDeleteRuntimeContext(
     findProjectDependents: vi.fn(async () => []),
     getDomainMappingsForService: vi.fn(async () => []),
     deleteDomainMappingsByService: vi.fn(async () => undefined),
+    getEnvironmentsByServiceId: vi.fn(async () => environments),
     getDeployablesByGroup: vi.fn(async (projectId: string) =>
       projectId === group.id ? siblings : [],
     ),
@@ -189,6 +193,7 @@ function makeDeleteRuntimeContext(
   const docker = {
     stopContainer: vi.fn(async () => undefined),
     removeContainer: vi.fn(async () => undefined),
+    removeProjectNetwork: vi.fn(async () => undefined),
     listVolumes: vi.fn(async () => []),
     removeVolume: vi.fn(async () => undefined),
     ...overrides.docker,
@@ -543,6 +548,37 @@ describe('createServiceRuntimeRoutes', () => {
     );
     expect(db.deleteService).toHaveBeenCalledWith(service.id);
     expect(db.deleteProject).toHaveBeenCalledWith(runtime.id);
+  });
+
+  it('removes every persisted environment container before deleting the service', async () => {
+    const service = makeServiceRow({
+      id: 'api__svc',
+      project_id: 'group-1',
+      name: 'api__svc',
+      container_id: 'container-production',
+      container_name: 'ol-api',
+    });
+    const { app, db, docker } = makeDeleteRuntimeContext({ service });
+    db.getEnvironmentsByServiceId.mockResolvedValueOnce([
+      makeEnvironmentRow({ id: 'env-dev', container_id: 'container-dev', type: 'development' }),
+      makeEnvironmentRow({ id: 'env-qa', container_id: 'container-qa', type: 'development' }),
+      makeEnvironmentRow({ id: 'env-production', container_id: 'container-production' }),
+    ]);
+
+    const res = await app.request('/api/projects/group-1/services/api__svc/instance', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmation: 'workspace/api' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(docker.removeContainer).toHaveBeenCalledTimes(3);
+    expect(docker.removeContainer).toHaveBeenNthCalledWith(1, 'container-production');
+    expect(docker.removeContainer).toHaveBeenNthCalledWith(2, 'container-dev');
+    expect(docker.removeContainer).toHaveBeenNthCalledWith(3, 'container-qa');
+    expect(docker.removeContainer.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      db.deleteService.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it('reports volumes as preserved when sibling deployables force volume deletion to skip', async () => {

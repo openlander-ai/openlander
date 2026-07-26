@@ -1,9 +1,77 @@
 import { z } from 'zod';
+import { applicationOperationActorFromToolContext } from '../../operations/index.js';
+import {
+  archiveEngagementOperation,
+  linkProjectToEngagementOperation,
+  unarchiveEngagementOperation,
+  unlinkProjectFromEngagementOperation,
+  updateEngagementFromBriefOperation,
+} from '../../operations/definitions/engagement.js';
+import { operationToolDef } from './agent-delivery.js';
 import type { ToolDef } from './types.js';
 
 const engagementStatus = z.enum(['active', 'on_hold', 'completed', 'archived']);
 
 export const engagementToolDefs: ToolDef[] = [
+  {
+    name: 'bootstrap_engagement',
+    riskLevel: 'low',
+    targets: ['mcp'],
+    description:
+      'Atomically create an internal FDE Engagement and its initial empty Project. Requires an instance/org-scoped token and an idempotency key.',
+    inputSchema: z.object({
+      idempotency_key: z.string().trim().min(1).max(200),
+      customer_name: z.string().trim().min(1).max(300),
+      title: z.string().trim().min(1).max(300),
+      summary: z.string().trim().max(20_000).optional(),
+      project: z
+        .object({
+          name: z
+            .string()
+            .trim()
+            .min(1)
+            .max(100)
+            .regex(/^[a-z0-9][a-z0-9-]*$/),
+          display_name: z.string().trim().min(1).max(300).optional(),
+          description: z.string().trim().max(20_000).optional(),
+          tags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+        })
+        .strict(),
+    }),
+    execute: async (args, context) => {
+      const project = args['project'] as {
+        name: string;
+        display_name?: string;
+        description?: string;
+        tags?: string[];
+      };
+      const execution = await context.appCtx.operations.execute(
+        context.appCtx,
+        'bootstrap_engagement',
+        {
+          customer_name: args['customer_name'],
+          title: args['title'],
+          ...(typeof args['summary'] === 'string' ? { summary: args['summary'] } : {}),
+          project,
+        },
+        {
+          actor: applicationOperationActorFromToolContext(context),
+          idempotencyKey: String(args['idempotency_key']),
+        },
+      );
+      return {
+        ...execution.result,
+        operation_id: execution.operation_id,
+        operation_version: execution.version,
+        replayed: execution.replayed,
+      };
+    },
+  },
+  operationToolDef(updateEngagementFromBriefOperation),
+  operationToolDef(linkProjectToEngagementOperation),
+  operationToolDef(unlinkProjectFromEngagementOperation),
+  operationToolDef(archiveEngagementOperation),
+  operationToolDef(unarchiveEngagementOperation),
   {
     name: 'list_engagements',
     riskLevel: 'low',

@@ -94,9 +94,11 @@ export function GithubStep({
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Github className="h-4 w-4 text-foreground/80" />
-            <span className="text-sm font-body font-medium text-foreground">{'GitHub Access'}</span>
+            <span className="text-sm font-body font-medium text-foreground">
+              {t('setup.github.access')}
+            </span>
             <Badge variant="outline" className="text-xs py-0">
-              Optional
+              {t('setup.github.optional')}
             </Badge>
           </div>
           <p className="text-sm font-body text-muted-foreground">{t('setup.github.description')}</p>
@@ -153,14 +155,14 @@ export function GithubStep({
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onBack} className="gap-1.5 font-body">
             <ArrowLeft className="h-3.5 w-3.5" />
-            {'Back'}
+            {t('setup.common.back')}
           </Button>
           <Button
             onClick={onNext}
             size="lg"
             className="flex-1 bg-agent text-white hover:bg-agent/90 font-body gap-2"
           >
-            {status?.github?.ok ? 'Continue' : 'Skip for now'}
+            {status?.github?.ok ? t('setup.common.continue') : t('setup.mcp.skipForNow')}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
@@ -199,7 +201,7 @@ function DeviceFlowUI({
           className="gap-1.5 font-body"
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          {'Open GitHub'}
+          {t('setup.github.open')}
         </Button>
         <Button
           type="button"
@@ -213,7 +215,7 @@ function DeviceFlowUI({
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}
-          {copiedCode ? 'Copied' : 'Copy Code'}
+          {copiedCode ? t('setup.github.copied') : t('setup.github.copyCode')}
         </Button>
       </div>
       <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -228,7 +230,7 @@ function DeviceFlowUI({
           onClick={onCancelDeviceFlow}
           className="text-xs font-body text-muted-foreground"
         >
-          {'Cancel'}
+          {t('setup.github.cancel')}
         </Button>
       </div>
     </div>
@@ -269,7 +271,9 @@ function GithubConnectionUI({
           <span className="w-full border-t border-[hsl(var(--border))]" />
         </div>
         <div className="relative flex justify-center text-xs">
-          <span className="bg-bg-panel px-2 text-muted-foreground font-body">{'or'}</span>
+          <span className="bg-bg-panel px-2 text-muted-foreground font-body">
+            {t('setup.github.or')}
+          </span>
         </div>
       </div>
 
@@ -303,7 +307,7 @@ function GithubConnectionUI({
           ) : (
             <Github className="h-3.5 w-3.5" />
           )}
-          {'Connect'}
+          {t('setup.github.connect')}
         </Button>
       </form>
 

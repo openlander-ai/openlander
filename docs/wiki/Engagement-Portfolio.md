@@ -51,18 +51,30 @@ Open **Engagements** in the Workspace sidebar to:
 4. Follow deep links to the owning Project or Delivery.
 5. Edit, archive, or unarchive the Engagement.
 
-Creation, editing, linking, unlinking, archive, and unarchive require an
-authenticated administrator web session. API tokens and Project PATs cannot
-mutate Engagements.
+The Web keeps creation, editing, linking, unlinking, archive, and unarchive as
+human exception controls. Normal automation uses the Application Operation
+Registry through MCP or `POST /api/v1/operations/:name`; it does not depend on a
+Web form.
 
-## MCP reads
+## Agent interface
 
 The existing `openlander_project` composite exposes:
 
+- `bootstrap_engagement`
+- `update_engagement_from_brief`
+- `link_project_to_engagement`
+- `unlink_project_from_engagement`
+- `archive_engagement`
+- `unarchive_engagement`
 - `list_engagements`
 - `get_engagement`
 
-These are compact, read-only summaries for instance/organization-scoped
-agents. Project- and service-scoped tokens receive `SCOPE_VIOLATION` so they
-cannot infer sibling Project data. Detailed artifacts, raw feedback, Gate
+`bootstrap_engagement` atomically creates an Engagement and its initial empty
+Project through the shared Application Operation Registry. Every mutation
+requires an `idempotency_key`; exact retries replay the original response and a
+changed input with the same key returns `OPERATION_IDEMPOTENCY_CONFLICT`. The two
+read actions remain compact summaries. Portfolio reads and Engagement-wide
+mutations require instance/organization scope. Link/unlink also permits a
+Project token when `project_id` exactly matches its own scope; sibling access and
+service tokens receive `SCOPE_VIOLATION`. Detailed artifacts, raw feedback, Gate
 evidence, and Receipt metadata remain on the existing Delivery actions.

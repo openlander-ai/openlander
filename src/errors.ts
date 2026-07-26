@@ -40,6 +40,92 @@ export class FeatureDisabledError extends OpenLanderError {
   }
 }
 
+export class ApplicationOperationNotFoundError extends OpenLanderError {
+  constructor(operationName: string) {
+    super(`Application operation not found: ${operationName}`, 'OPERATION_NOT_FOUND', 404, {
+      operationName,
+    });
+    this.name = 'ApplicationOperationNotFoundError';
+  }
+}
+
+export class ApplicationOperationValidationError extends OpenLanderError {
+  constructor(operationName: string, issues: unknown) {
+    super(
+      `Invalid input for application operation: ${operationName}`,
+      'OPERATION_INVALID_INPUT',
+      400,
+      {
+        operationName,
+        issues,
+      },
+    );
+    this.name = 'ApplicationOperationValidationError';
+  }
+}
+
+export class ApplicationOperationContractError extends OpenLanderError {
+  constructor(operationName: string, details?: Record<string, unknown>) {
+    super(
+      `Application operation contract failed: ${operationName}`,
+      'OPERATION_CONTRACT_ERROR',
+      500,
+      { operationName, ...details },
+    );
+    this.name = 'ApplicationOperationContractError';
+  }
+}
+
+export class ApplicationOperationScopeError extends OpenLanderError {
+  constructor(operationName: string, details: Record<string, unknown>) {
+    super('Actor scope does not allow this application operation.', 'SCOPE_VIOLATION', 403, {
+      operationName,
+      ...details,
+    });
+    this.name = 'ApplicationOperationScopeError';
+  }
+}
+
+export class ApplicationOperationIdempotencyRequiredError extends OpenLanderError {
+  constructor(operationName: string) {
+    super(
+      `An idempotency key is required for command: ${operationName}`,
+      'OPERATION_IDEMPOTENCY_REQUIRED',
+      400,
+      { operationName },
+    );
+    this.name = 'ApplicationOperationIdempotencyRequiredError';
+  }
+}
+
+export class ApplicationOperationIdempotencyConflictError extends OpenLanderError {
+  constructor(operationName: string, idempotencyKey: string) {
+    super(
+      `Idempotency key was already used with different input: ${operationName}`,
+      'OPERATION_IDEMPOTENCY_CONFLICT',
+      409,
+      { operationName, idempotencyKey },
+    );
+    this.name = 'ApplicationOperationIdempotencyConflictError';
+  }
+}
+
+export class ApplicationOperationInProgressError extends OpenLanderError {
+  constructor(operationName: string, operationId: string) {
+    super(
+      `Application operation is still running: ${operationName}`,
+      'OPERATION_IN_PROGRESS',
+      409,
+      {
+        operationName,
+        operationId,
+        statusCall: { method: 'GET', path: `/api/v1/operations/status/${operationId}` },
+      },
+    );
+    this.name = 'ApplicationOperationInProgressError';
+  }
+}
+
 // --- Git errors ---
 
 export class GitCloneError extends OpenLanderError {
@@ -298,6 +384,18 @@ export class NetworkNotFoundError extends OpenLanderError {
   constructor(identifier: string) {
     super(`Docker network not found: ${identifier}`, 'NETWORK_NOT_FOUND', 404, { identifier });
     this.name = 'NetworkNotFoundError';
+  }
+}
+
+export class NetworkAddressPoolExhaustedError extends OpenLanderError {
+  constructor(networkName: string) {
+    super(
+      `Docker has no available address pool for network: ${networkName}`,
+      'NETWORK_ADDRESS_POOL_EXHAUSTED',
+      503,
+      { networkName, retryable: true },
+    );
+    this.name = 'NetworkAddressPoolExhaustedError';
   }
 }
 
@@ -1163,10 +1261,153 @@ export class DeliveryStateError extends OpenLanderError {
   }
 }
 
+export class DeliveryAgentRunNotFoundError extends OpenLanderError {
+  constructor(runId: string) {
+    super(`Delivery Agent Run not found: ${runId}`, 'DELIVERY_AGENT_RUN_NOT_FOUND', 404, {
+      runId,
+    });
+    this.name = 'DeliveryAgentRunNotFoundError';
+  }
+}
+
+export class DeliveryAgentRunStateError extends OpenLanderError {
+  constructor(runId: string, message: string, status?: string) {
+    super(message, 'DELIVERY_AGENT_RUN_STATE_INVALID', 409, { runId, status });
+    this.name = 'DeliveryAgentRunStateError';
+  }
+}
+
+export class DeliveryAgentRunConflictError extends OpenLanderError {
+  constructor(deliveryId: string) {
+    super('This Delivery already has an active Agent Run.', 'DELIVERY_AGENT_RUN_CONFLICT', 409, {
+      deliveryId,
+    });
+    this.name = 'DeliveryAgentRunConflictError';
+  }
+}
+
+export class DeliveryManifestError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'DELIVERY_MANIFEST_INVALID', 400, details);
+    this.name = 'DeliveryManifestError';
+  }
+}
+
+export class DeliveryManifestMismatchError extends OpenLanderError {
+  constructor(runId: string, details: Record<string, unknown>) {
+    super(
+      'Repository state does not match the Agent Run manifest snapshot.',
+      'DELIVERY_MANIFEST_MISMATCH',
+      409,
+      { runId, ...details },
+    );
+    this.name = 'DeliveryManifestMismatchError';
+  }
+}
+
+export class DeliveryQualityRunnerUnavailableError extends OpenLanderError {
+  constructor(projectId: string, reason: string) {
+    super(
+      'A single Git-backed Application is required to run Delivery quality gates.',
+      'DELIVERY_QUALITY_RUNNER_UNAVAILABLE',
+      409,
+      { projectId, reason },
+    );
+    this.name = 'DeliveryQualityRunnerUnavailableError';
+  }
+}
+
+export class DeliveryQualityCheckTimeoutError extends OpenLanderError {
+  constructor(checkKey: string, timeoutMs: number) {
+    super(`Delivery quality check timed out: ${checkKey}`, 'DELIVERY_QUALITY_CHECK_TIMEOUT', 504, {
+      checkKey,
+      timeoutMs,
+    });
+    this.name = 'DeliveryQualityCheckTimeoutError';
+  }
+}
+
+export class ProjectEnvironmentNotFoundError extends OpenLanderError {
+  constructor(environmentId: string) {
+    super('Project Environment was not found.', 'PROJECT_ENVIRONMENT_NOT_FOUND', 404, {
+      environmentId,
+    });
+    this.name = 'ProjectEnvironmentNotFoundError';
+  }
+}
+
+export class ReleaseNotFoundError extends OpenLanderError {
+  constructor(releaseId: string) {
+    super('Release was not found.', 'RELEASE_NOT_FOUND', 404, { releaseId });
+    this.name = 'ReleaseNotFoundError';
+  }
+}
+
+export class ReleaseStateError extends OpenLanderError {
+  constructor(releaseId: string, message: string, status?: string) {
+    super(message, 'RELEASE_STATE_INVALID', 409, { releaseId, status });
+    this.name = 'ReleaseStateError';
+  }
+}
+
+export class ReleaseArtifactUnavailableError extends OpenLanderError {
+  constructor(releaseId: string, serviceId?: string) {
+    super('Immutable Release artifact is unavailable.', 'ARTIFACT_UNAVAILABLE', 409, {
+      releaseId,
+      serviceId,
+    });
+    this.name = 'ReleaseArtifactUnavailableError';
+  }
+}
+
+export class ReleaseArtifactDigestMismatchError extends OpenLanderError {
+  constructor(releaseId: string, expected: string, actual: string) {
+    super(
+      'Release artifact digest does not match its recorded provenance.',
+      'ARTIFACT_DIGEST_MISMATCH',
+      409,
+      {
+        releaseId,
+        expected,
+        actual,
+      },
+    );
+    this.name = 'ReleaseArtifactDigestMismatchError';
+  }
+}
+
+export class ReleasePromotionOrderError extends OpenLanderError {
+  constructor(releaseId: string, environmentId: string, prerequisiteEnvironmentId: string) {
+    super(
+      'Release must succeed in the previous Environment before promotion.',
+      'PROMOTION_ORDER_VIOLATION',
+      409,
+      {
+        releaseId,
+        environmentId,
+        prerequisiteEnvironmentId,
+      },
+    );
+    this.name = 'ReleasePromotionOrderError';
+  }
+}
+
 export class ArtifactValidationError extends OpenLanderError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'ARTIFACT_VALIDATION_FAILED', 400, details);
     this.name = 'ArtifactValidationError';
+  }
+}
+
+export class EvidenceUploadTokenError extends OpenLanderError {
+  constructor(reason: string, expired = false) {
+    super(
+      expired ? 'Evidence upload URL has expired.' : 'Evidence upload URL is invalid.',
+      expired ? 'EVIDENCE_UPLOAD_EXPIRED' : 'EVIDENCE_UPLOAD_TOKEN_INVALID',
+      expired ? 410 : 401,
+      { reason },
+    );
+    this.name = 'EvidenceUploadTokenError';
   }
 }
 
@@ -1289,5 +1530,24 @@ export class EngagementValidationError extends OpenLanderError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'ENGAGEMENT_VALIDATION_FAILED', 400, details);
     this.name = 'EngagementValidationError';
+  }
+}
+
+export class WeeklyReportNotFoundError extends OpenLanderError {
+  constructor(reportId: string) {
+    super(`Weekly report "${reportId}" was not found.`, 'WEEKLY_REPORT_NOT_FOUND', 404, {
+      reportId,
+    });
+    this.name = 'WeeklyReportNotFoundError';
+  }
+}
+
+export class WeeklyReportStateError extends OpenLanderError {
+  constructor(reportId: string, message: string, currentStatus?: string) {
+    super(message, 'WEEKLY_REPORT_STATE_INVALID', 409, {
+      reportId,
+      ...(currentStatus ? { currentStatus } : {}),
+    });
+    this.name = 'WeeklyReportStateError';
   }
 }

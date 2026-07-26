@@ -1,20 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BriefcaseBusiness, Plus, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { AlertTriangle, Bot, BriefcaseBusiness, Search } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  createEngagement,
   listEngagements,
   type EngagementRuntimeHealth,
   type EngagementStatus,
@@ -23,6 +13,8 @@ import {
 import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
+import { AgentGuideDialog } from '@/components/agent-guide';
 
 function healthClass(health: EngagementRuntimeHealth): string {
   if (health === 'healthy') return 'bg-success/10 text-[color:var(--ol-fg)]';
@@ -45,13 +37,7 @@ export function Engagements() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | EngagementStatus>('all');
   const [showArchived, setShowArchived] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [title, setTitle] = useState('');
-  const [summary, setSummary] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const [agentGuideOpen, setAgentGuideOpen] = useState(false);
 
   const load = useCallback(
     async (showLoading = true) => {
@@ -65,7 +51,9 @@ export function Engagements() {
         );
         setError(null);
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : t('engagements.errors.load'));
+        setError(
+          localizeApiError(loadError, t, 'engagements.errors.load', 'engagements.errors.codes'),
+        );
       } finally {
         if (showLoading) setLoading(false);
       }
@@ -92,39 +80,15 @@ export function Engagements() {
     );
   }, [engagements, query]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const created = await createEngagement({
-        customer_name: customerName,
-        title,
-        summary,
-      });
-      setCreateOpen(false);
-      setCustomerName('');
-      setTitle('');
-      setSummary('');
-      navigate(`/engagements/${created.id}`);
-    } catch (createFailure) {
-      setCreateError(
-        createFailure instanceof Error ? createFailure.message : t('engagements.errors.create'),
-      );
-    } finally {
-      setCreating(false);
-    }
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl">
       <OuterCard
         title={t('engagements.title')}
         subtitle={t('engagements.subtitle')}
         actions={
-          <Button ref={createButtonRef} size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            {t('engagements.actions.create')}
+          <Button size="sm" onClick={() => setAgentGuideOpen(true)}>
+            <Bot className="mr-1.5 h-3.5 w-3.5" />
+            {t('engagements.actions.askAgent')}
           </Button>
         }
       >
@@ -292,67 +256,11 @@ export function Engagements() {
         )}
       </OuterCard>
 
-      <Dialog
-        open={createOpen}
-        onOpenChange={(open) => {
-          setCreateOpen(open);
-          if (!open) setCreateError(null);
-        }}
-      >
-        <DialogContent closeLabel={t('engagements.actions.close')} returnFocusRef={createButtonRef}>
-          <DialogHeader>
-            <DialogTitle>{t('engagements.create.title')}</DialogTitle>
-            <DialogDescription>{t('engagements.create.description')}</DialogDescription>
-          </DialogHeader>
-          <form className="mt-4 space-y-4" onSubmit={handleCreate}>
-            <div className="space-y-1.5">
-              <Label htmlFor="engagement-customer">{t('engagements.fields.customer')}</Label>
-              <Input
-                id="engagement-customer"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                maxLength={200}
-                required
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="engagement-title">{t('engagements.fields.title')}</Label>
-              <Input
-                id="engagement-title"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                maxLength={200}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="engagement-summary">{t('engagements.fields.summary')}</Label>
-              <textarea
-                id="engagement-summary"
-                value={summary}
-                onChange={(event) => setSummary(event.target.value)}
-                maxLength={4000}
-                rows={4}
-                className="w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 text-sm text-[color:var(--ol-fg)]"
-              />
-            </div>
-            {createError && (
-              <p role="alert" className="text-xs text-error">
-                {createError}
-              </p>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                {t('engagements.actions.cancel')}
-              </Button>
-              <Button type="submit" disabled={creating}>
-                {creating ? t('engagements.actions.creating') : t('engagements.actions.create')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AgentGuideDialog
+        open={agentGuideOpen}
+        onOpenChange={setAgentGuideOpen}
+        kind="bootstrap-engagement"
+      />
     </div>
   );
 }

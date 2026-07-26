@@ -14,15 +14,19 @@ export function DiagnosisPanel({ deployment }: DiagnosisPanelProps) {
   if (deployment.status === 'success') {
     return (
       <div className="sticky top-6 space-y-4">
-        <h3 className="text-sm font-display font-medium text-foreground/80">Diagnosis</h3>
+        <h3 className="text-sm font-display font-medium text-foreground/80">
+          {t('diagnosis.title')}
+        </h3>
         <div className="rounded-lg border border-success/30 bg-success/5 p-4">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h4 className="text-sm font-display font-medium text-foreground">
-                No issues detected
+                {t('diagnosis.noIssues')}
               </h4>
-              <p className="text-sm font-body text-foreground/80">Build completed successfully.</p>
+              <p className="text-sm font-body text-foreground/80">
+                {t('diagnosis.buildSucceeded')}
+              </p>
             </div>
           </div>
         </div>
@@ -32,14 +36,18 @@ export function DiagnosisPanel({ deployment }: DiagnosisPanelProps) {
 
   return (
     <div className="sticky top-6 space-y-4">
-      <h3 className="text-sm font-display font-medium text-foreground/80">Diagnosis</h3>
+      <h3 className="text-sm font-display font-medium text-foreground/80">
+        {t('diagnosis.title')}
+      </h3>
 
       {deployment.failureSummary && (
         <div className="rounded-lg border border-warning/30 bg-warning/5 border-l-4 border-l-warning p-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <h4 className="text-sm font-display font-medium text-foreground">Error Detection</h4>
+              <h4 className="text-sm font-display font-medium text-foreground">
+                {t('diagnosis.errorDetected')}
+              </h4>
               <p className="text-sm font-body text-foreground/80">{deployment.failureSummary}</p>
             </div>
           </div>
@@ -51,7 +59,9 @@ export function DiagnosisPanel({ deployment }: DiagnosisPanelProps) {
           <div className="flex items-start gap-3">
             <ShieldAlert className="h-5 w-5 text-agent shrink-0 mt-0.5" />
             <div className="space-y-1 w-full">
-              <h4 className="text-sm font-display font-medium text-foreground">Build Log</h4>
+              <h4 className="text-sm font-display font-medium text-foreground">
+                {t('diagnosis.buildLog')}
+              </h4>
               <p className="text-sm font-body text-foreground/80 mb-3">
                 {t('deploy.buildFailureDetected')}
               </p>
@@ -67,8 +77,12 @@ export function DiagnosisPanel({ deployment }: DiagnosisPanelProps) {
         <div className="flex items-start gap-3">
           <Activity className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <h4 className="text-sm font-display font-medium text-foreground">Recovery Attempts</h4>
-            <p className="text-sm font-body text-muted-foreground">No recovery data available.</p>
+            <h4 className="text-sm font-display font-medium text-foreground">
+              {t('diagnosis.recoveryAttempts')}
+            </h4>
+            <p className="text-sm font-body text-muted-foreground">
+              {t('diagnosis.noRecoveryData')}
+            </p>
           </div>
         </div>
       </div>

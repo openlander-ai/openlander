@@ -51,6 +51,11 @@ import {
   type KindGroup,
   type ProjectSummary,
 } from '@/lib/agentActivity';
+import {
+  localizedActivityDetail,
+  localizedActivityRelativeTime,
+  localizedActivityTitle,
+} from '@/lib/activity-presentation';
 
 interface KindMeta {
   Icon: LucideIcon;
@@ -106,13 +111,6 @@ const SEVERITY_STYLE: Record<ActivitySeverity, SeverityStyle> = {
   },
 };
 
-const ACTOR_LABEL: Record<Actor, string> = {
-  mcp: 'MCP',
-  human: 'human',
-  webhook: 'git',
-  system: 'system',
-};
-
 const ACTOR_ICON: Partial<Record<Actor, LucideIcon>> = {
   mcp: Bot,
   webhook: Webhook,
@@ -163,10 +161,20 @@ export function ActivityRow({
   onOpenDeployment,
   resolveProjectName,
 }: ActivityRowProps) {
+  const { t } = useLanguage();
   const severity = severityForKind(event.kind);
   const sev = SEVERITY_STYLE[severity];
   const { Icon } = KIND_ICON[event.kind];
   const ActorIcon = ACTOR_ICON[event.actor];
+  const actorLabel: Record<Actor, string> = {
+    mcp: 'MCP',
+    human: t('activityFilters.actor.human'),
+    webhook: t('activityFilters.actor.git'),
+    system: t('activityFilters.actor.system'),
+  };
+  const relativeAt = localizedActivityRelativeTime(event, t);
+  const displayTitle = localizedActivityTitle(event, t);
+  const displayDetail = localizedActivityDetail(event, t);
 
   const projectDisplay = event.project
     ? (resolveProjectName?.(event.project) ?? event.projectName ?? event.project)
@@ -231,13 +239,13 @@ export function ActivityRow({
               onClick={handleTitleClick}
               className={cn(titleClass, 'text-left hover:underline')}
             >
-              {event.title}
+              {displayTitle}
             </button>
           ) : (
-            <span className={titleClass}>{event.title}</span>
+            <span className={titleClass}>{displayTitle}</span>
           )}
           <span className="ml-auto shrink-0 text-[11px] text-[color:var(--ol-fg-subtle)]">
-            {event.at}
+            {relativeAt}
           </span>
         </div>
 
@@ -268,18 +276,18 @@ export function ActivityRow({
           {projectDisplay && <Separator />}
           <span className="inline-flex items-center gap-1">
             {ActorIcon && <ActorIcon className="h-3 w-3 opacity-70" />}
-            {ACTOR_LABEL[event.actor]}
+            {actorLabel[event.actor]}
           </span>
         </div>
 
-        {event.detail && (
+        {displayDetail && (
           <p
             className={cn(
               'mt-1 line-clamp-2 text-[12px] leading-snug',
               sev.loud ? 'text-[color:var(--ol-fg)]' : 'text-[color:var(--ol-fg-muted)]',
             )}
           >
-            {event.detail}
+            {displayDetail}
           </p>
         )}
         {event.kind === 'data_access_read' && event.dataAccess && (
@@ -481,14 +489,18 @@ export function ActivityTimeline({
 
       {empty ? (
         <div className="px-6 py-10 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-          {emptyState ?? 'No activity yet.'}
+          {emptyState ?? t('activityFilters.empty')}
         </div>
       ) : bucketed && buckets ? (
         <div>
           {buckets.map(([bucketLabel, items]) => (
             <div key={bucketLabel}>
               <div className="border-y border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
-                {bucketLabel}
+                {bucketLabel === 'Just now'
+                  ? t('activityFilters.bucket.justNow')
+                  : bucketLabel === 'Earlier today'
+                    ? t('activityFilters.bucket.earlierToday')
+                    : t('activityFilters.bucket.yesterday')}
               </div>
               <ul className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
                 {items.map((e) => (
@@ -516,8 +528,14 @@ interface TabStripProps {
 }
 
 function TabStrip({ value, onChange, tabs }: TabStripProps) {
+  const { t } = useLanguage();
+
   return (
-    <div role="tablist" aria-label="Activity type" className="flex flex-wrap items-center gap-0.5">
+    <div
+      role="tablist"
+      aria-label={t('activityFilters.typeAria')}
+      className="flex flex-wrap items-center gap-0.5"
+    >
       {tabs.map((tab) => {
         const active = value === tab.v;
         return (
@@ -557,9 +575,11 @@ interface ProjectSelectProps {
 }
 
 function ProjectSelect({ value, onChange, projects }: ProjectSelectProps) {
+  const { t } = useLanguage();
+
   return (
     <label className="ml-auto flex items-center gap-1.5 text-[11px] text-[color:var(--ol-fg-subtle)]">
-      <span className="uppercase tracking-[0.06em]">Project</span>
+      <span className="uppercase tracking-[0.06em]">{t('activityFilters.project')}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -568,7 +588,7 @@ function ProjectSelect({ value, onChange, projects }: ProjectSelectProps) {
           'border-[color:var(--ol-border-subtle)] hover:border-[color:var(--ol-border)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ol-border-strong)]',
         )}
       >
-        <option value="all">All projects</option>
+        <option value="all">{t('activityFilters.allProjects')}</option>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}

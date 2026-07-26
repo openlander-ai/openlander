@@ -10,7 +10,7 @@
  * Slack / Email presets are v1.1+ and reuse the same plumbing.
  */
 import { fetchWithAuth } from './auth';
-import { apiDelete, apiPostVoid } from './client';
+import { apiDelete, apiPostVoid, throwApiError } from './client';
 
 export interface NotificationWebhookConfig {
   url: string;
@@ -24,10 +24,7 @@ export interface NotificationWebhookConfig {
 export async function fetchNotificationWebhook(): Promise<NotificationWebhookConfig | null> {
   const res = await fetchWithAuth('/api/settings/notifications/webhook');
   if (res.status === 404) return null;
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Failed to fetch webhook (${res.status})`);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch webhook');
   return res.json();
 }
 

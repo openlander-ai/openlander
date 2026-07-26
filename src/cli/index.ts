@@ -10,7 +10,10 @@ import type { AuthService, OrgMcpPatTokenResult } from '../auth/auth-service.js'
 
 const log = createModuleLogger('cli');
 
-const program = new Command();
+// Root and `start` intentionally expose the same server options. Positional option
+// parsing keeps flags after the subcommand attached to `start` instead of letting
+// the root defaults overwrite them (for example, `openlander start --port 10115`).
+const program = new Command().enablePositionalOptions();
 const DEFAULT_MCP_TOKEN_EXPIRY_DAYS = 90;
 
 interface McpTokenCommandOptions {

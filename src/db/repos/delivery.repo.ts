@@ -55,11 +55,23 @@ export interface CreateDeliveryInput {
   projectId: string;
   title: string;
   summary?: string;
+  objective?: string;
+  definitionOfDone?: string[];
+  manifestPath?: string | null;
+  autoFinalize?: boolean;
   deliveryType?: DeliveryType;
   maturity?: DeliveryMaturity;
   limitations?: string | null;
   predecessorDeliveryId?: string | null;
   createdBy?: string;
+  gates?: Array<{
+    gate_key: string;
+    gate_type: GateType;
+    label: string;
+    required: boolean;
+    source: 'manual' | 'manifest';
+    definition_sha256?: string | null;
+  }>;
 }
 
 export interface CreateDeliveryArtifactInput {
@@ -134,6 +146,24 @@ export class DeliveryRepo {
   async createDelivery(input: CreateDeliveryInput): Promise<DeliveryRow> {
     const id = input.id ?? ulid();
     const deliveryType = input.deliveryType ?? 'software_release';
+    if (input.id) {
+      const existing = await this.getDelivery(input.id);
+      if (existing) {
+        if (
+          existing.project_id === input.projectId &&
+          existing.title === input.title &&
+          existing.objective === (input.objective ?? '') &&
+          existing.manifest_path === (input.manifestPath ?? null)
+        ) {
+          return existing;
+        }
+        throw new DeliveryStateError(
+          input.id,
+          'The deterministic Delivery id is already used by another operation.',
+          existing.status,
+        );
+      }
+    }
     return await this.db.transaction(async (tx) => {
       const [created] = await tx
         .insert(deliveries)
@@ -142,6 +172,10 @@ export class DeliveryRepo {
           project_id: input.projectId,
           title: input.title,
           summary: input.summary ?? '',
+          objective: input.objective ?? '',
+          definition_of_done: input.definitionOfDone ?? [],
+          manifest_path: input.manifestPath ?? null,
+          ...(input.autoFinalize !== undefined ? { auto_finalize: input.autoFinalize } : {}),
           delivery_type: deliveryType,
           maturity: input.maturity ?? 'customer_review',
           limitations: input.limitations ?? null,
@@ -162,13 +196,16 @@ export class DeliveryRepo {
         .limit(1);
       const configuredGates =
         parseDefaultDeliveryGates(settings?.default_gates_json) ?? DEFAULT_DELIVERY_GATES;
-      await tx.insert(deliveryGates).values(
-        configuredGates[deliveryType].map((gate) => ({
-          id: ulid(),
-          delivery_id: id,
-          ...gate,
-        })),
-      );
+      const initialGates = input.gates ?? configuredGates[deliveryType];
+      if (initialGates.length > 0) {
+        await tx.insert(deliveryGates).values(
+          initialGates.map((gate) => ({
+            id: ulid(),
+            delivery_id: id,
+            ...gate,
+          })),
+        );
+      }
       return created;
     });
   }
@@ -1094,5 +1131,20 @@ export class DeliveryRepo {
   async getArtifactsByIds(ids: string[]): Promise<DeliveryArtifactRow[]> {
     if (ids.length === 0) return [];
     return await this.db.select().from(deliveryArtifacts).where(inArray(deliveryArtifacts.id, ids));
+  }
+
+  async getArtifactProjectRowsByIds(
+    ids: string[],
+  ): Promise<Array<{ artifact_id: string; delivery_id: string; project_id: string }>> {
+    if (ids.length === 0) return [];
+    return await this.db
+      .select({
+        artifact_id: deliveryArtifacts.id,
+        delivery_id: deliveryArtifacts.delivery_id,
+        project_id: deliveries.project_id,
+      })
+      .from(deliveryArtifacts)
+      .innerJoin(deliveries, eq(deliveryArtifacts.delivery_id, deliveries.id))
+      .where(inArray(deliveryArtifacts.id, ids));
   }
 }

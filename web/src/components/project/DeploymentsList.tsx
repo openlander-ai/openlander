@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLanguage } from '@/i18n/context';
 import {
   formatDeploymentDuration,
@@ -66,9 +66,9 @@ export function DeploymentsList({
         <div className="flex flex-col h-full p-6 bg-bg-app">
           <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm flex flex-col items-center justify-center flex-1 py-12 text-foreground/80">
             <History className="h-8 w-8 mb-3 text-muted-foreground" />
-            <p className="text-sm font-body">{'Failed to load deployments'}</p>
+            <p className="text-sm font-body">{t('projectDetail.deploymentsLoadFailed')}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={refetch}>
-              {'Try again'}
+              {t('projectDetail.deploymentsRetry')}
             </Button>
           </div>
         </div>
@@ -81,7 +81,7 @@ export function DeploymentsList({
         <p className="text-sm font-body">
           {statusFilter === 'all'
             ? t('projectDetail.noDeployments')
-            : 'No deployments match this filter'}
+            : t('projectDetail.deploymentsNoMatch')}
         </p>
       </div>
     </div>;
@@ -92,7 +92,7 @@ export function DeploymentsList({
       <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col">
         <div className="divide-y divide-border/50 overflow-auto flex-1">
           {filteredDeployments.map((deploy) => {
-            const statusMeta = getDeploymentStatusMeta(deploy.status);
+            const statusMeta = getDeploymentStatusMeta(deploy.status, t);
             const shortCommitSha = getShortCommitSha(deploy.commitSha);
             const triggerIconName = getDeploymentTriggerIcon(deploy.trigger);
 
@@ -118,7 +118,7 @@ export function DeploymentsList({
 
                 <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground truncate shrink-0">
                   <TriggerIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
+                  {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail, t)}
                 </span>
                 <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
                   {statusMeta.label}

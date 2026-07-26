@@ -39,6 +39,10 @@ export class EnvironmentRepo {
     publicUrl?: string | null;
   }): Promise<EnvironmentRow> {
     const serviceId = await this.resolveExistingCanonicalServiceId(environment.projectId);
+    const existing = await this.getEnvironmentByServiceAndType(serviceId, environment.type);
+    if (existing) {
+      return { ...existing, project_id: environment.projectId };
+    }
     const [created] = await this.db
       .insert(environments)
       .values({
@@ -53,7 +57,7 @@ export class EnvironmentRepo {
         previous_image_tag: environment.previousImageTag ?? null,
         public_url: environment.publicUrl ?? null,
       })
-      .onConflictDoNothing({ target: [environments.service_id, environments.type] })
+      .onConflictDoNothing()
       .returning();
 
     const row =
@@ -63,6 +67,57 @@ export class EnvironmentRepo {
       null;
     if (!row) throw new RepoPersistenceError('environment', environment.id);
     return { ...row, project_id: deployableServiceIdToProjectId(row.service_id) };
+  }
+
+  async createProjectEnvironmentRuntime(environment: {
+    id: string;
+    serviceId: string;
+    projectEnvironmentId: string;
+    type: EnvironmentRow['type'];
+    branch?: string | null;
+  }): Promise<EnvironmentRow> {
+    const existing = await this.getEnvironmentByServiceAndProjectEnvironment(
+      environment.serviceId,
+      environment.projectEnvironmentId,
+    );
+    if (existing) return existing;
+    const [created] = await this.db
+      .insert(environments)
+      .values({
+        id: environment.id,
+        service_id: environment.serviceId,
+        project_environment_id: environment.projectEnvironmentId,
+        type: environment.type,
+        branch: environment.branch ?? null,
+        status: 'idle',
+      })
+      .onConflictDoNothing()
+      .returning();
+    const row =
+      created ??
+      (await this.getEnvironmentByServiceAndProjectEnvironment(
+        environment.serviceId,
+        environment.projectEnvironmentId,
+      ));
+    if (!row) throw new RepoPersistenceError('environment', environment.id);
+    return row as EnvironmentRow;
+  }
+
+  async getEnvironmentByServiceAndProjectEnvironment(
+    serviceId: string,
+    projectEnvironmentId: string,
+  ): Promise<EnvironmentRow | undefined> {
+    const [selected] = await this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.service_id, serviceId),
+          eq(environments.project_environment_id, projectEnvironmentId),
+        ),
+      )
+      .limit(1);
+    return (selected ?? undefined) as EnvironmentRow | undefined;
   }
 
   private async getEnvironmentByServiceAndType(
@@ -98,6 +153,14 @@ export class EnvironmentRepo {
     // Back-compat: hydrate deprecated project_id from projectId parameter so
     // callers that read env.project_id continue to work through 1.0.
     return rows.map((r) => ({ ...r, project_id: projectId }));
+  }
+
+  async getEnvironmentsByServiceId(serviceId: string): Promise<EnvironmentRow[]> {
+    return (await this.db
+      .select()
+      .from(environments)
+      .where(eq(environments.service_id, serviceId))
+      .orderBy(asc(environments.created_at))) as EnvironmentRow[];
   }
 
   async getEnvironmentsByProjectIds(projectIds: string[]): Promise<Map<string, EnvironmentRow[]>> {

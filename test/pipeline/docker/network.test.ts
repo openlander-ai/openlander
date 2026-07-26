@@ -15,6 +15,7 @@ const mockGetImage = vi.fn();
 const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
 const mockGetNetwork = vi.fn();
+const mockCreateNetwork = vi.fn();
 const mockDemuxStream = vi.fn();
 const mockDf = vi.fn();
 const mockGetVolume = vi.fn();
@@ -31,6 +32,7 @@ const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
   this.getImage = mockGetImage;
   this.getContainer = mockGetContainer;
   this.getNetwork = mockGetNetwork;
+  this.createNetwork = mockCreateNetwork;
   this.df = mockDf;
   this.getVolume = mockGetVolume;
   this.listVolumes = mockListVolumes;
@@ -63,6 +65,7 @@ const resetMocks = () => {
   mockGetContainer.mockReset();
   mockFollowProgress.mockReset();
   mockGetNetwork.mockReset();
+  mockCreateNetwork.mockReset();
   mockDemuxStream.mockReset();
   mockDf.mockReset();
   mockGetVolume.mockReset();
@@ -185,5 +188,91 @@ describe('getNetworkInfo', () => {
 
     const docker = new Docker();
     await expect(docker.getNetworkInfo('broken')).rejects.toThrow('driver error');
+  });
+});
+
+describe('ensureProjectNetwork', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('labels a new network with the owning OpenLander instance', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockCreateNetwork.mockResolvedValueOnce({ id: 'network-id' });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.ensureProjectNetwork('demo')).resolves.toBe('ol-demo');
+
+    expect(mockCreateNetwork).toHaveBeenCalledWith({
+      Name: 'ol-demo',
+      Driver: 'bridge',
+      Labels: {
+        'openlander.managed': 'true',
+        'openlander.project': 'demo',
+        'openlander.instance': 'olinst_a',
+      },
+    });
+  });
+
+  it('returns a typed retryable error when Docker address pools are exhausted', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockCreateNetwork.mockRejectedValueOnce(
+      new Error('all predefined address pools have been fully subnetted'),
+    );
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.ensureProjectNetwork('demo')).rejects.toMatchObject({
+      code: 'NETWORK_ADDRESS_POOL_EXHAUSTED',
+      statusCode: 503,
+      details: { networkName: 'ol-demo', retryable: true },
+    });
+  });
+});
+
+describe('removeProjectNetwork', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('disconnects only the owning managed Traefik endpoint before removing its network', async () => {
+    const inspect = vi.fn().mockResolvedValue({
+      Labels: { 'openlander.instance': 'olinst_a' },
+      Containers: { 'traefik-id': { Name: 'traefik-ol' } },
+    });
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const remove = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({ inspect, disconnect, remove });
+    mockGetContainer.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Config: {
+          Labels: {
+            'openlander.managed': 'true',
+            'openlander.role': 'traefik',
+            'openlander.instance': 'olinst_a',
+          },
+        },
+      }),
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.removeProjectNetwork('demo')).resolves.toBeUndefined();
+
+    expect(disconnect).toHaveBeenCalledWith({ Container: 'traefik-id', Force: true });
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to remove a network without an exact instance ownership match', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Labels: {}, Containers: {} }),
+      remove,
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.removeProjectNetwork('legacy')).resolves.toBeUndefined();
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });

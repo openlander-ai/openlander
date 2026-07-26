@@ -11,6 +11,64 @@ export type EngagementBlockerKind =
   | 'warning_unacknowledged'
   | 'work_item_unresolved';
 
+export interface EngagementBlockerMetadataByKind {
+  project_error: {
+    runtime_status: 'error';
+    error_service_count: number;
+  };
+  revision_requested: {
+    delivery_status: 'revision_requested';
+  };
+  required_gate_failed: {
+    gate_key: string;
+    gate_label: string;
+    gate_summary: string | null;
+    gate_required: true;
+    gate_status: 'failed';
+  };
+  warning_unacknowledged: {
+    gate_key: string;
+    gate_label: string;
+    gate_summary: string | null;
+    gate_required: boolean;
+    gate_status: 'warning';
+    warning_accepted: false;
+  };
+  work_item_unresolved: {
+    work_item_kind: 'question' | 'change_request';
+    work_item_status: 'confirmed';
+    work_item_title: string;
+    work_item_detail: string;
+  };
+}
+
+export type EngagementBlockerMetadata = EngagementBlockerMetadataByKind[EngagementBlockerKind];
+
+export type EngagementSystemEventType =
+  | 'engagement:created'
+  | 'engagement:updated'
+  | 'engagement:archived'
+  | 'engagement:unarchived'
+  | 'engagement:project_linked'
+  | 'engagement:project_unlinked';
+
+export interface EngagementActivityMetadata extends Record<string, unknown> {
+  schema_version: 1;
+  engagement_id: string;
+  actor?: string;
+  engagement_title?: string;
+  previous_engagement_title?: string;
+  customer_name?: string;
+  engagement_status?: EngagementStatus;
+  previous_status?: EngagementStatus;
+  changed_fields?: string[];
+  project_id?: string;
+  project_name?: string;
+  delivery_id?: string;
+  linked_projects_changed?: boolean;
+  deliveries_changed?: boolean;
+}
+
 export interface EngagementDeliverySummary {
   total: number;
   blocker_count: number;
@@ -39,8 +97,7 @@ export interface EngagementDeliveryView {
   updated_at: string;
 }
 
-export interface EngagementBlocker {
-  kind: EngagementBlockerKind;
+interface EngagementBlockerBase {
   project_id: string;
   project_name: string;
   delivery_id: string | null;
@@ -51,6 +108,14 @@ export interface EngagementBlocker {
   deep_link: string;
 }
 
+export type EngagementBlocker = {
+  [Kind in EngagementBlockerKind]: EngagementBlockerBase & {
+    kind: Kind;
+    /** Structured display arguments. `title` and `detail` remain as legacy fallbacks. */
+    metadata: EngagementBlockerMetadataByKind[Kind];
+  };
+}[EngagementBlockerKind];
+
 export interface EngagementActivity {
   id: string;
   event_type: string;
@@ -60,7 +125,8 @@ export interface EngagementActivity {
   title: string;
   description: string;
   status: string;
-  metadata: Record<string, unknown>;
+  /** Locale-neutral display arguments keyed by `event_type`. */
+  metadata: EngagementActivityMetadata;
   created_at: string;
   deep_link: string | null;
 }

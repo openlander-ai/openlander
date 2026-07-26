@@ -108,6 +108,12 @@ describe('AI Ops briefing web surface', () => {
     expect(feedSource).toContain("label={t('aiOps.evidence')}");
     expect(feedSource).toContain('formatJson(selectedBriefing.suggested_call)');
     expect(feedSource).toContain('formatJson(selectedBriefing.evidence)');
+    expect(feedSource).toContain('localizedBriefingTitle(briefing, t)');
+    expect(feedSource).toContain('localizedBriefingSummary(briefing, t)');
+    expect(feedSource).toContain('localizedBriefingClassification(selectedBriefing, t)');
+    expect(feedSource).not.toContain('{briefing.title}');
+    expect(feedSource).not.toContain('{briefing.summary}');
+    expect(feedSource).not.toContain('{selectedBriefing.summary}');
   });
 
   it('renders a token-free agent handoff prompt from the briefing detail', () => {
@@ -159,9 +165,15 @@ describe('AI Ops briefing web surface', () => {
       ]) {
         expect(source).toContain(key);
       }
-      expect(source).toContain("off: 'Off'");
-      expect(source).toContain("briefing: 'Briefing'");
-      expect(source).toContain("inherit: 'Inherit'");
+      if (source === enSource) {
+        expect(source).toContain("off: 'Off'");
+        expect(source).toContain("briefing: 'Briefing'");
+        expect(source).toContain("inherit: 'Inherit'");
+      } else {
+        expect(source).toContain("off: '꺼짐'");
+        expect(source).toContain("briefing: '브리핑'");
+        expect(source).toContain("inherit: '프로젝트 설정 따름'");
+      }
     }
   });
 

@@ -17,6 +17,7 @@ import {
   verifyGitCredential,
   type GitCredential,
 } from '@/lib/api/git-credentials';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface GitCredentialWizardProps {
   open: boolean;
@@ -64,7 +65,7 @@ export function GitCredentialWizard({
       setCredential(created);
       setStep(2);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('repositoryKeys.errors.create'));
+      setError(localizeApiError(err, t, 'repositoryKeys.errors.create', 'common.errors.codes'));
     } finally {
       setBusy(false);
     }
@@ -94,7 +95,7 @@ export function GitCredentialWizard({
       }
       setStep(3);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('repositoryKeys.errors.verify'));
+      setError(localizeApiError(err, t, 'repositoryKeys.errors.verify', 'common.errors.codes'));
     } finally {
       setBusy(false);
     }

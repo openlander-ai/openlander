@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 const Dialog = DialogPrimitive.Root;
@@ -33,11 +34,14 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(
-  (
-    { className, children, closeLabel = 'Close', returnFocusRef, onCloseAutoFocus, ...props },
-    ref,
-  ) => (
+>(function DialogContent(
+  { className, children, closeLabel, returnFocusRef, onCloseAutoFocus, ...props },
+  ref,
+) {
+  const { t } = useLanguage();
+  const resolvedCloseLabel = closeLabel ?? t('accessibility.close');
+
+  return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
@@ -58,12 +62,12 @@ const DialogContent = React.forwardRef<
         {children}
         <DialogPrimitive.Close className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-sm opacity-60 transition-opacity hover:bg-[color:var(--ol-panel-2)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ol-primary)] disabled:pointer-events-none">
           <X className="h-3.5 w-3.5" />
-          <span className="sr-only">{closeLabel}</span>
+          <span className="sr-only">{resolvedCloseLabel}</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPortal>
-  ),
-);
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

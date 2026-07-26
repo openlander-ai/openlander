@@ -72,8 +72,9 @@ export interface ProxySummary {
   type: ProxyType;
   /**
    * Legacy free-form human-readable status string. Older OpenLander
-   * builds (≤ 0.1 pre-#242) only emitted this; the frontend renders
-   * it verbatim as a fallback when `statusCode` is missing.
+   * builds (≤ 0.1 pre-#242) only emitted this. The frontend derives a
+   * localized fallback from the structured type/mode fields instead of
+   * rendering this English diagnostic string.
    *
    * Examples:
    *   "Traefik v3.0.4 (traefik) [managed mode]"

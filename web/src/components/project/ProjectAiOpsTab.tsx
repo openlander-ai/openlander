@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { ChevronRight, Filter, ShieldCheck, Sparkles } from 'lucide-react';
 import { AiOpsBriefingFeed } from '@/components/ai-ops/AiOpsBriefingFeed';
 import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import {
   getProjectAiOps,
   getServiceAiOps,
@@ -106,7 +107,7 @@ export function ProjectAiOpsTab({
       setSelectedServicePolicy(null);
       setBriefings(response.briefings ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiOps.error.load'));
+      setError(localizeApiError(err, t, 'aiOps.error.load', 'aiOps.error.codes'));
     } finally {
       setLoading(false);
     }

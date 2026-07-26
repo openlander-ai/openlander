@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import {
   Activity,
   Archive,
@@ -32,6 +32,7 @@ import {
   type DataSourceSummary,
 } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 import type { ServiceHealth } from '@/lib/projectTopology';
 import type { Project } from '@/types';
 import {
@@ -45,11 +46,29 @@ export type SettingsSection = 'general' | 'delivery' | 'ai' | 'data' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
 type SettingsDeliveryType = 'software_release' | 'artifact_delivery';
 type SettingsGateType = 'review' | 'qa' | 'data' | 'custom';
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 interface SettingsGateTemplate {
   gate_key: string;
   gate_type: SettingsGateType;
   label: string;
   required: boolean;
+}
+
+function archivedServiceStatusLabel(status: string, t: Translate): string {
+  switch (status) {
+    case 'running':
+    case 'building':
+    case 'error':
+    case 'stopped':
+    case 'idle':
+      return t(`projects.status.${status}`);
+    default:
+      return t('projects.status.unknown');
+  }
+}
+
+function dataSourceKindLabel(kind: DataSourceSummary['kind'], t: Translate): string {
+  return t(`settings.data.kind.${kind}`);
 }
 
 const FALLBACK_GATE_TEMPLATES: Record<SettingsDeliveryType, SettingsGateTemplate[]> = {
@@ -137,7 +156,9 @@ export function SettingsTab({
         onProjectDeleted?.();
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('projectDetail.danger.error'));
+      setActionError(
+        localizeApiError(err, t, 'projectDetail.danger.error', 'projectDetail.danger.codes'),
+      );
     } finally {
       setActionLoading(null);
     }
@@ -346,7 +367,9 @@ function DeliverySettingsPanel({ projectId }: { projectId: string }) {
       })
       .catch((err) => {
         if (active) {
-          setError(err instanceof Error ? err.message : t('delivery.settings.loadError'));
+          setError(
+            localizeApiError(err, t, 'delivery.settings.loadError', 'delivery.errors.codes'),
+          );
         }
       });
     return () => {
@@ -373,7 +396,7 @@ function DeliverySettingsPanel({ projectId }: { projectId: string }) {
       );
       setMessage(t('delivery.settings.saved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.settings.saveError'));
+      setError(localizeApiError(err, t, 'delivery.settings.saveError', 'delivery.errors.codes'));
     } finally {
       setSaving(false);
     }
@@ -389,7 +412,7 @@ function DeliverySettingsPanel({ projectId }: { projectId: string }) {
       setLogoFile(null);
       setMessage(t('delivery.settings.logoSaved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.settings.logoError'));
+      setError(localizeApiError(err, t, 'delivery.settings.logoError', 'delivery.errors.codes'));
     } finally {
       setSaving(false);
     }
@@ -557,22 +580,34 @@ function DeliverySettingsPanel({ projectId }: { projectId: string }) {
                   >
                     <p className="text-xs font-semibold">{t(`delivery.type.${deliveryType}`)}</p>
                     <div className="mt-2 space-y-2">
-                      {settingsGateTemplates(settings)[deliveryType].map((gate) => (
-                        <label key={gate.gate_key} className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={gate.required}
-                            onChange={(event) =>
-                              setDefaultGateRequired(
-                                deliveryType,
-                                gate.gate_key,
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          {gate.label}
-                        </label>
-                      ))}
+                      {settingsGateTemplates(settings)[deliveryType].map((gate) => {
+                        const defaultLabelKey =
+                          gate.gate_key === 'review' && gate.label === 'Review'
+                            ? 'review'
+                            : gate.gate_key === 'qa' && gate.label === 'QA'
+                              ? 'qa'
+                              : gate.gate_key === 'data' && gate.label === 'Data'
+                                ? 'data'
+                                : null;
+                        return (
+                          <label key={gate.gate_key} className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={gate.required}
+                              onChange={(event) =>
+                                setDefaultGateRequired(
+                                  deliveryType,
+                                  gate.gate_key,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            {defaultLabelKey
+                              ? t(`delivery.gates.defaultLabel.${defaultLabelKey}`)
+                              : gate.label}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 ),
@@ -619,7 +654,12 @@ function ArchivedServicesDangerPanel({
       setServices(allServices.filter((service) => service.archivedAt != null));
     } catch (err) {
       setLoadError(
-        err instanceof Error ? err.message : t('projectDetail.danger.archivedServicesLoadError'),
+        localizeApiError(
+          err,
+          t,
+          'projectDetail.danger.archivedServicesLoadError',
+          'projectDetail.danger.codes',
+        ),
       );
     } finally {
       setLoading(false);
@@ -646,7 +686,14 @@ function ArchivedServicesDangerPanel({
       await loadArchivedServices();
       onProjectChanged?.();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('projectDetail.serviceRestore.error'));
+      setActionError(
+        localizeApiError(
+          err,
+          t,
+          'projectDetail.serviceRestore.error',
+          'projectDetail.serviceRestore.codes',
+        ),
+      );
     } finally {
       setActionKey(null);
     }
@@ -665,7 +712,14 @@ function ArchivedServicesDangerPanel({
       await loadArchivedServices();
       onProjectChanged?.();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('projectDetail.serviceDelete.error'));
+      setActionError(
+        localizeApiError(
+          err,
+          t,
+          'projectDetail.serviceDelete.error',
+          'projectDetail.serviceDelete.codes',
+        ),
+      );
     } finally {
       setActionKey(null);
     }
@@ -720,7 +774,7 @@ function ArchivedServicesDangerPanel({
                         {service.name}
                       </span>
                       <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
-                        {service.status}
+                        {archivedServiceStatusLabel(service.status, t)}
                       </span>
                     </div>
                     <p className="ol-mono mt-1 break-all text-[11px] text-foreground/60">
@@ -860,7 +914,7 @@ function ProjectDataAccessPanel({
       const response = await listProjectDataSources(projectId);
       setSources(response.data_sources);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.data.loadFailed'));
+      setError(localizeApiError(err, t, 'settings.data.loadFailed', 'settings.data.codes'));
     } finally {
       setLoading(false);
     }
@@ -884,7 +938,7 @@ function ProjectDataAccessPanel({
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.data.saveFailed'));
+      setError(localizeApiError(err, t, 'settings.data.saveFailed', 'settings.data.codes'));
     } finally {
       setActionKey(null);
     }
@@ -950,7 +1004,7 @@ function ProjectDataAccessPanel({
                         {source.name}
                       </span>
                       <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
-                        {source.kind}
+                        {dataSourceKindLabel(source.kind, t)}
                       </span>
                       <span className="rounded-full border border-[hsl(var(--border))] bg-bg-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
                         {external
@@ -1141,7 +1195,7 @@ function ProjectGeneralPanel({
       setMessage(t('settings.general.saved'));
       onProjectChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.general.saveFailed'));
+      setError(localizeApiError(err, t, 'settings.general.saveFailed', 'settings.general.codes'));
     } finally {
       setSaving(false);
     }

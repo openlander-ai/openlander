@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
+import {
+  agentDeliveryToolDefs,
+  projectManifestToolDefs,
+} from '../../src/tools/defs/agent-delivery.js';
+import { releaseOperationToolDefs } from '../../src/tools/defs/release-operations.js';
+import { reportingOperationToolDefs } from '../../src/tools/defs/reporting-operations.js';
 import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
 import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
@@ -24,6 +30,10 @@ import {
 import type { AppContext } from '../../src/app.js';
 
 const allToolDefs: ToolDef[] = [
+  ...agentDeliveryToolDefs,
+  ...projectManifestToolDefs,
+  ...releaseOperationToolDefs,
+  ...reportingOperationToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,

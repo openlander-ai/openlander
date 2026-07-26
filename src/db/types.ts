@@ -85,6 +85,7 @@ export interface EnvironmentRow {
   id: string;
   /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
   service_id: string;
+  project_environment_id?: string | null;
   type: EnvironmentType;
   branch: string | null;
   status: 'running' | 'stopped' | 'building' | 'error' | 'idle';

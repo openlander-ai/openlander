@@ -5,7 +5,14 @@
  * Per v4 errors.jsx + Plan Phase C spec.
  */
 import { cn } from '@/lib/utils';
-import { ERROR_CLASSES, type ErrorClass, type ErrorClassDef } from '@/lib/errorClasses';
+import { useLanguage } from '@/i18n/context';
+import {
+  ERROR_CLASSES,
+  localizeDeployPhase,
+  localizeErrorClass,
+  type ErrorClass,
+  type ErrorClassDef,
+} from '@/lib/errorClasses';
 
 /** Blame chip classification */
 type BlameCategory = 'your-config' | 'external' | 'our-bug';
@@ -29,18 +36,15 @@ const BLAME_MAP: Record<ErrorClass, BlameCategory> = {
   BUILD_TIMEOUT: 'our-bug',
 };
 
-const BLAME_STYLES: Record<BlameCategory, { label: string; className: string }> = {
+const BLAME_STYLES: Record<BlameCategory, { className: string }> = {
   'your-config': {
-    label: 'your config',
     className:
       'bg-[color-mix(in_oklch,var(--ol-warning)_14%,transparent)] text-[color:var(--ol-warning)]',
   },
   external: {
-    label: 'external',
     className: 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
   },
   'our-bug': {
-    label: 'our bug',
     className:
       'bg-[color-mix(in_oklch,var(--ol-error)_14%,transparent)] text-[color:var(--ol-error)]',
   },
@@ -55,9 +59,17 @@ export interface ErrorSurfaceProps {
 }
 
 export function ErrorSurface({ errorClass, target, className }: ErrorSurfaceProps) {
-  const def: ErrorClassDef = ERROR_CLASSES[errorClass] ?? ERROR_CLASSES.RUNTIME_CRASH;
+  const { t } = useLanguage();
+  const sourceDef: ErrorClassDef = ERROR_CLASSES[errorClass] ?? ERROR_CLASSES.RUNTIME_CRASH;
+  const def = localizeErrorClass(sourceDef, t);
+  const phaseLabel = localizeDeployPhase(def.phase, t);
   const blame = BLAME_MAP[errorClass] ?? 'our-bug';
   const blameStyle = BLAME_STYLES[blame];
+  const blameLabel: Record<BlameCategory, string> = {
+    'your-config': t('deployShell.error.blameConfig'),
+    external: t('deployShell.error.blameExternal'),
+    'our-bug': t('deployShell.error.blamePlatform'),
+  };
 
   const effectiveTarget = target ?? def.target;
 
@@ -69,7 +81,7 @@ export function ErrorSurface({ errorClass, target, className }: ErrorSurfaceProp
         className,
       )}
       role="alert"
-      aria-label={`Deploy error: ${def.title}`}
+      aria-label={t('deployShell.error.aria', { title: def.title })}
     >
       {/* Header row: title + blame chip */}
       <div className="flex items-start gap-3">
@@ -84,7 +96,7 @@ export function ErrorSurface({ errorClass, target, className }: ErrorSurfaceProp
             blameStyle.className,
           )}
         >
-          {blameStyle.label}
+          {blameLabel[blame]}
         </span>
       </div>
 
@@ -92,17 +104,20 @@ export function ErrorSurface({ errorClass, target, className }: ErrorSurfaceProp
       <p className="text-[12.5px] leading-snug text-[color:var(--ol-fg-muted)]">
         {def.phase !== '—' && (
           <>
-            Failed during <span className="ol-mono text-[color:var(--ol-fg)]">{def.phase}</span>
+            {t('deployShell.error.failedDuring')}{' '}
+            <span className="text-[color:var(--ol-fg)]">{phaseLabel}</span>
             {def.step !== '—' && (
               <>
                 {' '}
-                step <span className="ol-mono text-[color:var(--ol-fg)]">{def.step}</span>
+                {t('deployShell.error.step')}{' '}
+                <span className="ol-mono text-[color:var(--ol-fg)]">{def.step}</span>
               </>
             )}
             {effectiveTarget && (
               <>
                 {' '}
-                on <span className="ol-mono text-[color:var(--ol-fg)]">{effectiveTarget}</span>
+                {t('deployShell.error.on')}{' '}
+                <span className="ol-mono text-[color:var(--ol-fg)]">{effectiveTarget}</span>
               </>
             )}
             .
@@ -110,7 +125,8 @@ export function ErrorSurface({ errorClass, target, className }: ErrorSurfaceProp
         )}
         {def.phase === '—' && effectiveTarget && (
           <>
-            Target: <span className="ol-mono text-[color:var(--ol-fg)]">{effectiveTarget}</span>.
+            {t('deployShell.error.target')}{' '}
+            <span className="ol-mono text-[color:var(--ol-fg)]">{effectiveTarget}</span>.
           </>
         )}
       </p>

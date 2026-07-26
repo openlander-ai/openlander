@@ -17,7 +17,7 @@
  * inside the product so the human path is self-contained.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   Box,
   Database,
@@ -53,6 +53,7 @@ import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/d
 import { cn } from '@/lib/utils';
 import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings';
 
@@ -357,7 +358,12 @@ export function ProjectView() {
         if (!active) return;
         setArchivedServiceNodes([]);
         setArchivedServicesError(
-          err instanceof Error ? err.message : 'Failed to load archived Applications',
+          localizeApiError(
+            err,
+            t,
+            'projectDetail.danger.archivedServicesLoadError',
+            'common.apiError.codes',
+          ),
         );
       })
       .finally(() => {
@@ -367,7 +373,7 @@ export function ProjectView() {
     return () => {
       active = false;
     };
-  }, [projectId, showArchivedServiceList]);
+  }, [projectId, showArchivedServiceList, t]);
 
   const projectServiceRows = useMemo(() => {
     const resourceServiceNodes = groupServiceNodes ?? services;
@@ -570,7 +576,10 @@ export function ProjectView() {
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
             <span className="w-full text-[11px] text-[color:var(--ol-fg-subtle)] sm:w-auto">
-              updated {projectUpdatedAt} · created {projectCreatedAt}
+              {t('projectDetail.timestamps', {
+                updated: projectUpdatedAt,
+                created: projectCreatedAt,
+              })}
             </span>
             <button
               type="button"
@@ -634,15 +643,7 @@ export function ProjectView() {
           labelledBy="project-deliveries"
           className="p-0"
         >
-          {projectId && (
-            <DeliveriesTab
-              projectId={projectId}
-              onConfigure={() => {
-                setSettingsInitialSection('delivery');
-                setActiveTab('settings');
-              }}
-            />
-          )}
+          {projectId && <DeliveriesTab projectId={projectId} />}
         </TabPanel>
         <TabPanel
           active={activeTab === 'ai'}
@@ -1034,6 +1035,8 @@ function resourceLabelKey(
 }
 
 function HealthPill({ health }: { health: ServiceHealth }) {
+  const { t } = useLanguage();
+
   if (health === 'crashed') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-error-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-error)]">
@@ -1042,7 +1045,7 @@ function HealthPill({ health }: { health: ServiceHealth }) {
           className="h-1 w-1 rounded-full"
           style={{ backgroundColor: 'var(--ol-error)' }}
         />
-        crashed
+        {t('topology.health.crashed')}
       </span>
     );
   }
@@ -1054,7 +1057,7 @@ function HealthPill({ health }: { health: ServiceHealth }) {
           className="h-1 w-1 animate-pulse rounded-full"
           style={{ backgroundColor: 'var(--ol-info)' }}
         />
-        deploying
+        {t('topology.health.deploying')}
       </span>
     );
   }
@@ -1065,7 +1068,7 @@ function HealthPill({ health }: { health: ServiceHealth }) {
         className="h-1 w-1 rounded-full"
         style={{ backgroundColor: 'var(--ol-success)' }}
       />
-      healthy
+      {t('topology.health.healthy')}
     </span>
   );
 }

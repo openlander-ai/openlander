@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getMcpInstance, updateMcpInstanceName, type McpInstanceInfo } from '@/lib/api';
 import { getMcpEndpoint } from '@/lib/mcp-endpoint';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 export function useMcpInstance() {
+  const { t } = useLanguage();
   const [instance, setInstance] = useState<McpInstanceInfo | null>(null);
   const [draftName, setDraftName] = useState('openlander');
   const [loading, setLoading] = useState(true);
@@ -17,11 +20,11 @@ export function useMcpInstance() {
       setInstance(info);
       setDraftName(info.name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load MCP instance');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -40,12 +43,12 @@ export function useMcpInstance() {
       setDraftName(info.name);
       return info;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save MCP instance');
+      setError(localizeApiError(err, t, 'common.errors.save', 'common.errors.codes'));
       throw err;
     } finally {
       setSaving(false);
     }
-  }, [draftName]);
+  }, [draftName, t]);
 
   return {
     instance,

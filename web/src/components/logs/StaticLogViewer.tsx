@@ -6,7 +6,7 @@ import { parseAnsiLine } from '@/lib/ansi';
 import { detectLevel, levelColors } from '@/lib/log-utils';
 import { useLanguage } from '@/i18n/context';
 import {
-  CONSOLE_LABELS,
+  CONSOLE_LABEL_KEYS,
   DEFAULT_CONSOLE_FILTER_STATE,
   type ConsoleFilterState,
   type ConsoleLogLevelFilter,
@@ -134,7 +134,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
                 searchQuery: e.target.value,
               }))
             }
-            placeholder={CONSOLE_LABELS.searchPlaceholder}
+            placeholder={t(CONSOLE_LABEL_KEYS.searchPlaceholder)}
             className={cn(
               'flex-1 bg-transparent text-xs font-mono text-foreground',
               'placeholder:text-muted-foreground focus:outline-none',
@@ -142,7 +142,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
           />
           <button
             type="button"
-            title={CONSOLE_LABELS.searchMode[filters.searchMode]}
+            title={t(CONSOLE_LABEL_KEYS.searchMode[filters.searchMode])}
             onClick={() =>
               setFilters((current) => ({
                 ...current,
@@ -169,9 +169,9 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
             }
             className="bg-transparent text-xs font-mono text-muted-foreground focus:outline-none border-none cursor-pointer hover:text-foreground appearance-none pr-2"
           >
-            {Object.entries(CONSOLE_LABELS.logLevel).map(([value, label]) => (
+            {Object.entries(CONSOLE_LABEL_KEYS.logLevel).map(([value, labelKey]) => (
               <option key={value} value={value} className="bg-bg-panel text-foreground">
-                {label}
+                {t(labelKey)}
               </option>
             ))}
           </select>
@@ -187,11 +187,11 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
                   <span className="text-foreground font-medium">
                     {filteredEntries.length.toLocaleString()}
                   </span>{' '}
-                  / {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                  / {entries.length.toLocaleString()} {t(CONSOLE_LABEL_KEYS.lines)}
                 </>
               ) : (
                 <>
-                  {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                  {entries.length.toLocaleString()} {t(CONSOLE_LABEL_KEYS.lines)}
                 </>
               )}
             </span>

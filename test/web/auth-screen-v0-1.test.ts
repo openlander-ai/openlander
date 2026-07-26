@@ -82,8 +82,9 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
   });
 
   it('uses errorGeneric fallbacks instead of button labels', () => {
-    expect(source).toContain("t('login.errorGeneric')");
-    expect(source).toContain("t('setup.password.errorGeneric')");
+    expect(source).toContain('localizeApiError');
+    expect(source).toContain("'login.errorGeneric'");
+    expect(source).toContain("'setup.password.errorGeneric'");
     // Ensure we did not regress to the PR #200 shape that surfaced
     // button labels as error text.
     expect(source).not.toMatch(/setError\([^)]*t\('login\.signIn'\)/);

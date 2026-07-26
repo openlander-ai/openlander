@@ -7,11 +7,18 @@ import type {
   DeliveryFeedbackSourceRow,
   DeliveryGateRow,
   DeliveryReceiptRow,
+  DeliveryAgentRunEventRow,
+  DeliveryAgentRunRow,
+  DeliveryRunCheckRow,
   DeliveryRow,
   DeliveryWorkItemRow,
   DeployLogTableRow,
   EnvironmentTableRow,
   ProjectDeliverySettingsRow,
+  ProjectEnvironmentRow,
+  ReleaseArtifactRow,
+  ReleasePromotionRow,
+  ReleaseRow,
   ServiceTableRow,
 } from '../db/schema.drizzle.js';
 
@@ -51,6 +58,16 @@ export interface DeliveryDetail {
   receipt: DeliveryReceiptRow | null;
 }
 
+export interface DeliveryExecutionView {
+  agent_runs: DeliveryAgentRunRow[];
+  run_events: DeliveryAgentRunEventRow[];
+  run_checks: DeliveryRunCheckRow[];
+  project_environments: ProjectEnvironmentRow[];
+  releases: ReleaseRow[];
+  release_artifacts: ReleaseArtifactRow[];
+  release_promotions: ReleasePromotionRow[];
+}
+
 export interface DeliveryReadinessCheck {
   key:
     | 'delivery_approved'
@@ -65,6 +82,8 @@ export interface DeliveryReadinessCheck {
     | 'page_limit';
   passed: boolean;
   message: string;
+  /** Values used by locale-aware clients while `message` preserves API compatibility. */
+  params?: Record<string, number>;
 }
 
 export interface DeliveryReadiness {

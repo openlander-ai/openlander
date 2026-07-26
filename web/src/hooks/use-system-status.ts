@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { getServerStatus, getSetupStatus, type ServerStatus, type SetupStatus } from '../lib/api';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const POLL_MS = 10_000;
 
@@ -13,6 +15,7 @@ export interface UseSystemStatusReturn {
 }
 
 export function useSystemStatus(): UseSystemStatusReturn {
+  const { t } = useLanguage();
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,11 +28,11 @@ export function useSystemStatus(): UseSystemStatusReturn {
       setSetupStatus(setup);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch system status');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   usePollingTask(fetchStatus, { intervalMs: POLL_MS });
 

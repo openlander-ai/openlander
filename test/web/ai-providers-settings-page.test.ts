@@ -19,7 +19,7 @@ describe('AI Providers settings page', () => {
 
   it('mounts AI Providers under the Settings sidebar section', () => {
     expect(sidebarSource).toContain("id: 'ai-providers'");
-    expect(sidebarSource).toContain("label: 'AI Providers'");
+    expect(sidebarSource).toContain("labelKey: 'sidebar.items.aiProviders'");
     expect(sidebarSource).toContain("to: '/settings/ai-providers'");
     expect(appSource).toContain('path="/settings/ai-providers"');
     expect(appSource).toContain('<AiProvidersSettings />');
@@ -38,7 +38,7 @@ describe('AI Providers settings page', () => {
     expect(pageSource).toContain("t('aiProviders.policyTitle')");
     expect(pageSource).toContain('t(`aiProviders.scope.${key}.body`)');
     expect(enSource).toContain("title: 'Project AI Ops'");
-    expect(koSource).toContain("title: 'Project AI Ops'");
+    expect(koSource).toContain("title: '프로젝트 AI Ops'");
     expect(backendRouteSource).toContain('ai_ops_enabled_by_provider: false');
     expect(backendRouteSource).not.toContain('setAiOpsProjectPolicy');
   });

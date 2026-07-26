@@ -6,6 +6,7 @@ import { startTraefik, completeSetup, connectGithub, disconnectGithub } from '@/
 import { Loader2, Check } from 'lucide-react';
 import { useCopy } from '@/hooks/use-copy';
 import { useGithubDeviceFlow } from '@/hooks/use-github-device-flow';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { InfraStep } from './InfraStep';
 import { GithubStep } from './GithubStep';
 import { McpGuideStep } from './McpGuideStep';
@@ -126,8 +127,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       await refetch();
       setGithubToken('');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to connect GitHub';
-      setGithubError(message);
+      setGithubError(localizeApiError(err, t, 'setup.github.connectFailed', 'common.errors.codes'));
     } finally {
       setGithubConnecting(false);
     }
@@ -142,8 +142,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       setGithubToken('');
       await refetch();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
-      setGithubError(message);
+      setGithubError(
+        localizeApiError(err, t, 'setup.github.disconnectFailed', 'common.errors.codes'),
+      );
     } finally {
       setGithubDisconnecting(false);
     }

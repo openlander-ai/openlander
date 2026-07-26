@@ -107,6 +107,7 @@ describe('EngagementService portfolio rollups', () => {
         {
           id: 'gate-required',
           delivery_id: 'atlas-release',
+          gate_key: 'qa',
           label: 'QA',
           required: true,
           status: 'failed' as const,
@@ -116,6 +117,7 @@ describe('EngagementService portfolio rollups', () => {
         {
           id: 'gate-warning',
           delivery_id: 'atlas-review',
+          gate_key: 'data',
           label: 'Data',
           required: false,
           status: 'warning' as const,
@@ -125,6 +127,7 @@ describe('EngagementService portfolio rollups', () => {
         {
           id: 'gate-accepted',
           delivery_id: 'northwind-release',
+          gate_key: 'data',
           label: 'Data',
           required: false,
           status: 'warning' as const,
@@ -186,6 +189,166 @@ describe('EngagementService portfolio rollups', () => {
     expect(getEngagementPortfolioRows).toHaveBeenCalledWith([
       'engagement-atlas',
       'engagement-northwind',
+    ]);
+  });
+
+  it('returns locale-neutral blocker and activity metadata without rewriting source text', async () => {
+    const row = engagement('engagement-atlas', 'Atlas Synthetic');
+    const project = membership(row.id, 'atlas-web');
+    const portfolio = {
+      memberships: [project],
+      serviceRows: [
+        {
+          project_id: project.project_id,
+          kind: 'git',
+          status: 'error' as const,
+          runtime_role: 'application' as const,
+          archived_at: null,
+        },
+      ],
+      deliveryRows: [
+        {
+          id: 'delivery-review',
+          project_id: project.project_id,
+          title: '고객 입력 납품 제목',
+          delivery_type: 'artifact_delivery' as const,
+          maturity: 'customer_review' as const,
+          status: 'revision_requested' as const,
+          updated_at: NOW,
+        },
+      ],
+      gateRows: [
+        {
+          id: 'gate-required',
+          delivery_id: 'delivery-review',
+          gate_key: 'custom-required',
+          label: '고객 입력 품질 기준',
+          required: true,
+          status: 'failed' as const,
+          summary: '고객 입력 실패 상세',
+          warning_accepted: false,
+        },
+        {
+          id: 'gate-warning',
+          delivery_id: 'delivery-review',
+          gate_key: 'custom-warning',
+          label: '고객 입력 경고 기준',
+          required: false,
+          status: 'warning' as const,
+          summary: null,
+          warning_accepted: false,
+        },
+      ],
+      workItemRows: [
+        {
+          id: 'work-confirmed',
+          delivery_id: 'delivery-review',
+          kind: 'question' as const,
+          title: '고객 입력 질문',
+          detail: '고객 입력 질문 상세',
+          status: 'confirmed' as const,
+        },
+      ],
+      activityRows: [],
+    };
+    const service = new EngagementService({
+      requireEngagement: vi.fn(async () => row),
+      getEngagementPortfolioRows: vi.fn(async () => portfolio),
+      listEngagementRecentActivity: vi.fn(async () => [
+        {
+          id: 'activity-engagement-created',
+          event_type: 'engagement:created',
+          activity_type: 'engagement',
+          severity: 'info',
+          project_id: `engagement:${row.id}`,
+          correlation_id: row.id,
+          title: 'Legacy English fallback',
+          description: 'Legacy English description.',
+          status: 'active',
+          metadata: JSON.stringify({
+            actor: 'admin',
+            engagement_title: '고객 입력 과제 제목',
+          }),
+          created_at: NOW,
+        },
+        {
+          id: 'activity-delivery-updated',
+          event_type: 'delivery.updated',
+          activity_type: 'delivery',
+          severity: 'info',
+          project_id: project.project_id,
+          correlation_id: 'delivery-review',
+          title: 'Delivery updated',
+          description: 'Updated Delivery metadata.',
+          status: 'completed',
+          metadata: JSON.stringify({ delivery_id: 'delivery-review' }),
+          created_at: NOW,
+        },
+      ]),
+    } as unknown as Database);
+
+    const detail = await service.get(row.id);
+
+    expect(detail.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'project_error',
+          metadata: { runtime_status: 'error', error_service_count: 1 },
+        }),
+        expect.objectContaining({
+          kind: 'revision_requested',
+          delivery_title: '고객 입력 납품 제목',
+          metadata: { delivery_status: 'revision_requested' },
+        }),
+        expect.objectContaining({
+          kind: 'required_gate_failed',
+          title: '고객 입력 품질 기준',
+          detail: '고객 입력 실패 상세',
+          metadata: expect.objectContaining({
+            gate_key: 'custom-required',
+            gate_label: '고객 입력 품질 기준',
+            gate_summary: '고객 입력 실패 상세',
+            gate_required: true,
+            gate_status: 'failed',
+          }),
+        }),
+        expect.objectContaining({
+          kind: 'warning_unacknowledged',
+          metadata: expect.objectContaining({ gate_summary: null, gate_status: 'warning' }),
+        }),
+        expect.objectContaining({
+          kind: 'work_item_unresolved',
+          title: '고객 입력 질문',
+          detail: '고객 입력 질문 상세',
+          metadata: expect.objectContaining({
+            work_item_kind: 'question',
+            work_item_status: 'confirmed',
+            work_item_title: '고객 입력 질문',
+            work_item_detail: '고객 입력 질문 상세',
+          }),
+        }),
+      ]),
+    );
+    expect(detail.recent_activity).toEqual([
+      expect.objectContaining({
+        event_type: 'engagement:created',
+        title: 'Legacy English fallback',
+        description: 'Legacy English description.',
+        metadata: expect.objectContaining({
+          schema_version: 1,
+          engagement_id: row.id,
+          engagement_title: '고객 입력 과제 제목',
+        }),
+      }),
+      expect.objectContaining({
+        event_type: 'delivery.updated',
+        metadata: expect.objectContaining({
+          schema_version: 1,
+          engagement_id: row.id,
+          project_id: project.project_id,
+          delivery_id: 'delivery-review',
+        }),
+      }),
     ]);
   });
 

@@ -56,7 +56,20 @@ import type { OpsAgent } from './_ai-ops/ops-agent.js';
 import { GitCredentialManager, setActiveGitCredentialManager } from './git-credentials/manager.js';
 import { ArtifactStore } from './delivery/artifact-store.js';
 import { DeliveryService } from './delivery/delivery-service.js';
+import { DeliveryAgentRunService } from './delivery/agent-run-service.js';
+import { DeliveryQualityGateService } from './delivery/quality-gate-service.js';
+import { DeliveryCompletionService } from './delivery/completion-service.js';
+import { EvidenceUploadService } from './delivery/evidence-upload-service.js';
 import { EngagementService } from './engagement/engagement-service.js';
+import { ProjectManifestService } from './project/project-manifest-service.js';
+import { ReleaseService } from './release/release-service.js';
+import { ReleasePromotionService } from './release/promotion-service.js';
+import { WeeklyReportService } from './reporting/weekly-report-service.js';
+import { ensureMcpInstanceId } from './mcp/instance-identity.js';
+import {
+  createApplicationOperationRegistry,
+  type ApplicationOperationRegistry,
+} from './operations/index.js';
 
 const log = createModuleLogger('app');
 
@@ -206,7 +219,16 @@ export interface AppContext {
   planEngine: PlanEngine;
   artifactStore: ArtifactStore;
   deliveryService: DeliveryService;
+  deliveryAgentRunService: DeliveryAgentRunService;
+  deliveryQualityGateService: DeliveryQualityGateService;
+  deliveryCompletionService: DeliveryCompletionService;
+  evidenceUploadService: EvidenceUploadService;
+  projectManifestService: ProjectManifestService;
+  releaseService: ReleaseService;
+  releasePromotionService: ReleasePromotionService;
+  weeklyReportService: WeeklyReportService;
   engagementService: EngagementService;
+  operations: ApplicationOperationRegistry;
   // v1.0: Recovery coordinator
   coordinator: RecoveryCoordinator;
   rollbackWatcher: RollbackWatcher;
@@ -308,11 +330,34 @@ export async function createAppContext(
   const db = await Database.connect(databaseUrl);
   const artifactStore = new ArtifactStore();
   const deliveryService = new DeliveryService(db, artifactStore);
+  const deliveryAgentRunService = new DeliveryAgentRunService(db, deliveryService);
   const engagementService = new EngagementService(db);
+  const projectManifestService = new ProjectManifestService(db, deliveryService);
+  const operations = createApplicationOperationRegistry();
   const gitCredentials = new GitCredentialManager(db);
   setActiveGitCredentialManager(gitCredentials);
   await migrateDefaultResourceProfile(db);
-  const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
+  const instanceId = ensureMcpInstanceId(config);
+  const docker = new Docker(
+    config.docker.socketPath || undefined,
+    config.docker.networkName,
+    instanceId,
+  );
+  const deliveryQualityGateService = new DeliveryQualityGateService(
+    db,
+    deliveryService,
+    deliveryAgentRunService,
+    docker,
+  );
+  const releaseService = new ReleaseService(db, docker);
+  const releasePromotionService = new ReleasePromotionService(db, docker, config);
+  const deliveryCompletionService = new DeliveryCompletionService(
+    db,
+    deliveryService,
+    deliveryAgentRunService,
+  );
+  const evidenceUploadService = new EvidenceUploadService(db, deliveryService);
+  const weeklyReportService = new WeeklyReportService(db, engagementService, artifactStore);
   const runtime: RuntimeBackend = docker;
   const serverContext = createLocalServerContext(docker);
 
@@ -322,6 +367,7 @@ export async function createAppContext(
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env, routeProvider);
   const traefik = new TraefikManager(runtime, config.server.port, {
     networkName: config.docker.networkName,
+    instanceId,
   });
 
   const llmCircuitBreaker = new LlmCircuitBreaker();
@@ -550,7 +596,16 @@ export async function createAppContext(
     planEngine,
     artifactStore,
     deliveryService,
+    deliveryAgentRunService,
+    deliveryQualityGateService,
+    deliveryCompletionService,
+    evidenceUploadService,
+    projectManifestService,
+    releaseService,
+    releasePromotionService,
+    weeklyReportService,
     engagementService,
+    operations,
     coordinator,
     rollbackWatcher,
     llmVerified: false,

@@ -1,20 +1,14 @@
 # Translations
 
-`en.ts` and `ko.ts` are the source of truth for every user-facing
-string in the dashboard. Before adding or editing a key, read the
-copy policy:
-
-→ [`docs/i18n-policy.md`](../../../docs/i18n-policy.md)
+`en.ts` and `ko.ts` are the source of truth for user-facing dashboard copy.
+Read [`docs/i18n-policy.md`](../../../docs/i18n-policy.md) before changing it.
 
 ## Quick rule
 
-**Menu/button labels stay in English in both files. Descriptions
-translate.**
+Localize the user's task and status, not every English token. Keep established
+developer terms when Korean wording would be less precise, along with proper
+names, protocols, code, logs, and machine identifiers.
 
-Same key tree in both files. Chrome keys (buttons, nav, tabs, table
-headers, short verbs) carry the same English string on both sides.
-Content keys (subtitles, descriptions, errors with context, paragraph
-help) get locale-native Korean in `ko.ts`.
-
-See the _Mechanical convention_ table in the policy doc for how to
-default the register from the key name.
+The two locale files must keep the same key tree and interpolation
+placeholders. Components should use `t()` instead of embedding user-facing
+fallback text.

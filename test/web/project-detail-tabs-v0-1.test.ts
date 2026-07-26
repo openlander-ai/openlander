@@ -71,13 +71,11 @@ describe('Project detail v0.1 tabs', () => {
 
     expect(enTabs).not.toMatch(/mcp:/);
     expect(koTabs).not.toMatch(/mcp:/);
-    // Per docs/i18n-policy.md, tab labels are Chrome — same English
-    // string in both locales (no Korean translation).
     expect(enTabs).toContain("services: 'Resources'");
     expect(enTabs).toContain("deliveries: 'Deliveries'");
     expect(enTabs).toContain("settings: 'Settings'");
-    expect(koTabs).toContain("services: 'Resources'");
-    expect(koTabs).toContain("deliveries: 'Deliveries'");
-    expect(koTabs).toContain("settings: 'Settings'");
+    expect(koTabs).toContain("services: '리소스'");
+    expect(koTabs).toContain("deliveries: '납품 건'");
+    expect(koTabs).toContain("settings: '설정'");
   });
 });

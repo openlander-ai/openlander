@@ -44,8 +44,10 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { cn, copyToClipboard } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cancelDeployment } from '@/lib/api';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { LOG_SCRIPT_BASE, LOG_SCRIPT_FAIL, type LogEntry } from '@/lib/logScripts';
 import { LogPayload } from '@/lib/logAnsi';
 import { buildLogRows, derivePhaseStatus, RENDER_CAP, ROW_LINE_HEIGHT } from '@/lib/logRows';
@@ -125,12 +127,6 @@ export interface LogViewerProps {
   confirmKillAction?: string;
 }
 
-const DEFAULT_KILL_CONFIRM_COPY = {
-  title: 'Stop this deploy?',
-  description:
-    'The build will be cancelled and no new container will be started. You can deploy again once the issue is resolved.',
-} as const;
-
 export function LogViewer({
   variant = 'deploy',
   deploymentId = null,
@@ -147,10 +143,16 @@ export function LogViewer({
   headerTitle,
   headerSubtitle,
   onDownload,
-  confirmKillCopy = DEFAULT_KILL_CONFIRM_COPY,
-  confirmKillAction = 'Stop deploy',
+  confirmKillCopy,
+  confirmKillAction,
 }: LogViewerProps) {
+  const { t } = useLanguage();
   const isRuntime = variant === 'runtime';
+  const resolvedKillConfirmCopy = confirmKillCopy ?? {
+    title: t('deployShell.viewer.stopTitle'),
+    description: t('deployShell.viewer.stopDescription'),
+  };
+  const resolvedKillAction = confirmKillAction ?? t('deployShell.viewer.stopAction');
   const baseScript = useMemo<LogEntry[]>(() => {
     if (scriptOverride) return scriptOverride;
     return outcome === 'fail' ? LOG_SCRIPT_FAIL : LOG_SCRIPT_BASE;
@@ -339,12 +341,17 @@ export function LogViewer({
       // CANCELLED). Resetting here would briefly re-enable the button
       // between the POST 200 and the SSE terminal frame.
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to cancel deployment';
+      const message = localizeApiError(
+        err,
+        t,
+        'deployShell.viewer.cancelFailed',
+        'common.errors.codes',
+      );
       setCancelError(message);
       setIsCancelling(false);
       console.warn('[LogViewer] cancelDeployment failed:', message);
     }
-  }, [deploymentId, isCancelling]);
+  }, [deploymentId, isCancelling, t]);
 
   return (
     <div className="ol-log-pane relative flex h-full flex-col">
@@ -355,7 +362,7 @@ export function LogViewer({
             type="button"
             onClick={onClose}
             className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--log-header-muted)] transition-colors hover:bg-[color:var(--log-header-border)] hover:text-[color:var(--log-header-text)]"
-            aria-label="Back"
+            aria-label={t('deployShell.viewer.back')}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -364,7 +371,9 @@ export function LogViewer({
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
             {headerTitle ?? (
               <span className="font-medium text-[color:var(--log-header-text)]">
-                {isRuntime ? 'Runtime container logs' : 'Deploy log'}
+                {isRuntime
+                  ? t('deployShell.viewer.runtimeLogs')
+                  : t('deployShell.viewer.deployLog')}
               </span>
             )}
             <HeaderPill connState={connState} buildOutcome={buildOutcome} liveDur={liveDur} />
@@ -391,18 +400,18 @@ export function LogViewer({
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <HeaderActionButton
             icon={<Copy className="h-3.5 w-3.5" />}
-            title="Copy log to clipboard"
+            title={t('deployShell.viewer.copyTitle')}
             onClick={handleCopyLog}
           >
-            {logCopied ? 'Copied' : 'Copy'}
+            {logCopied ? t('deployShell.viewer.copied') : t('deployShell.viewer.copy')}
           </HeaderActionButton>
           {onDownload && (
             <HeaderActionButton
               icon={<Download className="h-3.5 w-3.5" />}
-              title="Download full log"
+              title={t('deployShell.viewer.downloadTitle')}
               onClick={onDownload}
             >
-              Download
+              {t('deployShell.viewer.download')}
             </HeaderActionButton>
           )}
           {(connState === 'LIVE' ||
@@ -418,7 +427,9 @@ export function LogViewer({
                 className="inline-flex items-center gap-1 rounded-md border border-[color:var(--log-error)] bg-[color-mix(in_oklch,var(--log-error)_20%,var(--log-header-bg))] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--log-error)] transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 <StopCircle className="h-3.5 w-3.5" />
-                {isCancelling ? 'Cancelling…' : 'Kill build'}
+                {isCancelling
+                  ? t('deployShell.viewer.cancelling')
+                  : t('deployShell.viewer.killBuild')}
               </button>
             )}
         </div>
@@ -433,8 +444,8 @@ export function LogViewer({
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>
             {connState === 'RECONNECTING'
-              ? 'Connection lost — reconnecting…'
-              : 'Reconnected — backfilling missed lines. Earlier lines may not be captured.'}
+              ? t('deployShell.viewer.reconnecting')
+              : t('deployShell.viewer.backfilled')}
           </span>
         </div>
       )}
@@ -446,7 +457,9 @@ export function LogViewer({
         tabIndex={0}
         role="log"
         aria-live="polite"
-        aria-label={isRuntime ? 'Runtime log stream' : 'Build log stream'}
+        aria-label={
+          isRuntime ? t('deployShell.viewer.runtimeAria') : t('deployShell.viewer.buildAria')
+        }
         className="relative flex-1 overflow-auto py-2"
       >
         <div
@@ -475,12 +488,13 @@ export function LogViewer({
                   <div className="ol-older-slabs">
                     <Info className="h-3.5 w-3.5 shrink-0" />
                     <span>
-                      Showing the most recent <b>{RENDER_CAP.toLocaleString()}</b> of{' '}
-                      <b>{totalLines.toLocaleString()}</b> lines.{' '}
-                      <button type="button" className="underline">
-                        Download full log
-                      </button>{' '}
-                      for the complete record.
+                      {t('deployShell.viewer.truncated', {
+                        shown: RENDER_CAP.toLocaleString(),
+                        total: totalLines.toLocaleString(),
+                      })}{' '}
+                      <button type="button" className="underline" onClick={onDownload}>
+                        {t('deployShell.viewer.completeRecord')}
+                      </button>
                     </span>
                   </div>
                 )}
@@ -506,7 +520,7 @@ export function LogViewer({
             }}
           >
             <ChevronDown className="h-3.5 w-3.5" />
-            Jump to latest
+            {t('deployShell.viewer.jumpLatest')}
           </button>
         )}
       </div>
@@ -526,9 +540,9 @@ export function LogViewer({
       <ConfirmDialog
         open={killConfirmOpen}
         onOpenChange={setKillConfirmOpen}
-        title={confirmKillCopy.title}
-        description={confirmKillCopy.description}
-        confirmLabel={confirmKillAction}
+        title={resolvedKillConfirmCopy.title}
+        description={resolvedKillConfirmCopy.description}
+        confirmLabel={resolvedKillAction}
         variant="destructive"
         onConfirm={() => void performCancel()}
       />
@@ -548,13 +562,14 @@ function PhaseHeaderInline({
   phase: PhaseId;
   status: 'active' | 'success' | 'failed' | '';
 }) {
+  const { t } = useLanguage();
   const labels: Record<PhaseId, string> = {
-    clone: 'Cloning repository',
-    image_pull: 'Pulling base images',
-    build: 'Building images',
-    container_create: 'Creating containers',
-    container_start: 'Starting containers',
-    healthcheck_wait: 'Waiting for health',
+    clone: t('deployShell.phase.cloning'),
+    image_pull: t('deployShell.phase.pulling'),
+    build: t('deployShell.phase.building'),
+    container_create: t('deployShell.phase.creating'),
+    container_start: t('deployShell.phase.starting'),
+    healthcheck_wait: t('deployShell.phase.waitingHealth'),
   };
   return <div className={cn('ol-phase-header', status)}>{labels[phase]}</div>;
 }

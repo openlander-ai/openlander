@@ -4,7 +4,7 @@
 // `/projects/:p/services/:s` shape since rc.1, so palette deep-links
 // keep working without per-action rewires.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
@@ -100,7 +100,7 @@ export function CommandPalette() {
     const navItems: CommandItem[] = [
       {
         id: 'nav-dashboard',
-        label: 'Go to Dashboard',
+        label: t('command.dashboard'),
         icon: <LayoutDashboard className="h-4 w-4" />,
         action: () => {
           navigate('/projects');
@@ -115,7 +115,7 @@ export function CommandPalette() {
       // can still reach them via Cmd+K (Gemini CCG round-1 on #244).
       {
         id: 'nav-web-server',
-        label: 'Web Server',
+        label: t('command.webServer'),
         icon: <Server className="h-4 w-4" />,
         action: () => {
           navigate('/settings/web-server');
@@ -131,7 +131,7 @@ export function CommandPalette() {
       },
       {
         id: 'nav-git-providers',
-        label: 'Git Providers',
+        label: t('command.gitProviders'),
         icon: <Code2 className="h-4 w-4" />,
         action: () => {
           navigate('/settings/git-providers');
@@ -150,10 +150,19 @@ export function CommandPalette() {
        not dropped DB columns. */
     /* eslint-disable openlander-internal/no-dropped-columns */
     for (const project of projects) {
+      const statusLabels: Record<string, string> = {
+        running: t('services.status.running'),
+        stopped: t('services.status.stopped'),
+        error: t('services.status.error'),
+      };
+      const displayStatus = statusLabels[project.status] ?? project.status;
       projectItems.push({
         id: `go-${project.id}`,
         label: project.name,
-        description: `${'Go to'} ${project.name} (${project.status})`,
+        description: t('command.goToProject', {
+          name: project.name,
+          status: displayStatus,
+        }),
         icon: <FolderOpen className="h-4 w-4" />,
         action: () => {
           navigate(`/projects/${project.id}`);
@@ -165,8 +174,8 @@ export function CommandPalette() {
       if (project.status === 'running') {
         projectItems.push({
           id: `logs-${project.id}`,
-          label: `Activity: ${project.name}`,
-          description: 'Project activity timeline (deploys, config changes, agent calls)',
+          label: t('command.projectActivity', { name: project.name }),
+          description: t('command.projectActivityDescription'),
           icon: <Terminal className="h-4 w-4" />,
           action: () => {
             // V2 takeover: ProjectViewV2 has Services / Activity tabs. The pre-V2
@@ -189,7 +198,7 @@ export function CommandPalette() {
         // command available but reroute so the "+ New Project" button is
         // immediately visible to the user.
         id: 'new-project',
-        label: 'New Project',
+        label: t('command.newProject'),
         description: t('command.deployNewRepo'),
         icon: <Plus className="h-4 w-4" />,
         action: () => {
@@ -228,21 +237,33 @@ export function CommandPalette() {
       if (recentItems.length > 0) {
         resultGroups.push({
           id: 'recent',
-          heading: 'Recent',
+          heading: t('command.group.recent'),
           items: recentItems,
         });
         flatFilteredList.push(...recentItems);
       }
 
-      resultGroups.push({ id: 'navigation', heading: 'Navigation', items: navItems });
+      resultGroups.push({
+        id: 'navigation',
+        heading: t('command.group.navigation'),
+        items: navItems,
+      });
       flatFilteredList.push(...navItems);
 
       if (projectItems.length > 0) {
-        resultGroups.push({ id: 'projects', heading: 'Projects', items: projectItems });
+        resultGroups.push({
+          id: 'projects',
+          heading: t('command.group.projects'),
+          items: projectItems,
+        });
         flatFilteredList.push(...projectItems);
       }
 
-      resultGroups.push({ id: 'system', heading: 'System', items: systemItems });
+      resultGroups.push({
+        id: 'system',
+        heading: t('command.group.system'),
+        items: systemItems,
+      });
       flatFilteredList.push(...systemItems);
     } else {
       // When querying, just group the filtered items
@@ -251,15 +272,27 @@ export function CommandPalette() {
       const filteredSystem = systemItems.filter((item) => filteredItems.includes(item));
 
       if (filteredNav.length > 0) {
-        resultGroups.push({ id: 'navigation', heading: 'Navigation', items: filteredNav });
+        resultGroups.push({
+          id: 'navigation',
+          heading: t('command.group.navigation'),
+          items: filteredNav,
+        });
         flatFilteredList.push(...filteredNav);
       }
       if (filteredProjects.length > 0) {
-        resultGroups.push({ id: 'projects', heading: 'Projects', items: filteredProjects });
+        resultGroups.push({
+          id: 'projects',
+          heading: t('command.group.projects'),
+          items: filteredProjects,
+        });
         flatFilteredList.push(...filteredProjects);
       }
       if (filteredSystem.length > 0) {
-        resultGroups.push({ id: 'system', heading: 'System', items: filteredSystem });
+        resultGroups.push({
+          id: 'system',
+          heading: t('command.group.system'),
+          items: filteredSystem,
+        });
         flatFilteredList.push(...filteredSystem);
       }
     }
@@ -390,13 +423,15 @@ export function CommandPalette() {
           <div className="flex items-center gap-4 px-4 py-2 border-t border-[hsl(var(--border))] text-xs font-mono text-muted-foreground bg-bg-panel">
             <span className="flex items-center gap-1">
               <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">↑↓</kbd>{' '}
-              navigate
+              {t('command.keyboard.navigate')}
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">↵</kbd> select
+              <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">↵</kbd>{' '}
+              {t('command.keyboard.select')}
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">esc</kbd> close
+              <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">esc</kbd>{' '}
+              {t('command.keyboard.close')}
             </span>
           </div>
         </div>

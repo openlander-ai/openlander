@@ -9,6 +9,7 @@
  * project owns the deploy; per-service view omits it.
  */
 import { Eye, MoreHorizontal } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import type { DeployLogSummary } from '@/types/index';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ export interface DeployRowProps {
 }
 
 export function DeployRow({ d, onView, projectName }: DeployRowProps) {
+  const { t } = useLanguage();
   const durationSec = d.durationMs != null ? Math.round(d.durationMs / 1000) : null;
   const durationLabel =
     durationSec != null
@@ -83,11 +85,11 @@ export function DeployRow({ d, onView, projectName }: DeployRowProps) {
           className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
         >
           <Eye className="h-3 w-3" />
-          View
+          {t('deployShell.deployRow.view')}
         </button>
         <button
           type="button"
-          aria-label="More actions"
+          aria-label={t('deployShell.deployRow.moreActions')}
           className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
@@ -98,13 +100,19 @@ export function DeployRow({ d, onView, projectName }: DeployRowProps) {
 }
 
 export function TriggerChip({ trigger }: { trigger: DeployLogSummary['trigger'] }) {
+  const { t } = useLanguage();
   const tone =
     trigger === 'api'
       ? 'text-[color:var(--ol-actor-mcp)] bg-[color-mix(in_oklch,var(--ol-actor-mcp)_14%,transparent)]'
       : trigger === 'webhook'
         ? 'text-[color:var(--ol-actor-webhook)] bg-[color-mix(in_oklch,var(--ol-actor-webhook)_14%,transparent)]'
         : 'text-[color:var(--ol-fg-muted)] bg-[color:var(--ol-panel-2)]';
-  const label = trigger === 'api' ? 'mcp/api' : trigger === 'webhook' ? 'git push' : 'manual';
+  const label =
+    trigger === 'api'
+      ? 'mcp/api'
+      : trigger === 'webhook'
+        ? t('deployShell.deployRow.triggerGit')
+        : t('deployShell.deployRow.triggerManual');
   return (
     <span
       className={cn(
@@ -122,31 +130,32 @@ export function StatusPill({
 }: {
   status: DeployLogSummary['status'] | 'running' | 'building';
 }) {
+  const { t } = useLanguage();
   type StatusKey = typeof status;
   const map: Partial<Record<StatusKey, { label: string; tone: string }>> = {
     running: {
-      label: 'Running',
+      label: t('deployShell.deployRow.status.running'),
       tone: 'bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]',
     },
     building: {
-      label: 'Building',
+      label: t('deployShell.deployRow.status.building'),
       tone: 'bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]',
     },
     success: {
-      label: 'Done',
+      label: t('deployShell.deployRow.status.success'),
       tone: 'bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]',
     },
     failed: {
-      label: 'Failed',
+      label: t('deployShell.deployRow.status.failed'),
       tone: 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]',
     },
     cancelled: {
-      label: 'Cancelled',
+      label: t('deployShell.deployRow.status.cancelled'),
       tone: 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
     },
   };
   const v = map[status] ?? {
-    label: status,
+    label: t('deployShell.deployRow.status.unknown'),
     tone: 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
   };
   return (

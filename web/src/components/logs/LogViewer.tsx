@@ -7,7 +7,7 @@ import { Search, ArrowDown, Trash2, Radio, RefreshCw } from 'lucide-react';
 import { normalizeLogText, parseAnsiLine } from '@/lib/ansi';
 import { detectLevel, levelColors } from '@/lib/log-utils';
 import {
-  CONSOLE_LABELS,
+  CONSOLE_LABEL_KEYS,
   DEFAULT_CONSOLE_FILTER_STATE,
   getConsoleSurfaceState,
   type ConsoleFilterState,
@@ -188,7 +188,7 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
                 searchQuery: e.target.value,
               }))
             }
-            placeholder={CONSOLE_LABELS.searchPlaceholder}
+            placeholder={t(CONSOLE_LABEL_KEYS.searchPlaceholder)}
             className={cn(
               'flex-1 bg-transparent text-xs font-mono text-foreground',
               'placeholder:text-muted-foreground focus:outline-none',
@@ -196,7 +196,7 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
           />
           <button
             type="button"
-            title={CONSOLE_LABELS.searchMode[filters.searchMode]}
+            title={t(CONSOLE_LABEL_KEYS.searchMode[filters.searchMode])}
             onClick={() =>
               setFilters((current) => ({
                 ...current,
@@ -223,9 +223,9 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
             }
             className="bg-transparent text-xs font-mono text-muted-foreground focus:outline-none border-none cursor-pointer hover:text-foreground appearance-none pr-2"
           >
-            {Object.entries(CONSOLE_LABELS.logLevel).map(([value, label]) => (
+            {Object.entries(CONSOLE_LABEL_KEYS.logLevel).map(([value, labelKey]) => (
               <option key={value} value={value} className="bg-bg-panel text-foreground">
-                {label}
+                {t(labelKey)}
               </option>
             ))}
           </select>
@@ -241,24 +241,26 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </span>
-                {CONSOLE_LABELS.live}
+                {t(CONSOLE_LABEL_KEYS.live)}
               </span>
             )}
             {isInitialLoading && !isConnected && (
-              <span className="text-muted-foreground">{CONSOLE_LABELS.connecting}</span>
+              <span className="text-muted-foreground">{t(CONSOLE_LABEL_KEYS.connecting)}</span>
             )}
-            {isDisconnected && <span className="text-warning">{CONSOLE_LABELS.disconnected}</span>}
+            {isDisconnected && (
+              <span className="text-warning">{t(CONSOLE_LABEL_KEYS.disconnected)}</span>
+            )}
             <span className="text-muted-foreground border-l border-[hsl(var(--border))] pl-2">
               {hasActiveFilters ? (
                 <>
                   <span className="text-foreground font-medium">
                     {filteredEntries.length.toLocaleString()}
                   </span>{' '}
-                  / {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                  / {entries.length.toLocaleString()} {t(CONSOLE_LABEL_KEYS.lines)}
                 </>
               ) : (
                 <>
-                  {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                  {entries.length.toLocaleString()} {t(CONSOLE_LABEL_KEYS.lines)}
                 </>
               )}
             </span>
@@ -279,7 +281,7 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
               )}
             >
               <Radio className={cn('h-3.5 w-3.5', isFollowing && 'animate-pulse')} />
-              {isFollowing ? CONSOLE_LABELS.followMode.follow : CONSOLE_LABELS.followMode.paused}
+              {t(CONSOLE_LABEL_KEYS.followMode[isFollowing ? 'follow' : 'paused'])}
             </button>
 
             <button
@@ -288,7 +290,7 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle/50 transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              {CONSOLE_LABELS.clear}
+              {t(CONSOLE_LABEL_KEYS.clear)}
             </button>
           </div>
 
@@ -341,7 +343,7 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
                   : 'text-foreground/80 bg-bg-panel hover:text-foreground',
               )}
             >
-              {isLoadingOlder ? CONSOLE_LABELS.loadingOlder : CONSOLE_LABELS.loadOlder}
+              {t(isLoadingOlder ? CONSOLE_LABEL_KEYS.loadingOlder : CONSOLE_LABEL_KEYS.loadOlder)}
             </button>
           </div>
         )}
@@ -467,8 +469,8 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
             <ArrowDown className={cn('h-4 w-4', unseenCount > 0 && 'animate-bounce')} />
             <span className="text-sm">
               {unseenCount > 0
-                ? `${CONSOLE_LABELS.jumpToLatest} (${unseenCount})`
-                : CONSOLE_LABELS.jumpToLatest}
+                ? `${t(CONSOLE_LABEL_KEYS.jumpToLatest)} (${unseenCount})`
+                : t(CONSOLE_LABEL_KEYS.jumpToLatest)}
             </span>
           </button>
         </div>

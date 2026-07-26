@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import { createOpenLanderProjectCompositeTool } from '../../src/mcp/composite-tools.js';
 import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
+import { reportingOperationToolDefs } from '../../src/tools/defs/reporting-operations.js';
 import type { ToolContext } from '../../src/tools/defs/types.js';
 import type { RequestIdentity } from '../../src/types/identity.js';
 
@@ -70,7 +71,10 @@ function context(identity: RequestIdentity) {
 }
 
 describe('Engagement MCP scope boundary', () => {
-  const tool = createOpenLanderProjectCompositeTool(engagementToolDefs);
+  const tool = createOpenLanderProjectCompositeTool([
+    ...engagementToolDefs,
+    ...reportingOperationToolDefs,
+  ]);
 
   it('allows an organization-scoped token to read Engagement portfolio summaries', async () => {
     const { value, list } = context({
@@ -161,6 +165,31 @@ describe('Engagement MCP scope boundary', () => {
         },
       });
       expect(list).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(scopedIdentities)(
+    'rejects $mcpScopeKind tokens before generating an Engagement-wide report',
+    async (identity) => {
+      const { value } = context(identity);
+      const result = (await tool.execute(
+        {
+          action: 'generate_weekly_report',
+          params: {
+            idempotency_key: 'weekly-1',
+            engagement_id: 'engagement-1',
+            period_start: '2026-07-20',
+            period_end: '2026-07-26',
+          },
+        },
+        value,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'SCOPE_VIOLATION',
+        code: 'SCOPE_VIOLATION',
+        details: { tokenScopeKind: identity.mcpScopeKind, reason: 'target_required' },
+      });
     },
   );
 

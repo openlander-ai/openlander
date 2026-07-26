@@ -27,6 +27,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { fetchProjectTopology } from '../lib/api/topology';
 import { getServices, type ServiceNode } from '../lib/projectTopology';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
@@ -41,6 +43,7 @@ export interface UseProjectTopologyResult {
 }
 
 export function useProjectTopology(projectId: string | null): UseProjectTopologyResult {
+  const { t } = useLanguage();
   const [services, setServices] = useState<ServiceNode[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +58,12 @@ export function useProjectTopology(projectId: string | null): UseProjectTopology
       setServices(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch topology');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
       // Keep last-good data — don't flicker to mock on transient blips.
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   const hasCrashed = useMemo(
     () => (services ?? []).some((s) => s.health === 'crashed'),
