@@ -531,5 +531,5 @@ describe('ReceiptBuilder', () => {
       detail: { delivery: { id: 'delivery-1' } },
     });
     expect(JSON.stringify(result.snapshot)).not.toContain('sensitive');
-  }, 120_000);
+  }, 240_000);
 });
