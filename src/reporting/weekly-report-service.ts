@@ -157,6 +157,127 @@ function statusLabel(value: unknown, locale: ReportLocale): string {
   return locale === 'ko' ? (KOREAN_STATUS[raw] ?? raw) : raw;
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function activityMetadata(entry: Record<string, unknown>): Record<string, unknown> {
+  const raw = entry['metadata'];
+  if (typeof raw !== 'string') return recordValue(raw);
+  try {
+    return recordValue(JSON.parse(raw));
+  } catch {
+    return {};
+  }
+}
+
+function descriptionMatch(description: string, pattern: RegExp): string | null {
+  return description.match(pattern)?.[1] ?? null;
+}
+
+function koreanActivitySummary(entry: Record<string, unknown>): string {
+  const eventType = display(entry['event_type']);
+  const description = display(entry['description']).trim();
+  const metadata = activityMetadata(entry);
+  const phase = display(metadata['phase']);
+  const commitSha = display(metadata['commit_sha']);
+  const receiptId = display(metadata['receipt_id']);
+
+  switch (eventType) {
+    case 'engagement:created':
+      return `고객 과제 생성 — ${display(metadata['customer_name'])} 고객의 ${display(metadata['engagement_title'])} 과제를 만들고 초기 프로젝트 ${display(metadata['project_name'])}을 연결했습니다.`;
+    case 'deploy:start':
+      return '배포 시작';
+    case 'deploy:clone':
+      return '소스 코드 가져오기 시작';
+    case 'deploy:build':
+      return '이미지 빌드 시작';
+    case 'deploy:run':
+      return '애플리케이션 실행 시작';
+    case 'deploy:success':
+      return '배포 완료';
+    case 'release.adopted': {
+      const deployIds = Array.isArray(metadata['deploy_ids']) ? metadata['deploy_ids'] : [];
+      const artifactCount = Object.keys(recordValue(metadata['image_digests'])).length;
+      return `기존 배포를 릴리스로 등록 — 배포 ${deployIds.map(display).join(', ')}의 산출물 ${String(artifactCount)}개를 재빌드 없이 기록했습니다.`;
+    }
+    case 'project.manifest_applied': {
+      const count = descriptionMatch(description, /^(\d+) Environment/);
+      return `프로젝트 manifest 적용 — ${display(metadata['manifest_path'])}의 환경 정의${count ? ` ${count}개` : ''}를 적용했습니다.`;
+    }
+    case 'delivery.created':
+      return `납품 건 생성 — ${descriptionMatch(description, /"([^"]+)"/) ?? display(metadata['delivery_id'])}`;
+    case 'delivery.agent_run_started':
+      return `Agent 실행 시작 — commit ${commitSha}에 고정했습니다.`;
+    case 'delivery.artifact_uploaded':
+      return `산출물 업로드 — ${description}`;
+    case 'delivery.gate_recorded': {
+      const [label = display(metadata['gate_key']), rawStatus = display(metadata['status'])] =
+        description.split(':').map((part) => part.trim());
+      return `통과 기준 결과 기록 — ${label}: ${statusLabel(rawStatus, 'ko')}`;
+    }
+    case 'delivery.agent_run_failed':
+      return 'Agent 실행 실패 — 품질 검증을 통과하지 못했습니다.';
+    case 'delivery.agent_run_handoff':
+      return `Agent 실행 인수인계 — 수정한 구현을 ${phase === 'verification' ? '검증 단계' : phase || '다음 단계'}로 넘겼습니다.`;
+    case 'delivery.agent_run_resumed':
+      return 'Agent 실행 재개 — 다른 Agent가 인수인계를 이어받았습니다.';
+    case 'delivery.agent_run_progress':
+      return phase === 'quality_gates_passed'
+        ? 'Agent 실행 진행 — 모든 manifest 품질 검증을 통과했습니다.'
+        : `Agent 실행 진행${phase ? ` — ${statusLabel(phase, 'ko')}` : ''}`;
+    case 'release.created': {
+      const version = descriptionMatch(description, /^(\S+) built once/);
+      const count = descriptionMatch(description, /for (\d+) service artifact/);
+      return `릴리스 생성 — ${version ?? display(metadata['release_id'])}을 한 번 빌드해 서비스 산출물 ${count ?? '1'}개를 만들었습니다.`;
+    }
+    case 'release.promoted': {
+      const [version = display(metadata['release_id']), environment = ''] = description
+        .split('→')
+        .map((part) => part.trim());
+      return `릴리스 환경 승격 — ${version}${environment ? ` → ${environment}` : ''}`;
+    }
+    case 'engagement.weekly_report_generated': {
+      const revision = descriptionMatch(description, /revision (\d+)/);
+      return `주간 보고서 버전 생성${revision ? ` — ${revision}차 보고` : ''}`;
+    }
+    case 'engagement.weekly_report_published': {
+      const revision = descriptionMatch(description, /Revision (\d+)/);
+      return `주간 보고서 발행${revision ? ` — ${revision}차 보고` : ''}`;
+    }
+    case 'delivery.artifact_status_changed': {
+      const [artifact = description, transition = ''] = description
+        .split(':')
+        .map((part) => part.trim());
+      const localizedTransition = transition
+        .split('→')
+        .map((part) => statusLabel(part.trim(), 'ko'))
+        .join(' → ');
+      return `산출물 상태 변경 — ${artifact}${localizedTransition ? `: ${localizedTransition}` : ''}`;
+    }
+    case 'delivery.receipt_previewed': {
+      const pageCount = descriptionMatch(description, /^(\d+) page/);
+      return `납품 확인서 미리보기 생성${pageCount ? ` — ${pageCount}페이지` : ''}`;
+    }
+    case 'delivery.receipt_finalized':
+      return `납품 확인서 확정 — ${receiptId || display(metadata['delivery_id'])}`;
+    case 'delivery.agent_run_completed':
+      return receiptId
+        ? `Agent 실행 완료 — 운영 환경 승격 후 완료 증빙 ${receiptId}을 확정했습니다.`
+        : 'Agent 실행 완료 — 운영 환경 승격 후 완료 증빙을 확정했습니다.';
+    case 'engagement:archived':
+      return `고객 과제 보관 — ${display(metadata['engagement_title'])} 과제를 보관했습니다. 연결된 프로젝트와 납품 기록은 변경하지 않았습니다.`;
+    case 'engagement:unarchived':
+      return `고객 과제 보관 해제 — ${display(metadata['engagement_title'])} 과제를 다시 진행 상태로 전환했습니다.`;
+    default: {
+      const title = display(entry['title']) || eventType;
+      return description ? `${title} — ${description}` : title;
+    }
+  }
+}
+
 function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale): string[] {
   const detail = snapshot['engagement'] as Record<string, unknown>;
   const evidence = snapshot['evidence'] as Record<string, unknown>;
@@ -191,8 +312,7 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
           `환경 승격 ${String(promotion['id'])}: ${statusLabel(promotion['status'], locale)} · 상태 ${statusLabel(promotion['health_status'], locale)}`,
       ),
       ...activity.map(
-        (entry) =>
-          `활동 ${String(entry['created_at'])}: ${String(entry['title'])} — ${String(entry['description'])}`,
+        (entry) => `활동 ${String(entry['created_at'])}: ${koreanActivitySummary(entry)}`,
       ),
     ];
   }
@@ -230,6 +350,9 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   const evidence = snapshot['evidence'] as Record<string, unknown>;
   const projects = detail['projects'] as Array<Record<string, unknown>>;
   const deliveries = detail['deliveries'] as Array<Record<string, unknown>>;
+  const customerDeliveries = deliveries.filter(
+    (delivery) => !String(delivery['id']).startsWith('delivery_implicit_'),
+  );
   const blockers = detail['blockers'] as Array<Record<string, unknown>>;
   const releases = evidence['releases'] as Array<Record<string, unknown>>;
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
@@ -245,7 +368,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
         (project) =>
           `프로젝트 ${String(project['display_name'])}: ${statusLabel(project['runtime_status'], locale)}`,
       ),
-      ...deliveries.map(
+      ...customerDeliveries.map(
         (delivery) =>
           `납품 ${String(delivery['title'])}: ${statusLabel(delivery['status'], locale)}`,
       ),
@@ -271,7 +394,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
       (project) =>
         `Project ${String(project['display_name'])}: ${String(project['runtime_status'])}`,
     ),
-    ...deliveries.map(
+    ...customerDeliveries.map(
       (delivery) => `Delivery ${String(delivery['title'])}: ${String(delivery['status'])}`,
     ),
     ...releases.map(
