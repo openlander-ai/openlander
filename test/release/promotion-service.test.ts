@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Database } from '../../src/db/index.js';
@@ -14,6 +14,7 @@ function createHarness(
     smokePath?: string | null;
     soakSeconds?: number;
     smokePassed?: boolean;
+    useDefaultSmokeProbe?: boolean;
   } = {},
 ) {
   const release = {
@@ -118,7 +119,7 @@ function createHarness(
     { traefik: { mode: 'external' } } as OpenLanderConfig,
     allocateRuntimePort,
     releaseRuntimePort,
-    smokeProbe,
+    options.useDefaultSmokeProbe ? undefined : smokeProbe,
     waitForSoak,
   );
   return {
@@ -132,6 +133,11 @@ function createHarness(
     waitForSoak,
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe('ReleasePromotionService', () => {
   it('persists a queryable Promotion before start returns', async () => {
@@ -304,6 +310,31 @@ describe('ReleasePromotionService', () => {
     expect(harness.smokeProbe).toHaveBeenCalledWith(32123, '/smoke', 30_000);
     expect(harness.docker.safeRemoveContainer).toHaveBeenCalledWith('candidate-container');
     expect(harness.db.finalizeReleasePromotion).not.toHaveBeenCalled();
+  });
+
+  it('probes the Docker host when OpenLander runs in a container', async () => {
+    vi.stubEnv('OPENLANDER_CONTAINERIZED', 'true');
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/smoke',
+      useDefaultSmokeProbe: true,
+    });
+
+    const result = await harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://host.docker.internal:32123/smoke',
+      expect.objectContaining({ redirect: 'manual' }),
+    );
   });
 
   it('rechecks health and Smoke Test after the configured soak window', async () => {
