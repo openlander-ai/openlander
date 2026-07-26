@@ -3231,6 +3231,7 @@ export class DeployPipeline {
         },
         db: this.db,
       });
+      const imageCmd = options?.cmd ?? deployConfig.imageCmd;
 
       this.jobManager?.trackJob(projectId, projectName);
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
@@ -3334,6 +3335,7 @@ export class DeployPipeline {
         port: newPort,
         containerPort,
         envVars,
+        cmd: imageCmd,
         traefikLabels: { 'traefik.enable': 'false' },
         labels: this.makeGreenContainerLabels({
           projectName,

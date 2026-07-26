@@ -415,6 +415,29 @@ describe('blue-green route target flip', () => {
     );
   });
 
+  it('preserves the saved image command for the green candidate', async () => {
+    state.service.kind = 'image';
+    state.service.source = 'image';
+    state.service.repo_url = null;
+    state.service.branch = null;
+    state.service.image_url = 'ghcr.io/openlander-ai/openlander:rc';
+    state.service.image_cmd = JSON.stringify(['node', 'server.js']);
+    state.environment.branch = null;
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
+    });
+
+    expect(result).toMatchObject({ success: true, strategy: 'blue-green' });
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({ cmd: ['node', 'server.js'] }),
+    );
+  });
+
   it('starts attached blue-green green containers on the owner project network', async () => {
     state.ownerProject = createOwnerProject();
     state.service.project_id = state.ownerProject.id;
