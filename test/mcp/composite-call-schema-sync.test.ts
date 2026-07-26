@@ -45,6 +45,7 @@ import { z } from 'zod';
 import { COMPOSITE_REGISTRY } from '../../src/mcp/composite-tools.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
+  agentDeliveryToolDefs,
   composeToolDefs,
   debugToolDefs,
   deliveryToolDefs,
@@ -56,7 +57,10 @@ import {
   gitToolDefs,
   infraToolDefs,
   monitoringToolDefs,
+  projectManifestToolDefs,
   projectOpsToolDefs,
+  releaseOperationToolDefs,
+  reportingOperationToolDefs,
   serviceToolDefs,
   volumeToolDefs,
 } from '../../src/tools/defs/index.js';
@@ -76,6 +80,7 @@ const SCANNED_DOCS: readonly string[] = [
 ] as const;
 
 const ALL_TOOL_DEFS: readonly ToolDef[] = [
+  ...agentDeliveryToolDefs,
   ...composeToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
@@ -87,7 +92,10 @@ const ALL_TOOL_DEFS: readonly ToolDef[] = [
   ...gitToolDefs,
   ...infraToolDefs,
   ...monitoringToolDefs,
+  ...projectManifestToolDefs,
   ...projectOpsToolDefs,
+  ...releaseOperationToolDefs,
+  ...reportingOperationToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

@@ -29,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
+  agentDeliveryToolDefs,
   composeToolDefs,
   debugToolDefs,
   deliveryToolDefs,
@@ -40,7 +41,10 @@ import {
   gitToolDefs,
   infraToolDefs,
   monitoringToolDefs,
+  projectManifestToolDefs,
   projectOpsToolDefs,
+  releaseOperationToolDefs,
+  reportingOperationToolDefs,
   serviceToolDefs,
   volumeToolDefs,
 } from '../../src/tools/defs/index.js';
@@ -61,6 +65,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'wiki', 'MCP-Tools-Reference.md');
 
 const ALL_TOOL_DEFS = [
+  ...agentDeliveryToolDefs,
   ...composeToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
@@ -72,7 +77,10 @@ const ALL_TOOL_DEFS = [
   ...gitToolDefs,
   ...infraToolDefs,
   ...monitoringToolDefs,
+  ...projectManifestToolDefs,
   ...projectOpsToolDefs,
+  ...releaseOperationToolDefs,
+  ...reportingOperationToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

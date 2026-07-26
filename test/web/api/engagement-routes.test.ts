@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../../src/app.js';
 import type { AuthService } from '../../../src/auth/auth-service.js';
@@ -60,6 +61,35 @@ function harness(authKind: AuthKind) {
       status: 'active',
     })),
   };
+  const report = {
+    id: 'report-1',
+    engagement_id: 'engagement-1',
+    period_start: '2026-07-20',
+    period_end: '2026-07-26',
+    revision: 1,
+    status: 'published',
+    evidence_snapshot: { internal: 'must not be returned by the list route' },
+    evidence_sha256: 'a'.repeat(64),
+    internal_sha256: 'b'.repeat(64),
+    customer_sha256: 'c'.repeat(64),
+    created_at: '2026-07-26T00:00:00.000Z',
+    published_at: '2026-07-26T00:01:00.000Z',
+  };
+  const weeklyReportService = {
+    list: vi.fn(async () => [report]),
+    getPublishedArtifact: vi.fn(async () => ({
+      report,
+      blob: {
+        mime_type: 'application/pdf',
+        size_bytes: 11,
+        storage_key: 'sha256/report',
+      },
+      filename: 'report-1-customer-r1.pdf',
+    })),
+  };
+  const artifactStore = {
+    open: vi.fn(() => Readable.from([Buffer.from('report-pdf')])),
+  };
   const app = new Hono();
   app.onError((error, c) => {
     if (error instanceof OpenLanderError) {
@@ -74,8 +104,15 @@ function harness(authKind: AuthKind) {
     c.set('authKind', authKind);
     await next();
   });
-  app.route('/api', createEngagementRoutes({ engagementService } as unknown as AppContext));
-  return { app, engagementService };
+  app.route(
+    '/api',
+    createEngagementRoutes({
+      engagementService,
+      weeklyReportService,
+      artifactStore,
+    } as unknown as AppContext),
+  );
+  return { app, engagementService, weeklyReportService };
 }
 
 describe('Engagement REST routes', () => {
@@ -117,6 +154,31 @@ describe('Engagement REST routes', () => {
       engagement: { id: 'engagement-1' },
     });
     expect(engagementService.get).toHaveBeenCalledWith('engagement-1');
+  });
+
+  it('lists redacted report metadata and streams a published PDF with safe headers', async () => {
+    const { app, weeklyReportService } = harness('api_token');
+    const list = await app.request('/api/engagements/engagement-1/weekly-reports');
+    expect(list.status).toBe(200);
+    const body = await list.json();
+    expect(body).toMatchObject({ reports: [{ id: 'report-1', status: 'published' }] });
+    expect(JSON.stringify(body)).not.toContain('evidence_snapshot');
+    expect(JSON.stringify(body)).not.toContain('must not be returned');
+
+    const pdf = await app.request(
+      '/api/engagements/engagement-1/weekly-reports/report-1/customer/pdf',
+    );
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get('content-disposition')).toContain('inline');
+    expect(pdf.headers.get('content-security-policy')).toContain('sandbox');
+    expect(pdf.headers.get('cache-control')).toBe('private, no-store');
+    expect(await pdf.text()).toBe('report-pdf');
+    expect(weeklyReportService.getPublishedArtifact).toHaveBeenCalledWith({
+      engagementId: 'engagement-1',
+      reportId: 'report-1',
+      audience: 'customer',
+      format: 'pdf',
+    });
   });
 
   it.each<AuthKind>(['api_token', 'project_pat'])(

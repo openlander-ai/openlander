@@ -96,6 +96,15 @@ describe('Delivery project PAT boundary', () => {
 describe('Delivery REST human and idempotency gates', () => {
   function deliveryHarness(authKind: 'session' | 'api_token' | 'project_pat') {
     const finalizeReceipt = vi.fn(async () => ({ id: 'receipt-1' }));
+    const getDeliveryExecution = vi.fn(async () => ({
+      agent_runs: [],
+      run_events: [],
+      run_checks: [],
+      project_environments: [],
+      releases: [],
+      release_artifacts: [],
+      release_promotions: [],
+    }));
     const app = new Hono();
     app.onError((error, c) => {
       if (error instanceof OpenLanderError) {
@@ -119,10 +128,10 @@ describe('Delivery REST human and idempotency gates', () => {
             project_id: 'project-1',
           })),
         },
-        deliveryService: { finalizeReceipt },
+        deliveryService: { finalizeReceipt, getDeliveryExecution },
       } as unknown as AppContext),
     );
-    return { app, finalizeReceipt };
+    return { app, finalizeReceipt, getDeliveryExecution };
   }
 
   it('requires Idempotency-Key before a Project PAT can upload CI evidence', async () => {
@@ -165,6 +174,21 @@ describe('Delivery REST human and idempotency gates', () => {
     );
     expect(allowed.status).toBe(200);
     expect(sessionHarness.finalizeReceipt).toHaveBeenCalledWith('delivery-1', 'admin');
+  });
+
+  it('returns the read-only execution view only after verifying Project ownership', async () => {
+    const harness = deliveryHarness('session');
+    const allowed = await harness.app.request(
+      '/api/projects/project-1/deliveries/delivery-1/execution',
+    );
+    expect(allowed.status).toBe(200);
+    expect(harness.getDeliveryExecution).toHaveBeenCalledWith('delivery-1');
+
+    const denied = await harness.app.request(
+      '/api/projects/project-2/deliveries/delivery-1/execution',
+    );
+    expect(denied.status).toBe(404);
+    expect(harness.getDeliveryExecution).toHaveBeenCalledTimes(1);
   });
 
   it('always downloads HTML as an attachment with a restrictive content policy', async () => {
@@ -262,10 +286,10 @@ describe('Delivery REST human and idempotency gates', () => {
       }),
     );
 
-    const response = await app.request(
-      '/api/projects/project-1/deliveries/delivery-1/artifacts',
-      { method: 'POST', body: form },
-    );
+    const response = await app.request('/api/projects/project-1/deliveries/delivery-1/artifacts', {
+      method: 'POST',
+      body: form,
+    });
 
     expect(response.status).toBe(201);
     expect(store).toHaveBeenCalledWith(

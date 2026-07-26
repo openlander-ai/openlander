@@ -152,4 +152,5 @@ export interface RuntimeBackend {
 
   cleanupSecretFiles(name: string): void;
   getNetworkName(): string;
+  getInstanceId?(): string | undefined;
 }

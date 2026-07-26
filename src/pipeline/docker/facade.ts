@@ -24,8 +24,8 @@ export class Docker implements RuntimeBackend {
   private readonly streamOps: StreamOps;
   private readonly infraOps: InfraOps;
 
-  constructor(socketPath?: string, networkName?: string) {
-    this.ctx = createDockerContext(socketPath, networkName);
+  constructor(socketPath?: string, networkName?: string, instanceId?: string) {
+    this.ctx = createDockerContext(socketPath, networkName, instanceId);
     this.networkOps = new NetworkOps(this.ctx);
     this.containerOps = new ContainerOps(this.ctx, {
       ensureSharedNetworkAttachment: (containerId, alias) =>
@@ -48,6 +48,10 @@ export class Docker implements RuntimeBackend {
 
   runContainer(options: Parameters<ContainerOps['runContainer']>[0], _serverId?: string) {
     return this.runContainerStart(() => this.containerOps.runContainer(options));
+  }
+
+  runEphemeralContainer(...args: Parameters<ContainerOps['runEphemeralContainer']>) {
+    return this.containerOps.runEphemeralContainer(...args);
   }
 
   runComposeService(...args: Parameters<ContainerOps['runComposeService']>) {
@@ -260,5 +264,9 @@ export class Docker implements RuntimeBackend {
 
   getNetworkName(): string {
     return this.ctx.networkName;
+  }
+
+  getInstanceId(): string | undefined {
+    return this.ctx.instanceId;
   }
 }

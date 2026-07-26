@@ -39,6 +39,50 @@ export const projects = pgTable('projects', {
   deploy_lock_at: text('deploy_lock_at'),
 });
 
+export const projectEnvironments = pgTable(
+  'project_environments',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    display_name: text('display_name').notNull(),
+    tier: text('tier', { enum: ['development', 'validation', 'production'] }).notNull(),
+    promotion_order: integer('promotion_order').notNull(),
+    health_timeout_seconds: integer('health_timeout_seconds').notNull().default(30),
+    smoke_path: text('smoke_path'),
+    soak_seconds: integer('soak_seconds').notNull().default(0),
+    manifest_sha256: text('manifest_sha256').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('project_environments_key_unique').on(table.project_id, table.key),
+    uniqueIndex('project_environments_order_unique').on(table.project_id, table.promotion_order),
+    check(
+      'project_environments_tier_check',
+      sql`${table.tier} IN ('development', 'validation', 'production')`,
+    ),
+    check('project_environments_order_check', sql`${table.promotion_order} >= 0`),
+    check(
+      'project_environments_health_timeout_check',
+      sql`${table.health_timeout_seconds} BETWEEN 1 AND 600`,
+    ),
+    check(
+      'project_environments_smoke_path_check',
+      sql`${table.smoke_path} IS NULL OR left(${table.smoke_path}, 1) = '/'`,
+    ),
+    check('project_environments_soak_seconds_check', sql`${table.soak_seconds} BETWEEN 0 AND 3600`),
+    check('project_environments_manifest_sha256_check', sql`length(${table.manifest_sha256}) = 64`),
+    index('idx_project_environments_project').on(table.project_id, table.promotion_order),
+  ],
+);
+
 export const environments = pgTable(
   'environments',
   {
@@ -47,6 +91,10 @@ export const environments = pgTable(
     service_id: text('service_id')
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
+    project_environment_id: text('project_environment_id').references(
+      () => projectEnvironments.id,
+      { onDelete: 'cascade' },
+    ),
     type: text('type', { enum: ['production', 'development'] }).notNull(),
     branch: text('branch'),
     status: text('status', { enum: ['running', 'stopped', 'building', 'error', 'idle'] }).default(
@@ -68,8 +116,14 @@ export const environments = pgTable(
       'environments_status_check',
       sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'idle')`,
     ),
-    uniqueIndex('environments_service_type_unique').on(table.service_id, table.type),
+    uniqueIndex('environments_service_project_environment_unique')
+      .on(table.service_id, table.project_environment_id)
+      .where(sql`${table.project_environment_id} IS NOT NULL`),
+    uniqueIndex('environments_service_type_legacy_unique')
+      .on(table.service_id, table.type)
+      .where(sql`${table.project_environment_id} IS NULL`),
     index('idx_environments_service').on(table.service_id),
+    index('idx_environments_project_environment').on(table.project_environment_id),
   ],
 );
 
@@ -1311,6 +1365,10 @@ export const deliveries = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     summary: text('summary').notNull().default(''),
+    objective: text('objective').notNull().default(''),
+    definition_of_done: jsonb('definition_of_done').$type<string[]>().notNull().default([]),
+    manifest_path: text('manifest_path'),
+    auto_finalize: boolean('auto_finalize').notNull().default(true),
     delivery_type: text('delivery_type', {
       enum: ['software_release', 'artifact_delivery'],
     })
@@ -1572,6 +1630,10 @@ export const deliveryGates = pgTable(
       .notNull()
       .references(() => deliveries.id, { onDelete: 'cascade' }),
     gate_key: text('gate_key').notNull(),
+    source: text('source', { enum: ['manual', 'manifest'] })
+      .notNull()
+      .default('manual'),
+    definition_sha256: text('definition_sha256'),
     gate_type: text('gate_type', { enum: ['review', 'qa', 'data', 'custom'] }).notNull(),
     label: text('label').notNull(),
     required: boolean('required').notNull().default(false),
@@ -1609,7 +1671,354 @@ export const deliveryGates = pgTable(
       'delivery_gates_status_check',
       sql`${table.status} IN ('pending', 'passed', 'warning', 'failed', 'waived')`,
     ),
+    check('delivery_gates_source_check', sql`${table.source} IN ('manual', 'manifest')`),
+    check(
+      'delivery_gates_definition_sha256_check',
+      sql`${table.definition_sha256} IS NULL OR length(${table.definition_sha256}) = 64`,
+    ),
     index('idx_delivery_gates_delivery').on(table.delivery_id),
+  ],
+);
+
+export const applicationOperationInvocations = pgTable(
+  'application_operation_invocations',
+  {
+    id: text('id').primaryKey(),
+    operation_name: text('operation_name').notNull(),
+    operation_version: integer('operation_version').notNull(),
+    actor_scope_key: text('actor_scope_key').notNull(),
+    idempotency_key: text('idempotency_key').notNull(),
+    request_sha256: text('request_sha256').notNull(),
+    status: text('status', { enum: ['running', 'succeeded', 'failed'] })
+      .notNull()
+      .default('running'),
+    response_json: jsonb('response_json').$type<Record<string, unknown>>(),
+    error_json: jsonb('error_json').$type<Record<string, unknown>>(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('application_operation_invocations_key_unique').on(
+      table.operation_name,
+      table.operation_version,
+      table.actor_scope_key,
+      table.idempotency_key,
+    ),
+    check(
+      'application_operation_invocations_status_check',
+      sql`${table.status} IN ('running', 'succeeded', 'failed')`,
+    ),
+    check(
+      'application_operation_invocations_request_sha256_check',
+      sql`length(${table.request_sha256}) = 64`,
+    ),
+    index('idx_application_operation_invocations_created').on(
+      table.operation_name,
+      table.created_at,
+    ),
+  ],
+);
+
+export const deliveryAgentRuns = pgTable(
+  'delivery_agent_runs',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'paused', 'completed', 'failed', 'cancelled'] })
+      .notNull()
+      .default('running'),
+    commit_sha: text('commit_sha').notNull(),
+    manifest_path: text('manifest_path').notNull(),
+    manifest_sha256: text('manifest_sha256').notNull(),
+    runner_image: text('runner_image').notNull(),
+    runner_image_digest: text('runner_image_digest'),
+    current_phase: text('current_phase').notNull().default('planning'),
+    handoff_summary: text('handoff_summary'),
+    started_by: text('started_by').notNull(),
+    started_at: text('started_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+    completed_at: text('completed_at'),
+    cancellation_reason: text('cancellation_reason'),
+  },
+  (table) => [
+    check(
+      'delivery_agent_runs_status_check',
+      sql`${table.status} IN ('running', 'paused', 'completed', 'failed', 'cancelled')`,
+    ),
+    check('delivery_agent_runs_commit_sha_check', sql`length(trim(${table.commit_sha})) > 0`),
+    check('delivery_agent_runs_manifest_sha256_check', sql`length(${table.manifest_sha256}) = 64`),
+    uniqueIndex('delivery_agent_runs_active_unique')
+      .on(table.delivery_id)
+      .where(sql`${table.status} IN ('running', 'paused')`),
+    index('idx_delivery_agent_runs_delivery').on(table.delivery_id, table.started_at),
+  ],
+);
+
+export const deliveryAgentRunEvents = pgTable(
+  'delivery_agent_run_events',
+  {
+    id: text('id').primaryKey(),
+    run_id: text('run_id')
+      .notNull()
+      .references(() => deliveryAgentRuns.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    event_type: text('event_type').notNull(),
+    phase: text('phase'),
+    summary: text('summary').notNull(),
+    detail_json: jsonb('detail_json').$type<Record<string, unknown>>().notNull().default({}),
+    actor: text('actor').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_agent_run_events_sequence_unique').on(table.run_id, table.sequence),
+    check('delivery_agent_run_events_sequence_check', sql`${table.sequence} > 0`),
+    index('idx_delivery_agent_run_events_run').on(table.run_id, table.created_at),
+  ],
+);
+
+export const deliveryRunChecks = pgTable(
+  'delivery_run_checks',
+  {
+    id: text('id').primaryKey(),
+    run_id: text('run_id')
+      .notNull()
+      .references(() => deliveryAgentRuns.id, { onDelete: 'cascade' }),
+    gate_id: text('gate_id').references(() => deliveryGates.id, { onDelete: 'set null' }),
+    check_key: text('check_key').notNull(),
+    attempt: integer('attempt').notNull().default(1),
+    status: text('status', { enum: ['pending', 'running', 'passed', 'failed', 'cancelled'] })
+      .notNull()
+      .default('pending'),
+    command: text('command').notNull(),
+    exit_code: integer('exit_code'),
+    duration_ms: integer('duration_ms'),
+    log_sha256: text('log_sha256'),
+    report_artifact_id: text('report_artifact_id').references(() => deliveryArtifacts.id, {
+      onDelete: 'set null',
+    }),
+    runner_image_digest: text('runner_image_digest'),
+    details_json: jsonb('details_json').$type<Record<string, unknown>>().notNull().default({}),
+    started_at: text('started_at'),
+    finished_at: text('finished_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_run_checks_attempt_unique').on(
+      table.run_id,
+      table.check_key,
+      table.attempt,
+    ),
+    check('delivery_run_checks_attempt_check', sql`${table.attempt} > 0`),
+    check(
+      'delivery_run_checks_status_check',
+      sql`${table.status} IN ('pending', 'running', 'passed', 'failed', 'cancelled')`,
+    ),
+    check(
+      'delivery_run_checks_duration_check',
+      sql`${table.duration_ms} IS NULL OR ${table.duration_ms} >= 0`,
+    ),
+    check(
+      'delivery_run_checks_log_sha256_check',
+      sql`${table.log_sha256} IS NULL OR length(${table.log_sha256}) = 64`,
+    ),
+    index('idx_delivery_run_checks_run').on(table.run_id, table.check_key, table.attempt),
+    index('idx_delivery_run_checks_gate').on(table.gate_id),
+  ],
+);
+
+export const releases = pgTable(
+  'releases',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    agent_run_id: text('agent_run_id')
+      .notNull()
+      .references(() => deliveryAgentRuns.id, { onDelete: 'cascade' }),
+    version: text('version').notNull(),
+    commit_sha: text('commit_sha').notNull(),
+    status: text('status', { enum: ['building', 'ready', 'recalled', 'failed'] })
+      .notNull()
+      .default('building'),
+    created_by: text('created_by').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('releases_delivery_version_unique').on(table.delivery_id, table.version),
+    check(
+      'releases_status_check',
+      sql`${table.status} IN ('building', 'ready', 'recalled', 'failed')`,
+    ),
+    check('releases_commit_sha_check', sql`length(${table.commit_sha}) IN (40, 64)`),
+    index('idx_releases_delivery').on(table.delivery_id, table.created_at),
+  ],
+);
+
+export const releaseArtifacts = pgTable(
+  'release_artifacts',
+  {
+    id: text('id').primaryKey(),
+    release_id: text('release_id')
+      .notNull()
+      .references(() => releases.id, { onDelete: 'cascade' }),
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    image_reference: text('image_reference').notNull(),
+    image_digest: text('image_digest').notNull(),
+    build_provenance: jsonb('build_provenance').$type<Record<string, unknown>>().notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('release_artifacts_service_unique').on(table.release_id, table.service_id),
+    check(
+      'release_artifacts_digest_check',
+      sql`${table.image_digest} ~ '^sha256:[0-9A-Fa-f]{64}$'`,
+    ),
+    index('idx_release_artifacts_release').on(table.release_id),
+  ],
+);
+
+export const releasePromotions = pgTable(
+  'release_promotions',
+  {
+    id: text('id').primaryKey(),
+    release_id: text('release_id')
+      .notNull()
+      .references(() => releases.id, { onDelete: 'cascade' }),
+    project_environment_id: text('project_environment_id')
+      .notNull()
+      .references(() => projectEnvironments.id, { onDelete: 'cascade' }),
+    previous_release_id: text('previous_release_id').references((): AnyPgColumn => releases.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status', {
+      enum: ['pending', 'deploying', 'succeeded', 'failed', 'rolled_back'],
+    })
+      .notNull()
+      .default('pending'),
+    health_status: text('health_status', {
+      enum: ['pending', 'healthy', 'unhealthy'],
+    })
+      .notNull()
+      .default('pending'),
+    soak_status: text('soak_status', { enum: ['pending', 'passed', 'failed', 'skipped'] })
+      .notNull()
+      .default('pending'),
+    deploy_ids: jsonb('deploy_ids').$type<string[]>().notNull().default([]),
+    runtime_environment_ids: jsonb('runtime_environment_ids')
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    idempotency_key: text('idempotency_key').notNull(),
+    error_code: text('error_code'),
+    error_message: text('error_message'),
+    initiated_by: text('initiated_by').notNull(),
+    started_at: text('started_at'),
+    completed_at: text('completed_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('release_promotions_idempotency_unique').on(
+      table.project_environment_id,
+      table.idempotency_key,
+    ),
+    check(
+      'release_promotions_status_check',
+      sql`${table.status} IN ('pending', 'deploying', 'succeeded', 'failed', 'rolled_back')`,
+    ),
+    check(
+      'release_promotions_health_check',
+      sql`${table.health_status} IN ('pending', 'healthy', 'unhealthy')`,
+    ),
+    check(
+      'release_promotions_soak_check',
+      sql`${table.soak_status} IN ('pending', 'passed', 'failed', 'skipped')`,
+    ),
+    index('idx_release_promotions_release').on(table.release_id, table.created_at),
+    index('idx_release_promotions_environment').on(table.project_environment_id, table.created_at),
+  ],
+);
+
+export const engagementWeeklyReports = pgTable(
+  'engagement_weekly_reports',
+  {
+    id: text('id').primaryKey(),
+    engagement_id: text('engagement_id')
+      .notNull()
+      .references(() => engagements.id, { onDelete: 'restrict' }),
+    period_start: text('period_start').notNull(),
+    period_end: text('period_end').notNull(),
+    revision: integer('revision').notNull(),
+    status: text('status', { enum: ['draft', 'published'] })
+      .notNull()
+      .default('draft'),
+    evidence_snapshot: jsonb('evidence_snapshot').$type<Record<string, unknown>>().notNull(),
+    evidence_sha256: text('evidence_sha256').notNull(),
+    internal_html_blob_id: text('internal_html_blob_id').references(() => artifactBlobs.id, {
+      onDelete: 'restrict',
+    }),
+    internal_pdf_blob_id: text('internal_pdf_blob_id').references(() => artifactBlobs.id, {
+      onDelete: 'restrict',
+    }),
+    customer_html_blob_id: text('customer_html_blob_id').references(() => artifactBlobs.id, {
+      onDelete: 'restrict',
+    }),
+    customer_pdf_blob_id: text('customer_pdf_blob_id').references(() => artifactBlobs.id, {
+      onDelete: 'restrict',
+    }),
+    internal_sha256: text('internal_sha256'),
+    customer_sha256: text('customer_sha256'),
+    created_by: text('created_by').notNull(),
+    published_at: text('published_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('engagement_weekly_reports_revision_unique').on(
+      table.engagement_id,
+      table.period_start,
+      table.period_end,
+      table.revision,
+    ),
+    check('engagement_weekly_reports_revision_check', sql`${table.revision} > 0`),
+    check('engagement_weekly_reports_status_check', sql`${table.status} IN ('draft', 'published')`),
+    check(
+      'engagement_weekly_reports_evidence_sha_check',
+      sql`length(${table.evidence_sha256}) = 64`,
+    ),
+    index('idx_engagement_weekly_reports_engagement').on(table.engagement_id, table.period_start),
   ],
 );
 
@@ -1651,7 +2060,7 @@ export const deliveryDeployLinks = pgTable(
       .references(() => deliveries.id, { onDelete: 'cascade' }),
     deploy_id: text('deploy_id')
       .notNull()
-      .references(() => deployLogs.id, { onDelete: 'restrict' }),
+      .references(() => deployLogs.id, { onDelete: 'cascade' }),
     relation: text('relation', { enum: ['candidate', 'released', 'rollback'] }).notNull(),
     linked_at: text('linked_at')
       .notNull()
@@ -1695,6 +2104,7 @@ export const deliveryReceipts = pgTable(
 );
 
 export type ProjectDeliverySettingsRow = typeof projectDeliverySettings.$inferSelect;
+export type ProjectEnvironmentRow = typeof projectEnvironments.$inferSelect;
 export type ArtifactBlobRow = typeof artifactBlobs.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 export type DeliveryArtifactRow = typeof deliveryArtifacts.$inferSelect;
@@ -1703,6 +2113,14 @@ export type DeliveryFeedbackSourceRow = typeof deliveryFeedbackSources.$inferSel
 export type DeliveryWorkItemRow = typeof deliveryWorkItems.$inferSelect;
 export type DeliveryApprovalRow = typeof deliveryApprovals.$inferSelect;
 export type DeliveryGateRow = typeof deliveryGates.$inferSelect;
+export type ApplicationOperationInvocationRow = typeof applicationOperationInvocations.$inferSelect;
+export type DeliveryAgentRunRow = typeof deliveryAgentRuns.$inferSelect;
+export type DeliveryAgentRunEventRow = typeof deliveryAgentRunEvents.$inferSelect;
+export type DeliveryRunCheckRow = typeof deliveryRunChecks.$inferSelect;
+export type ReleaseRow = typeof releases.$inferSelect;
+export type ReleaseArtifactRow = typeof releaseArtifacts.$inferSelect;
+export type ReleasePromotionRow = typeof releasePromotions.$inferSelect;
+export type EngagementWeeklyReportRow = typeof engagementWeeklyReports.$inferSelect;
 export type DeliveryIdempotencyRecordRow = typeof deliveryIdempotencyRecords.$inferSelect;
 export type DeliveryDeployLinkRow = typeof deliveryDeployLinks.$inferSelect;
 export type DeliveryReceiptRow = typeof deliveryReceipts.$inferSelect;
@@ -1733,6 +2151,7 @@ export type NewMcpSessionLog = typeof mcpSessionLog.$inferInsert;
 
 export const drizzleSchema = {
   projects,
+  projectEnvironments,
   environments,
   envVars,
   deployLogs,
@@ -1779,6 +2198,14 @@ export const drizzleSchema = {
   deliveryWorkItems,
   deliveryApprovals,
   deliveryGates,
+  applicationOperationInvocations,
+  deliveryAgentRuns,
+  deliveryAgentRunEvents,
+  deliveryRunChecks,
+  releases,
+  releaseArtifacts,
+  releasePromotions,
+  engagementWeeklyReports,
   deliveryIdempotencyRecords,
   deliveryDeployLinks,
   deliveryReceipts,

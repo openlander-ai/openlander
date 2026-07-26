@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -156,7 +156,7 @@ describe('Docker sandbox race prevention', () => {
       inspect: vi.fn().mockResolvedValue({}),
     });
 
-    const docker = new Docker('/var/run/docker.sock', 'openlander');
+    const docker = new Docker('/var/run/docker.sock', 'openlander', 'olinst_a');
     await docker.runContainer({
       imageTag: 'app:v1',
       name: 'ol-myapp',
@@ -164,10 +164,23 @@ describe('Docker sandbox race prevention', () => {
       containerPort: 3000,
       envVars: { NODE_ENV: 'production' },
       traefikLabels: {},
+      labels: {
+        custom: 'yes',
+        'openlander.instance': 'foreign-instance',
+      },
     });
 
     expect(container.start).toHaveBeenCalledOnce();
     expect(connect).not.toHaveBeenCalled();
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Labels: expect.objectContaining({
+          custom: 'yes',
+          'openlander.managed': 'true',
+          'openlander.instance': 'olinst_a',
+        }),
+      }),
+    );
   });
 
   it('ensureSharedNetworkAttachment silently returns on already-connected error', async () => {
@@ -208,7 +221,7 @@ describe('Docker sandbox race prevention', () => {
       inspect: vi.fn().mockResolvedValue({}),
     });
 
-    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web', 'olinst_a');
     await docker.runContainer({
       imageTag: 'worker:v1',
       name: 'ol-worker',
@@ -222,6 +235,10 @@ describe('Docker sandbox race prevention', () => {
     expect(connect).not.toHaveBeenCalled();
     expect(mockCreateContainer).toHaveBeenCalledWith(
       expect.objectContaining({
+        Labels: expect.objectContaining({
+          'openlander.managed': 'true',
+          'openlander.instance': 'olinst_a',
+        }),
         NetworkingConfig: {
           EndpointsConfig: {
             'traefik-web': {
@@ -232,6 +249,44 @@ describe('Docker sandbox race prevention', () => {
         HostConfig: expect.objectContaining({
           NetworkMode: 'traefik-web',
         }),
+      }),
+    );
+  });
+
+  it('keeps startup orphan handling audit-only and batch-loads environments', () => {
+    const source = readFileSync('src/pipeline/deploy-core.ts', 'utf8');
+    const start = source.indexOf('private async auditOrphanContainers');
+    const end = source.indexOf('private validateProjectName', start);
+    const auditMethod = source.slice(start, end);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(auditMethod).toContain('getEnvironmentsByProjectIds');
+    expect(auditMethod).not.toContain('safeRemoveContainer');
+    expect(auditMethod).toContain('startup cleanup is audit-only');
+  });
+
+  it('keeps resource ownership distinct for two instances on one Docker socket', async () => {
+    mockCreateContainer
+      .mockResolvedValueOnce({ id: 'ctr-a', start: vi.fn().mockResolvedValue(undefined) })
+      .mockResolvedValueOnce({ id: 'ctr-b', start: vi.fn().mockResolvedValue(undefined) });
+
+    const dockerA = new Docker('/var/run/docker.sock', 'openlander', 'olinst_a');
+    const dockerB = new Docker('/var/run/docker.sock', 'openlander', 'olinst_b');
+
+    await dockerA.runInfraContainer({ Image: 'traefik:v3', name: 'traefik-a' });
+    await dockerB.runInfraContainer({ Image: 'traefik:v3', name: 'traefik-b' });
+
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        Labels: expect.objectContaining({ 'openlander.instance': 'olinst_a' }),
+      }),
+    );
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        Labels: expect.objectContaining({ 'openlander.instance': 'olinst_b' }),
       }),
     );
   });

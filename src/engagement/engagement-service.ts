@@ -244,6 +244,45 @@ export class EngagementService {
     return await this.get(created.id);
   }
 
+  async bootstrap(input: {
+    operationId: string;
+    customerName: string;
+    title: string;
+    summary?: string;
+    project: {
+      name: string;
+      displayName?: string;
+      description?: string;
+      tags?: string[];
+    };
+    actor?: string;
+  }): Promise<{ engagement: EngagementDetail; project_id: string; project_name: string }> {
+    const created = await this.db.bootstrapEngagement({
+      id: `eng_${input.operationId}`,
+      customerName: requiredText(input.customerName, 'customer_name'),
+      title: requiredText(input.title, 'title'),
+      summary: input.summary?.trim() ?? '',
+      createdBy: input.actor,
+      project: {
+        id: `prj_${input.operationId}`,
+        name: requiredText(input.project.name, 'project.name'),
+        displayName: input.project.displayName?.trim() || input.project.name.trim(),
+        description: input.project.description?.trim() || null,
+        tags:
+          input.project.tags && input.project.tags.length > 0
+            ? JSON.stringify([
+                ...new Set(input.project.tags.map((tag) => tag.trim()).filter(Boolean)),
+              ])
+            : null,
+      },
+    });
+    return {
+      engagement: await this.get(created.engagement.id),
+      project_id: created.project.id,
+      project_name: created.project.name,
+    };
+  }
+
   async update(
     id: string,
     input: {

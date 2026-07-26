@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
 import type {
@@ -17,7 +17,8 @@ const log = createModuleLogger('config');
 /**
  * OpenLander configuration system.
  *
- * Config is stored at ~/.openlander/config.json.
+ * Config is stored at ~/.openlander/config.json by default. Multi-instance and
+ * ephemeral environments can set OPENLANDER_DATA_DIR to use an isolated root.
  * Forward-compatible with v0.5 — new fields are added with defaults,
  * existing configs never break.
  */
@@ -29,6 +30,7 @@ export type OpenLanderEnv = 'production' | 'development';
 export const SHARED_NETWORK_NAME = 'openlander';
 export const DOCKER_LABELS = {
   MANAGED: 'openlander.managed',
+  INSTANCE: 'openlander.instance',
   ROLE: 'openlander.role',
   PROJECT: 'openlander.project',
   SERVICE: 'openlander.service',
@@ -319,7 +321,12 @@ export interface GitProvidersConfig {
 
 // --- Defaults ---
 
-const CONFIG_DIR = join(homedir(), '.openlander');
+export function resolveDataDir(environment: NodeJS.ProcessEnv = process.env): string {
+  const configured = environment.OPENLANDER_DATA_DIR?.trim();
+  return configured ? resolve(configured) : join(homedir(), '.openlander');
+}
+
+const CONFIG_DIR = resolveDataDir();
 
 const DISABLED_AI_FEATURES: AIFeaturesConfig = {
   autoRecovery: { enabled: false },

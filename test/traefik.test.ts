@@ -5,6 +5,7 @@ import {
   switchToExternalMode,
   getProxyWarning,
   getProxyStatus,
+  ensureManagedTraefikNetwork,
   type ProxyDetection,
   TraefikManager,
 } from '../src/pipeline/traefik.js';
@@ -475,6 +476,48 @@ describe('TraefikManager', () => {
     expect(manager).toBeDefined();
   });
 
+  it('does not attach a foreign or unlabeled Traefik during a Project deploy', async () => {
+    const foreign = createMockContainer('traefik-ol', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+      state: 'running',
+    });
+    const runtime = {
+      getInstanceId: vi.fn(() => 'instance-b'),
+      listAllContainers: vi.fn(async () => [foreign]),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+    } as unknown as Docker;
+
+    await ensureManagedTraefikNetwork(runtime, 'ol-instance-b-project');
+
+    expect(runtime.connectContainerToNetwork).not.toHaveBeenCalled();
+  });
+
+  it('attaches Traefik during deploy only when the instance label matches', async () => {
+    const owned = createMockContainer('traefik-ol', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+        'openlander.instance': 'instance-b',
+      },
+      state: 'running',
+    });
+    const runtime = {
+      getInstanceId: vi.fn(() => 'instance-b'),
+      listAllContainers: vi.fn(async () => [owned]),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+    } as unknown as Docker;
+
+    await ensureManagedTraefikNetwork(runtime, 'ol-instance-b-project');
+
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+      'traefik-ol',
+      'ol-instance-b-project',
+    );
+  });
+
   it('recreates legacy Traefik containers that do not expose the HTTP provider', async () => {
     const legacy = createMockContainer('legacy-traefik', {
       labels: {
@@ -789,6 +832,53 @@ describe('TraefikManager', () => {
 
     expect(runtime.renameContainer).toHaveBeenCalledWith(legacy.id, 'traefik-ol');
     expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'openlander');
+    expect(runtime.runInfraContainer).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate another instance or an unlabeled legacy Traefik', async () => {
+    const foreign = createMockContainer('traefik-ol', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+      },
+      state: 'running',
+    });
+    const otherInstance = createMockContainer('traefik-other', {
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+        'openlander.instance': 'olinst_other',
+      },
+      state: 'running',
+    });
+    const runtime = {
+      listAllContainers: vi.fn(async () => [foreign, otherInstance]),
+      inspectContainer: vi.fn(async () => ({ Config: { Cmd: [] } })),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      safeRemoveContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => 'new-traefik'),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10115, {
+      networkName: 'openlander',
+      instanceId: 'olinst_candidate',
+    });
+
+    await manager.start();
+    await manager.connectToNetwork('ol-candidate-project');
+    await manager.stop();
+
+    expect(runtime.inspectContainer).not.toHaveBeenCalled();
+    expect(runtime.removeContainer).not.toHaveBeenCalled();
+    expect(runtime.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(runtime.renameContainer).not.toHaveBeenCalled();
+    expect(runtime.connectContainerToNetwork).not.toHaveBeenCalled();
+    expect(runtime.pullImage).not.toHaveBeenCalled();
     expect(runtime.runInfraContainer).not.toHaveBeenCalled();
   });
 });

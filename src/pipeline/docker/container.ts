@@ -5,6 +5,8 @@ import type {
   ContainerInfo,
   RunComposeServiceOptions,
   RunContainerOptions,
+  RunEphemeralContainerOptions,
+  RunEphemeralContainerResult,
   WaitForHealthyResult,
 } from './types.js';
 import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
@@ -160,10 +162,12 @@ export class ContainerOps {
       Image: options.imageTag,
       name: options.name,
       Env: envArray,
-      Labels: options.labels ?? {
+      Labels: {
+        ...options.traefikLabels,
+        ...options.labels,
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.PROJECT]: stripContainerPrefix(options.name),
-        ...options.traefikLabels,
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
       },
       ExposedPorts: {
         [`${String(cPort)}/tcp`]: {},
@@ -194,6 +198,79 @@ export class ContainerOps {
     await container.start();
 
     return container.id;
+  }
+
+  async runEphemeralContainer(
+    options: RunEphemeralContainerOptions,
+  ): Promise<RunEphemeralContainerResult> {
+    const startedAt = Date.now();
+    const container = await this.ctx.client.createContainer({
+      Image: options.imageTag,
+      name: options.name,
+      Cmd: options.command,
+      WorkingDir: '/workspace',
+      Tty: true,
+      Env: Object.entries(options.envVars ?? {}).map(([key, value]) => `${key}=${value}`),
+      Labels: {
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.PROJECT]: options.projectId,
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
+        'openlander.purpose': 'delivery-quality-check',
+      },
+      HostConfig: {
+        AutoRemove: false,
+        Binds: [`${options.workspacePath}:/workspace:rw`],
+        NetworkMode: 'bridge',
+        RestartPolicy: { Name: 'no' },
+        Memory: 2 * 1024 * 1024 * 1024,
+        MemorySwap: 2 * 1024 * 1024 * 1024,
+        PidsLimit: 1_024,
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '1' } },
+      },
+    });
+
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await container.start();
+      const waitForExit = async (): Promise<{ timedOut: false; exitCode: number }> => {
+        const result: unknown = await container.wait();
+        const statusCode =
+          result &&
+          typeof result === 'object' &&
+          'StatusCode' in result &&
+          typeof result.StatusCode === 'number'
+            ? result.StatusCode
+            : 1;
+        return { timedOut: false, exitCode: statusCode };
+      };
+      const completion = await Promise.race([
+        waitForExit(),
+        new Promise<{ timedOut: true; exitCode: number }>((resolveTimeout) => {
+          timeout = setTimeout(() => {
+            resolveTimeout({ timedOut: true, exitCode: 124 });
+          }, options.timeoutMs);
+        }),
+      ]);
+      if (completion.timedOut) {
+        try {
+          await container.stop({ t: 1 });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!isContainerNotRunning(message) && !isDockerNotFoundError(error)) throw error;
+        }
+      }
+      const rawLogs = await container.logs({ stdout: true, stderr: true, follow: false });
+      const logs = Buffer.isBuffer(rawLogs) ? rawLogs.toString('utf8') : String(rawLogs);
+      return {
+        exitCode: completion.exitCode,
+        durationMs: Date.now() - startedAt,
+        logs: logs.slice(-1_048_576),
+        timedOut: completion.timedOut,
+      };
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      await container.remove({ force: true });
+    }
   }
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
@@ -261,9 +338,10 @@ export class ContainerOps {
       name: opts.name,
       Env: envArray,
       Labels: {
+        ...opts.traefikLabels,
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.PROJECT]: stripContainerPrefix(opts.name),
-        ...opts.traefikLabels,
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
       },
       ExposedPorts:
         exposedPorts.length > 0
@@ -333,6 +411,11 @@ export class ContainerOps {
   async runInfraContainer(options: Dockerode.ContainerCreateOptions): Promise<string> {
     const container = await this.ctx.client.createContainer({
       ...options,
+      Labels: {
+        ...options.Labels,
+        [DOCKER_LABELS.MANAGED]: 'true',
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
+      },
       HostConfig: {
         ...options.HostConfig,
         Memory: 268435456,
@@ -515,6 +598,7 @@ export class ContainerOps {
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.ROLE]: 'service',
         [DOCKER_LABELS.SERVICE]: opts.serviceName,
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
       },
       ExposedPorts: { [`${String(containerPort)}/tcp`]: {} },
       NetworkingConfig: networkingConfig,

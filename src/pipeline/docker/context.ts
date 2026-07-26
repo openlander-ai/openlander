@@ -6,9 +6,14 @@ import { resolveDockerSocket } from './helpers.js';
 export interface DockerContext {
   readonly client: Dockerode;
   readonly networkName: string;
+  readonly instanceId?: string;
 }
 
-export function createDockerContext(socketPath?: string, networkName?: string): DockerContext {
+export function createDockerContext(
+  socketPath?: string,
+  networkName?: string,
+  instanceId?: string,
+): DockerContext {
   const require = createRequire(import.meta.url);
 
   const dockerSshModulePath = require.resolve('docker-modem/lib/ssh.js');
@@ -25,8 +30,7 @@ export function createDockerContext(socketPath?: string, networkName?: string): 
   }
 
   const dockerodeModule = require('dockerode') as
-    | { default?: new (options?: unknown) => Dockerode }
-    | (new (options?: unknown) => Dockerode);
+    { default?: new (options?: unknown) => Dockerode } | (new (options?: unknown) => Dockerode);
   const DockerodeClass =
     typeof dockerodeModule === 'function' ? dockerodeModule : dockerodeModule.default;
   if (!DockerodeClass) {
@@ -44,5 +48,6 @@ export function createDockerContext(socketPath?: string, networkName?: string): 
   return {
     client,
     networkName: resolvedNetworkName,
+    instanceId,
   };
 }

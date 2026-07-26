@@ -896,6 +896,7 @@ export async function runDeployableServiceAction(
     action,
   );
   const noCache = (args.no_cache as boolean | undefined) === true;
+  const adoptAsImplicitRelease = args['__adopt_implicit_release'] === true;
   const requestedStrategy = args.strategy as 'blue-green' | 'force' | undefined;
   let strategy = requestedStrategy;
   const healthCheckPath = args.health_check_path as string | undefined;
@@ -1139,6 +1140,22 @@ export async function runDeployableServiceAction(
       lockSessionId: sessionId,
       trigger: deployTriggerForToolContext(context),
     });
+    if (adoptAsImplicitRelease) {
+      try {
+        const deployLog = await context.appCtx.db.getLastDeployLogForService(deploymentService.id);
+        await context.appCtx.releaseService.adoptSuccessfulDeploy({
+          projectId: project.id,
+          serviceId: service.id,
+          ...(deployLog ? { deployId: deployLog.id } : {}),
+          actor: context.identity?.initiatedBy ?? 'external-mcp-agent',
+        });
+      } catch (err) {
+        log.error(
+          { err, projectId: project.id, serviceId: service.id },
+          'Deployment succeeded, but implicit Release adoption failed',
+        );
+      }
+    }
   };
 
   void execute()
@@ -1186,6 +1203,9 @@ export async function runDeployableServiceAction(
 
   return {
     status: 'deploying',
+    ...(adoptAsImplicitRelease
+      ? { implicit_release: { status: 'pending', source: 'deploy_app_compatibility' } }
+      : {}),
     strategy,
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     ...(strategy === 'force'

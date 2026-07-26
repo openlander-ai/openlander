@@ -20,6 +20,7 @@ export interface TraefikManagerOptions {
   networkName?: string;
   httpPort?: number;
   dashboardPort?: number;
+  instanceId?: string;
 }
 
 /** Get the dynamic config directory for the current environment. */
@@ -41,6 +42,7 @@ export class TraefikManager {
   private readonly networkName: string;
   private readonly httpPort: number;
   private readonly dashboardPort: number;
+  private readonly instanceId?: string;
 
   constructor(
     private readonly runtime: RuntimeBackend,
@@ -52,13 +54,30 @@ export class TraefikManager {
     this.networkName = options?.networkName ?? defaultPolicy.networkName;
     this.httpPort = options?.httpPort ?? 80;
     this.dashboardPort = options?.dashboardPort ?? 8080;
+    this.instanceId = options?.instanceId;
+  }
+
+  private ownsContainer(container: { labels: Record<string, string> }): boolean {
+    return !this.instanceId || container.labels[DOCKER_LABELS.INSTANCE] === this.instanceId;
+  }
+
+  private async ownsContainerName(containerName: string): Promise<boolean> {
+    if (!this.instanceId) return true;
+    const containers = await this.runtime.listAllContainers();
+    const container = containers.find(
+      (candidate) => candidate.name === containerName || candidate.id === containerName,
+    );
+    return container !== undefined && this.ownsContainer(container);
   }
 
   async isRunning(): Promise<boolean> {
     try {
       const containers = await this.runtime.listAllContainers();
       return containers.some(
-        (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
+        (c) =>
+          c.labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+          c.state === 'running' &&
+          this.ownsContainer(c),
       );
     } catch (err) {
       log.warn({ err }, 'Failed to check Traefik running status');
@@ -68,6 +87,7 @@ export class TraefikManager {
 
   private async containerHasCurrentConfig(containerName: string): Promise<boolean> {
     try {
+      if (!(await this.ownsContainerName(containerName))) return false;
       const info = await this.runtime.inspectContainer(containerName);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const cmd: string[] = info.Config.Cmd ?? [];
@@ -113,6 +133,13 @@ export class TraefikManager {
     networkName: string,
   ): Promise<boolean> {
     try {
+      if (!(await this.ownsContainerName(containerName))) {
+        log.warn(
+          { containerName, networkName, instanceId: this.instanceId },
+          'Refusing to connect a Traefik container owned by another OpenLander instance',
+        );
+        return false;
+      }
       await this.runtime.connectContainerToNetwork(containerName, networkName);
       log.info({ containerName, networkName }, 'Traefik connected to network');
       return true;
@@ -125,7 +152,10 @@ export class TraefikManager {
   private async tryAdoptExistingTraefik(): Promise<boolean> {
     const containers = await this.runtime.listAllContainers();
     const running = containers.filter(
-      (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
+      (c) =>
+        c.labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+        c.state === 'running' &&
+        this.ownsContainer(c),
     );
 
     const candidate = running.find((c) => c.name !== this.containerName);
@@ -196,6 +226,22 @@ export class TraefikManager {
       log.info('Traefik config outdated (missing HTTP Provider) — recreating container');
     }
 
+    const existingAtManagedName = (await this.runtime.listAllContainers()).find(
+      (container) => container.name === this.containerName,
+    );
+    if (existingAtManagedName && !this.ownsContainer(existingAtManagedName)) {
+      log.warn(
+        {
+          containerName: this.containerName,
+          ownerInstanceId:
+            existingAtManagedName.labels[DOCKER_LABELS.INSTANCE] ?? 'legacy-unlabeled',
+          instanceId: this.instanceId,
+        },
+        'Managed Traefik name is owned by another OpenLander instance; leaving it untouched',
+      );
+      return;
+    }
+
     await this.ensureAllNetworks();
 
     if (await this.tryAdoptExistingTraefik()) {
@@ -204,7 +250,9 @@ export class TraefikManager {
 
     try {
       const existing = await this.runtime.listAllContainers();
-      const traefikContainers = existing.filter((c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik');
+      const traefikContainers = existing.filter(
+        (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && this.ownsContainer(c),
+      );
       for (const c of traefikContainers) {
         await this.runtime.removeContainer(c.id);
       }
@@ -290,6 +338,13 @@ export class TraefikManager {
 
   async stop(): Promise<void> {
     try {
+      if (!(await this.ownsContainerName(this.containerName))) {
+        log.warn(
+          { containerName: this.containerName, instanceId: this.instanceId },
+          'Refusing to remove a Traefik container owned by another OpenLander instance',
+        );
+        return;
+      }
       await this.runtime.safeRemoveContainer(this.containerName);
     } catch (err) {
       log.warn({ err }, 'Failed to remove Traefik container — may already be removed');
@@ -616,6 +671,25 @@ export async function ensureManagedTraefikNetwork(
   networkName: string,
 ): Promise<void> {
   try {
+    const instanceId = runtime.getInstanceId?.();
+    if (instanceId) {
+      const containers = await runtime.listAllContainers();
+      const traefik = containers.find(
+        (container) => container.name === 'traefik-ol' || container.id === 'traefik-ol',
+      );
+      if (!traefik || traefik.labels[DOCKER_LABELS.INSTANCE] !== instanceId) {
+        log.warn(
+          {
+            networkName,
+            instanceId,
+            ownerInstanceId:
+              traefik?.labels[DOCKER_LABELS.INSTANCE] ?? (traefik ? 'legacy-unlabeled' : 'missing'),
+          },
+          'Refusing to connect a Traefik container owned by another OpenLander instance',
+        );
+        return;
+      }
+    }
     await runtime.connectContainerToNetwork('traefik-ol', networkName);
   } catch (error) {
     if (isDockerNotFoundError(error)) {

@@ -12,6 +12,7 @@ export function evaluateDeliveryReadiness(
 ): DeliveryReadiness {
   const approvedArtifacts = detail.artifacts.filter((artifact) => artifact.status === 'approved');
   const activeApprovals = detail.approvals.filter((approval) => !approval.invalidated_at);
+  const reviewRequired = detail.gates.some((gate) => gate.gate_type === 'review' && gate.required);
   const unresolved = detail.work_items.filter(
     (item) =>
       (item.kind === 'change_request' || item.kind === 'question') && item.status === 'confirmed',
@@ -71,10 +72,11 @@ export function evaluateDeliveryReadiness(
     },
     {
       key: 'customer_approval',
-      passed: activeApprovals.length > 0,
-      params: { count: activeApprovals.length },
-      message:
-        activeApprovals.length > 0
+      passed: !reviewRequired || activeApprovals.length > 0,
+      params: { count: activeApprovals.length, required: reviewRequired ? 1 : 0 },
+      message: !reviewRequired
+        ? 'Customer approval evidence is not required by the manifest.'
+        : activeApprovals.length > 0
           ? `${String(activeApprovals.length)} active customer approval record(s)`
           : 'Customer approval evidence is required.',
     },

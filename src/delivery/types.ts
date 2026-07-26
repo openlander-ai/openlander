@@ -7,11 +7,18 @@ import type {
   DeliveryFeedbackSourceRow,
   DeliveryGateRow,
   DeliveryReceiptRow,
+  DeliveryAgentRunEventRow,
+  DeliveryAgentRunRow,
+  DeliveryRunCheckRow,
   DeliveryRow,
   DeliveryWorkItemRow,
   DeployLogTableRow,
   EnvironmentTableRow,
   ProjectDeliverySettingsRow,
+  ProjectEnvironmentRow,
+  ReleaseArtifactRow,
+  ReleasePromotionRow,
+  ReleaseRow,
   ServiceTableRow,
 } from '../db/schema.drizzle.js';
 
@@ -49,6 +56,16 @@ export interface DeliveryDetail {
   gates: DeliveryGateRow[];
   deploy_links: DeliveryDeployEvidence[];
   receipt: DeliveryReceiptRow | null;
+}
+
+export interface DeliveryExecutionView {
+  agent_runs: DeliveryAgentRunRow[];
+  run_events: DeliveryAgentRunEventRow[];
+  run_checks: DeliveryRunCheckRow[];
+  project_environments: ProjectEnvironmentRow[];
+  releases: ReleaseRow[];
+  release_artifacts: ReleaseArtifactRow[];
+  release_promotions: ReleasePromotionRow[];
 }
 
 export interface DeliveryReadinessCheck {

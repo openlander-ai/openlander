@@ -23,7 +23,7 @@ dedicated VM/VPS or a separate Docker daemon for the candidate and point the
 tests at it:
 
 ```bash
-HOME=/tmp/openlander-e2e-home node dist/cli/index.js --no-open --port 10115
+OPENLANDER_DATA_DIR=/tmp/openlander-e2e-data node dist/cli/index.js --no-open --port 10115
 OPENLANDER_E2E_BASE_URL=http://localhost:10115 npx playwright test --project=quality-gate
 ```
 

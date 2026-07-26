@@ -106,6 +106,26 @@ export function postDeployCleanup(): void {
   }
 }
 
+/**
+ * Report high disk pressure without mutating the shared Docker daemon.
+ *
+ * An OpenLander process cannot prove ownership of dangling images or BuildKit
+ * cache on a Docker socket shared with another instance. Automatic maintenance
+ * therefore stays audit-only; an administrator can still run the explicit
+ * cleanup_docker action after reviewing its scope.
+ */
+export function auditDiskThresholdCleanup(): void {
+  try {
+    const usagePercent = getSystemStats().disk.usagePercent;
+    log.warn(
+      { usagePercent, thresholdPercent: DISK_CLEANUP_THRESHOLD_PERCENT },
+      'Disk usage is above the cleanup threshold; automatic Docker cleanup is audit-only',
+    );
+  } catch (err) {
+    log.warn({ err }, 'Failed to audit disk cleanup threshold');
+  }
+}
+
 export function diskThresholdCleanup(): void {
   try {
     const before = getSystemStats().disk.usagePercent;

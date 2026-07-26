@@ -643,15 +643,7 @@ export function ProjectView() {
           labelledBy="project-deliveries"
           className="p-0"
         >
-          {projectId && (
-            <DeliveriesTab
-              projectId={projectId}
-              onConfigure={() => {
-                setSettingsInitialSection('delivery');
-                setActiveTab('settings');
-              }}
-            />
-          )}
+          {projectId && <DeliveriesTab projectId={projectId} />}
         </TabPanel>
         <TabPanel
           active={activeTab === 'ai'}

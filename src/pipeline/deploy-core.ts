@@ -23,7 +23,7 @@ import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -517,7 +517,7 @@ export class DeployPipeline {
     void this.cleanupStaleTunnels().catch((err: unknown) => {
       log.debug({ err }, 'Stale tunnel cleanup failed');
     });
-    void this.cleanupOrphanContainers();
+    void this.auditOrphanContainers();
   }
 
   /**
@@ -528,18 +528,13 @@ export class DeployPipeline {
     await this.tunnelManager.cleanupStale();
   }
 
-  private async cleanupOrphanContainers(): Promise<void> {
+  private async auditOrphanContainers(): Promise<void> {
     try {
       const managed = await this.runtime.listManagedContainers();
       const projects = await this.db.listProjects();
       const services = await this.db.listServices();
-      const environmentsByProject = new Map<string, EnvironmentRow[]>(
-        await Promise.all(
-          projects.map(async (project): Promise<[string, EnvironmentRow[]]> => [
-            project.id,
-            await this.db.getEnvironmentsByProject(project.id),
-          ]),
-        ),
+      const environmentsByProject = await this.db.getEnvironmentsByProjectIds(
+        projects.map((project) => project.id),
       );
       const { knownIds, knownNames } = collectKnownContainerNames(
         projects,
@@ -553,15 +548,17 @@ export class DeployPipeline {
         if (knownNames.has(container.name)) continue;
         if (container.labels?.['openlander.role']) continue;
 
-        log.info({ id: container.id, name: container.name }, 'Removing orphan container');
-        try {
-          await this.runtime.safeRemoveContainer(container.id);
-        } catch (err) {
-          log.debug({ err, container: container.name }, 'Orphan container removal failed');
-        }
+        log.warn(
+          {
+            id: container.id,
+            name: container.name,
+            instanceId: container.labels?.[DOCKER_LABELS.INSTANCE] ?? null,
+          },
+          'Found unknown managed container; startup cleanup is audit-only',
+        );
       }
     } catch (err) {
-      log.debug({ err }, 'Orphan container cleanup failed — Docker may not be available');
+      log.debug({ err }, 'Orphan container audit failed — Docker may not be available');
     }
   }
 

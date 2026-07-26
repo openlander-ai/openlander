@@ -282,6 +282,13 @@ export function createDeliveryRoutes(ctx: AppContext): Hono {
     return c.json(await ctx.deliveryService.getDeliveryDetail(deliveryId));
   });
 
+  api.get('/projects/:projectId/deliveries/:deliveryId/execution', async (c) => {
+    const projectId = c.req.param('projectId');
+    const deliveryId = c.req.param('deliveryId');
+    await assertDeliveryProject(ctx, c, projectId, deliveryId);
+    return c.json(await ctx.deliveryService.getDeliveryExecution(deliveryId));
+  });
+
   api.patch('/projects/:projectId/deliveries/:deliveryId', async (c) => {
     const projectId = c.req.param('projectId');
     const deliveryId = c.req.param('deliveryId');

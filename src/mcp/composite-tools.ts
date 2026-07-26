@@ -59,6 +59,12 @@ export const DEPLOY_ACTIONS = [
   'remove_git_credential',
   'scan_dockerfiles',
   'analyze_infrastructure',
+  'create_release',
+  'get_release',
+  'promote_release',
+  'evaluate_promotion',
+  'recall_release',
+  'rollback_environment',
 ] as const;
 
 /**
@@ -69,10 +75,26 @@ export const DEPLOY_ACTIONS = [
  * - Temporary public share URLs
  * Includes Delivery Workspace metadata, feedback, Gate, deployment-link,
  * readiness, and Receipt-preview actions, plus read-only internal Engagement
- * portfolio summaries. Binary upload, Engagement mutation, and finalization
- * stay on the authenticated web/API surfaces.
+ * portfolio summaries. Binary evidence uses short-lived upload capabilities;
+ * human exception decisions and hard deletion stay on the Web surface.
  */
 export const PROJECT_ACTIONS = [
+  'bootstrap_engagement',
+  'update_engagement_from_brief',
+  'plan_delivery',
+  'create_evidence_upload',
+  'start_delivery_run',
+  'get_delivery_run',
+  'run_quality_gates',
+  'record_delivery_run_progress',
+  'resume_delivery_run',
+  'cancel_delivery_run',
+  'complete_delivery',
+  'generate_weekly_report',
+  'publish_weekly_report',
+  'get_weekly_report',
+  'apply_project_manifest',
+  'record_project_update',
   'create_project',
   'list_projects',
   'archive_project',

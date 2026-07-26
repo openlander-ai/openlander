@@ -42,6 +42,11 @@ import { PatTokenRepo } from './repos/pat-token.repo.js';
 import { GitCredentialRepo } from './repos/git-credential.repo.js';
 import { DeliveryRepo } from './repos/delivery.repo.js';
 import { EngagementRepo } from './repos/engagement.repo.js';
+import { ApplicationOperationRepo } from './repos/application-operation.repo.js';
+import { DeliveryAgentRunRepo } from './repos/delivery-agent-run.repo.js';
+import { ProjectEnvironmentRepo } from './repos/project-environment.repo.js';
+import { ReleaseRepo } from './repos/release.repo.js';
+import { WeeklyReportRepo } from './repos/weekly-report.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -95,6 +100,15 @@ export type {
   DeliveryReceiptRow,
   EngagementRow,
   EngagementProjectRow,
+  ApplicationOperationInvocationRow,
+  DeliveryAgentRunRow,
+  DeliveryAgentRunEventRow,
+  DeliveryRunCheckRow,
+  ProjectEnvironmentRow,
+  ReleaseRow,
+  ReleaseArtifactRow,
+  ReleasePromotionRow,
+  EngagementWeeklyReportRow,
 } from './schema.drizzle.js';
 
 const log = createModuleLogger('db-migration');
@@ -308,6 +322,11 @@ export class Database implements AuthDatabase {
   private readonly gitCredentialRepo: GitCredentialRepo;
   private readonly deliveryRepo: DeliveryRepo;
   private readonly engagementRepo: EngagementRepo;
+  private readonly applicationOperationRepo: ApplicationOperationRepo;
+  private readonly deliveryAgentRunRepo: DeliveryAgentRunRepo;
+  private readonly projectEnvironmentRepo: ProjectEnvironmentRepo;
+  private readonly releaseRepo: ReleaseRepo;
+  private readonly weeklyReportRepo: WeeklyReportRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -348,6 +367,11 @@ export class Database implements AuthDatabase {
     this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
     this.deliveryRepo = new DeliveryRepo(this.db, this.client);
     this.engagementRepo = new EngagementRepo(this.db, this.client);
+    this.applicationOperationRepo = new ApplicationOperationRepo(this.db, this.client);
+    this.deliveryAgentRunRepo = new DeliveryAgentRunRepo(this.db, this.client);
+    this.projectEnvironmentRepo = new ProjectEnvironmentRepo(this.db, this.client);
+    this.releaseRepo = new ReleaseRepo(this.db, this.client);
+    this.weeklyReportRepo = new WeeklyReportRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -365,6 +389,11 @@ export class Database implements AuthDatabase {
     log.info({ migrationsFolder }, 'Postgres migrations applied');
     const database = new Database(client, db);
     await database.actionRunRepo.markStaleAsFailedOnStartup();
+    const interruptedOperations =
+      await database.applicationOperationRepo.markRunningAsFailedOnStartup();
+    if (interruptedOperations > 0) {
+      log.warn({ interruptedOperations }, 'Marked interrupted application operations as failed');
+    }
     const repairedManagedKinds = await database.serviceRepo.repairManagedServiceKindAliases();
     if (repairedManagedKinds > 0) {
       log.info(
@@ -388,6 +417,27 @@ export class Database implements AuthDatabase {
   createProjectGroup(project: Parameters<ProjectRepo['createProjectGroup']>[0]) {
     return this.projectRepo.createProjectGroup(project);
   }
+  claimApplicationOperation(input: Parameters<ApplicationOperationRepo['claim']>[0]) { return this.applicationOperationRepo.claim(input); }
+  getApplicationOperationById(id: string) { return this.applicationOperationRepo.findById(id); }
+  retryFailedApplicationOperation(id: string) { return this.applicationOperationRepo.retryFailed(id); }
+  succeedApplicationOperation(id: string, response: Record<string, unknown>) { return this.applicationOperationRepo.succeed(id, response); }
+  failApplicationOperation(id: string, error: Record<string, unknown>) { return this.applicationOperationRepo.fail(id, error); }
+  startDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['start']>[0]) { return this.deliveryAgentRunRepo.start(input); }
+  getDeliveryAgentRun(id: string) { return this.deliveryAgentRunRepo.get(id); }
+  requireDeliveryAgentRun(id: string) { return this.deliveryAgentRunRepo.require(id); }
+  listDeliveryAgentRuns(deliveryId: string) { return this.deliveryAgentRunRepo.listForDelivery(deliveryId); }
+  listDeliveryAgentRunEventsForRuns(runIds: readonly string[]) { return this.deliveryAgentRunRepo.listEventsForRuns(runIds); }
+  listDeliveryRunChecksForRuns(runIds: readonly string[]) { return this.deliveryAgentRunRepo.listChecksForRuns(runIds); }
+  listDeliveryAgentRunEvents(id: string) { return this.deliveryAgentRunRepo.listEvents(id); }
+  recordDeliveryAgentRunProgress(input: Parameters<DeliveryAgentRunRepo['recordProgress']>[0]) { return this.deliveryAgentRunRepo.recordProgress(input); }
+  resumeDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['resume']>[0]) { return this.deliveryAgentRunRepo.resume(input); }
+  cancelDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['cancel']>[0]) { return this.deliveryAgentRunRepo.cancel(input); }
+  startDeliveryRunCheck(input: Parameters<DeliveryAgentRunRepo['startCheck']>[0]) { return this.deliveryAgentRunRepo.startCheck(input); }
+  finishDeliveryRunCheck(input: Parameters<DeliveryAgentRunRepo['finishCheck']>[0]) { return this.deliveryAgentRunRepo.finishCheck(input); }
+  listDeliveryRunChecks(runId: string) { return this.deliveryAgentRunRepo.listChecks(runId); }
+  setDeliveryAgentRunRunnerDigest(runId: string, digest: string) { return this.deliveryAgentRunRepo.setRunnerImageDigest(runId, digest); }
+  failDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['fail']>[0]) { return this.deliveryAgentRunRepo.fail(input); }
+  completeDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['complete']>[0]) { return this.deliveryAgentRunRepo.complete(input); }
   ensureDeployableServiceForProject(projectId: string, input: Parameters<ProjectRepo['ensureDeployableServiceForProject']>[1]) {
     return this.projectRepo.ensureDeployableServiceForProject(projectId, input);
   }
@@ -420,11 +470,36 @@ export class Database implements AuthDatabase {
   // + recovery stale window all share a single 30-min boundary.
   cleanExpiredDeployLocks(timeoutMinutes = 30) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
+  createProjectEnvironmentRuntime(environment: Parameters<EnvironmentRepo['createProjectEnvironmentRuntime']>[0]) { return this.environmentRepo.createProjectEnvironmentRuntime(environment); }
+  getEnvironmentByServiceAndProjectEnvironment(serviceId: string, projectEnvironmentId: string) { return this.environmentRepo.getEnvironmentByServiceAndProjectEnvironment(serviceId, projectEnvironmentId); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
   getEnvironmentsByProjectIds(projectIds: string[]) { return this.environmentRepo.getEnvironmentsByProjectIds(projectIds); }
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { return this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { return this.environmentRepo.deleteEnvironment(id); }
+  syncProjectEnvironments(projectId: string, manifestSha256: string, inputs: Parameters<ProjectEnvironmentRepo['sync']>[2]) { return this.projectEnvironmentRepo.sync(projectId, manifestSha256, inputs); }
+  getProjectEnvironment(id: string) { return this.projectEnvironmentRepo.get(id); }
+  listProjectEnvironments(projectId: string) { return this.projectEnvironmentRepo.list(projectId); }
+  createRelease(input: Parameters<ReleaseRepo['create']>[0]) { return this.releaseRepo.create(input); }
+  getRelease(id: string) { return this.releaseRepo.get(id); }
+  requireRelease(id: string) { return this.releaseRepo.require(id); }
+  listReleasesForDelivery(deliveryId: string) { return this.releaseRepo.listForDelivery(deliveryId); }
+  setReleaseStatus(id: string, status: Parameters<ReleaseRepo['setStatus']>[1]) { return this.releaseRepo.setStatus(id, status); }
+  addReleaseArtifact(input: Parameters<ReleaseRepo['addArtifact']>[0]) { return this.releaseRepo.addArtifact(input); }
+  listReleaseArtifacts(releaseId: string) { return this.releaseRepo.listArtifacts(releaseId); }
+  listReleaseArtifactsForReleases(releaseIds: readonly string[]) { return this.releaseRepo.listArtifactsForReleases(releaseIds); }
+  listReleasePromotionsForReleases(releaseIds: readonly string[]) { return this.releaseRepo.listPromotionsForReleases(releaseIds); }
+  createReleasePromotion(input: Parameters<ReleaseRepo['createPromotion']>[0]) { return this.releaseRepo.createPromotion(input); }
+  updateReleasePromotion(id: string, patch: Parameters<ReleaseRepo['updatePromotion']>[1]) { return this.releaseRepo.updatePromotion(id, patch); }
+  finalizeReleasePromotion(input: Parameters<ReleaseRepo['finalizePromotion']>[0]) { return this.releaseRepo.finalizePromotion(input); }
+  getReleasePromotion(id: string) { return this.releaseRepo.getPromotion(id); }
+  listReleasePromotions(releaseId: string) { return this.releaseRepo.listPromotionsForRelease(releaseId); }
+  getLatestSuccessfulPromotion(projectEnvironmentId: string) { return this.releaseRepo.latestSuccessfulPromotion(projectEnvironmentId); }
+  collectWeeklyReportEvidence(engagementId: string, periodStart: string, periodEnd: string) { return this.weeklyReportRepo.collectEvidence(engagementId, periodStart, periodEnd); }
+  createWeeklyReport(input: Parameters<WeeklyReportRepo['create']>[0]) { return this.weeklyReportRepo.create(input); }
+  getWeeklyReport(id: string) { return this.weeklyReportRepo.get(id); }
+  listWeeklyReports(engagementId: string) { return this.weeklyReportRepo.list(engagementId); }
+  publishWeeklyReport(input: Parameters<WeeklyReportRepo['publish']>[0]) { return this.weeklyReportRepo.publish(input); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
   getEnvVarsForService(projectId: string, serviceId: string, environmentId?: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId, environmentId); }
   setEnvVar(projectId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVar(projectId, key, value, environmentId); }
@@ -715,10 +790,12 @@ export class Database implements AuthDatabase {
   getDeliveryProjectIdByArtifactId(artifactId: string) { return this.deliveryRepo.getDeliveryProjectIdByArtifactId(artifactId); }
   getDeliveryProjectIdsByDeployId(deployId: string) { return this.deliveryRepo.getDeliveryProjectIdByDeployId(deployId); }
   getDeliveryArtifactsByIds(ids: string[]) { return this.deliveryRepo.getArtifactsByIds(ids); }
+  getArtifactProjectRowsByIds(ids: string[]) { return this.deliveryRepo.getArtifactProjectRowsByIds(ids); }
   listEngagements(includeArchived?: boolean) { return this.engagementRepo.list(includeArchived); }
   getEngagement(id: string) { return this.engagementRepo.get(id); }
   requireEngagement(id: string) { return this.engagementRepo.require(id); }
   createEngagement(input: Parameters<EngagementRepo['create']>[0]) { return this.engagementRepo.create(input); }
+  bootstrapEngagement(input: Parameters<EngagementRepo['bootstrap']>[0]) { return this.engagementRepo.bootstrap(input); }
   updateEngagement(id: string, input: Parameters<EngagementRepo['update']>[1]) { return this.engagementRepo.update(id, input); }
   archiveEngagement(id: string, actor?: string) { return this.engagementRepo.archive(id, actor); }
   unarchiveEngagement(id: string, actor?: string) { return this.engagementRepo.unarchive(id, actor); }

@@ -258,6 +258,55 @@ describe('waitForContainer', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: runEphemeralContainer
+// ---------------------------------------------------------------------------
+
+describe('runEphemeralContainer', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('runs argv directly in a bounded disposable workspace and removes the container', async () => {
+    const containerHandle = {
+      start: vi.fn().mockResolvedValueOnce(undefined),
+      wait: vi.fn().mockResolvedValueOnce({ StatusCode: 0 }),
+      logs: vi.fn().mockResolvedValueOnce(Buffer.from('2 tests passed')),
+      remove: vi.fn().mockResolvedValueOnce(undefined),
+    };
+    mockCreateContainer.mockResolvedValueOnce(containerHandle);
+
+    const docker = new Docker(undefined, undefined, 'olinst_quality');
+    const result = await docker.runEphemeralContainer({
+      imageTag: 'node:22',
+      name: 'ol-quality-run-1-unit',
+      projectId: 'project-1',
+      workspacePath: '/tmp/openlander-repo',
+      command: ['npm', 'test', '--', '--run'],
+      timeoutMs: 30_000,
+    });
+
+    expect(result).toMatchObject({ exitCode: 0, logs: '2 tests passed', timedOut: false });
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: ['npm', 'test', '--', '--run'],
+        WorkingDir: '/workspace',
+        Tty: true,
+        Labels: expect.objectContaining({
+          'openlander.instance': 'olinst_quality',
+          'openlander.project': 'project-1',
+          'openlander.purpose': 'delivery-quality-check',
+        }),
+        HostConfig: expect.objectContaining({
+          AutoRemove: false,
+          Binds: ['/tmp/openlander-repo:/workspace:rw'],
+          RestartPolicy: { Name: 'no' },
+        }),
+      }),
+    );
+    expect(containerHandle.remove).toHaveBeenCalledWith({ force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: runServiceContainer
 // ---------------------------------------------------------------------------
 
@@ -272,7 +321,7 @@ describe('runServiceContainer', () => {
     };
     mockCreateContainer.mockResolvedValueOnce(containerHandle);
 
-    const docker = new Docker();
+    const docker = new Docker(undefined, undefined, 'olinst_a');
     const id = await docker.runServiceContainer({
       imageTag: 'postgres:15',
       name: 'ol-svc-postgres',
@@ -291,6 +340,7 @@ describe('runServiceContainer', () => {
           'openlander.managed': 'true',
           'openlander.role': 'service',
           'openlander.service': 'postgres',
+          'openlander.instance': 'olinst_a',
         }),
       }),
     );

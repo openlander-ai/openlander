@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
 import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
 import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
+import {
+  agentDeliveryToolDefs,
+  projectManifestToolDefs,
+} from '../../src/tools/defs/agent-delivery.js';
+import { releaseOperationToolDefs } from '../../src/tools/defs/release-operations.js';
+import { reportingOperationToolDefs } from '../../src/tools/defs/reporting-operations.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -19,20 +25,26 @@ const EXPECTED_TOOLS = [
   'add_domain_route',
   'add_volume',
   'analyze_infrastructure',
+  'apply_project_manifest',
   'apply_route_config',
   'archive_project',
   'archive_service',
   'attach_delivery_url',
   'backup_service',
+  'bootstrap_engagement',
   'bulk_delete_env_vars',
+  'cancel_delivery_run',
   'cancel_deploy',
   'cleanup_docker',
   'cleanup_preview',
+  'complete_delivery',
   'create_bucket',
   'create_delivery',
   'create_deploy_plan',
+  'create_evidence_upload',
   'create_git_deploy_key',
   'create_project',
+  'create_release',
   'create_service',
   'create_service_user',
   'delete_bucket',
@@ -42,16 +54,19 @@ const EXPECTED_TOOLS = [
   'diagnose_host_resources',
   'diagnose_service',
   'dismiss_alert',
+  'evaluate_promotion',
   'exec_service_container',
   'execute_deploy_plan',
   'export_env_vars',
   'expose_public',
   'generate_delivery_receipt_preview',
+  'generate_weekly_report',
   'get_ai_ops_briefing',
   'get_alerts',
   'get_build_log',
   'get_delivery',
   'get_delivery_readiness',
+  'get_delivery_run',
   'get_deploy_history',
   'get_deploy_plan',
   'get_deploy_status',
@@ -61,11 +76,13 @@ const EXPECTED_TOOLS = [
   'get_instance_info',
   'get_logs',
   'get_project_stats',
+  'get_release',
   'get_service_credentials',
   'get_service_logs',
   'get_service_status',
   'get_system_stats',
   'get_topology',
+  'get_weekly_report',
   'link_delivery_deploy',
   'list_ai_ops_briefings',
   'list_archived_services',
@@ -85,11 +102,17 @@ const EXPECTED_TOOLS = [
   'list_services',
   'list_volumes',
   'mcp_action_status',
+  'plan_delivery',
   'preview_deploy',
   'probe_host',
+  'promote_release',
+  'publish_weekly_report',
   'read_data_source',
+  'recall_release',
   'record_delivery_feedback',
   'record_delivery_gate_result',
+  'record_delivery_run_progress',
+  'record_project_update',
   'redeploy_app',
   'remove_git_credential',
   'remove_secret_file',
@@ -97,11 +120,15 @@ const EXPECTED_TOOLS = [
   'remove_volume',
   'restart_service',
   'restore_service',
+  'resume_delivery_run',
+  'rollback_environment',
   'rollback_service',
+  'run_quality_gates',
   'scan_dockerfiles',
   'search_github_repos',
   'set_env_vars',
   'set_global_secret',
+  'start_delivery_run',
   'start_service',
   'stop_service',
   'submit_delivery_work_item_drafts',
@@ -112,6 +139,7 @@ const EXPECTED_TOOLS = [
   'update_application_source',
   'update_delivery_draft',
   'update_deploy_plan',
+  'update_engagement_from_brief',
   'update_service_config',
   'upload_secret_file',
   'validate_deploy_plan',
@@ -142,6 +170,10 @@ function getMcpToolDefs(): ToolDef[] {
     ...debugToolDefs,
     ...deliveryToolDefs,
     ...engagementToolDefs,
+    ...agentDeliveryToolDefs,
+    ...projectManifestToolDefs,
+    ...releaseOperationToolDefs,
+    ...reportingOperationToolDefs,
   ];
 }
 
@@ -162,8 +194,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 100 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(100);
+  it('maintains exactly 122 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(122);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

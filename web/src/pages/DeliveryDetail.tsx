@@ -1,61 +1,51 @@
 import {
   ArrowLeft,
+  Bot,
   Check,
   CircleAlert,
   Download,
   ExternalLink,
   FileCheck2,
   FileText,
-  Link2,
   Loader2,
   MessageSquareText,
   PackageCheck,
   Rocket,
   ShieldCheck,
-  Upload,
+  X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { OuterCard } from '@/components/Shell/OuterCard';
-import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
+import { AgentGuideDialog } from '@/components/agent-guide/AgentGuideDialog';
 import {
   DeliveryWorkflowRail,
   type DeliveryDetailTab,
 } from '@/components/delivery/DeliveryWorkflowRail';
+import { EngagementChip } from '@/components/engagement/EngagementChip';
+import { OuterCard } from '@/components/Shell/OuterCard';
+import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
+import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/i18n/context';
 import {
-  attachDeliveryExternalRef,
   downloadReceipt,
-  finalizeReceipt,
   generateReceiptPreview,
   getDelivery,
+  getDeliveryExecution,
   getDeliveryReadiness,
-  linkDeliveryDeploy,
-  recordDeliveryApproval,
-  recordDeliveryFeedback,
   recordDeliveryGate,
   setDeliveryArtifactStatus,
   transitionDelivery,
-  unlinkDeliveryDeploy,
-  updateDelivery,
-  updateDeliveryGateTemplate,
   updateDeliveryWorkItem,
-  uploadDeliveryArtifact,
-  type Delivery,
-  type DeliveryArtifact,
   type DeliveryDetail,
+  type DeliveryExecutionView,
   type DeliveryGate,
   type DeliveryReadiness,
   type DeliveryReadinessCheck,
   type DeliveryStatus,
   type DeliveryType,
 } from '@/lib/api/deliveries';
-import { useLanguage } from '@/i18n/context';
-import { cn } from '@/lib/utils';
-import { EngagementChip } from '@/components/engagement/EngagementChip';
 import { localizeApiError } from '@/lib/localized-api-error';
+import { cn } from '@/lib/utils';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -132,6 +122,14 @@ function SectionCard({
   );
 }
 
+function EmptyEvidence({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-md border border-dashed border-[color:var(--ol-border)] px-3 py-6 text-center text-xs text-[color:var(--ol-fg-muted)]">
+      {children}
+    </p>
+  );
+}
+
 function downloadBlob(blob: Blob, filename: string, openInline = false): void {
   const url = URL.createObjectURL(blob);
   if (openInline) {
@@ -155,6 +153,16 @@ function statusClass(status: DeliveryStatus): string {
   return 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]';
 }
 
+interface PanelProps {
+  detail: DeliveryDetail;
+  immutable: boolean;
+  busy: string | null;
+  onRun: (key: string, operation: () => Promise<unknown>, success?: string) => Promise<void>;
+  projectId: string;
+  deliveryId: string;
+  execution: DeliveryExecutionView | null;
+}
+
 export function DeliveryDetailPage() {
   const { projectId = '', deliveryId = '' } = useParams<{
     projectId: string;
@@ -165,25 +173,27 @@ export function DeliveryDetailPage() {
   const [activeTab, setActiveTab] = useState<DeliveryDetailTab>('overview');
   const [detail, setDetail] = useState<DeliveryDetail | null>(null);
   const [readiness, setReadiness] = useState<DeliveryReadiness | null>(null);
+  const [execution, setExecution] = useState<DeliveryExecutionView | null>(null);
+  const [receiptPreviewCurrent, setReceiptPreviewCurrent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [previewSucceeded, setPreviewSucceeded] = useState(false);
+  const [agentGuideOpen, setAgentGuideOpen] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      const [nextDetail, nextReadiness] = await Promise.all([
+      const [nextDetail, nextReadiness, nextExecution] = await Promise.all([
         getDelivery(projectId, deliveryId),
         getDeliveryReadiness(projectId, deliveryId).catch(() => null),
+        getDeliveryExecution(projectId, deliveryId).catch(() => null),
       ]);
       setDetail(nextDetail);
       setReadiness(nextReadiness);
-      setPreviewSucceeded(
-        nextDetail.delivery.status === 'ready' &&
-          nextDetail.delivery.previewed_evidence_version === nextDetail.delivery.evidence_version,
+      setExecution(nextExecution);
+      setReceiptPreviewCurrent(
+        nextDetail.delivery.previewed_evidence_version === nextDetail.delivery.evidence_version,
       );
     } catch (err) {
       setError(localizeApiError(err, t, 'delivery.errors.load', 'delivery.errors.codes'));
@@ -194,15 +204,15 @@ export function DeliveryDetailPage() {
 
   useEffect(() => {
     void load();
+    const timer = window.setInterval(() => void load(), 10_000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   const run = async (key: string, operation: () => Promise<unknown>, success?: string) => {
     setBusy(key);
     setError(null);
     setMessage(null);
-    if (key !== 'receipt:preview' && key !== 'receipt:finalize') {
-      setPreviewSucceeded(false);
-    }
+    if (key !== 'receipt:preview') setReceiptPreviewCurrent(false);
     try {
       await operation();
       if (success) setMessage(success);
@@ -273,7 +283,7 @@ export function DeliveryDetailPage() {
 
       <OuterCard
         title={
-          <span className="flex items-center gap-2">
+          <span className="flex flex-wrap items-center gap-2">
             <FileCheck2 className="h-5 w-5 text-[color:var(--ol-primary)]" />
             <span>{detail.delivery.title}</span>
             <EngagementChip projectId={projectId} />
@@ -290,6 +300,12 @@ export function DeliveryDetailPage() {
         subtitle={`${t(`delivery.type.${detail.delivery.delivery_type}`)} · ${t(
           `delivery.maturity.${detail.delivery.maturity}`,
         )} · ${detail.delivery.id}`}
+        actions={
+          <Button size="sm" onClick={() => setAgentGuideOpen(true)}>
+            <Bot className="h-3.5 w-3.5" />
+            {t('delivery.actions.askAgent')}
+          </Button>
+        }
         bodyClassName="p-0"
       >
         <ProjectTabs
@@ -308,6 +324,9 @@ export function DeliveryDetailPage() {
             onChange={setActiveTab}
           />
 
+          <div className="rounded-md border border-[color:var(--ol-primary)]/25 bg-[color:var(--ol-primary-soft)] px-3 py-2 text-xs text-[color:var(--ol-fg-muted)]">
+            {t('delivery.formless.detailDescription')}
+          </div>
           {error && (
             <div
               role="alert"
@@ -342,6 +361,7 @@ export function DeliveryDetailPage() {
               onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              execution={execution}
             />
           </TabPanel>
           <TabPanel
@@ -356,6 +376,7 @@ export function DeliveryDetailPage() {
               onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              execution={execution}
             />
           </TabPanel>
           <TabPanel
@@ -370,6 +391,7 @@ export function DeliveryDetailPage() {
               onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              execution={execution}
             />
           </TabPanel>
           <TabPanel
@@ -384,6 +406,7 @@ export function DeliveryDetailPage() {
               onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              execution={execution}
             />
           </TabPanel>
           <TabPanel
@@ -398,6 +421,7 @@ export function DeliveryDetailPage() {
               onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              execution={execution}
             />
           </TabPanel>
           <TabPanel
@@ -409,48 +433,36 @@ export function DeliveryDetailPage() {
               detail={detail}
               readiness={readiness}
               busy={busy}
-              previewSucceeded={previewSucceeded}
-              onPreviewSucceeded={() => setPreviewSucceeded(true)}
-              onRun={run}
               projectId={projectId}
               deliveryId={deliveryId}
+              previewCurrent={receiptPreviewCurrent}
+              onPreviewed={load}
             />
           </TabPanel>
         </div>
       </OuterCard>
+
+      <AgentGuideDialog
+        open={agentGuideOpen}
+        onOpenChange={setAgentGuideOpen}
+        kind="manage-delivery"
+        projectName={projectId}
+        deliveryId={deliveryId}
+      />
     </div>
   );
 }
 
-function OverviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
+function OverviewPanel({
+  detail,
+  immutable,
+  busy,
+  onRun,
+  projectId,
+  deliveryId,
+  execution,
+}: PanelProps) {
   const { t } = useLanguage();
-  const [title, setTitle] = useState(detail.delivery.title);
-  const [summary, setSummary] = useState(detail.delivery.summary);
-  const [limitations, setLimitations] = useState(detail.delivery.limitations ?? '');
-  const [maturity, setMaturity] = useState(detail.delivery.maturity);
-
-  useEffect(() => {
-    setTitle(detail.delivery.title);
-    setSummary(detail.delivery.summary);
-    setLimitations(detail.delivery.limitations ?? '');
-    setMaturity(detail.delivery.maturity);
-  }, [detail.delivery]);
-
-  const save = (event: FormEvent) => {
-    event.preventDefault();
-    void onRun(
-      'overview',
-      () =>
-        updateDelivery(projectId, deliveryId, {
-          title,
-          summary,
-          limitations,
-          maturity,
-        }),
-      t('delivery.messages.saved'),
-    );
-  };
-
   const transitions: Array<{ status: DeliveryStatus; label: string }> = [];
   if (detail.delivery.status === 'draft') {
     transitions.push({ status: 'in_review', label: t('delivery.actions.startReview') });
@@ -465,104 +477,60 @@ function OverviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }
   } else if (detail.delivery.status === 'approved') {
     transitions.push({ status: 'in_review', label: t('delivery.actions.reopenReview') });
   }
-  if (
-    detail.delivery.status === 'draft' ||
-    detail.delivery.status === 'in_review' ||
-    detail.delivery.status === 'revision_requested' ||
-    detail.delivery.status === 'approved'
-  ) {
+  if (!immutable && detail.delivery.status !== 'ready') {
     transitions.push({ status: 'cancelled', label: t('delivery.actions.cancelDelivery') });
   }
 
   return (
-    <SectionCard
-      title={t('delivery.overview.title')}
-      description={t('delivery.overview.description')}
-    >
-      <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
-        {detail.delivery.predecessor_delivery_id && (
+    <div className="space-y-4">
+      <SectionCard
+        title={t('delivery.overview.title')}
+        description={t('delivery.formless.agentManaged')}
+      >
+        <dl className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <Label>{t('delivery.fields.predecessor')}</Label>
-            <p className="ol-mono mt-1.5 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-xs">
-              {detail.delivery.predecessor_delivery_id}
-            </p>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+              {t('delivery.fields.summary')}
+            </dt>
+            <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[color:var(--ol-fg)]">
+              {detail.delivery.summary || t('delivery.formless.noSummary')}
+            </dd>
           </div>
-        )}
-        <div className="sm:col-span-2">
-          <Label htmlFor="detail-title">{t('delivery.fields.title')}</Label>
-          <Input
-            id="detail-title"
-            className="mt-1.5"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={immutable}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="detail-type">{t('delivery.fields.type')}</Label>
-          <Input
-            id="detail-type"
-            className="mt-1.5"
-            value={t(`delivery.type.${detail.delivery.delivery_type}`)}
-            disabled
-          />
-        </div>
-        <div>
-          <Label htmlFor="detail-maturity">{t('delivery.fields.maturity')}</Label>
-          <select
-            id="detail-maturity"
-            className="mt-1.5 h-9 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-            value={maturity}
-            onChange={(event) => setMaturity(event.target.value as Delivery['maturity'])}
-            disabled={immutable}
-          >
-            {(
-              [
-                'concept',
-                'functional_preview',
-                'customer_review',
-                'release_candidate',
-                'production',
-              ] as Delivery['maturity'][]
-            ).map((value) => (
-              <option key={value} value={value}>
-                {t(`delivery.maturity.${value}`)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sm:col-span-2">
-          <Label htmlFor="detail-summary">{t('delivery.fields.summary')}</Label>
-          <textarea
-            id="detail-summary"
-            rows={4}
-            className="mt-1.5 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 text-xs"
-            value={summary}
-            onChange={(event) => setSummary(event.target.value)}
-            disabled={immutable}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <Label htmlFor="detail-limitations">{t('delivery.fields.limitations')}</Label>
-          <textarea
-            id="detail-limitations"
-            rows={3}
-            className="mt-1.5 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 text-xs"
-            value={limitations}
-            onChange={(event) => setLimitations(event.target.value)}
-            disabled={immutable}
-          />
-        </div>
-        {!immutable && (
-          <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
-            <Button type="submit" variant="outline" size="sm" disabled={busy === 'overview'}>
-              {t('delivery.actions.save')}
-            </Button>
+          <div className="sm:col-span-2">
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+              {t('delivery.fields.limitations')}
+            </dt>
+            <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[color:var(--ol-fg)]">
+              {detail.delivery.limitations || t('delivery.formless.noLimitations')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+              {t('delivery.fields.type')}
+            </dt>
+            <dd className="mt-1 text-xs">{t(`delivery.type.${detail.delivery.delivery_type}`)}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+              {t('delivery.fields.maturity')}
+            </dt>
+            <dd className="mt-1 text-xs">{t(`delivery.maturity.${detail.delivery.maturity}`)}</dd>
+          </div>
+          {detail.delivery.predecessor_delivery_id && (
+            <div className="sm:col-span-2">
+              <dt className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+                {t('delivery.fields.predecessor')}
+              </dt>
+              <dd className="ol-mono mt-1 text-xs">{detail.delivery.predecessor_delivery_id}</dd>
+            </div>
+          )}
+        </dl>
+        {transitions.length > 0 && (
+          <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-[color:var(--ol-border-subtle)] pt-4">
             {transitions.map((transition) => (
               <Button
                 key={transition.status}
-                type="button"
+                variant={transition.status === 'cancelled' ? 'outline' : 'default'}
                 size="sm"
                 disabled={busy !== null}
                 onClick={() =>
@@ -578,363 +546,252 @@ function OverviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }
             ))}
           </div>
         )}
-      </form>
-    </SectionCard>
-  );
-}
-
-interface PanelProps {
-  detail: DeliveryDetail;
-  immutable: boolean;
-  busy: string | null;
-  onRun: (key: string, operation: () => Promise<unknown>, success?: string) => Promise<void>;
-  projectId: string;
-  deliveryId: string;
-}
-
-function ArtifactsPanel(props: PanelProps) {
-  const { detail, immutable, busy, onRun, projectId, deliveryId } = props;
-  const { t } = useLanguage();
-  const [file, setFile] = useState<File | null>(null);
-  const [logicalKey, setLogicalKey] = useState('review');
-  const [revision, setRevision] = useState(1);
-  const [kind, setKind] = useState<DeliveryArtifact['kind']>('review_html');
-  const [receiptOrder, setReceiptOrder] = useState(0);
-  const [companionFor, setCompanionFor] = useState('');
-
-  const upload = (event: FormEvent) => {
-    event.preventDefault();
-    if (!file) return;
-    void onRun(
-      'artifact:upload',
-      () =>
-        uploadDeliveryArtifact(projectId, deliveryId, {
-          file,
-          logicalKey,
-          revision,
-          kind,
-          includeInReceipt: true,
-          receiptOrder,
-          companionForArtifactId: companionFor || undefined,
-        }),
-      t('delivery.messages.uploaded'),
-    ).then(() => setFile(null));
-  };
-
-  const htmlArtifacts = detail.artifacts.filter(
-    (artifact) => artifact.kind === 'review_html' && artifact.status !== 'superseded',
-  );
-
-  return (
-    <div className="space-y-4">
-      {!immutable && (
-        <SectionCard
-          title={t('delivery.artifacts.uploadTitle')}
-          description={t('delivery.artifacts.uploadDescription')}
-        >
-          <form onSubmit={upload} className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <Label htmlFor="artifact-file">{t('delivery.artifacts.file')}</Label>
-              <Input
-                id="artifact-file"
-                type="file"
-                className="mt-1.5"
-                accept=".html,.htm,.pdf,.md,.json,.xml,.png,.jpg,.jpeg,.webp"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="artifact-key">{t('delivery.artifacts.logicalKey')}</Label>
-              <Input
-                id="artifact-key"
-                className="mt-1.5"
-                value={logicalKey}
-                onChange={(event) => setLogicalKey(event.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="artifact-revision">{t('delivery.artifacts.revision')}</Label>
-              <Input
-                id="artifact-revision"
-                type="number"
-                min={1}
-                className="mt-1.5"
-                value={revision}
-                onChange={(event) => setRevision(Number(event.target.value))}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="artifact-kind">{t('delivery.artifacts.kind')}</Label>
-              <select
-                id="artifact-kind"
-                className="mt-1.5 h-9 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-                value={kind}
-                onChange={(event) => setKind(event.target.value as DeliveryArtifact['kind'])}
-              >
-                {(
-                  [
-                    'review_html',
-                    'companion_pdf',
-                    'markdown',
-                    'qa_report',
-                    'data_report',
-                    'image',
-                    'other',
-                  ] as DeliveryArtifact['kind'][]
-                ).map((value) => (
-                  <option key={value} value={value}>
-                    {t(`delivery.artifacts.kindValue.${value}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="artifact-order">{t('delivery.artifacts.order')}</Label>
-              <Input
-                id="artifact-order"
-                type="number"
-                min={0}
-                className="mt-1.5"
-                value={receiptOrder}
-                onChange={(event) => setReceiptOrder(Number(event.target.value))}
-              />
-            </div>
-            {kind === 'companion_pdf' && (
-              <div className="sm:col-span-2">
-                <Label htmlFor="artifact-companion">{t('delivery.artifacts.companionFor')}</Label>
-                <select
-                  id="artifact-companion"
-                  className="mt-1.5 h-9 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-                  value={companionFor}
-                  onChange={(event) => {
-                    const id = event.target.value;
-                    setCompanionFor(id);
-                    const html = htmlArtifacts.find((artifact) => artifact.id === id);
-                    if (html) {
-                      setLogicalKey(html.logical_key);
-                      setRevision(html.revision);
-                    }
-                  }}
-                >
-                  <option value="">{t('delivery.artifacts.noCompanion')}</option>
-                  {htmlArtifacts.map((artifact) => (
-                    <option key={artifact.id} value={artifact.id}>
-                      {artifact.original_filename} · {formatArtifactRevision(artifact.revision, t)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="flex justify-end sm:col-span-2">
-              <Button type="submit" size="sm" disabled={!file || busy === 'artifact:upload'}>
-                <Upload className="h-3.5 w-3.5" />
-                {t('delivery.actions.upload')}
-              </Button>
-            </div>
-          </form>
-        </SectionCard>
-      )}
-
-      <SectionCard title={t('delivery.artifacts.listTitle')}>
-        {detail.artifacts.length === 0 ? (
-          <p className="text-xs text-[color:var(--ol-fg-muted)]">{t('delivery.artifacts.empty')}</p>
-        ) : (
-          <div className="divide-y divide-[color:var(--ol-border-subtle)]">
-            {detail.artifacts.map((artifact) => (
-              <div key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
-                  <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
-                    {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
-                    {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
-                    {t(`delivery.artifacts.statusValue.${artifact.status}`)}
-                  </p>
-                  <p className="ol-mono mt-1 truncate text-[9px] text-[color:var(--ol-fg-subtle)]">
-                    {artifact.blob.sha256}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(
-                        deliveryId,
-                      )}/artifacts/${encodeURIComponent(artifact.id)}/download`}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {t('delivery.actions.download')}
-                    </a>
-                  </Button>
-                  {!immutable && artifact.status === 'draft' && (
-                    <Button
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(
-                          `artifact:${artifact.id}`,
-                          () =>
-                            setDeliveryArtifactStatus(
-                              projectId,
-                              deliveryId,
-                              artifact.id,
-                              'approved',
-                            ),
-                          t('delivery.messages.artifactApproved'),
-                        )
-                      }
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      {t('delivery.actions.approveArtifact')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </SectionCard>
+      <ExecutionPanel execution={execution} />
     </div>
   );
 }
 
-function ReviewPanel(props: PanelProps) {
-  const { detail, immutable, busy, onRun, projectId, deliveryId } = props;
-  const { t } = useLanguage();
-  const [sourceType, setSourceType] =
-    useState<DeliveryDetail['feedback_sources'][number]['source_type']>('slack');
-  const [sourceUrl, setSourceUrl] = useState('');
-  const [author, setAuthor] = useState('');
-  const [rawText, setRawText] = useState('');
-  const [resolutions, setResolutions] = useState<Record<string, string>>({});
-  const [selectedArtifacts, setSelectedArtifacts] = useState<string[]>([]);
-  const [approver, setApprover] = useState('');
-  const [approvalExcerpt, setApprovalExcerpt] = useState('');
-  const [approvalSourceUrl, setApprovalSourceUrl] = useState('');
-  const [refLabel, setRefLabel] = useState('');
-  const [refUrl, setRefUrl] = useState('');
-  const [refProvider, setRefProvider] =
-    useState<DeliveryDetail['external_refs'][number]['provider']>('slack');
-
-  const submitFeedback = (event: FormEvent) => {
-    event.preventDefault();
-    void onRun(
-      'feedback',
-      () =>
-        recordDeliveryFeedback(projectId, deliveryId, {
-          source_type: sourceType,
-          source_url: sourceUrl || null,
-          author_display_name: author || null,
-          raw_text: rawText,
-          occurred_at: new Date().toISOString(),
-        }),
-      t('delivery.messages.feedbackRecorded'),
-    ).then(() => setRawText(''));
-  };
-
-  const submitApproval = (event: FormEvent) => {
-    event.preventDefault();
-    void onRun(
-      'approval',
-      () =>
-        recordDeliveryApproval(projectId, deliveryId, {
-          artifact_ids: selectedArtifacts,
-          approver_display_name: approver,
-          approval_excerpt: approvalExcerpt,
-          source_type: sourceType,
-          source_url: approvalSourceUrl || null,
-          approved_at: new Date().toISOString(),
-        }),
-      t('delivery.messages.approvalRecorded'),
+function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null }) {
+  const { t, language } = useLanguage();
+  const run = execution?.agent_runs[0];
+  if (!execution || !run) {
+    return (
+      <SectionCard
+        title={t('delivery.execution.title')}
+        description={t('delivery.execution.description')}
+      >
+        <EmptyEvidence>{t('delivery.execution.empty')}</EmptyEvidence>
+      </SectionCard>
     );
-  };
+  }
 
-  const approvedArtifacts = detail.artifacts.filter((artifact) => artifact.status === 'approved');
+  const latestChecks = new Map<string, DeliveryExecutionView['run_checks'][number]>();
+  for (const check of execution.run_checks) {
+    if (check.run_id === run.id && !latestChecks.has(check.check_key)) {
+      latestChecks.set(check.check_key, check);
+    }
+  }
+  const events = execution.run_events.filter((event) => event.run_id === run.id).slice(0, 5);
 
   return (
-    <div className="space-y-4">
-      {!immutable && (
-        <SectionCard
-          title={t('delivery.review.feedbackTitle')}
-          description={t('delivery.review.feedbackDescription')}
-        >
-          <form onSubmit={submitFeedback} className="grid gap-3 sm:grid-cols-2">
-            <select
-              value={sourceType}
-              onChange={(event) =>
-                setSourceType(
-                  event.target.value as DeliveryDetail['feedback_sources'][number]['source_type'],
-                )
-              }
-              className="h-9 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-            >
-              {['slack', 'teams', 'email', 'meeting', 'other'].map((value) => (
-                <option key={value} value={value}>
-                  {t(`delivery.review.sourceType.${value}`)}
-                </option>
-              ))}
-            </select>
-            <Input
-              value={author}
-              onChange={(event) => setAuthor(event.target.value)}
-              placeholder={t('delivery.review.authorPlaceholder')}
-            />
-            <Input
-              value={sourceUrl}
-              onChange={(event) => setSourceUrl(event.target.value)}
-              placeholder={t('delivery.review.sourceUrlPlaceholder')}
-              className="sm:col-span-2"
-            />
-            <textarea
-              value={rawText}
-              onChange={(event) => setRawText(event.target.value)}
-              placeholder={t('delivery.review.rawTextPlaceholder')}
-              rows={5}
-              required
-              className="rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 text-xs sm:col-span-2"
-            />
-            <div className="flex justify-end sm:col-span-2">
-              <Button type="submit" size="sm" disabled={!rawText.trim() || busy === 'feedback'}>
-                {t('delivery.actions.recordFeedback')}
-              </Button>
+    <SectionCard
+      title={t('delivery.execution.title')}
+      description={t('delivery.execution.description')}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <strong className="text-xs">{t('delivery.execution.latestRun')}</strong>
+            <span className="rounded-full border border-[color:var(--ol-border)] px-2 py-0.5 text-[10px]">
+              {t(`delivery.execution.runStatus.${run.status}`)}
+            </span>
+          </div>
+          <dl className="mt-3 space-y-2 text-[10px]">
+            <div>
+              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.phase')}</dt>
+              <dd className="mt-0.5 text-xs">{run.current_phase}</dd>
             </div>
-          </form>
-        </SectionCard>
-      )}
+            <div>
+              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.commit')}</dt>
+              <dd className="ol-mono mt-0.5 break-all">{run.commit_sha}</dd>
+            </div>
+            <div>
+              <dt className="text-[color:var(--ol-fg-subtle)]">
+                {t('delivery.execution.manifest')}
+              </dt>
+              <dd className="ol-mono mt-0.5 break-all">
+                {run.manifest_path} · sha256:{run.manifest_sha256}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[color:var(--ol-fg-subtle)]">{t('delivery.execution.runner')}</dt>
+              <dd className="ol-mono mt-0.5 break-all">
+                {run.runner_image_digest ?? run.runner_image}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[color:var(--ol-fg-subtle)]">
+                {t('delivery.execution.started')}
+              </dt>
+              <dd className="mt-0.5">{new Date(run.started_at).toLocaleString(language)}</dd>
+            </div>
+          </dl>
+          {run.handoff_summary && (
+            <p className="mt-3 rounded bg-[color:var(--ol-panel-2)] px-2 py-1.5 text-xs leading-5">
+              <span className="font-medium">{t('delivery.execution.handoff')}: </span>
+              {run.handoff_summary}
+            </p>
+          )}
+        </div>
 
-      <SectionCard title={t('delivery.review.sourcesTitle')}>
-        <div className="space-y-3">
-          {detail.feedback_sources.length === 0 ? (
-            <p className="text-xs text-[color:var(--ol-fg-muted)]">
-              {t('delivery.review.noFeedback')}
+        <div className="rounded-md border border-[color:var(--ol-border-subtle)] p-3">
+          <strong className="text-xs">{t('delivery.execution.checks')}</strong>
+          {latestChecks.size === 0 ? (
+            <p className="mt-3 text-xs text-[color:var(--ol-fg-muted)]">
+              {t('delivery.execution.noChecks')}
             </p>
           ) : (
-            detail.feedback_sources.map((source) => (
+            <ul className="mt-3 space-y-2">
+              {[...latestChecks.values()].map((check) => (
+                <li
+                  key={check.id}
+                  className="rounded border border-[color:var(--ol-border-subtle)] px-2 py-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-medium">{check.check_key}</span>
+                    <span>{t(`delivery.execution.checkStatus.${check.status}`)}</span>
+                  </div>
+                  <p className="ol-mono mt-1 break-all text-[10px] text-[color:var(--ol-fg-muted)]">
+                    {check.command}
+                  </p>
+                  <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                    {t('delivery.execution.attempt', { attempt: check.attempt })}
+                    {check.duration_ms !== null
+                      ? ` · ${t('delivery.execution.duration', { duration: check.duration_ms })}`
+                      : ''}
+                    {check.exit_code !== null ? ` · exit ${check.exit_code}` : ''}
+                  </p>
+                  {(check.log_sha256 || check.report_artifact_id) && (
+                    <p className="ol-mono mt-1 break-all text-[9px] text-[color:var(--ol-fg-subtle)]">
+                      {check.log_sha256 ? `log sha256:${check.log_sha256}` : ''}
+                      {check.log_sha256 && check.report_artifact_id ? ' · ' : ''}
+                      {check.report_artifact_id ? `report:${check.report_artifact_id}` : ''}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-[color:var(--ol-border-subtle)] pt-4">
+        <strong className="text-xs">{t('delivery.execution.recentEvents')}</strong>
+        {events.length === 0 ? (
+          <p className="mt-2 text-xs text-[color:var(--ol-fg-muted)]">
+            {t('delivery.execution.noEvents')}
+          </p>
+        ) : (
+          <ol className="mt-2 space-y-2">
+            {events.map((event) => (
+              <li key={event.id} className="flex gap-3 text-xs">
+                <time className="shrink-0 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                  {new Date(event.created_at).toLocaleString(language)}
+                </time>
+                <span>
+                  {event.phase && <span className="font-medium">[{event.phase}] </span>}
+                  {event.summary}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
+  const { t } = useLanguage();
+  return (
+    <SectionCard
+      title={t('delivery.artifacts.listTitle')}
+      description={t('delivery.formless.artifactsDescription')}
+    >
+      {detail.artifacts.length === 0 ? (
+        <EmptyEvidence>{t('delivery.artifacts.empty')}</EmptyEvidence>
+      ) : (
+        <div className="divide-y divide-[color:var(--ol-border-subtle)]">
+          {detail.artifacts.map((artifact) => (
+            <div key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
+                <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                  {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
+                  {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
+                  {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+                </p>
+                <p className="ol-mono mt-1 truncate text-[9px] text-[color:var(--ol-fg-subtle)]">
+                  sha256:{artifact.blob.sha256}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {t('delivery.actions.download')}
+                  </a>
+                </Button>
+                {!immutable && artifact.status === 'draft' && (
+                  <Button
+                    size="sm"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void onRun(
+                        `artifact:${artifact.id}`,
+                        () =>
+                          setDeliveryArtifactStatus(projectId, deliveryId, artifact.id, 'approved'),
+                        t('delivery.messages.artifactApproved'),
+                      )
+                    }
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    {t('delivery.actions.approveArtifact')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
+  const { t, language } = useLanguage();
+  return (
+    <div className="space-y-4">
+      <SectionCard
+        title={t('delivery.review.sourcesTitle')}
+        description={t('delivery.formless.reviewDescription')}
+      >
+        {detail.feedback_sources.length === 0 ? (
+          <EmptyEvidence>{t('delivery.review.noFeedback')}</EmptyEvidence>
+        ) : (
+          <div className="space-y-3">
+            {detail.feedback_sources.map((source) => (
               <article
                 key={source.id}
                 className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3"
               >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
-                  {t(`delivery.review.sourceType.${source.source_type}`)} ·{' '}
-                  {source.author_display_name || t('delivery.review.unknown')}
-                </p>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--ol-fg-muted)]">
+                  <span>{t(`delivery.review.sourceType.${source.source_type}`)}</span>
+                  <span>·</span>
+                  <span>{source.author_display_name || t('delivery.review.unknown')}</span>
+                  <span>·</span>
+                  <time>
+                    {new Date(source.occurred_at ?? source.created_at).toLocaleString(language)}
+                  </time>
+                  {source.source_url && (
+                    <a
+                      className="ml-auto inline-flex items-center gap-1 text-[color:var(--ol-primary)]"
+                      href={source.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t('delivery.review.openSource')} <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
                 <p className="mt-2 whitespace-pre-wrap text-xs leading-5">{source.raw_text}</p>
-                {source.source_url && (
-                  <a
-                    href={source.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-[10px] text-[color:var(--ol-primary)]"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {t('delivery.review.openSource')}
-                  </a>
-                )}
               </article>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard
@@ -942,533 +799,375 @@ function ReviewPanel(props: PanelProps) {
         description={t('delivery.review.itemsDescription')}
       >
         {detail.work_items.length === 0 ? (
-          <p className="text-xs text-[color:var(--ol-fg-muted)]">{t('delivery.review.noItems')}</p>
+          <EmptyEvidence>{t('delivery.review.noItems')}</EmptyEvidence>
         ) : (
           <div className="space-y-3">
             {detail.work_items.map((item) => (
-              <div
+              <article
                 key={item.id}
                 className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase text-[color:var(--ol-primary)]">
+                  <span className="text-[10px] font-medium text-[color:var(--ol-primary)]">
                     {t(`delivery.review.kind.${item.kind}`)}
                   </span>
-                  <span className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                  <span className="rounded-full bg-[color:var(--ol-panel-2)] px-2 py-0.5 text-[10px] text-[color:var(--ol-fg-muted)]">
                     {t(`delivery.review.status.${item.status}`)}
                   </span>
                   {item.is_ai_draft && (
-                    <span className="rounded bg-[color:var(--ol-primary-soft)] px-1.5 py-0.5 text-[9px] text-[color:var(--ol-primary)]">
+                    <span className="text-[10px] text-[color:var(--ol-fg-subtle)]">
                       {t('delivery.review.aiDraft')}
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-xs font-medium">{item.title}</p>
-                {item.detail && <p className="mt-1 text-xs leading-5">{item.detail}</p>}
-                {!immutable && item.status === 'proposed' && (
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(`work:${item.id}`, () =>
-                          updateDeliveryWorkItem(projectId, deliveryId, item.id, {
-                            status: 'confirmed',
-                          }),
-                        )
-                      }
-                    >
-                      {t('delivery.actions.confirm')}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(`work:${item.id}`, () =>
-                          updateDeliveryWorkItem(projectId, deliveryId, item.id, {
-                            status: 'rejected',
-                          }),
-                        )
-                      }
-                    >
-                      {t('delivery.actions.reject')}
-                    </Button>
+                <h4 className="mt-2 text-xs font-semibold">{item.title}</h4>
+                <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                  {item.detail}
+                </p>
+                {item.resolution && (
+                  <p className="mt-2 rounded bg-[color:var(--ol-panel-2)] px-2 py-1.5 text-xs">
+                    {item.resolution}
+                  </p>
+                )}
+                {!immutable && (item.status === 'proposed' || item.status === 'confirmed') && (
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    {item.status === 'proposed' && (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            void onRun(
+                              `work:${item.id}:confirmed`,
+                              () =>
+                                updateDeliveryWorkItem(projectId, deliveryId, item.id, {
+                                  status: 'confirmed',
+                                }),
+                              t('delivery.messages.workItemUpdated'),
+                            )
+                          }
+                        >
+                          <Check className="h-3.5 w-3.5" /> {t('delivery.actions.confirm')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            void onRun(
+                              `work:${item.id}:rejected`,
+                              () =>
+                                updateDeliveryWorkItem(projectId, deliveryId, item.id, {
+                                  status: 'rejected',
+                                }),
+                              t('delivery.messages.workItemUpdated'),
+                            )
+                          }
+                        >
+                          <X className="h-3.5 w-3.5" /> {t('delivery.actions.reject')}
+                        </Button>
+                      </>
+                    )}
+                    {item.status === 'confirmed' &&
+                      (item.kind === 'question' || item.kind === 'change_request') && (
+                        <Button
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            void onRun(
+                              `work:${item.id}:resolved`,
+                              () =>
+                                updateDeliveryWorkItem(projectId, deliveryId, item.id, {
+                                  status: 'resolved',
+                                }),
+                              t('delivery.messages.workItemUpdated'),
+                            )
+                          }
+                        >
+                          <Check className="h-3.5 w-3.5" /> {t('delivery.actions.resolve')}
+                        </Button>
+                      )}
                   </div>
                 )}
-                {!immutable &&
-                  item.status === 'confirmed' &&
-                  (item.kind === 'change_request' || item.kind === 'question') && (
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <Input
-                        value={resolutions[item.id] ?? ''}
-                        onChange={(event) =>
-                          setResolutions((current) => ({
-                            ...current,
-                            [item.id]: event.target.value,
-                          }))
-                        }
-                        placeholder={t('delivery.review.resolutionPlaceholder')}
-                      />
-                      <Button
-                        size="sm"
-                        disabled={!resolutions[item.id]?.trim() || busy !== null}
-                        onClick={() =>
-                          void onRun(`work:${item.id}`, () =>
-                            updateDeliveryWorkItem(projectId, deliveryId, item.id, {
-                              status: 'resolved',
-                              resolution: resolutions[item.id],
-                            }),
-                          )
-                        }
-                      >
-                        {t('delivery.actions.resolve')}
-                      </Button>
-                    </div>
-                  )}
-              </div>
+              </article>
             ))}
           </div>
         )}
       </SectionCard>
 
-      {!immutable && (
-        <SectionCard
-          title={t('delivery.review.approvalTitle')}
-          description={t('delivery.review.approvalDescription')}
-        >
-          <form onSubmit={submitApproval} className="grid gap-3 sm:grid-cols-2">
-            <Input
-              value={approver}
-              onChange={(event) => setApprover(event.target.value)}
-              placeholder={t('delivery.review.approverPlaceholder')}
-              required
-            />
-            <Input
-              value={approvalSourceUrl}
-              onChange={(event) => setApprovalSourceUrl(event.target.value)}
-              placeholder={t('delivery.review.sourceUrlPlaceholder')}
-            />
-            <textarea
-              value={approvalExcerpt}
-              onChange={(event) => setApprovalExcerpt(event.target.value)}
-              placeholder={t('delivery.review.approvalExcerptPlaceholder')}
-              rows={3}
-              required
-              className="rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 text-xs sm:col-span-2"
-            />
-            <div className="space-y-2 sm:col-span-2">
-              {approvedArtifacts.map((artifact) => (
-                <label key={artifact.id} className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={selectedArtifacts.includes(artifact.id)}
-                    onChange={(event) =>
-                      setSelectedArtifacts((current) =>
-                        event.target.checked
-                          ? [...current, artifact.id]
-                          : current.filter((id) => id !== artifact.id),
-                      )
-                    }
-                  />
-                  {artifact.original_filename} · {formatArtifactRevision(artifact.revision, t)}
-                </label>
+      <SectionCard title={t('delivery.formless.approvalsTitle')}>
+        {detail.approvals.filter((approval) => !approval.invalidated_at).length === 0 ? (
+          <EmptyEvidence>{t('delivery.formless.noApprovals')}</EmptyEvidence>
+        ) : (
+          <div className="space-y-3">
+            {detail.approvals
+              .filter((approval) => !approval.invalidated_at)
+              .map((approval) => (
+                <article
+                  key={approval.id}
+                  className="rounded-md border border-success/25 bg-success/5 p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <strong>{approval.approver_display_name}</strong>
+                    <time className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                      {new Date(approval.approved_at).toLocaleString(language)}
+                    </time>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5">
+                    {approval.approval_excerpt}
+                  </p>
+                </article>
               ))}
-            </div>
-            <div className="flex justify-end sm:col-span-2">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={
-                  selectedArtifacts.length === 0 ||
-                  !approver.trim() ||
-                  !approvalExcerpt.trim() ||
-                  busy === 'approval'
-                }
-              >
-                {t('delivery.actions.recordApproval')}
-              </Button>
-            </div>
-          </form>
-        </SectionCard>
-      )}
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard title={t('delivery.review.externalRefTitle')}>
-        {!immutable && (
-          <form
-            className="flex flex-col gap-2 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onRun(
-                'external-ref',
-                () =>
-                  attachDeliveryExternalRef(projectId, deliveryId, {
-                    provider: refProvider,
-                    label: refLabel,
-                    url: refUrl,
-                  }),
-                t('delivery.messages.referenceAdded'),
-              ).then(() => {
-                setRefLabel('');
-                setRefUrl('');
-              });
-            }}
-          >
-            <select
-              value={refProvider}
-              onChange={(event) =>
-                setRefProvider(
-                  event.target.value as DeliveryDetail['external_refs'][number]['provider'],
-                )
-              }
-              className="h-9 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-            >
-              {['slack', 'teams', 'email', 'drive', 'github', 'other'].map((provider) => (
-                <option key={provider} value={provider}>
-                  {t(`delivery.review.externalProvider.${provider}`)}
-                </option>
-              ))}
-            </select>
-            <Input
-              value={refLabel}
-              onChange={(event) => setRefLabel(event.target.value)}
-              placeholder={t('delivery.review.refLabelPlaceholder')}
-              required
-            />
-            <Input
-              value={refUrl}
-              onChange={(event) => setRefUrl(event.target.value)}
-              placeholder="https://"
-              required
-            />
-            <Button type="submit" size="sm" disabled={busy === 'external-ref'}>
-              <Link2 className="h-3.5 w-3.5" />
-              {t('delivery.actions.add')}
-            </Button>
-          </form>
+        {detail.external_refs.length === 0 ? (
+          <EmptyEvidence>{t('delivery.review.noExternalRefs')}</EmptyEvidence>
+        ) : (
+          <ul className="space-y-2">
+            {detail.external_refs.map((reference) => (
+              <li key={reference.id}>
+                <a
+                  className="flex items-center justify-between rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs hover:bg-[color:var(--ol-panel-2)]"
+                  href={reference.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>
+                    {reference.label} ·{' '}
+                    {t(`delivery.review.externalProvider.${reference.provider}`)}
+                  </span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
-        <div className={cn('space-y-2', !immutable && 'mt-3')}>
-          {detail.external_refs.length === 0 ? (
-            <p className="text-xs text-[color:var(--ol-fg-muted)]">
-              {t('delivery.review.noExternalRefs')}
-            </p>
-          ) : (
-            detail.external_refs.map((reference) => (
-              <a
-                key={reference.id}
-                href={reference.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs text-[color:var(--ol-primary)]"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span className="text-[color:var(--ol-fg-muted)]">
-                  {t(`delivery.review.externalProvider.${reference.provider}`)}
-                </span>
-                <span className="truncate">{reference.label}</span>
-              </a>
-            ))
-          )}
-        </div>
       </SectionCard>
     </div>
   );
 }
 
-function GatesPanel(props: PanelProps) {
-  const { detail, immutable, busy, onRun, projectId, deliveryId } = props;
+function GatesPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
   const { t } = useLanguage();
-  const [drafts, setDrafts] = useState<
-    Record<
-      string,
-      {
-        status: DeliveryGate['status'];
-        summary: string;
-        waiver: string;
-        warning: boolean;
-        reportArtifactId: string;
-      }
-    >
-  >({});
-
-  useEffect(() => {
-    setDrafts(
-      Object.fromEntries(
-        detail.gates.map((gate) => [
-          gate.gate_key,
-          {
-            status: gate.status,
-            summary: gate.summary ?? '',
-            waiver: gate.waiver_reason ?? '',
-            warning: gate.warning_accepted,
-            reportArtifactId: gate.report_artifact_id ?? '',
-          },
-        ]),
-      ),
-    );
-  }, [detail.gates]);
-
   return (
-    <SectionCard title={t('delivery.gates.title')} description={t('delivery.gates.description')}>
-      <div className="space-y-4">
-        {detail.gates.map((gate) => {
-          const draft = drafts[gate.gate_key] ?? {
-            status: gate.status,
-            summary: '',
-            waiver: '',
-            warning: false,
-            reportArtifactId: '',
-          };
-          return (
-            <div
-              key={gate.id}
-              className="grid gap-3 rounded-md border border-[color:var(--ol-border-subtle)] p-3 sm:grid-cols-[160px_1fr]"
-            >
+    <SectionCard
+      title={t('delivery.gates.title')}
+      description={t('delivery.formless.gatesDescription')}
+    >
+      <div className="space-y-3">
+        {detail.gates.map((gate) => (
+          <article
+            key={gate.id}
+            className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold">{formatDefaultGateLabel(gate, t)}</p>
-                <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
-                  {t(`delivery.gates.type.${gate.gate_type}`)} ·{' '}
-                  {gate.required ? t('delivery.gates.required') : t('delivery.gates.optional')}
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-xs font-semibold">{formatDefaultGateLabel(gate, t)}</h4>
+                  <span className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                    {gate.required ? t('delivery.gates.required') : t('delivery.gates.optional')}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                  {t(`delivery.gates.type.${gate.gate_type}`)} · {gate.gate_key}
                 </p>
-                {!immutable && detail.delivery.status === 'draft' && (
-                  <label className="mt-3 flex items-center gap-2 text-[10px] text-[color:var(--ol-fg-muted)]">
-                    <input
-                      type="checkbox"
-                      checked={gate.required}
-                      disabled={busy !== null}
-                      onChange={(event) =>
-                        void onRun(
-                          `gate-template:${gate.gate_key}`,
-                          () =>
-                            updateDeliveryGateTemplate(projectId, deliveryId, gate.gate_key, {
-                              required: event.target.checked,
-                            }),
-                          t('delivery.messages.gateTemplateSaved'),
-                        )
-                      }
-                    />
-                    {t('delivery.gates.requiredToggle')}
-                  </label>
-                )}
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <select
-                  value={draft.status}
-                  disabled={immutable}
-                  onChange={(event) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [gate.gate_key]: {
-                        ...draft,
-                        status: event.target.value as DeliveryGate['status'],
-                      },
-                    }))
-                  }
-                  className="h-9 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-                >
-                  {['pending', 'passed', 'warning', 'failed', 'waived'].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`delivery.gates.status.${value}`)}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  value={draft.summary}
-                  disabled={immutable}
-                  onChange={(event) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [gate.gate_key]: { ...draft, summary: event.target.value },
-                    }))
-                  }
-                  placeholder={t('delivery.gates.summaryPlaceholder')}
-                />
-                <select
-                  value={draft.reportArtifactId}
-                  disabled={immutable}
-                  onChange={(event) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [gate.gate_key]: {
-                        ...draft,
-                        reportArtifactId: event.target.value,
-                      },
-                    }))
-                  }
-                  className="h-9 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs sm:col-span-2"
-                  aria-label={t('delivery.gates.reportArtifact')}
-                >
-                  <option value="">{t('delivery.gates.noReport')}</option>
-                  {detail.artifacts
-                    .filter(
-                      (artifact) =>
-                        artifact.kind === 'qa_report' ||
-                        artifact.kind === 'data_report' ||
-                        artifact.kind === 'other',
-                    )
-                    .map((artifact) => (
-                      <option key={artifact.id} value={artifact.id}>
-                        {artifact.original_filename} ·{' '}
-                        {formatArtifactRevision(artifact.revision, t)}
-                      </option>
-                    ))}
-                </select>
-                {draft.status === 'waived' && (
-                  <Input
-                    value={draft.waiver}
-                    disabled={immutable}
-                    onChange={(event) =>
-                      setDrafts((current) => ({
-                        ...current,
-                        [gate.gate_key]: { ...draft, waiver: event.target.value },
-                      }))
-                    }
-                    placeholder={t('delivery.gates.waiverPlaceholder')}
-                    className="sm:col-span-2"
-                  />
+              <span
+                className={cn(
+                  'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                  gate.status === 'passed'
+                    ? 'border-success/30 bg-success/10 text-success'
+                    : gate.status === 'failed'
+                      ? 'border-error/30 bg-error/10 text-error'
+                      : gate.status === 'warning'
+                        ? 'border-warning/30 bg-warning/10 text-warning'
+                        : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)]',
                 )}
-                {draft.status === 'warning' && (
-                  <label className="flex items-center gap-2 text-xs sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={draft.warning}
-                      disabled={immutable}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [gate.gate_key]: { ...draft, warning: event.target.checked },
-                        }))
-                      }
-                    />
-                    {t('delivery.gates.acceptWarning')}
-                  </label>
-                )}
-                {!immutable && (
-                  <div className="flex justify-end sm:col-span-2">
-                    <Button
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(
-                          `gate:${gate.gate_key}`,
-                          () =>
-                            recordDeliveryGate(projectId, deliveryId, gate.gate_key, {
-                              status: draft.status,
-                              summary: draft.summary || null,
-                              waiver_reason: draft.waiver || null,
-                              warning_accepted: draft.warning,
-                              report_artifact_id: draft.reportArtifactId || null,
-                            }),
-                          t('delivery.messages.gateRecorded'),
-                        )
-                      }
-                    >
-                      {t('delivery.actions.save')}
-                    </Button>
-                  </div>
-                )}
-              </div>
+              >
+                {t(`delivery.gates.status.${gate.status}`)}
+              </span>
             </div>
-          );
-        })}
+            {gate.summary && (
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                {gate.summary}
+              </p>
+            )}
+            {gate.waiver_reason && (
+              <p className="mt-2 rounded bg-warning/10 px-2 py-1.5 text-xs text-warning">
+                {gate.waiver_reason}
+              </p>
+            )}
+            {!immutable && gate.status === 'warning' && !gate.warning_accepted && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void onRun(
+                      `gate:${gate.id}:warning`,
+                      () =>
+                        recordDeliveryGate(projectId, deliveryId, gate.gate_key, {
+                          status: gate.status,
+                          summary: gate.summary,
+                          warning_accepted: true,
+                          report_artifact_id: gate.report_artifact_id,
+                        }),
+                      t('delivery.messages.gateRecorded'),
+                    )
+                  }
+                >
+                  <Check className="h-3.5 w-3.5" /> {t('delivery.gates.acceptWarning')}
+                </Button>
+              </div>
+            )}
+          </article>
+        ))}
       </div>
     </SectionCard>
   );
 }
 
-function DeploymentsPanel(props: PanelProps) {
-  const { detail, immutable, busy, onRun, projectId, deliveryId } = props;
-  const { t } = useLanguage();
-  const [deployId, setDeployId] = useState('');
-  const [relation, setRelation] = useState<'candidate' | 'released' | 'rollback'>('released');
+function DeploymentsPanel({ detail, execution }: PanelProps) {
+  const { t, language } = useLanguage();
+  const environments = [...(execution?.project_environments ?? [])].sort(
+    (left, right) => left.promotion_order - right.promotion_order,
+  );
+  const releases = new Map((execution?.releases ?? []).map((release) => [release.id, release]));
+  const latestPromotion = new Map<string, DeliveryExecutionView['release_promotions'][number]>();
+  for (const promotion of execution?.release_promotions ?? []) {
+    if (!latestPromotion.has(promotion.project_environment_id)) {
+      latestPromotion.set(promotion.project_environment_id, promotion);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      {!immutable && (
-        <SectionCard
-          title={t('delivery.deployments.linkTitle')}
-          description={t('delivery.deployments.linkDescription')}
-        >
-          <form
-            className="flex flex-col gap-2 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onRun(
-                'deploy',
-                () => linkDeliveryDeploy(projectId, deliveryId, deployId, relation),
-                t('delivery.messages.deployLinked'),
-              );
-            }}
-          >
-            <Input
-              value={deployId}
-              onChange={(event) => setDeployId(event.target.value)}
-              placeholder={t('delivery.deployments.deployIdPlaceholder')}
-              required
-            />
-            <select
-              value={relation}
-              onChange={(event) =>
-                setRelation(event.target.value as 'candidate' | 'released' | 'rollback')
-              }
-              className="h-9 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 text-xs"
-            >
-              <option value="candidate">{t('delivery.deployments.relation.candidate')}</option>
-              <option value="released">{t('delivery.deployments.relation.released')}</option>
-              <option value="rollback">{t('delivery.deployments.relation.rollback')}</option>
-            </select>
-            <Button type="submit" size="sm" disabled={!deployId.trim() || busy === 'deploy'}>
-              <Link2 className="h-3.5 w-3.5" />
-              {t('delivery.actions.link')}
-            </Button>
-          </form>
-        </SectionCard>
-      )}
-      <SectionCard title={t('delivery.deployments.listTitle')}>
-        {detail.deploy_links.length === 0 ? (
-          <p className="text-xs text-[color:var(--ol-fg-muted)]">
-            {t('delivery.deployments.empty')}
-          </p>
+      <SectionCard
+        title={t('delivery.promotion.title')}
+        description={t('delivery.promotion.description')}
+      >
+        {environments.length === 0 ? (
+          <EmptyEvidence>{t('delivery.promotion.empty')}</EmptyEvidence>
         ) : (
-          <div className="space-y-2">
+          <ol className="grid gap-3 lg:grid-cols-3" aria-label={t('delivery.promotion.graphLabel')}>
+            {environments.map((environment) => {
+              const promotion = latestPromotion.get(environment.id);
+              const release = promotion ? releases.get(promotion.release_id) : undefined;
+              const artifacts = promotion
+                ? (execution?.release_artifacts ?? []).filter(
+                    (artifact) => artifact.release_id === promotion.release_id,
+                  )
+                : [];
+              return (
+                <li
+                  key={environment.id}
+                  className="relative rounded-md border border-[color:var(--ol-border-subtle)] p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold">{environment.display_name}</p>
+                      <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                        {environment.promotion_order + 1}.{' '}
+                        {t(`delivery.promotion.tier.${environment.tier}`)}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-[color:var(--ol-border)] px-2 py-0.5 text-[10px]">
+                      {promotion
+                        ? t(`delivery.promotion.status.${promotion.status}`)
+                        : t('delivery.promotion.notPromoted')}
+                    </span>
+                  </div>
+                  {promotion && release && (
+                    <div className="mt-3 space-y-2 text-[10px]">
+                      <p>
+                        <span className="font-medium">{release.version}</span>
+                        <span className="ol-mono ml-2 text-[color:var(--ol-fg-muted)]">
+                          {release.commit_sha}
+                        </span>
+                      </p>
+                      <p className="text-[color:var(--ol-fg-muted)]">
+                        {t('delivery.promotion.health')}:{' '}
+                        {t(`delivery.promotion.healthStatus.${promotion.health_status}`)} ·{' '}
+                        {t('delivery.promotion.soak')}:{' '}
+                        {t(`delivery.promotion.soakStatus.${promotion.soak_status}`)}
+                      </p>
+                      <p className="text-[color:var(--ol-fg-subtle)]">
+                        {environment.smoke_path
+                          ? t('delivery.promotion.smokeConfigured', {
+                              path: environment.smoke_path,
+                            })
+                          : t('delivery.promotion.smokeSkipped')}{' '}
+                        ·{' '}
+                        {t('delivery.promotion.soakSeconds', { seconds: environment.soak_seconds })}
+                      </p>
+                      {artifacts.map((artifact) => (
+                        <p
+                          key={artifact.id}
+                          className="ol-mono break-all rounded bg-[color:var(--ol-panel-2)] px-2 py-1.5 text-[9px]"
+                        >
+                          {artifact.service_id}: {artifact.image_reference}
+                          <br />
+                          {artifact.image_digest}
+                        </p>
+                      ))}
+                      {(promotion.error_code || promotion.error_message) && (
+                        <p className="rounded bg-error/10 px-2 py-1.5 text-error">
+                          {promotion.error_code ?? t('delivery.promotion.failed')}:{' '}
+                          {promotion.error_message ?? t('delivery.promotion.noErrorDetail')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title={t('delivery.deployments.listTitle')}
+        description={t('delivery.formless.deploymentsDescription')}
+      >
+        {detail.deploy_links.length === 0 ? (
+          <EmptyEvidence>{t('delivery.deployments.empty')}</EmptyEvidence>
+        ) : (
+          <div className="space-y-3">
             {detail.deploy_links.map((evidence) => (
-              <div
+              <article
                 key={evidence.link.id}
                 className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-medium">{evidence.service.name}</span>
-                    <span>
-                      {evidence.environment
-                        ? t(`delivery.deployments.environment.${evidence.environment.type}`)
-                        : t('delivery.deployments.environment.unknown')}
-                    </span>
-                    <span>{t(`delivery.deployments.relation.${evidence.link.relation}`)}</span>
-                    <span>{t(`delivery.deployments.status.${evidence.deploy.status}`)}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold">{evidence.service.name}</p>
+                    <p className="ol-mono mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                      {evidence.deploy.commit_sha || t('delivery.deployments.noCommit')}
+                    </p>
                   </div>
-                  {!immutable && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(
-                          `deploy-unlink:${evidence.deploy.id}`,
-                          () => unlinkDeliveryDeploy(projectId, deliveryId, evidence.deploy.id),
-                          t('delivery.messages.deployUnlinked'),
-                        )
-                      }
-                    >
-                      {t('delivery.actions.unlink')}
-                    </Button>
-                  )}
+                  <span className="rounded-full border border-[color:var(--ol-border)] px-2 py-0.5 text-[10px]">
+                    {t(`delivery.deployments.relation.${evidence.link.relation}`)}
+                  </span>
                 </div>
-                <p className="ol-mono mt-2 text-[10px] text-[color:var(--ol-fg-muted)]">
-                  {evidence.deploy.id} ·{' '}
-                  {evidence.deploy.commit_sha ?? t('delivery.deployments.noCommit')}
-                </p>
-              </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                  <span>
+                    {t(
+                      `delivery.deployments.environment.${evidence.environment?.type ?? 'unknown'}`,
+                    )}
+                  </span>
+                  {evidence.deploy.status && (
+                    <span>{t(`delivery.deployments.status.${evidence.deploy.status}`)}</span>
+                  )}
+                  {evidence.deploy.created_at && (
+                    <time>{new Date(evidence.deploy.created_at).toLocaleString(language)}</time>
+                  )}
+                  <span className="ol-mono">{evidence.deploy.id}</span>
+                </div>
+              </article>
             ))}
           </div>
         )}
@@ -1481,123 +1180,122 @@ function ReceiptPanel({
   detail,
   readiness,
   busy,
-  previewSucceeded,
-  onPreviewSucceeded,
-  onRun,
   projectId,
   deliveryId,
+  previewCurrent,
+  onPreviewed,
 }: {
   detail: DeliveryDetail;
   readiness: DeliveryReadiness | null;
   busy: string | null;
-  previewSucceeded: boolean;
-  onPreviewSucceeded: () => void;
-  onRun: PanelProps['onRun'];
   projectId: string;
   deliveryId: string;
+  previewCurrent: boolean;
+  onPreviewed: () => Promise<void>;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [localBusy, setLocalBusy] = useState<string | null>(null);
+  const actionBusy = busy !== null || localBusy !== null;
 
   const preview = async () => {
-    await onRun(
-      'receipt:preview',
-      async () => {
-        const blob = await generateReceiptPreview(projectId, deliveryId);
-        downloadBlob(blob, `${deliveryId}-receipt-preview.pdf`, true);
-        onPreviewSucceeded();
-      },
-      t('delivery.messages.previewGenerated'),
-    );
+    setLocalBusy('preview');
+    try {
+      const blob = await generateReceiptPreview(projectId, deliveryId);
+      await onPreviewed();
+      downloadBlob(blob, `${deliveryId}-receipt-preview.pdf`, true);
+    } finally {
+      setLocalBusy(null);
+    }
   };
 
-  const finalized = detail.receipt !== null || detail.delivery.status === 'delivered';
+  const download = async () => {
+    setLocalBusy('download');
+    try {
+      const blob = await downloadReceipt(projectId, deliveryId);
+      downloadBlob(blob, `${deliveryId}-receipt.pdf`);
+    } finally {
+      setLocalBusy(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <SectionCard
         title={t('delivery.receipt.readinessTitle')}
-        description={t('delivery.receipt.readinessDescription')}
+        description={t('delivery.formless.receiptDescription')}
       >
         {!readiness ? (
-          <p className="text-xs text-[color:var(--ol-fg-muted)]">{t('delivery.loading')}</p>
+          <EmptyEvidence>{t('delivery.loading')}</EmptyEvidence>
         ) : (
-          <div className="space-y-2">
-            {readiness.checks.map((check) => (
-              <div
-                key={check.key}
-                className="flex items-start gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2"
-              >
-                {check.passed ? (
-                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-                ) : (
-                  <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-                )}
-                <span className="text-xs leading-5">
-                  {formatReadinessCheck(check, detail.delivery.delivery_type, t)}
-                </span>
-              </div>
-            ))}
-            <p className="pt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+          <>
+            <ul className="space-y-2">
+              {readiness.checks.map((check) => (
+                <li
+                  key={check.key}
+                  className="flex gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs"
+                >
+                  {check.passed ? (
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                  ) : (
+                    <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                  )}
+                  <span>{formatReadinessCheck(check, detail.delivery.delivery_type, t)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-[10px] text-[color:var(--ol-fg-muted)]">
               {t('delivery.receipt.pageEstimate', { count: readiness.estimated_pages })}
             </p>
-          </div>
+          </>
         )}
       </SectionCard>
 
       <SectionCard title={t('delivery.receipt.actionsTitle')}>
-        <div className="flex flex-wrap gap-2">
-          {!finalized && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!readiness?.ready || busy !== null}
-                onClick={() => void preview()}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {t('delivery.actions.preview')}
-              </Button>
-              <Button
-                size="sm"
-                disabled={!readiness?.ready || !previewSucceeded || busy !== null}
-                onClick={() =>
-                  void onRun(
-                    'receipt:finalize',
-                    () => finalizeReceipt(projectId, deliveryId),
-                    t('delivery.messages.finalized'),
-                  )
-                }
-              >
-                <PackageCheck className="h-3.5 w-3.5" />
-                {t('delivery.actions.finalize')}
-              </Button>
-            </>
-          )}
-          {finalized && (
-            <Button
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void onRun('receipt:download', async () => {
-                  const blob = await downloadReceipt(projectId, deliveryId);
-                  downloadBlob(blob, `${deliveryId}-receipt.pdf`);
-                })
-              }
-            >
-              <Download className="h-3.5 w-3.5" />
+        {detail.receipt ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-success">
+                {t('delivery.receipt.finalizedTitle')}
+              </p>
+              <p className="ol-mono mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                sha256:{detail.receipt.pdf_sha256}
+              </p>
+              <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                {new Date(detail.receipt.finalized_at).toLocaleString(language)}
+              </p>
+            </div>
+            <Button size="sm" disabled={actionBusy} onClick={() => void download()}>
+              {localBusy === 'download' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
               {t('delivery.actions.downloadReceipt')}
             </Button>
-          )}
-        </div>
-        {!finalized && (
-          <p className="mt-3 text-[10px] leading-4 text-[color:var(--ol-fg-muted)]">
-            {t('delivery.receipt.finalizeWarning')}
-          </p>
-        )}
-        {detail.receipt && (
-          <div className="mt-4 rounded-md border border-success/30 bg-success/10 p-3 text-xs">
-            <p className="font-medium">{t('delivery.receipt.finalizedTitle')}</p>
-            <p className="ol-mono mt-1 text-[10px]">{detail.receipt.pdf_sha256}</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-2xl text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+              {t('delivery.formless.completionHint')}
+              {previewCurrent && (
+                <span className="mt-1 block text-success">
+                  {t('delivery.receipt.previewCurrent')}
+                </span>
+              )}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={actionBusy || !readiness?.ready}
+              onClick={() => void preview()}
+            >
+              {localBusy === 'preview' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              {t('delivery.actions.preview')}
+            </Button>
           </div>
         )}
       </SectionCard>

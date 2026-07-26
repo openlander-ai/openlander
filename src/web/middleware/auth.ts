@@ -2,7 +2,14 @@ import type { Context, Next } from 'hono';
 import type { AuthService } from '../../auth/auth-service.js';
 import { parseCookie } from './cookies.js';
 
-const EXEMPT_PREFIXES = ['/api/webhooks/', '/webhooks/', '/assets/', '/mcp', '/api/traefik/'];
+const EXEMPT_PREFIXES = [
+  '/api/webhooks/',
+  '/webhooks/',
+  '/assets/',
+  '/mcp',
+  '/api/traefik/',
+  '/api/evidence-uploads/',
+];
 
 // Auth endpoints that intentionally bypass session validation.
 // Anything not in this list (e.g. OAuth start/callback, change-password,

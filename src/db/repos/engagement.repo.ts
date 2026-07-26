@@ -4,6 +4,7 @@ import {
   EngagementProjectConflictError,
   EngagementProjectNotLinkedError,
   EngagementStateError,
+  ProjectAlreadyExistsError,
   ProjectNotFoundError,
   RepoPersistenceError,
 } from '../../errors.js';
@@ -40,6 +41,17 @@ export interface UpdateEngagementInput {
   summary?: string;
   status?: Exclude<EngagementStatus, 'archived'>;
   updatedBy?: string;
+}
+
+export interface BootstrapEngagementInput extends CreateEngagementInput {
+  id: string;
+  project: {
+    id: string;
+    name: string;
+    displayName?: string;
+    description?: string | null;
+    tags?: string | null;
+  };
 }
 
 export interface EngagementPortfolioRows {
@@ -217,6 +229,126 @@ export class EngagementRepo {
         },
       });
       return created;
+    });
+  }
+
+  async bootstrap(input: BootstrapEngagementInput): Promise<{
+    engagement: EngagementRow;
+    project: { id: string; name: string; display_name: string };
+  }> {
+    const actor = input.createdBy ?? 'external-agent';
+    return await this.db.transaction(async (tx) => {
+      const [existingEngagement] = await tx
+        .select()
+        .from(engagements)
+        .where(eq(engagements.id, input.id))
+        .limit(1);
+      const [existingProject] = await tx
+        .select()
+        .from(projects)
+        .where(or(eq(projects.id, input.project.id), eq(projects.name, input.project.name)))
+        .limit(1);
+
+      if (existingEngagement || existingProject) {
+        if (
+          existingEngagement?.id === input.id &&
+          existingEngagement.customer_name === input.customerName &&
+          existingEngagement.title === input.title &&
+          existingProject?.id === input.project.id &&
+          existingProject.name === input.project.name
+        ) {
+          const [membership] = await tx
+            .select()
+            .from(engagementProjects)
+            .where(
+              and(
+                eq(engagementProjects.engagement_id, input.id),
+                eq(engagementProjects.project_id, input.project.id),
+              ),
+            )
+            .limit(1);
+          if (membership) {
+            return {
+              engagement: existingEngagement,
+              project: {
+                id: existingProject.id,
+                name: existingProject.name,
+                display_name: existingProject.display_name || existingProject.name,
+              },
+            };
+          }
+        }
+        if (existingProject) throw new ProjectAlreadyExistsError(input.project.name);
+        throw new EngagementStateError(
+          input.id,
+          'The deterministic Engagement id is already used by another operation.',
+          existingEngagement?.status,
+        );
+      }
+
+      const [project] = await tx
+        .insert(projects)
+        .values({
+          id: input.project.id,
+          name: input.project.name,
+          display_name: input.project.displayName ?? input.project.name,
+          description: input.project.description ?? null,
+          tags: input.project.tags ?? null,
+        })
+        .returning();
+      if (!project) throw new RepoPersistenceError('project', input.project.id);
+
+      const [engagement] = await tx
+        .insert(engagements)
+        .values({
+          id: input.id,
+          customer_name: input.customerName,
+          title: input.title,
+          summary: input.summary ?? '',
+          status: input.status ?? 'active',
+          created_by: actor,
+        })
+        .returning();
+      if (!engagement) throw new RepoPersistenceError('engagement', input.id);
+
+      const [membership] = await tx
+        .insert(engagementProjects)
+        .values({
+          engagement_id: engagement.id,
+          project_id: project.id,
+          linked_by: actor,
+        })
+        .returning();
+      if (!membership) {
+        throw new RepoPersistenceError('engagement project membership', project.id);
+      }
+
+      await insertEngagementActivity(tx, {
+        engagementId: engagement.id,
+        eventType: 'engagement:created',
+        title: `Engagement created: ${engagement.title}`,
+        description: `Created for ${engagement.customer_name} with initial Project ${project.name}.`,
+        status: engagement.status,
+        actor,
+        projectId: project.id,
+        metadata: {
+          engagement_title: engagement.title,
+          customer_name: engagement.customer_name,
+          engagement_status: engagement.status,
+          project_id: project.id,
+          project_name: project.name,
+          bootstrap: true,
+        },
+      });
+
+      return {
+        engagement,
+        project: {
+          id: project.id,
+          name: project.name,
+          display_name: project.display_name || project.name,
+        },
+      };
     });
   }
 

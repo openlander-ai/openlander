@@ -2,7 +2,7 @@ import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
+import { auditDiskThresholdCleanup, shouldRunCleanup } from '../pipeline/cleanup.js';
 
 const log = createModuleLogger('system-maintenance');
 
@@ -87,9 +87,9 @@ export class SystemMaintenanceMonitor {
     }
 
     this.lastCleanupAt = now;
-    log.info('Disk usage above threshold — triggering cleanup');
+    log.info('Disk usage above threshold — recording audit-only cleanup recommendation');
     await Promise.resolve();
-    diskThresholdCleanup();
+    auditDiskThresholdCleanup();
   }
 
   private async runMaintenance(): Promise<void> {

@@ -43,6 +43,7 @@ describe('deploy MCP guidance', () => {
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),
         releaseDeployLock: vi.fn(async () => undefined),
+        getLastDeployLogForService: vi.fn(async () => ({ id: 'deploy-app-1', status: 'success' })),
       },
       pipeline: {
         redeploy: vi.fn(async () => undefined),
@@ -61,6 +62,9 @@ describe('deploy MCP guidance', () => {
       planEngine: {
         createPlan: vi.fn(),
         executePlan: vi.fn(),
+      },
+      releaseService: {
+        adoptSuccessfulDeploy: vi.fn(async () => undefined),
       },
     } as unknown as AppContext;
 
@@ -153,6 +157,7 @@ describe('deploy MCP guidance', () => {
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),
         releaseDeployLock: vi.fn(async () => undefined),
+        getLastDeployLogForService: vi.fn(async () => ({ id: 'deploy-app-1', status: 'success' })),
       },
       pipeline: {
         redeploy: vi.fn(async () => undefined),
@@ -173,6 +178,9 @@ describe('deploy MCP guidance', () => {
         verifyRoundTripForService: vi.fn(async () => []),
       },
       planEngine: { createPlan: vi.fn(), executePlan: vi.fn() },
+      releaseService: {
+        adoptSuccessfulDeploy: vi.fn(async () => undefined),
+      },
     } as unknown as AppContext;
   };
 
@@ -187,11 +195,24 @@ describe('deploy MCP guidance', () => {
       mode: 'redeploy_existing_project',
       strategy: 'blue-green',
       zero_downtime: true,
+      implicit_release: {
+        status: 'pending',
+        source: 'deploy_app_compatibility',
+      },
     });
     await vi.waitFor(() =>
       expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
         'app__svc',
         expect.objectContaining({ strategy: 'blue-green' }),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(ctx.releaseService.adoptSuccessfulDeploy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'app',
+          serviceId: 'app__svc',
+          deployId: 'deploy-app-1',
+        }),
       ),
     );
   });

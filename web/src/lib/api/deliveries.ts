@@ -144,6 +144,84 @@ export interface DeliveryDetail {
   receipt: DeliveryReceipt | null;
 }
 
+export interface DeliveryExecutionView {
+  agent_runs: Array<{
+    id: string;
+    status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+    commit_sha: string;
+    manifest_path: string;
+    manifest_sha256: string;
+    runner_image: string;
+    runner_image_digest: string | null;
+    current_phase: string;
+    handoff_summary: string | null;
+    started_by: string;
+    started_at: string;
+    updated_at: string;
+    completed_at: string | null;
+  }>;
+  run_events: Array<{
+    id: string;
+    run_id: string;
+    sequence: number;
+    event_type: string;
+    phase: string | null;
+    summary: string;
+    actor: string;
+    created_at: string;
+  }>;
+  run_checks: Array<{
+    id: string;
+    run_id: string;
+    check_key: string;
+    attempt: number;
+    status: 'pending' | 'running' | 'passed' | 'failed' | 'cancelled';
+    command: string;
+    exit_code: number | null;
+    duration_ms: number | null;
+    log_sha256: string | null;
+    report_artifact_id: string | null;
+    runner_image_digest: string | null;
+  }>;
+  project_environments: Array<{
+    id: string;
+    key: string;
+    display_name: string;
+    tier: 'development' | 'validation' | 'production';
+    promotion_order: number;
+    health_timeout_seconds: number;
+    smoke_path: string | null;
+    soak_seconds: number;
+    manifest_sha256: string;
+  }>;
+  releases: Array<{
+    id: string;
+    version: string;
+    commit_sha: string;
+    status: 'building' | 'ready' | 'recalled' | 'failed';
+    created_at: string;
+  }>;
+  release_artifacts: Array<{
+    id: string;
+    release_id: string;
+    service_id: string;
+    image_reference: string;
+    image_digest: string;
+  }>;
+  release_promotions: Array<{
+    id: string;
+    release_id: string;
+    project_environment_id: string;
+    status: 'pending' | 'deploying' | 'succeeded' | 'failed' | 'rolled_back';
+    health_status: 'pending' | 'healthy' | 'unhealthy';
+    soak_status: 'pending' | 'passed' | 'failed' | 'skipped';
+    deploy_ids: string[];
+    error_code: string | null;
+    error_message: string | null;
+    created_at: string;
+  }>;
+}
+
 export interface DeliveryReadinessCheck {
   key:
     | 'delivery_approved'
@@ -199,6 +277,15 @@ export function createDelivery(
 
 export function getDelivery(projectId: string, deliveryId: string): Promise<DeliveryDetail> {
   return apiGet<DeliveryDetail>(`${base(projectId)}/${encodeURIComponent(deliveryId)}`);
+}
+
+export function getDeliveryExecution(
+  projectId: string,
+  deliveryId: string,
+): Promise<DeliveryExecutionView> {
+  return apiGet<DeliveryExecutionView>(
+    `${base(projectId)}/${encodeURIComponent(deliveryId)}/execution`,
+  );
 }
 
 export function updateDelivery(

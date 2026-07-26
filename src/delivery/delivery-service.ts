@@ -31,6 +31,7 @@ import {
   parseDefaultDeliveryGates,
   type DeliveryArtifactKind,
   type DeliveryDetail,
+  type DeliveryExecutionView,
   type DeliveryExternalProvider,
   type DeliveryMaturity,
   type DeliveryReadiness,
@@ -50,6 +51,7 @@ function requestSha256(value: Record<string, unknown>): string {
 }
 
 export interface UploadDeliveryArtifactInput {
+  artifactId?: string;
   deliveryId: string;
   source: BinarySource;
   filename: string;
@@ -132,14 +134,27 @@ export class DeliveryService {
   }
 
   async createDelivery(input: {
+    id?: string;
     projectId: string;
     title: string;
     summary?: string;
+    objective?: string;
+    definitionOfDone?: string[];
+    manifestPath?: string | null;
+    autoFinalize?: boolean;
     deliveryType?: DeliveryType;
     maturity?: DeliveryMaturity;
     limitations?: string | null;
     predecessorDeliveryId?: string | null;
     actor?: string;
+    gates?: Array<{
+      gate_key: string;
+      gate_type: GateType;
+      label: string;
+      required: boolean;
+      source: 'manual' | 'manifest';
+      definition_sha256?: string | null;
+    }>;
   }): Promise<DeliveryRow> {
     await this.requireMutableProject(input.projectId);
     if (!input.title.trim()) {
@@ -155,14 +170,20 @@ export class DeliveryService {
       }
     }
     const delivery = await this.db.createDelivery({
+      id: input.id,
       projectId: input.projectId,
       title: input.title.trim(),
       summary: input.summary?.trim(),
+      objective: input.objective?.trim(),
+      definitionOfDone: input.definitionOfDone?.map((item) => item.trim()).filter(Boolean),
+      manifestPath: input.manifestPath?.trim() || null,
+      autoFinalize: input.autoFinalize,
       deliveryType: input.deliveryType,
       maturity: input.maturity,
       limitations: input.limitations?.trim() || null,
       predecessorDeliveryId: input.predecessorDeliveryId,
       createdBy: input.actor ?? 'admin',
+      gates: input.gates,
     });
     await this.audit(
       delivery,
@@ -214,6 +235,32 @@ export class DeliveryService {
       gates,
       deploy_links: deployLinks,
       receipt,
+    };
+  }
+
+  async getDeliveryExecution(deliveryId: string): Promise<DeliveryExecutionView> {
+    const delivery = await this.db.requireDelivery(deliveryId);
+    const [agentRuns, projectEnvironments, releases] = await Promise.all([
+      this.db.listDeliveryAgentRuns(deliveryId),
+      this.db.listProjectEnvironments(delivery.project_id),
+      this.db.listReleasesForDelivery(deliveryId),
+    ]);
+    const runIds = agentRuns.map((run) => run.id);
+    const releaseIds = releases.map((release) => release.id);
+    const [runEvents, runChecks, releaseArtifacts, releasePromotions] = await Promise.all([
+      this.db.listDeliveryAgentRunEventsForRuns(runIds),
+      this.db.listDeliveryRunChecksForRuns(runIds),
+      this.db.listReleaseArtifactsForReleases(releaseIds),
+      this.db.listReleasePromotionsForReleases(releaseIds),
+    ]);
+    return {
+      agent_runs: agentRuns,
+      run_events: runEvents,
+      run_checks: runChecks,
+      project_environments: projectEnvironments,
+      releases,
+      release_artifacts: releaseArtifacts,
+      release_promotions: releasePromotions,
     };
   }
 
@@ -337,6 +384,7 @@ export class DeliveryService {
     });
     const blob = await this.db.upsertArtifactBlob(stored);
     const artifact = await this.db.createDeliveryArtifact({
+      id: input.artifactId,
       deliveryId: input.deliveryId,
       blobId: blob.id,
       logicalKey: input.logicalKey.trim(),

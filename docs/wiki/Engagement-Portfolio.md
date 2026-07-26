@@ -55,14 +55,19 @@ Creation, editing, linking, unlinking, archive, and unarchive require an
 authenticated administrator web session. API tokens and Project PATs cannot
 mutate Engagements.
 
-## MCP reads
+## Agent interface
 
 The existing `openlander_project` composite exposes:
 
+- `bootstrap_engagement`
 - `list_engagements`
 - `get_engagement`
 
-These are compact, read-only summaries for instance/organization-scoped
-agents. Project- and service-scoped tokens receive `SCOPE_VIOLATION` so they
-cannot infer sibling Project data. Detailed artifacts, raw feedback, Gate
-evidence, and Receipt metadata remain on the existing Delivery actions.
+`bootstrap_engagement` atomically creates an Engagement and its initial empty
+Project through the shared Application Operation Registry. It requires an
+`idempotency_key`; exact retries replay the original response and changed input
+with the same key returns `OPERATION_IDEMPOTENCY_CONFLICT`. The two read actions
+remain compact summaries. All three require instance/organization scope;
+Project- and service-scoped tokens receive `SCOPE_VIOLATION`. Detailed
+artifacts, raw feedback, Gate evidence, and Receipt metadata remain on the
+existing Delivery actions.

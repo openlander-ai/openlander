@@ -41,6 +41,23 @@ export interface RunContainerOptions {
   resourceLimits?: ResourceLimitConfig;
 }
 
+export interface RunEphemeralContainerOptions {
+  imageTag: string;
+  name: string;
+  projectId: string;
+  workspacePath: string;
+  command: string[];
+  timeoutMs: number;
+  envVars?: Record<string, string>;
+}
+
+export interface RunEphemeralContainerResult {
+  exitCode: number;
+  durationMs: number;
+  logs: string;
+  timedOut: boolean;
+}
+
 export interface RunComposeServiceOptions {
   imageTag: string;
   name: string;

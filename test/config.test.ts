@@ -8,6 +8,7 @@ import {
   getDataDir,
   getDbPath,
   getConfigPath,
+  resolveDataDir,
   SHARED_NETWORK_NAME,
   normalizeLlmConfig,
 } from '../src/config/index.js';
@@ -130,8 +131,25 @@ describeConfig('Data Paths', () => {
     expect(getDataDir()).toBe(join(homedir(), '.openlander'));
   });
 
-  it('getDbPath returns ~/.openlander/openlander.db', () => {
-    expect(getDbPath()).toContain('openlander.db');
+  it('resolves an explicit isolated data directory without changing HOME', () => {
+    expect(resolveDataDir({ OPENLANDER_DATA_DIR: './tmp/openlander-candidate' })).toBe(
+      join(process.cwd(), 'tmp/openlander-candidate'),
+    );
+  });
+
+  it('getDbPath keeps the Postgres URL compatibility alias', () => {
+    const previous = process.env.OPENLANDER_DATABASE_URL;
+    process.env.OPENLANDER_DATABASE_URL = 'postgresql://openlander:test@localhost:5432/openlander';
+
+    try {
+      expect(getDbPath()).toBe('postgresql://openlander:test@localhost:5432/openlander');
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENLANDER_DATABASE_URL;
+      } else {
+        process.env.OPENLANDER_DATABASE_URL = previous;
+      }
+    }
   });
 
   it('getConfigPath returns ~/.openlander/config.json', () => {

@@ -214,43 +214,69 @@ The endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com
 
 Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens — they run as a child process.
 
+### Isolated local instances
+
+OpenLander stores its configuration, generated instance identity, and local data under
+`~/.openlander` by default. Set `OPENLANDER_DATA_DIR` when a development, test, or secondary
+instance must use an independent data root on the same host:
+
+```bash
+OPENLANDER_DATA_DIR=/path/to/openlander-candidate openlander start --no-open --port 10115
+```
+
+Give each instance its own Postgres database and port as well. The data-directory override keeps
+instance identity and configuration separate; it does not make it safe for two instances to share
+the same database.
+
 ---
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **100 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **122 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                           |
 | ---------------------------- | ------- | --------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 22      | Deploy lifecycle: plans, execution, rollback, build                               |
-| `openlander_project`         | 30      | Projects, Delivery Workspace, read-only Engagement portfolio, secrets, exposure   |
+| `openlander_project`         | 38      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure       |
 | `openlander_service`         | 25      | Application lifecycle, config, domains                                            |
 | `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                 |
 | `openlander_monitor`         | 13      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, stats, host diagnosis |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task      | Composite → action                                 | Description                            |
-| --------- | -------------------------------------------------- | -------------------------------------- |
-| Deploy    | `openlander_deploy` → `deploy_app`                 | App deploy front door                  |
-| Status    | `openlander_deploy` → `get_deploy_status`          | Check deployment status                |
-| List      | `openlander_project` → `list_projects`             | Show all projects                      |
-| Logs      | `openlander_monitor` → `get_logs`                  | Container logs                         |
-| Env Vars  | `openlander_service` → `set_env_vars`              | Save Application environment variables |
-| Update    | `openlander_service` → `update_app`                | Ship latest stored source/config       |
-| Rollback  | `openlander_deploy` → `rollback_service`           | Revert to previous Docker image only   |
-| Share     | `openlander_project` → `expose_public`             | Generate temporary share URL           |
-| Resource  | `openlander_managed_service` → `create_service`    | Create Database/Cache resource         |
-| Inspect   | `openlander_managed_service` → `list_data_sources` | Discover Project data sources          |
-| Delivery  | `openlander_project` → `create_delivery`           | Start an FDE delivery evidence record  |
-| Portfolio | `openlander_project` → `list_engagements`          | Read internal cross-Project FDE status |
-| Feedback  | `openlander_project` → `record_delivery_feedback`  | Preserve pasted customer feedback      |
-| Receipt   | `openlander_project` → `get_delivery_readiness`    | Check deterministic finalization gates |
+| Task      | Composite → action                                    | Description                                         |
+| --------- | ----------------------------------------------------- | --------------------------------------------------- |
+| Deploy    | `openlander_deploy` → `deploy_app`                    | App deploy front door                               |
+| Status    | `openlander_deploy` → `get_deploy_status`             | Check deployment status                             |
+| List      | `openlander_project` → `list_projects`                | Show all projects                                   |
+| Logs      | `openlander_monitor` → `get_logs`                     | Container logs                                      |
+| Env Vars  | `openlander_service` → `set_env_vars`                 | Save Application environment variables              |
+| Update    | `openlander_service` → `update_app`                   | Ship latest stored source/config                    |
+| Rollback  | `openlander_deploy` → `rollback_service`              | Revert to previous Docker image only                |
+| Share     | `openlander_project` → `expose_public`                | Generate temporary share URL                        |
+| Resource  | `openlander_managed_service` → `create_service`       | Create Database/Cache resource                      |
+| Inspect   | `openlander_managed_service` → `list_data_sources`    | Discover Project data sources                       |
+| Delivery  | `openlander_project` → `create_delivery`              | Start an FDE delivery evidence record               |
+| Portfolio | `openlander_project` → `list_engagements`             | Read internal cross-Project FDE status              |
+| Bootstrap | `openlander_project` → `bootstrap_engagement`         | Create an Engagement and initial Project atomically |
+| Feedback  | `openlander_project` → `record_delivery_feedback`     | Preserve pasted customer feedback                   |
+| Receipt   | `openlander_project` → `get_delivery_readiness`       | Check deterministic finalization gates              |
+| Plan run  | `openlander_project` → `plan_delivery`                | Store objective, DoD, manifest, and Gates           |
+| Handoff   | `openlander_project` → `record_delivery_run_progress` | Record progress or pause with a handoff             |
+| Quality   | `openlander_project` → `run_quality_gates`            | Run manifest checks in disposable containers        |
+| Evidence  | `openlander_project` → `create_evidence_upload`       | Issue a short-lived upload URL for one artifact     |
+| Update    | `openlander_project` → `record_project_update`        | Record source-linked decisions, actions, and risks  |
 
-`list_engagements` and `get_engagement` require an instance/organization MCP
-token. Project- and service-scoped tokens cannot use these targetless portfolio
-reads because the result could reveal sibling Projects. Engagement mutation
-and Project linking are available only through an administrator web session.
+`bootstrap_engagement`, `update_engagement_from_brief`, `list_engagements`, and `get_engagement` require an
+instance/organization MCP token. Project- and service-scoped tokens cannot use
+these Engagement-wide operations because they could reveal or mutate sibling
+Projects. Engagement mutation commands and `bootstrap_engagement` also require `idempotency_key`; retrying the
+same payload returns the original operation result.
+
+Application Operations are also available to authenticated automation at
+`POST /api/v1/operations/:name`. Send the operation input as the JSON body and
+commands' stable key in the `Idempotency-Key` header. Both REST and MCP call the
+same in-process operation handler; neither adapter calls the other.
 
 MCP env changes target Applications. Use `service_id` or `service_name`;
 `project_name` works only for Projects with exactly one Application.

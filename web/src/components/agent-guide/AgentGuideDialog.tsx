@@ -34,6 +34,10 @@ export interface AgentGuideDialogProps {
   domain?: string;
   /** Optional managed-service name (wire-managed-db prompts). */
   managedServiceName?: string;
+  /** Optional Engagement display name for portfolio prompts. */
+  engagementName?: string;
+  /** Optional Delivery identifier for evidence and execution prompts. */
+  deliveryId?: string;
 }
 
 export function AgentGuideDialog({
@@ -45,6 +49,8 @@ export function AgentGuideDialog({
   envVarKey,
   domain,
   managedServiceName,
+  engagementName,
+  deliveryId,
 }: AgentGuideDialogProps) {
   const navigate = useNavigate();
   const { status } = useMcpStatus();
@@ -61,6 +67,8 @@ export function AgentGuideDialog({
       envVarKey,
       domain,
       managedServiceName,
+      engagementName,
+      deliveryId,
     },
     t,
   );

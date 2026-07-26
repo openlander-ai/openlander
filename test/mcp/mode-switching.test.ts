@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
+import {
+  agentDeliveryToolDefs,
+  projectManifestToolDefs,
+} from '../../src/tools/defs/agent-delivery.js';
+import { releaseOperationToolDefs } from '../../src/tools/defs/release-operations.js';
+import { reportingOperationToolDefs } from '../../src/tools/defs/reporting-operations.js';
+import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
+import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -23,6 +31,12 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployableServiceToolDefs,
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
+    ...deliveryToolDefs,
+    ...engagementToolDefs,
+    ...agentDeliveryToolDefs,
+    ...projectManifestToolDefs,
+    ...releaseOperationToolDefs,
+    ...reportingOperationToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -41,10 +55,10 @@ function isMcpTargeted(def: ToolDef): boolean {
 }
 
 describe('MCP Composite Tools', () => {
-  it('returns 5 composite tools from 87 underlying default tool defs', () => {
+  it('returns 5 composite tools from 122 underlying default tool defs', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
-    expect(mcpDefs).toHaveLength(87);
+    expect(mcpDefs).toHaveLength(122);
 
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(5);

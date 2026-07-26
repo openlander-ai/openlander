@@ -143,6 +143,20 @@ export interface EngagementDetail extends EngagementSummary {
   recent_activity: EngagementActivity[];
 }
 
+export interface EngagementWeeklyReport {
+  id: string;
+  engagement_id: string;
+  period_start: string;
+  period_end: string;
+  revision: number;
+  status: 'draft' | 'published';
+  evidence_sha256: string;
+  internal_sha256: string | null;
+  customer_sha256: string | null;
+  created_at: string;
+  published_at: string | null;
+}
+
 export interface ProjectEngagementReference {
   id: string;
   customer_name: string;
@@ -171,6 +185,25 @@ export async function listEngagements(options?: {
 
 export function getEngagement(id: string): Promise<EngagementDetail> {
   return apiGet(`/api/engagements/${encodeURIComponent(id)}`);
+}
+
+export async function listEngagementWeeklyReports(
+  engagementId: string,
+): Promise<EngagementWeeklyReport[]> {
+  const response = await apiGet<{ reports: EngagementWeeklyReport[] }>(
+    `/api/engagements/${encodeURIComponent(engagementId)}/weekly-reports`,
+  );
+  return response.reports;
+}
+
+export function engagementWeeklyReportUrl(
+  engagementId: string,
+  reportId: string,
+  audience: 'internal' | 'customer',
+  options?: { download?: boolean },
+): string {
+  const base = `/api/engagements/${encodeURIComponent(engagementId)}/weekly-reports/${encodeURIComponent(reportId)}/${audience}/pdf`;
+  return options?.download ? `${base}?download=1` : base;
 }
 
 export function createEngagement(input: {

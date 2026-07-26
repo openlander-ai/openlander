@@ -4,7 +4,10 @@ import type { ProjectRow, ServiceRow } from '../db/types.js';
 import {
   ArtifactNotFoundError,
   DeliveryNotFoundError,
+  DeliveryAgentRunNotFoundError,
   ProjectNotFoundError,
+  ProjectEnvironmentNotFoundError,
+  ReleaseStateError,
   ScopeViolationError,
   ServiceNotFoundError,
 } from '../errors.js';
@@ -136,6 +139,39 @@ async function targetFromDeliveryId(
   const delivery = await appCtx.db.getDelivery(deliveryId);
   if (!delivery) throw new DeliveryNotFoundError(deliveryId);
   return { projectId: delivery.project_id, serviceId: null, resolvedFrom };
+}
+
+async function targetFromDeliveryRunId(appCtx: AppContext, runId: string): Promise<ScopeTarget> {
+  const run = await appCtx.db.getDeliveryAgentRun(runId);
+  if (!run) throw new DeliveryAgentRunNotFoundError(runId);
+  return await targetFromDeliveryId(appCtx, run.delivery_id, 'run_id');
+}
+
+async function targetFromReleaseId(appCtx: AppContext, releaseId: string): Promise<ScopeTarget> {
+  const release = await appCtx.db.requireRelease(releaseId);
+  return targetFromDeliveryId(appCtx, release.delivery_id, 'release_id');
+}
+
+async function targetFromProjectEnvironmentId(
+  appCtx: AppContext,
+  projectEnvironmentId: string,
+): Promise<ScopeTarget> {
+  const environment = await appCtx.db.getProjectEnvironment(projectEnvironmentId);
+  if (!environment) throw new ProjectEnvironmentNotFoundError(projectEnvironmentId);
+  return {
+    projectId: environment.project_id,
+    serviceId: null,
+    resolvedFrom: 'project_environment_id',
+  };
+}
+
+async function targetFromPromotionId(
+  appCtx: AppContext,
+  promotionId: string,
+): Promise<ScopeTarget> {
+  const promotion = await appCtx.db.getReleasePromotion(promotionId);
+  if (!promotion) throw new ReleaseStateError(promotionId, 'Promotion was not found.');
+  return targetFromReleaseId(appCtx, promotion.release_id);
 }
 
 async function targetFromArtifactId(
@@ -281,6 +317,20 @@ async function resolveMcpScopeTargets(
   const deliveryId = readString(args, 'delivery_id');
   if (deliveryId) push(await targetFromDeliveryId(appCtx, deliveryId));
 
+  const runId = readString(args, 'run_id');
+  if (runId) push(await targetFromDeliveryRunId(appCtx, runId));
+
+  const releaseId = readString(args, 'release_id');
+  if (releaseId) push(await targetFromReleaseId(appCtx, releaseId));
+
+  const promotionId = readString(args, 'promotion_id');
+  if (promotionId) push(await targetFromPromotionId(appCtx, promotionId));
+
+  const projectEnvironmentId = readString(args, 'project_environment_id');
+  if (projectEnvironmentId) {
+    push(await targetFromProjectEnvironmentId(appCtx, projectEnvironmentId));
+  }
+
   const predecessorDeliveryId = readString(args, 'predecessor_delivery_id');
   if (predecessorDeliveryId) {
     push(await targetFromDeliveryId(appCtx, predecessorDeliveryId, 'predecessor_delivery_id'));
@@ -369,6 +419,7 @@ export async function maybeRejectMcpScope(
       err instanceof ProjectNotFoundError ||
       err instanceof ServiceNotFoundError ||
       err instanceof DeliveryNotFoundError ||
+      err instanceof DeliveryAgentRunNotFoundError ||
       err instanceof ArtifactNotFoundError
     ) {
       return buildScopeViolationResponse(identity, null, 'target_not_found_or_out_of_scope');

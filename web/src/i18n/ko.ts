@@ -839,6 +839,45 @@ export const translations = {
           service: '한 서비스에서만 이 변수를 사용해야 할 때 서비스 전용 방식을 선택하세요.',
         },
       },
+      bootstrapEngagement: {
+        heading: '고객이 원하는 결과를 에이전트에게 알려주세요',
+        lead: '빈 입력 폼 대신 고객 과제와 첫 프로젝트를 함께 만들고, 원문 요구사항과 변경 이력을 작업 기록으로 남깁니다.',
+        prompt: {
+          fromBrief:
+            '이 고객 요구사항 문서를 읽고 고객 과제와 첫 프로젝트를 만들어 주세요. 목표, 위험, 확인할 질문, 다음 납품 작업 계획도 구조화해서 보여주세요.',
+          fromRepository:
+            '이 저장소를 확인해 고객 과제와 프로젝트를 만들고 `.openlander/project.yml`과 첫 납품 작업 목표를 작성해 주세요. 꼭 필요한 고객 정보만 질문하세요.',
+        },
+      },
+      manageEngagement: {
+        heading: '바꿀 내용을 에이전트에게 알려주세요',
+        lead: '고객 과제 정보, 프로젝트 연결, 주간 보고서는 버전이 남는 작업 명령으로 반영합니다. 웹에서는 결과와 증거를 확인하세요.',
+        prompt: {
+          update:
+            '최신 문서를 기준으로 {engagementName} 고객 과제를 검토하고, 고객 과제와 프로젝트에서 바뀔 내용을 설명한 뒤 반영해 주세요.',
+          report:
+            '{engagementName}의 이번 주 내부용·고객용 보고서를 같은 증거 기준으로 만들고 발행한 뒤 두 PDF의 해시를 알려주세요.',
+        },
+      },
+      planDelivery: {
+        heading: '입력 항목 대신 원하는 결과를 설명하세요',
+        lead: '에이전트가 목표를 납품 작업, 완료 조건, manifest 검증 항목, 정확한 커밋, 품질 실행, 릴리스와 환경 승격 순서로 구성합니다.',
+        prompt: {
+          plan: '프로젝트 {projectName}에서 이 요구사항을 다음 납품 작업으로 계획해 주세요. `.openlander/delivery.yml`을 작성하고 품질 검증을 실행하되, 실제 막힘이 있으면 멈추고 알려주세요.',
+          continue:
+            '프로젝트 {projectName}의 진행 중인 에이전트 실행과 납품 작업을 확인하고, 안전하게 이어갈 수 있는 최신 인수인계부터 재개한 뒤 다음 작업을 알려주세요.',
+        },
+      },
+      manageDelivery: {
+        heading: '다음 작업을 에이전트에게 알려주세요',
+        lead: '납품 작업 설정과 증거는 버전이 남는 작업 명령으로 반영합니다. 이 화면에서는 범위, 검증 결과, 승인, 배포 근거와 납품 확인서를 확인하세요.',
+        prompt: {
+          continue:
+            '프로젝트 {projectName}의 납품 작업 {deliveryId}에서 현재 막힌 항목을 확인하고, 진행 중인 에이전트 실행을 이어받아 다음으로 안전한 작업까지 진행해 주세요.',
+          evidence:
+            '프로젝트 {projectName}의 납품 작업 {deliveryId}에 이 문서를 증거로 보존하고 프로젝트 기록을 구조화해 갱신한 뒤, 영향받은 품질 검증만 다시 실행해 주세요.',
+        },
+      },
     },
   },
   account: {
@@ -2806,6 +2845,30 @@ export const translations = {
     beta: '베타',
     description:
       '산출물, 고객 피드백, 승인, 품질 확인, 배포 근거를 한 납품 건에서 관리하고 최종 확인서를 만듭니다.',
+    formlessDescription:
+      '에이전트가 저장소 manifest를 기준으로 납품 작업을 계획하고 실행합니다. 이 화면에서는 상태, 증거, 인수인계를 확인하세요.',
+    formless: {
+      detailDescription:
+        '이 화면은 증거를 확인하는 곳입니다. 범위 변경, 증거 추가, 통과 기준 설정, 릴리스 진행은 에이전트에게 요청하고 사람의 예외 판단만 버튼으로 처리합니다.',
+      agentManaged:
+        '범위와 납품 단계는 납품 목표와 저장소 manifest에서 가져옵니다. 여기에서 확인하고 변경은 에이전트에게 요청하세요.',
+      noSummary: '구조화된 범위가 아직 기록되지 않았습니다.',
+      noLimitations: '제한 사항이 아직 기록되지 않았습니다.',
+      artifactsDescription:
+        '산출물은 애플리케이션 인터페이스를 통해 업로드하고 버전을 남깁니다. 검토자는 대기 중인 버전을 여기에서 승인할 수 있습니다.',
+      reviewDescription:
+        '고객의 원문과 출처 링크를 증거로 보존하고, 구조화한 결정 사항이 어디에서 나왔는지 추적합니다.',
+      approvalsTitle: '승인 증거',
+      noApprovals: '현재 유효한 승인 증거가 없습니다.',
+      gatesDescription:
+        'manifest에 선언한 검증 결과가 통과 기준에 자동 반영됩니다. 웹에서는 사람의 명시적 확인이 필요한 예외만 처리합니다.',
+      deploymentsDescription:
+        '릴리스와 환경 승격 작업에서 변경 불가능한 산출물 digest와 성공한 환경별 배포 근거를 연결합니다.',
+      receiptDescription:
+        '현재 증거를 기준으로 확정 준비 상태를 다시 계산합니다. 필수 조건을 모두 충족해야 완료할 수 있습니다.',
+      completionHint:
+        '에이전트에게 complete_delivery 실행을 요청하세요. 준비 상태를 다시 확인하고, 필요한 경우 운영 환경 승격 성공을 검증한 뒤 변경 불가능한 납품 확인서를 확정합니다.',
+    },
     loading: '납품 내역을 불러오는 중...',
     none: '없음',
     immutable:
@@ -2865,6 +2928,7 @@ export const translations = {
       },
     },
     actions: {
+      askAgent: '에이전트에게 요청',
       create: '납품 건 만들기',
       creating: '생성 중...',
       cancel: '취소',
@@ -2892,12 +2956,86 @@ export const translations = {
       downloadReceipt: '납품 확인서 다운로드',
     },
     empty: {
+      formlessTitle: '에이전트가 계획한 납품 작업이 없습니다',
+      formlessDescription:
+        '원하는 결과를 에이전트에게 설명하세요. 납품 작업, 완료 조건, 통과 기준, 정확한 실행 기록을 함께 구성합니다.',
       title: '아직 납품 건이 없습니다',
       description: '고객에게 전달할 산출물, 결정 사항, 배포 근거를 한 기록으로 남길 때 만드세요.',
     },
     overview: {
       title: '납품 개요',
       description: '납품 유형에 따라 운영 환경에 성공적으로 배포한 근거가 필요한지 결정됩니다.',
+    },
+    execution: {
+      title: '에이전트 실행 기록',
+      description:
+        '최근 실행에 사용한 commit, manifest snapshot, runner image를 정확히 보여줍니다. 이전 실행 결과도 증거로 남습니다.',
+      empty: '이 납품 건에서 시작한 Agent Run이 없습니다.',
+      latestRun: '최근 Agent Run',
+      phase: '현재 단계',
+      commit: 'Commit 정보',
+      manifest: 'Manifest snapshot 정보',
+      runner: 'Runner image 정보',
+      started: '시작 시각',
+      handoff: '인수인계',
+      checks: '검증별 최근 실행',
+      noChecks: '이 실행에 기록된 품질 검증이 없습니다.',
+      attempt: '{attempt}차 실행',
+      duration: '소요 {duration}ms',
+      recentEvents: '최근 실행 내역',
+      noEvents: '기록된 실행 내역이 없습니다.',
+      runStatus: {
+        running: '실행 중',
+        paused: '일시 중지',
+        completed: '완료',
+        failed: '실패',
+        cancelled: '취소',
+      },
+      checkStatus: {
+        pending: '대기 중',
+        running: '실행 중',
+        passed: '통과',
+        failed: '실패',
+        cancelled: '취소',
+      },
+    },
+    promotion: {
+      title: '릴리스 환경 승격',
+      description:
+        '모든 환경에 동일한 Release digest를 배포합니다. 각 환경의 최근 승격에서 health, Smoke Test, 안정화 대기 결과를 확인할 수 있습니다.',
+      graphLabel: '릴리스 환경 승격 경로',
+      empty: '저장소 manifest에서 적용한 프로젝트 환경이 없습니다.',
+      notPromoted: '승격 전',
+      health: 'Health 상태',
+      soak: '안정화 대기',
+      smokeConfigured: 'Smoke Test {path} 실행',
+      smokeSkipped: 'Smoke Test 경로 없음',
+      soakSeconds: '안정화 대기 {seconds}초',
+      failed: '환경 승격 실패',
+      noErrorDetail: '추가 오류 정보 없음',
+      tier: {
+        development: '개발',
+        validation: '검증',
+        production: '운영',
+      },
+      status: {
+        pending: '대기 중',
+        deploying: '배포 중',
+        succeeded: '성공',
+        failed: '실패',
+        rolled_back: '롤백 완료',
+      },
+      healthStatus: {
+        pending: '확인 전',
+        healthy: '정상',
+        unhealthy: '비정상',
+      },
+      soakStatus: {
+        pending: '대기 중',
+        passed: '통과',
+        failed: '실패',
+        skipped: '생략',
+      },
     },
     artifacts: {
       uploadTitle: '새 산출물 버전 업로드',
@@ -3044,6 +3182,7 @@ export const translations = {
       finalizeWarning:
         '확정하면 납품 건과 근거 자료가 잠겨 더 이상 바꿀 수 없습니다. 먼저 납품 확인서 PDF 전체를 확인하세요.',
       finalizedTitle: '납품 확인서가 확정되었습니다',
+      previewCurrent: '현재 증거 버전으로 만든 미리보기입니다.',
       check: {
         delivery_approved: {
           passed: '납품 승인이 기록되었습니다.',
@@ -3127,6 +3266,7 @@ export const translations = {
       statusChanged: '납품 상태를 변경했습니다.',
       uploaded: '산출물을 업로드했습니다.',
       artifactApproved: '산출물을 승인했습니다.',
+      workItemUpdated: '검토 항목 상태를 변경했습니다.',
       feedbackRecorded: '피드백을 기록했습니다.',
       approvalRecorded: '고객 승인 근거를 기록했습니다.',
       referenceAdded: '외부 근거를 추가했습니다.',
@@ -3167,7 +3307,7 @@ export const translations = {
     loading: '고객 과제를 불러오는 중',
     emptyTitle: '아직 고객 과제가 없습니다',
     emptyDescription:
-      '고객 과제를 만들고 기존 프로젝트를 연결하세요. 실행 및 납품 기록은 바뀌지 않습니다.',
+      '고객이 원하는 결과를 에이전트에게 설명하세요. 고객 과제와 첫 프로젝트를 하나의 작업 기록으로 만듭니다.',
     emptySearchTitle: '조건에 맞는 고객 과제가 없습니다',
     emptySearchDescription: '검색어나 상태 필터를 조정하세요.',
     notFound: '고객 과제를 찾을 수 없습니다',
@@ -3175,6 +3315,12 @@ export const translations = {
     chipAria: '{title} 고객 과제 열기',
     projectDeliveryCount: '납품 건 {count}개',
     blockerCount: '진행을 막는 항목 {count}개',
+    formless: {
+      projects: '에이전트가 반영한 프로젝트 연결과 현재 실행 상태입니다.',
+      deliveries: '연결된 프로젝트별 납품 작업 단계와 상태입니다.',
+      blockers: '실패한 통과 기준, 해결되지 않은 검토 항목, 실행 오류를 바로 확인합니다.',
+      activity: '에이전트 작업, 증거 변경, 릴리스, 환경 승격, 보고서 기록입니다.',
+    },
     status: {
       all: '전체',
       active: '진행 중',
@@ -3207,6 +3353,7 @@ export const translations = {
       project: '프로젝트',
     },
     actions: {
+      askAgent: '에이전트에게 요청',
       create: '새 고객 과제',
       creating: '생성 중...',
       edit: '수정',
@@ -3260,6 +3407,22 @@ export const translations = {
         empty: '최근 활동이 없습니다.',
       },
     },
+    reports: {
+      title: '주간 보고서',
+      description:
+        '내부용과 고객용 PDF는 같은 시점의 증거로 만듭니다. 새 버전 생성과 발행은 에이전트에게 요청하세요.',
+      empty: '생성된 주간 보고서가 없습니다.',
+      revision: '{revision}차 보고',
+      download: '{audience} 다운로드',
+      status: {
+        draft: '작성 전',
+        published: '발행됨',
+      },
+      audience: {
+        internal: '내부용 PDF',
+        customer: '고객용 PDF',
+      },
+    },
     blocker: {
       project_error: '프로젝트 실행 오류',
       revision_requested: '수정 요청',
@@ -3282,6 +3445,9 @@ export const translations = {
       engagementUnarchived: '고객 과제 보관 해제',
       projectLinked: '프로젝트 연결',
       projectUnlinked: '프로젝트 연결 해제',
+      projectUpdateRecorded: '프로젝트 업데이트 기록',
+      weeklyReportGenerated: '주간 보고서 버전 생성',
+      weeklyReportPublished: '주간 보고서 발행',
       deliveryCreated: '납품 건 생성',
       deliveryUpdated: '납품 건 정보 수정',
       deliveryStatusChanged: '납품 상태 변경',

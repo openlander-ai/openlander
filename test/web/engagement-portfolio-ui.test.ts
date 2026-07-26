@@ -24,6 +24,7 @@ describe('Engagement Portfolio UI contract', () => {
   const detailSource = readRepoFile('web/src/pages/EngagementDetail.tsx');
   const projectSource = readRepoFile('web/src/pages/ProjectView.tsx');
   const deliverySource = readRepoFile('web/src/pages/DeliveryDetail.tsx');
+  const deliveriesTabSource = readRepoFile('web/src/components/delivery/DeliveriesTab.tsx');
 
   it('registers portfolio routes and the Workspace sidebar entry', () => {
     expect(appSource).toContain('path="/engagements"');
@@ -112,20 +113,29 @@ describe('Engagement Portfolio UI contract', () => {
     expect(detailSource).toContain('<Link');
   });
 
-  it('polls operational summaries and keeps mutation errors inside their dialogs', () => {
+  it('polls operational summaries and keeps primary portfolio flows form-free', () => {
     expect(listSource).toContain('window.setInterval');
     expect(listSource).toContain('void load(false)');
     expect(detailSource).toContain('window.setInterval');
-    expect(detailSource).toContain('setEditError(');
-    expect(detailSource).toContain('setLinkError(');
-    expect(detailSource).toContain('{editError && (');
-    expect(detailSource).toContain('{linkError && (');
-    expect(detailSource).toContain('maxLength={200}');
-    expect(detailSource).toContain('maxLength={4000}');
-    expect(listSource).toContain('returnFocusRef={createButtonRef}');
-    expect(detailSource).toContain('returnFocusRef={editButtonRef}');
-    expect(detailSource).toContain('returnFocusRef={linkButtonRef}');
-    expect(detailSource).toContain('className="min-w-0 rounded-lg');
+    for (const source of [listSource, detailSource, deliveriesTabSource, deliverySource]) {
+      expect(source).not.toContain('<form');
+      expect(source).not.toContain('<textarea');
+      expect(source).not.toContain('type="file"');
+    }
+    expect(listSource).toContain('kind="bootstrap-engagement"');
+    expect(detailSource).toContain('kind="manage-engagement"');
+    expect(deliveriesTabSource).toContain('kind="plan-delivery"');
+    expect(deliverySource).toContain('kind="manage-delivery"');
+  });
+
+  it('shows Agent execution evidence and the immutable Release Promotion path', () => {
+    expect(deliverySource).toContain('getDeliveryExecution(projectId, deliveryId)');
+    expect(deliverySource).toContain('<ExecutionPanel execution={execution} />');
+    expect(deliverySource).toContain('delivery.execution.manifest');
+    expect(deliverySource).toContain('delivery.execution.runner');
+    expect(deliverySource).toContain('delivery.promotion.graphLabel');
+    expect(deliverySource).toContain('artifact.image_digest');
+    expect(deliverySource).toContain('latestPromotion');
   });
 
   it('adds optional Engagement context to Project and Delivery headers', () => {
@@ -135,5 +145,9 @@ describe('Engagement Portfolio UI contract', () => {
 
   it('keeps every Engagement translation key in English and Korean', () => {
     expect(keys(en.engagements).sort()).toEqual(keys(ko.engagements).sort());
+  });
+
+  it('keeps every Delivery translation key in English and Korean', () => {
+    expect(keys(en.delivery).sort()).toEqual(keys(ko.delivery).sort());
   });
 });

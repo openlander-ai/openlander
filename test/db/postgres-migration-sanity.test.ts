@@ -268,6 +268,11 @@ describe('Postgres migration sanity gate', () => {
       '0013_delivery_workspace',
       '0014_delivery_evidence_hardening',
       '0015_engagement_portfolio',
+      '0016_agent_delivery_interface',
+      '0017_release_promotion_reporting',
+      '0018_release_promotion_quality',
+      '0019_release-hard-delete-cascade',
+      '0020_delivery-deploy-link-hard-delete-cascade',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -286,6 +291,11 @@ describe('Postgres migration sanity gate', () => {
       '0013_delivery_workspace.sql',
       '0014_delivery_evidence_hardening.sql',
       '0015_engagement_portfolio.sql',
+      '0016_agent_delivery_interface.sql',
+      '0017_release_promotion_reporting.sql',
+      '0018_release_promotion_quality.sql',
+      '0019_release-hard-delete-cascade.sql',
+      '0020_delivery-deploy-link-hard-delete-cascade.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -298,6 +308,22 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "delivery_idempotency_records"');
     expect(sql).toContain('CREATE TABLE "engagements"');
     expect(sql).toContain('CREATE TABLE "engagement_projects"');
+    expect(sql).toContain('CREATE TABLE "application_operation_invocations"');
+    expect(sql).toContain('CREATE TABLE "delivery_agent_runs"');
+    expect(sql).toContain('CREATE TABLE "delivery_agent_run_events"');
+    expect(sql).toContain('CREATE TABLE "delivery_run_checks"');
+    expect(sql).toContain('ADD COLUMN "health_timeout_seconds" integer DEFAULT 30 NOT NULL');
+    expect(sql).toContain('ADD COLUMN "smoke_path" text');
+    expect(sql).toContain('ADD COLUMN "soak_seconds" integer DEFAULT 0 NOT NULL');
+    expect(sql).toContain('"auto_finalize" boolean');
+    expect(sql).toContain('UPDATE "deliveries" SET "auto_finalize" = false');
+    expect(sql).toContain('CREATE UNIQUE INDEX "delivery_agent_runs_active_unique"');
+    expect(sql).toContain('CREATE TABLE "project_environments"');
+    expect(sql).toContain('CREATE TABLE "releases"');
+    expect(sql).toContain('CREATE TABLE "release_artifacts"');
+    expect(sql).toContain('CREATE TABLE "release_promotions"');
+    expect(sql).toContain('CREATE TABLE "engagement_weekly_reports"');
+    expect(sql).toContain('UPDATE "environments" AS "environment"');
     expect(sql).toContain('"project_id" text PRIMARY KEY NOT NULL');
     expect(sql).toContain('CONSTRAINT "engagements_status_check"');
     expect(sql).toContain('"evidence_version" integer DEFAULT 0 NOT NULL');
@@ -450,6 +476,41 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 16 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 17 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 19 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 20 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 21 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -470,7 +531,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 17 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 22 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

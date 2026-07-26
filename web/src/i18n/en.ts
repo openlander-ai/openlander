@@ -833,6 +833,45 @@ export const translations = {
           service: 'Use the service-scoped form when only one service should see the variable.',
         },
       },
+      bootstrapEngagement: {
+        heading: 'Describe the customer outcome to your agent',
+        lead: 'The agent will create the Engagement and initial Project together, preserving the brief as an auditable operation instead of a blank form.',
+        prompt: {
+          fromBrief:
+            'Read this customer brief, create an Engagement and its first Project, then show the structured objective, risks, questions, and next Delivery plan.',
+          fromRepository:
+            'Inspect this repository and bootstrap an Engagement with a Project, `.openlander/project.yml`, and the first Delivery objective. Ask only for missing customer context.',
+        },
+      },
+      manageEngagement: {
+        heading: 'Tell your agent what should change',
+        lead: 'Engagement metadata, Project membership, and reports are applied through versioned operations so the UI can stay focused on evidence and status.',
+        prompt: {
+          update:
+            'Review {engagementName}, update its brief from my latest document, and explain the Engagement and Project changes before applying them.',
+          report:
+            'Generate and publish this week’s internal and customer reports for {engagementName}, then return both PDF hashes.',
+        },
+      },
+      planDelivery: {
+        heading: 'Describe the outcome, not the form fields',
+        lead: 'The agent will turn the goal into a Delivery, Definition of Done, manifest Gates, exact commit, quality run, Release, and Promotion sequence.',
+        prompt: {
+          plan: 'For Project {projectName}, plan the next Delivery from this requirement. Write `.openlander/delivery.yml`, run the quality Gates, and stop at any real blocker.',
+          continue:
+            'Inspect active Agent Runs and Deliveries in {projectName}; resume the most recent safe handoff and tell me the next required operation.',
+        },
+      },
+      manageDelivery: {
+        heading: 'Tell your agent what to do next',
+        lead: 'Delivery configuration and evidence enter through versioned operations. Use this page to inspect the resulting scope, checks, approvals, deployment evidence, and Receipt.',
+        prompt: {
+          continue:
+            'For Delivery {deliveryId} in Project {projectName}, inspect the current blockers, resume its active Agent Run, and continue through the next safe operation.',
+          evidence:
+            'For Delivery {deliveryId} in Project {projectName}, preserve this document as evidence, update the structured project record, and rerun only the affected quality Gates.',
+        },
+      },
     },
   },
   account: {
@@ -2599,6 +2638,30 @@ export const translations = {
     beta: 'Beta',
     description:
       'Preserve review artifacts, customer feedback, decisions, Gates, deployment evidence, and the final immutable Receipt in one project workflow.',
+    formlessDescription:
+      'Agents plan and execute Deliveries from repository manifests. Use this page to inspect status, evidence, and handoffs.',
+    formless: {
+      detailDescription:
+        'This is an evidence view. Ask an agent to change scope, add evidence, configure Gates, or advance the Release; human exception decisions remain available as buttons.',
+      agentManaged:
+        'Scope and maturity come from the Delivery objective and repository manifest. Review them here; ask an agent to apply changes.',
+      noSummary: 'No structured scope has been recorded.',
+      noLimitations: 'No limitation statement has been recorded.',
+      artifactsDescription:
+        'Artifacts are uploaded and versioned through the application interface. Human reviewers can approve a pending revision here.',
+      reviewDescription:
+        'Original customer messages and source links are preserved as evidence. Structured decisions remain traceable to them.',
+      approvalsTitle: 'Approval evidence',
+      noApprovals: 'No active approval evidence has been recorded.',
+      gatesDescription:
+        'Manifest-defined checks update these Gates automatically. The Web only exposes explicit human acknowledgment when required.',
+      deploymentsDescription:
+        'Release and Promotion operations attach immutable artifact digests and successful environment evidence here.',
+      receiptDescription:
+        'Readiness is recalculated from the current evidence. Every required condition must pass before completion.',
+      completionHint:
+        'Ask the agent to run complete_delivery. It will recheck readiness, require a successful Production Promotion when applicable, and finalize the immutable Receipt.',
+    },
     loading: 'Loading Delivery workspace...',
     none: 'None',
     immutable:
@@ -2658,6 +2721,7 @@ export const translations = {
       },
     },
     actions: {
+      askAgent: 'Ask agent',
       create: 'Create Delivery',
       creating: 'Creating...',
       cancel: 'Cancel',
@@ -2685,6 +2749,9 @@ export const translations = {
       downloadReceipt: 'Download Receipt',
     },
     empty: {
+      formlessTitle: 'No Agent-planned Deliveries yet',
+      formlessDescription:
+        'Describe the outcome to your agent. It will create the Delivery, Definition of Done, Gates, and exact execution record.',
       title: 'No Deliveries yet',
       description:
         'Create one when review artifacts, customer decisions, and release evidence need a durable handoff record.',
@@ -2693,6 +2760,77 @@ export const translations = {
       title: 'Delivery overview',
       description:
         'The type controls whether a successful Production deployment is required for finalization.',
+    },
+    execution: {
+      title: 'Agent execution',
+      description:
+        'The latest run is pinned to an exact commit, manifest snapshot, and runner image. Previous attempts remain in the evidence record.',
+      empty: 'No Agent Run has started for this Delivery.',
+      latestRun: 'Latest Agent Run',
+      phase: 'Current phase',
+      commit: 'Commit',
+      manifest: 'Manifest snapshot',
+      runner: 'Runner image',
+      started: 'Started',
+      handoff: 'Handoff',
+      checks: 'Latest check attempts',
+      noChecks: 'No quality checks have been recorded for this run.',
+      attempt: 'Attempt {attempt}',
+      duration: '{duration} ms',
+      recentEvents: 'Recent execution events',
+      noEvents: 'No execution events have been recorded.',
+      runStatus: {
+        running: 'Running',
+        paused: 'Paused',
+        completed: 'Completed',
+        failed: 'Failed',
+        cancelled: 'Cancelled',
+      },
+      checkStatus: {
+        pending: 'Pending',
+        running: 'Running',
+        passed: 'Passed',
+        failed: 'Failed',
+        cancelled: 'Cancelled',
+      },
+    },
+    promotion: {
+      title: 'Release promotion',
+      description:
+        'Each environment must receive the same immutable Release digest. Health, Smoke Test, and soak results are shown for the latest Promotion.',
+      graphLabel: 'Release Promotion path',
+      empty: 'No Project Environment has been applied from the repository manifest.',
+      notPromoted: 'Not promoted',
+      health: 'Health',
+      soak: 'Soak',
+      smokeConfigured: 'Smoke Test {path}',
+      smokeSkipped: 'No Smoke Test path',
+      soakSeconds: 'soak {seconds}s',
+      failed: 'Promotion failed',
+      noErrorDetail: 'No additional error detail',
+      tier: {
+        development: 'Development',
+        validation: 'Validation',
+        production: 'Production',
+      },
+      status: {
+        pending: 'Pending',
+        deploying: 'Deploying',
+        succeeded: 'Succeeded',
+        failed: 'Failed',
+        rolled_back: 'Rolled back',
+      },
+      healthStatus: {
+        pending: 'Pending',
+        healthy: 'Healthy',
+        unhealthy: 'Unhealthy',
+      },
+      soakStatus: {
+        pending: 'Pending',
+        passed: 'Passed',
+        failed: 'Failed',
+        skipped: 'Skipped',
+      },
     },
     artifacts: {
       uploadTitle: 'Upload an artifact revision',
@@ -2840,6 +2978,7 @@ export const translations = {
       finalizeWarning:
         'Finalization permanently locks this Delivery and its evidence snapshot. Preview the entire PDF first.',
       finalizedTitle: 'Immutable Receipt finalized',
+      previewCurrent: 'The preview matches the current evidence version.',
       check: {
         delivery_approved: {
           passed: 'Delivery approval is recorded.',
@@ -2924,6 +3063,7 @@ export const translations = {
       statusChanged: 'Delivery status changed.',
       uploaded: 'Artifact uploaded.',
       artifactApproved: 'Artifact approved.',
+      workItemUpdated: 'Review item status changed.',
       feedbackRecorded: 'Feedback recorded.',
       approvalRecorded: 'Customer approval evidence recorded.',
       referenceAdded: 'External evidence added.',
@@ -2965,7 +3105,7 @@ export const translations = {
     loading: 'Loading Engagements',
     emptyTitle: 'No Engagements yet',
     emptyDescription:
-      'Create an internal Engagement, then link existing Projects without changing their runtime or Delivery history.',
+      'Describe the customer outcome to your agent. It will create the Engagement and first Project as one auditable operation.',
     emptySearchTitle: 'No matching Engagements',
     emptySearchDescription: 'Adjust the search or status filters.',
     notFound: 'Engagement not found',
@@ -2973,6 +3113,12 @@ export const translations = {
     chipAria: 'Open Engagement {title}',
     projectDeliveryCount: '{count} Deliveries',
     blockerCount: '{count} blockers',
+    formless: {
+      projects: 'Runtime state and Project membership applied by agents.',
+      deliveries: 'Delivery maturity and status across linked Projects.',
+      blockers: 'Failed Gates, unresolved review items, and runtime errors with deep links.',
+      activity: 'Agent operations, evidence changes, Releases, Promotions, and reports.',
+    },
     status: {
       all: 'All',
       active: 'Active',
@@ -3005,6 +3151,7 @@ export const translations = {
       project: 'Project',
     },
     actions: {
+      askAgent: 'Ask agent',
       create: 'New Engagement',
       creating: 'Creating...',
       edit: 'Edit',
@@ -3057,6 +3204,22 @@ export const translations = {
         empty: 'No recent activity.',
       },
     },
+    reports: {
+      title: 'Weekly reports',
+      description:
+        'Internal and customer PDFs are rendered from the same frozen evidence snapshot. Ask an agent to create or publish a revision.',
+      empty: 'No weekly report revision has been generated.',
+      revision: 'revision {revision}',
+      download: 'Download {audience} PDF',
+      status: {
+        draft: 'Draft',
+        published: 'Published',
+      },
+      audience: {
+        internal: 'Internal PDF',
+        customer: 'Customer PDF',
+      },
+    },
     blocker: {
       project_error: 'Project runtime error',
       revision_requested: 'Revision requested',
@@ -3079,6 +3242,9 @@ export const translations = {
       engagementUnarchived: 'Engagement unarchived',
       projectLinked: 'Project linked',
       projectUnlinked: 'Project unlinked',
+      projectUpdateRecorded: 'Project update recorded',
+      weeklyReportGenerated: 'Weekly report revision generated',
+      weeklyReportPublished: 'Weekly report published',
       deliveryCreated: 'Delivery created',
       deliveryUpdated: 'Delivery details updated',
       deliveryStatusChanged: 'Delivery status changed',
