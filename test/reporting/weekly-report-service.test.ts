@@ -11,7 +11,7 @@ import { WeeklyReportService } from '../../src/reporting/weekly-report-service.j
 
 const temporaryDirectories: string[] = [];
 
-async function createHarness() {
+async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-weekly-report-'));
   temporaryDirectories.push(dataDir);
   const artifacts = new ArtifactStore(dataDir);
@@ -127,12 +127,23 @@ async function createHarness() {
     insertActivityLog: vi.fn(async () => undefined),
   };
   const engagements = { get: vi.fn(async () => engagement) };
+  let locale = initialLocale;
   const service = new WeeklyReportService(
     db as unknown as Database,
     engagements as unknown as EngagementService,
     artifacts,
+    () => locale,
   );
-  return { service, db, engagement, artifacts, stored };
+  return {
+    service,
+    db,
+    engagement,
+    artifacts,
+    stored,
+    setLocale(nextLocale: 'en' | 'ko') {
+      locale = nextLocale;
+    },
+  };
 }
 
 afterEach(async () => {
@@ -169,6 +180,35 @@ describe('WeeklyReportService', () => {
     expect(published.internal_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.customer_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.evidence_sha256).toBe(draft.evidence_sha256);
+  }, 120_000);
+
+  it('pins Korean report copy to the locale in the immutable evidence snapshot', async () => {
+    const harness = await createHarness('ko');
+    const draft = await harness.service.generate({
+      engagementId: 'engagement-1',
+      periodStart: '2026-07-20',
+      periodEnd: '2026-07-26',
+      actor: 'agent-a',
+    });
+    expect(draft.evidence_snapshot).toMatchObject({ locale: 'ko' });
+
+    harness.setLocale('en');
+    const published = await harness.service.publish(draft.id);
+    const internalHtmlBlob = harness.stored.get(String(published.internal_html_blob_id));
+    const customerHtmlBlob = harness.stored.get(String(published.customer_html_blob_id));
+    if (!internalHtmlBlob || !customerHtmlBlob) throw new Error('Published HTML blobs are missing');
+    const [internalHtml, customerHtml] = await Promise.all([
+      harness.artifacts.read(internalHtmlBlob.storageKey),
+      harness.artifacts.read(customerHtmlBlob.storageKey),
+    ]);
+
+    expect(internalHtml.toString()).toContain('<html lang="ko">');
+    expect(internalHtml.toString()).toContain('내부 FDE 주간 보고서');
+    expect(internalHtml.toString()).toContain('품질 검증 통과');
+    expect(customerHtml.toString()).toContain('고객 주간 진행 보고서');
+    expect(customerHtml.toString()).toContain('확인할 이슈 없음');
+    expect(customerHtml.toString()).not.toContain('Agent Run');
+    expect(customerHtml.toString()).not.toContain('customer-secret');
   }, 120_000);
 
   it('rejects periods that are not bounded weekly ranges', async () => {
