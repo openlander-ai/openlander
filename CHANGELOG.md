@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.11-rc.2] - 2026-07-26
+
+### Added
+
+- Add a versioned Application Operation Registry shared by MCP and REST,
+  including actor scope, idempotency, asynchronous status, and machine-readable
+  error contracts.
+- Add manifest-driven Agent Delivery runs with resumable handoffs, quality
+  checks, evidence uploads, automatic Gate evaluation, and immutable completion
+  evidence.
+- Add build-once Releases with digest-preserving promotion across Project
+  environments, health and smoke evaluation, recall, and rollback.
+- Add Project manifest snapshots and drift inspection, Engagement lifecycle and
+  Project-link operations, and internal/customer weekly reports generated from
+  the same evidence snapshot.
+
+### Changed
+
+- Shift the primary Web workflow toward formless observation of manifests,
+  Agent progress, checks, evidence, promotions, and reports while keeping
+  approvals and operational exception actions available.
+- Refine Korean product language for developer and FDE audiences while
+  preserving familiar technical terms where translation would reduce clarity.
+- Keep existing deploy and Delivery operations available through compatibility
+  wrappers while routing new Agent workflows through shared application
+  operations.
+
+### Fixed
+
+- Isolate Docker containers and networks by OpenLander instance, keep automatic
+  cleanup audit-only for unowned resources, and return typed address-pool
+  failures without leaving partial state.
+- Remove all persisted service-environment containers and same-instance routing
+  endpoints during explicit hard delete, and allow finalized Receipt records to
+  cascade only with that explicit Project deletion.
+- Serialize weekly report PDF rendering and provide coverage runners enough
+  headroom for Korean font subsetting.
+
 ## [0.2.11-rc.1] - 2026-07-25
 
 ### Added
