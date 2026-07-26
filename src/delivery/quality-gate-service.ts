@@ -220,6 +220,7 @@ export class DeliveryQualityGateService {
             workspacePath: clone.path,
             command: check.command,
             timeoutMs: (check.timeout_seconds ?? manifest.runner.timeout_seconds) * 1_000,
+            outputPaths: check.report ? [check.report.path] : undefined,
           });
           exitCode = executed.exitCode;
           durationMs = executed.durationMs;

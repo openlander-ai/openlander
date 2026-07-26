@@ -13,6 +13,7 @@ import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { pipeline } from 'node:stream/promises';
 import {
   getProjectVolumeBinds,
   isContainerAlreadyRunning,
@@ -30,6 +31,88 @@ import { sleep } from '../../lib/sleep.js';
 const log = createModuleLogger('docker:container');
 const DEFAULT_HEALTH_POLL_INTERVAL_MS = 500;
 const HEALTHCHECK_START_PERIOD_GRACE_MS = 500;
+
+async function archiveProcessExit(
+  archive: ReturnType<typeof spawn>,
+  purpose: string,
+): Promise<void> {
+  const archiveStderr = archive.stderr;
+  if (!archiveStderr) {
+    throw new ServiceConfigError(`Failed to open ${purpose} archive error stream`);
+  }
+  let stderr = '';
+  archiveStderr.setEncoding('utf8');
+  archiveStderr.on('data', (chunk: string) => {
+    if (stderr.length < 8_192) stderr += chunk;
+  });
+  const code = await new Promise<number>((resolveExit, reject) => {
+    archive.once('error', reject);
+    archive.once('close', (exitCode) => {
+      resolveExit(exitCode ?? 1);
+    });
+  });
+  if (code !== 0) {
+    throw new ServiceConfigError(
+      `Failed to ${purpose}: ${stderr.trim() || `tar exited with code ${String(code)}`}`,
+    );
+  }
+}
+
+async function copyWorkspaceIntoContainer(
+  container: Dockerode.Container,
+  workspacePath: string,
+): Promise<void> {
+  const archive = spawn('tar', ['-C', workspacePath, '-cf', '-', '.'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const archiveStdout = archive.stdout;
+  try {
+    await Promise.all([
+      container.putArchive(archiveStdout, { path: '/workspace' }),
+      archiveProcessExit(archive, 'prepare Delivery workspace'),
+    ]);
+  } finally {
+    if (archive.exitCode === null) archive.kill();
+  }
+}
+
+async function copyWorkspaceOutput(
+  container: Dockerode.Container,
+  workspacePath: string,
+  outputPath: string,
+): Promise<boolean> {
+  const normalized = posix.normalize(outputPath.replaceAll('\\', '/'));
+  if (normalized.startsWith('/') || normalized === '..' || normalized.startsWith('../')) {
+    throw new ServiceConfigError(`Invalid Delivery workspace output path: ${outputPath}`);
+  }
+  const workspaceRoot = resolve(workspacePath);
+  const target = resolve(workspaceRoot, normalized);
+  if (target !== workspaceRoot && !target.startsWith(`${workspaceRoot}${sep}`)) {
+    throw new ServiceConfigError(`Invalid Delivery workspace output path: ${outputPath}`);
+  }
+  await mkdir(dirname(target), { recursive: true });
+
+  let source: NodeJS.ReadableStream;
+  try {
+    source = await container.getArchive({ path: `/workspace/${normalized}` });
+  } catch (error) {
+    if (isDockerNotFoundError(error)) return false;
+    throw error;
+  }
+  const extractor = spawn('tar', ['-C', dirname(target), '-xf', '-'], {
+    stdio: ['pipe', 'ignore', 'pipe'],
+  });
+  const extractorStdin = extractor.stdin;
+  try {
+    await Promise.all([
+      pipeline(source, extractorStdin),
+      archiveProcessExit(extractor, 'restore Delivery workspace output'),
+    ]);
+    return true;
+  } finally {
+    if (extractor.exitCode === null) extractor.kill();
+  }
+}
 
 async function copyFilesIntoContainer(
   container: Dockerode.Container,
@@ -219,7 +302,6 @@ export class ContainerOps {
       },
       HostConfig: {
         AutoRemove: false,
-        Binds: [`${options.workspacePath}:/workspace:rw`],
         NetworkMode: 'bridge',
         RestartPolicy: { Name: 'no' },
         Memory: 2 * 1024 * 1024 * 1024,
@@ -231,6 +313,10 @@ export class ContainerOps {
 
     let timeout: NodeJS.Timeout | undefined;
     try {
+      // The OpenLander process may itself run in a container. A host bind using
+      // workspacePath would then point Docker at a different filesystem. Copy
+      // the exact clone snapshot through the Docker API instead.
+      await copyWorkspaceIntoContainer(container, options.workspacePath);
       await container.start();
       const waitForExit = async (): Promise<{ timedOut: false; exitCode: number }> => {
         const result: unknown = await container.wait();
@@ -261,6 +347,9 @@ export class ContainerOps {
       }
       const rawLogs = await container.logs({ stdout: true, stderr: true, follow: false });
       const logs = Buffer.isBuffer(rawLogs) ? rawLogs.toString('utf8') : String(rawLogs);
+      for (const outputPath of options.outputPaths ?? []) {
+        await copyWorkspaceOutput(container, options.workspacePath, outputPath);
+      }
       return {
         exitCode: completion.exitCode,
         durationMs: Date.now() - startedAt,
