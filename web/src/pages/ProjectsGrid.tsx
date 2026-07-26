@@ -13,7 +13,7 @@
  * page keeps rendering without a behavioral rewire.
  */
 import { type FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { ChevronDown, Folder, MoreHorizontal, Plus, X } from 'lucide-react';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjects } from '@/hooks/use-projects';
@@ -22,36 +22,26 @@ import { createProjectGroup } from '@/lib/api/projects';
 import { useLanguage } from '@/i18n/context';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 import type { Project } from '@/types';
 
-function getStatusPill(status: Project['status']): { cls: string; label: string } {
-  const map: Record<Project['status'], { cls: string; label: string }> = {
-    running: {
-      cls: 'bg-[color-mix(in_oklch,var(--ol-success)_12%,transparent)] text-[color:var(--ol-success)]',
-      label: 'Running',
-    },
-    building: {
-      cls: 'bg-[color-mix(in_oklch,var(--ol-warning)_12%,transparent)] text-[color:var(--ol-warning)]',
-      label: 'Deploying',
-    },
-    error: {
-      cls: 'bg-[color-mix(in_oklch,var(--ol-error)_12%,transparent)] text-[color:var(--ol-error)]',
-      label: 'Crashing',
-    },
-    stopped: {
-      cls: 'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
-      label: 'Stopped',
-    },
-    idle: {
-      cls: 'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
-      label: 'Idle',
-    },
+function getStatusPillClass(status: Project['status']): string {
+  const map: Record<Project['status'], string> = {
+    running:
+      'bg-[color-mix(in_oklch,var(--ol-success)_12%,transparent)] text-[color:var(--ol-success)]',
+    building:
+      'bg-[color-mix(in_oklch,var(--ol-warning)_12%,transparent)] text-[color:var(--ol-warning)]',
+    error: 'bg-[color-mix(in_oklch,var(--ol-error)_12%,transparent)] text-[color:var(--ol-error)]',
+    stopped:
+      'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
+    idle: 'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
   };
   return map[status] ?? map.stopped;
 }
 
 function StatusPill({ status }: { status: Project['status'] }) {
-  const { cls, label } = getStatusPill(status);
+  const { t } = useLanguage();
+  const cls = getStatusPillClass(status);
   return (
     <span
       className={cn(
@@ -60,7 +50,7 @@ function StatusPill({ status }: { status: Project['status'] }) {
       )}
     >
       <span aria-hidden className="h-1 w-1 rounded-full bg-current" />
-      {label}
+      {t(`projects.status.${status}`)}
     </span>
   );
 }
@@ -108,7 +98,9 @@ export function ProjectsGrid() {
       setProjectName('');
       navigate(`/projects/${result.project.id}`);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : t('projects.create.errors.fallback'));
+      setCreateError(
+        localizeApiError(err, t, 'projects.create.errors.fallback', 'common.errors.codes'),
+      );
     } finally {
       setCreating(false);
     }

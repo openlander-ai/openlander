@@ -40,6 +40,7 @@ import {
 import { disconnectGithub } from '@/lib/api/system';
 import { formatDateTime, formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -49,7 +50,7 @@ interface FetchState {
   error: string | null;
 }
 
-function useGitHubStatus() {
+function useGitHubStatus(t: Translate) {
   const [state, setState] = useState<FetchState>({ data: null, loading: true, error: null });
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
@@ -77,10 +78,10 @@ function useGitHubStatus() {
       setState({
         data: null,
         loading: false,
-        error: err instanceof Error ? err.message : 'Failed',
+        error: localizeApiError(err, t, 'gitProviders.github.loadFailed', 'common.apiError.codes'),
       });
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void reload();
@@ -318,7 +319,9 @@ function GitHubCard({ data, onReload, onReauthorize }: GitHubCardProps) {
       await disconnectGithub();
       onReload();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Disconnect failed');
+      setActionError(
+        localizeApiError(err, t, 'gitProviders.github.disconnectFailed', 'common.apiError.codes'),
+      );
     } finally {
       setBusy(false);
     }
@@ -402,7 +405,7 @@ function GitHubCard({ data, onReload, onReauthorize }: GitHubCardProps) {
               data-testid="github-validation-error"
               className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
             >
-              {t('gitProviders.github.validationError', { message: data.validationError })}
+              {t('gitProviders.github.validationError')}
               {guidance && (
                 <a
                   href={guidance.url}
@@ -420,7 +423,7 @@ function GitHubCard({ data, onReload, onReauthorize }: GitHubCardProps) {
               data-testid="github-validation-unreachable"
               className="rounded-md border border-[color:var(--ol-warn)] bg-[color:color-mix(in_oklch,var(--ol-warn)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
             >
-              {t('gitProviders.github.validationUnreachable', { message: data.validationError })}
+              {t('gitProviders.github.validationUnreachable')}
               {guidance && (
                 <a
                   href={guidance.url}
@@ -602,9 +605,7 @@ function ErrorCard({ message, onRetry, t }: ErrorCardProps) {
       }
     >
       <div className="flex flex-col gap-3">
-        <p className="text-[12.5px] text-[color:var(--ol-error)]">
-          {t('gitProviders.github.loadFailed')} {message}
-        </p>
+        <p className="text-[12.5px] text-[color:var(--ol-error)]">{message}</p>
         <button
           type="button"
           onClick={onRetry}
@@ -645,7 +646,7 @@ function GitHubConnectionFlow({ mode, onComplete, onCancel }: GitHubConnectionFl
 
 export function GitProvidersSettings() {
   const { t } = useLanguage();
-  const status = useGitHubStatus();
+  const status = useGitHubStatus(t);
   const [connectionMode, setConnectionMode] = useState<'connect' | 'reauthorize' | null>(null);
 
   const finishConnection = async () => {

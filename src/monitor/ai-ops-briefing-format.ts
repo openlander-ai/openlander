@@ -1,6 +1,17 @@
 import type { AiOpsBriefingRow } from '../db/types.js';
 import { normalizeAiOpsEvidenceForRead } from './ai-ops-evidence-normalizer.js';
 
+const AI_OPS_CLASSIFICATIONS = new Set([
+  'traffic_health_mismatch',
+  'route_failure',
+  'container_exited',
+  'restart_loop',
+  'dependency_failure',
+  'runtime_incident',
+  'deploy_failed',
+  'no_issue_detected',
+]);
+
 function parseJsonRecord(value: string | null): Record<string, unknown> | null {
   if (!value) return null;
   try {
@@ -43,8 +54,52 @@ function oneLineSummary(text: string): string {
   return compact.length > 240 ? `${compact.slice(0, 237)}...` : compact;
 }
 
+function numberValue(record: Record<string, unknown> | null, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildPresentation(row: AiOpsBriefingRow, evidence: Record<string, unknown> | null) {
+  const titleCode = AI_OPS_CLASSIFICATIONS.has(row.classification) ? row.classification : 'unknown';
+  const params: Record<string, string | number> = {};
+  let summaryCode = titleCode;
+
+  const routeHealth = recordValue(evidence?.['routeHealth']);
+  const representativeTraffic = recordValue(evidence?.['representativeTraffic']);
+  const container = recordValue(evidence?.['container']);
+  const runtimeIncident = recordValue(evidence?.['runtimeIncident']);
+
+  if (titleCode === 'traffic_health_mismatch') {
+    const path = representativeTraffic?.['path'];
+    const statusCode = numberValue(representativeTraffic, 'status_code');
+    if (typeof path === 'string' && path.trim()) params['path'] = path.trim();
+    if (statusCode !== null) params['statusCode'] = statusCode;
+    summaryCode = statusCode === null ? 'traffic_health_mismatch' : 'traffic_health_mismatch_http';
+  } else if (titleCode === 'route_failure') {
+    const statusCode = numberValue(routeHealth, 'statusCode');
+    if (statusCode !== null) params['statusCode'] = statusCode;
+    summaryCode = statusCode === null ? 'route_failure' : 'route_failure_http';
+  } else if (titleCode === 'restart_loop') {
+    const restartCount =
+      numberValue(container, 'restartCount') ?? numberValue(runtimeIncident, 'restartCount');
+    if (restartCount !== null) params['restartCount'] = restartCount;
+    summaryCode = restartCount === null ? 'restart_loop' : 'restart_loop_with_count';
+  } else if (titleCode === 'container_exited') {
+    const exitCode = numberValue(container, 'exitCode');
+    if (exitCode !== null) params['exitCode'] = exitCode;
+    summaryCode = exitCode === null ? 'container_exited' : 'container_exited_with_code';
+  }
+
+  return {
+    title_code: titleCode,
+    summary_code: summaryCode,
+    params,
+  };
+}
+
 export function formatAiOpsBriefingTriageRow(row: AiOpsBriefingRow) {
   const suggestedCall = parseJsonRecord(row.suggested_call_json);
+  const evidence = parseJsonRecord(row.evidence_json);
   return {
     briefing_id: row.id,
     project_id: row.project_id,
@@ -54,6 +109,7 @@ export function formatAiOpsBriefingTriageRow(row: AiOpsBriefingRow) {
     classification: row.classification,
     title: row.title,
     summary: oneLineSummary(row.llm_summary ?? row.deterministic_summary),
+    presentation: buildPresentation(row, evidence),
     diagnostic_call: buildTicketDiagnosticCall(row, suggestedCall),
     created_at: row.created_at,
   };
@@ -64,9 +120,10 @@ export function formatAiOpsBriefingRow(
   opts: { includeEvidence?: boolean } = {},
 ) {
   const suggestedCall = parseJsonRecord(row.suggested_call_json);
+  const persistedEvidence = parseJsonRecord(row.evidence_json);
   const diagnosticCall = buildTicketDiagnosticCall(row, suggestedCall);
   const evidenceContext = opts.includeEvidence
-    ? normalizeAiOpsEvidenceForRead(parseJsonRecord(row.evidence_json), {
+    ? normalizeAiOpsEvidenceForRead(persistedEvidence, {
         source: 'briefing_snapshot',
         live: false,
         serviceId: row.service_id,
@@ -86,6 +143,7 @@ export function formatAiOpsBriefingRow(
     classification: row.classification,
     title: row.title,
     summary: row.llm_summary ?? row.deterministic_summary,
+    presentation: buildPresentation(row, persistedEvidence),
     summary_source: summarySource,
     summary_status: summaryStatus,
     summary_truncated: row.llm_summary_truncated === true,

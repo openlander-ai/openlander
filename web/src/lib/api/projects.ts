@@ -6,7 +6,7 @@ import type {
   Project,
 } from '../../types';
 import { fetchWithAuth } from './auth.js';
-import { apiDelete, apiPost, apiPostVoid } from './client';
+import { apiDelete, apiPost, apiPostVoid, throwApiError } from './client';
 
 interface BackendEnvironment {
   id: string;
@@ -194,9 +194,7 @@ export async function listProjects(
 ): Promise<ProjectWithOptionalEnvironments[]> {
   const query = includeArchived ? '?include_archived=true' : '';
   const res = await fetch(`/api/projects${query}`);
-  if (!res.ok) {
-    throw new Error('Failed to fetch projects');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch projects');
   const data = (await res.json()) as { projects: BackendProjectWithOptionalEnvironments[] };
   return data.projects.map((p) => ({
     ...p,
@@ -206,10 +204,7 @@ export async function listProjects(
 
 export async function getProject(id: string): Promise<ProjectWithOptionalEnvironments> {
   const res = await fetch(`/api/projects/${id}`);
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err || 'Failed to fetch project');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch project');
   const data = (await res.json()) as Project & {
     previous_image_tag?: string | null;
     created_at?: string;
@@ -254,20 +249,14 @@ export async function updateProject(
     }),
   });
 
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to update project');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to update project');
 
   return res.json();
 }
 
 export async function getEnvironments(projectId: string): Promise<Environment[]> {
   const res = await fetch(`/api/projects/${projectId}/environments`);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch environments');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch environments');
 
   const data = (await res.json()) as { environments: BackendEnvironment[] };
   return data.environments.map(mapEnvironment);
@@ -278,10 +267,7 @@ export async function getEnvironmentEnvVars(
   envId: string,
 ): Promise<EnvironmentEnvVarsResponse> {
   const res = await fetch(`/api/projects/${projectId}/environments/${envId}/env`);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch environment variables');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch environment variables');
 
   const data = (await res.json()) as {
     environment: BackendEnvironment;
@@ -319,7 +305,7 @@ export interface PRPreview {
 
 export async function getProjectPreviews(projectId: string): Promise<PRPreview[]> {
   const res = await fetch(`/api/projects/${projectId}/previews`);
-  if (!res.ok) throw new Error('Failed to fetch previews');
+  if (!res.ok) await throwApiError(res, 'Failed to fetch previews');
   const data = await res.json();
   return data.previews;
 }
@@ -338,7 +324,7 @@ export async function getProjectDeployments(
     query.set('environmentId', environmentId);
   }
   const res = await fetch(`/api/projects/${id}/deployments?${query.toString()}`);
-  if (!res.ok) throw new Error('Failed to fetch deployments');
+  if (!res.ok) await throwApiError(res, 'Failed to fetch deployments');
   const data = await res.json();
   return data.deployments;
 }
@@ -356,7 +342,7 @@ export async function getServiceDeployments(
   const res = await fetch(
     `/api/projects/${projectId}/services/${serviceId}/deployments?${query.toString()}`,
   );
-  if (!res.ok) throw new Error('Failed to fetch service deployments');
+  if (!res.ok) await throwApiError(res, 'Failed to fetch service deployments');
   const data = await res.json();
   return data.deployments;
 }
@@ -382,7 +368,7 @@ export async function getServiceEnvVars(
   const res = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/env`,
   );
-  if (!res.ok) throw new Error('Failed to fetch env vars');
+  if (!res.ok) await throwApiError(res, 'Failed to fetch env vars');
   const data = (await res.json()) as { envVars?: Record<string, string> };
   return data.envVars ?? {};
 }
@@ -418,7 +404,7 @@ export async function deleteServiceEnvVar(
     `/api/projects/${encodedProjectId}/services/${encodedServiceId}/env/${encodedKey}`,
     { method: 'DELETE' },
   );
-  if (!res.ok) throw new Error('Failed to delete env var');
+  if (!res.ok) await throwApiError(res, 'Failed to delete env var');
   return res.json() as Promise<{ status: 'deleted' | 'not_found'; needsRedeploy: boolean }>;
 }
 
@@ -428,7 +414,7 @@ export async function deleteServiceEnvVar(
 export async function getRecentDeployments(limit = 20): Promise<RecentDeployment[]> {
   const query = new URLSearchParams({ limit: String(limit) });
   const res = await fetch(`/api/deployments/recent?${query.toString()}`);
-  if (!res.ok) throw new Error('Failed to fetch recent deployments');
+  if (!res.ok) await throwApiError(res, 'Failed to fetch recent deployments');
   const data = (await res.json()) as { deployments: RecentDeployment[] };
   return data.deployments;
 }
@@ -493,8 +479,7 @@ export async function getDeploymentDetail(
   const res = await fetchWithAuth(`/api/projects/${projectId}/deployments/${deployId}`);
   if (res.status === 404) return null;
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `GET /api/projects/${projectId}/deployments/${deployId} failed`);
+    await throwApiError(res, `GET /api/projects/${projectId}/deployments/${deployId} failed`);
   }
   return res.json() as Promise<DeployLogDetail>;
 }
@@ -512,8 +497,8 @@ export interface CancelDeploymentResponse {
  * `deploy_logs.id`, a `services.id`, or a `projects.id`). The response
  * always echoes the resolved project id and `outcome: 'cancelled'`.
  *
- * Errors are bubbled as plain `Error` for now — callers (the LogViewer
- * Kill button) just toast `err.message`. Specific status mapping:
+ * Errors retain the HTTP status and stable backend code so callers can
+ * localize the message without discarding diagnostic context. Specific status mapping:
  *
  *   - 404: deployment id resolves to nothing
  *   - 409: `DEPLOYMENT_NOT_ACTIVE` (already terminal, or no live build)
@@ -523,22 +508,12 @@ export async function cancelDeployment(deployId: string): Promise<CancelDeployme
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const text = await res.text();
-    let message = text;
-    try {
-      const parsed = JSON.parse(text) as { message?: string; error?: string };
-      message = parsed.message ?? parsed.error ?? text;
-    } catch {
-      // text was not JSON — fall through with the raw body.
-    }
-    throw new Error(message || `Failed to cancel deployment (${res.status})`);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to cancel deployment');
   return res.json() as Promise<CancelDeploymentResponse>;
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  return apiDelete(`/api/projects/${id}`);
 }
 
 export async function archiveProject(id: string): Promise<void> {
@@ -561,28 +536,12 @@ export async function getProjectLogs(id: string): Promise<string> {
 
 export async function exposeProject(id: string): Promise<{ publicUrl: string }> {
   const res = await fetch(`/api/projects/${id}/expose`, { method: 'POST' });
-  if (!res.ok) {
-    const text = await res.text();
-    let message = 'Failed to expose project';
-    try {
-      const payload = JSON.parse(text);
-      if (typeof payload.message === 'string') {
-        message = payload.message;
-      } else if (typeof payload.error === 'string') {
-        message = payload.error;
-      }
-    } catch {
-      if (text.trim()) {
-        message = text;
-      }
-    }
-    throw new Error(message);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to expose project');
   return res.json();
 }
 
 export async function unexposeProject(id: string): Promise<void> {
-  await fetch(`/api/projects/${id}/unexpose`, { method: 'POST' });
+  return apiPostVoid(`/api/projects/${id}/unexpose`);
 }
 
 export async function shareProject(id: string, accessCode: string): Promise<{ publicUrl: string }> {
@@ -591,23 +550,7 @@ export async function shareProject(id: string, accessCode: string): Promise<{ pu
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accessCode }),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    let message = 'Failed to share project';
-    try {
-      const payload = JSON.parse(text);
-      if (typeof payload.message === 'string') {
-        message = payload.message;
-      } else if (typeof payload.error === 'string') {
-        message = payload.error;
-      }
-    } catch {
-      if (text.trim()) {
-        message = text;
-      }
-    }
-    throw new Error(message);
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to share project');
   return res.json();
 }
 
@@ -671,10 +614,7 @@ export interface UpdateResourceLimitsRequest {
 
 export async function getProjectResources(projectId: string): Promise<ResourceLimitsResponse> {
   const res = await fetchWithAuth(`/api/projects/${projectId}/resources`);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch project resources');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch project resources');
   return res.json();
 }
 
@@ -683,10 +623,7 @@ export async function getServiceResources(
   serviceId: string,
 ): Promise<ResourceLimitsResponse> {
   const res = await fetchWithAuth(`/api/projects/${projectId}/services/${serviceId}/resources`);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch service resources');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to fetch service resources');
   return res.json();
 }
 
@@ -699,10 +636,7 @@ export async function updateProjectResources(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to update project resources');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to update project resources');
   return res.json();
 }
 
@@ -716,9 +650,6 @@ export async function updateServiceResources(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to update service resources');
-  }
+  if (!res.ok) await throwApiError(res, 'Failed to update service resources');
   return res.json();
 }

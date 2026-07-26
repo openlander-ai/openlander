@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { terminalTokens } from './terminal-tokens';
 import { ArrowDown } from 'lucide-react';
@@ -16,6 +17,7 @@ export function TerminalScrollback({
   className,
   autoFollow = true,
 }: TerminalScrollbackProps) {
+  const { t } = useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isFollowing, setIsFollowing] = useState(autoFollow);
@@ -89,7 +91,7 @@ export function TerminalScrollback({
           }}
         >
           <ArrowDown className="w-3 h-3" />
-          Resume Auto-scroll
+          {t('deployShell.autoScroll')}
         </button>
       )}
     </div>

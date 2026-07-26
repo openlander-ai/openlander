@@ -13,7 +13,7 @@
  * the right names.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { ArrowRight, Cable, Check, Copy, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
@@ -21,9 +21,6 @@ import { useLanguage } from '@/i18n/context';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { getAgentGuideContent, type AgentGuideKind } from './prompt-sets';
-
-const MCP_SETUP_CHECK =
-  'Before acting, call openlander_project({ action: "help" }) to confirm OpenLander MCP tools are available. If openlander_* tools are not available, stop and ask me to connect MCP; do not call OpenLander /api endpoints with the MCP token.';
 
 export interface AgentGuideDialogProps {
   open: boolean;
@@ -56,13 +53,17 @@ export function AgentGuideDialog({
   const connected = sessions.length > 0;
   const lastSession = sessions[0];
 
-  const content = getAgentGuideContent(kind, {
-    projectName,
-    serviceName,
-    envVarKey,
-    domain,
-    managedServiceName,
-  });
+  const content = getAgentGuideContent(
+    kind,
+    {
+      projectName,
+      serviceName,
+      envVarKey,
+      domain,
+      managedServiceName,
+    },
+    t,
+  );
 
   const handleSetupAgent = () => {
     onOpenChange(false);
@@ -206,7 +207,7 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
 
   const handleCopy = () => {
     if (disabled) return;
-    const copyText = `${MCP_SETUP_CHECK}\n\n${text}`;
+    const copyText = `${t('agentGuide.mcpSetupCheck')}\n\n${text}`;
     void navigator.clipboard
       .writeText(copyText)
       .then(() => {

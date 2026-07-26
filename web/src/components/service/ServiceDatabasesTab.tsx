@@ -31,9 +31,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useCopy } from '@/hooks/use-copy';
+import { localizeApiError } from '@/lib/localized-api-error';
 
-function formatBytes(bytes: number | null): string {
-  if (bytes == null) return 'Unknown size';
+function formatBytes(bytes: number | null, unknownLabel: string): string {
+  if (bytes == null) return unknownLabel;
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -76,7 +77,12 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       setUsers(usrs);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : t('services.detail.toasts.loadDatabasesFailed'),
+        localizeApiError(
+          err,
+          t,
+          'services.detail.toasts.loadDatabasesFailed',
+          'common.errors.codes',
+        ),
       );
     } finally {
       setLoading(false);
@@ -104,7 +110,9 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         toast.success(t('services.detail.toasts.connStringCopied'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('services.detail.toasts.dbCreateFailed'));
+      toast.error(
+        localizeApiError(err, t, 'services.detail.toasts.dbCreateFailed', 'common.errors.codes'),
+      );
     } finally {
       setCreatingDb(false);
     }
@@ -135,7 +143,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       }
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : t('services.detail.toasts.userCreateFailed'),
+        localizeApiError(err, t, 'services.detail.toasts.userCreateFailed', 'common.errors.codes'),
       );
     } finally {
       setCreatingUser(false);
@@ -165,17 +173,17 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Database className="h-4 w-4" />
-            Databases
+            {t('serviceDialogs.databases')}
           </div>
           <Button size="sm" onClick={() => setCreateDbOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Create Database
+            {t('serviceDialogs.createDatabase')}
           </Button>
         </div>
 
         {databases.length === 0 ? (
           <div className="text-sm text-muted-foreground bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
-            No databases found.
+            {t('serviceDialogs.noDatabases')}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -203,7 +211,9 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                 >
                   <div>
                     <div className="font-mono text-sm text-foreground mb-1">{db.name}</div>
-                    <div className="text-xs text-muted-foreground">{formatBytes(db.sizeBytes)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatBytes(db.sizeBytes, t('serviceDialogs.unknownSize'))}
+                    </div>
                   </div>
                   {connString && (
                     <div className="mt-4 flex justify-end">
@@ -218,7 +228,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                         ) : (
                           <Copy className="h-3.5 w-3.5 mr-1.5" />
                         )}
-                        Copy URL
+                        {t('serviceDialogs.copyUrl')}
                       </Button>
                     </div>
                   )}
@@ -233,17 +243,17 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Users className="h-4 w-4" />
-            Users
+            {t('serviceDialogs.users')}
           </div>
           <Button size="sm" onClick={() => setCreateUserOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Create User
+            {t('serviceDialogs.createUser')}
           </Button>
         </div>
 
         {users.length === 0 ? (
           <div className="text-sm text-muted-foreground bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
-            No users found.
+            {t('serviceDialogs.noUsers')}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -265,12 +275,12 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       <Dialog open={createDbOpen} onOpenChange={setCreateDbOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Database</DialogTitle>
+            <DialogTitle>{t('serviceDialogs.createDatabase')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateDatabase} className="space-y-4 mt-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">
-                Database Name
+                {t('serviceDialogs.databaseName')}
               </label>
               <Input
                 value={newDbName}
@@ -282,11 +292,11 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="ghost" onClick={() => setCreateDbOpen(false)}>
-                Cancel
+                {t('serviceDialogs.cancel')}
               </Button>
               <Button type="submit" disabled={creatingDb || !newDbName.trim()}>
                 {creatingDb && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create
+                {t('serviceDialogs.createShort')}
               </Button>
             </div>
           </form>
@@ -296,11 +306,13 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t('serviceDialogs.createUser')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateUser} className="space-y-4 mt-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Username</label>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                {t('serviceDialogs.username')}
+              </label>
               <Input
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
@@ -311,25 +323,25 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">
-                Password (Optional)
+                {t('serviceDialogs.passwordOptional')}
               </label>
               <Input
                 type="password"
                 value={newUserPassword}
                 onChange={(e) => setNewUserPassword(e.target.value)}
-                placeholder="Leave blank to auto-generate"
+                placeholder={t('serviceDialogs.passwordAutoGenerate')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">
-                Grant Access To (Optional)
+                {t('serviceDialogs.grantAccessOptional')}
               </label>
               <Select value={newUserDatabase} onValueChange={setNewUserDatabase}>
                 <SelectTrigger>
                   <SelectValue placeholder={t('services.detail.selectDatabase')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None (Create user only)</SelectItem>
+                  <SelectItem value="none">{t('serviceDialogs.noDatabaseAccess')}</SelectItem>
                   {databases.map((db) => (
                     <SelectItem key={db.name} value={db.name}>
                       {db.name}
@@ -340,11 +352,11 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="ghost" onClick={() => setCreateUserOpen(false)}>
-                Cancel
+                {t('serviceDialogs.cancel')}
               </Button>
               <Button type="submit" disabled={creatingUser || !newUsername.trim()}>
                 {creatingUser && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create
+                {t('serviceDialogs.createShort')}
               </Button>
             </div>
           </form>

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { translations as en } from '../../web/src/i18n/en.js';
 import { translations as ko } from '../../web/src/i18n/ko.js';
+import { formatReadinessCheck } from '../../web/src/pages/DeliveryDetail.js';
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
@@ -17,6 +18,7 @@ function keys(value: unknown, prefix = ''): string[] {
 
 describe('Engagement Portfolio UI contract', () => {
   const appSource = readRepoFile('web/src/App.tsx');
+  const activityLoggerSource = readRepoFile('src/monitor/activity-logger.ts');
   const sidebarSource = readRepoFile('web/src/components/Shell/Sidebar.tsx');
   const listSource = readRepoFile('web/src/pages/Engagements.tsx');
   const detailSource = readRepoFile('web/src/pages/EngagementDetail.tsx');
@@ -27,7 +29,7 @@ describe('Engagement Portfolio UI contract', () => {
     expect(appSource).toContain('path="/engagements"');
     expect(appSource).toContain('path="/engagements/:engagementId"');
     expect(sidebarSource).toContain("id: 'engagements'");
-    expect(sidebarSource).toContain("labelKey: 'engagements.sidebar'");
+    expect(sidebarSource).toContain("labelKey: 'sidebar.items.engagements'");
   });
 
   it('keeps the detail page limited to the four planned evidence sections', () => {
@@ -38,6 +40,66 @@ describe('Engagement Portfolio UI contract', () => {
     expect(detailSource).not.toContain('Gantt');
     expect(detailSource).not.toContain('assignee');
     expect(detailSource).not.toContain('customer portal');
+  });
+
+  it('renders known server events and blockers from locale-neutral metadata', () => {
+    expect(detailSource).toContain('ACTIVITY_TRANSLATION_KEYS');
+    expect(detailSource).toContain('activityTitle(activity, t)');
+    expect(detailSource).toContain('blockerContext(blocker, t)');
+    expect(detailSource).toContain('blockerDetail(blocker, t)');
+    expect(detailSource).not.toContain('{activity.title}');
+    expect(detailSource).not.toContain('{blocker.detail}');
+    expect(en.engagements.activityEvent.unknown).not.toContain('{eventType}');
+    expect(ko.engagements.activityEvent.unknown).not.toContain('{eventType}');
+  });
+
+  it('localizes every persisted project activity event without exposing raw enum names', () => {
+    const persistedList = activityLoggerSource.match(
+      /const PERSISTED_EVENT_TYPES:[\s\S]*?= \[([\s\S]*?)\];/,
+    )?.[1];
+    expect(persistedList).toBeDefined();
+    const persistedEventTypes = [...(persistedList ?? '').matchAll(/'([^']+)'/g)].map(
+      ([, eventType]) => eventType,
+    );
+
+    for (const eventType of persistedEventTypes) {
+      expect(detailSource, `missing Engagement activity mapping for ${eventType}`).toContain(
+        `'${eventType}':`,
+      );
+    }
+    expect(detailSource).not.toContain('{ eventType: activity.event_type }');
+  });
+
+  it('renders Delivery readiness from stable keys instead of English server prose', () => {
+    expect(deliverySource).toContain(
+      'formatReadinessCheck(check, detail.delivery.delivery_type, t)',
+    );
+    expect(deliverySource).not.toContain('{check.message}');
+  });
+
+  it('uses truthful generic Korean copy for legacy readiness responses without params', () => {
+    const keyOnly = (key: string) => key;
+    expect(
+      formatReadinessCheck(
+        { key: 'approved_artifact', passed: true, message: '2 approved artifact(s)' },
+        'software_release',
+        keyOnly,
+      ),
+    ).toBe('delivery.receipt.check.approved_artifact.passedGeneric');
+    expect(
+      formatReadinessCheck(
+        { key: 'page_limit', passed: false, message: 'Page limit exceeded.' },
+        'software_release',
+        keyOnly,
+      ),
+    ).toBe('delivery.receipt.check.page_limit.blockedGeneric');
+    expect(
+      formatReadinessCheck(
+        { key: 'production_deploy', passed: true, message: 'Not required.' },
+        'artifact_delivery',
+        keyOnly,
+      ),
+    ).toBe('delivery.receipt.check.production_deploy.notRequired');
   });
 
   it('exposes accessible search, filters, async errors, and keyboard-native actions', () => {

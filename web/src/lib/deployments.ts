@@ -1,5 +1,7 @@
 import type { DeploymentHistoryFilter, DeploymentViewModel, DeployLogSummary } from '@/types';
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export const DEPLOYMENT_HISTORY_FILTERS: DeploymentHistoryFilter[] = [
   'all',
   'failed',
@@ -7,62 +9,63 @@ export const DEPLOYMENT_HISTORY_FILTERS: DeploymentHistoryFilter[] = [
   'in_progress',
 ];
 
-export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
+export function getDeploymentStatusMeta(status: DeployLogSummary['status'], t: Translate) {
   switch (status) {
     case 'success':
       return {
         dotClass: 'bg-success',
         textClass: 'text-success',
-        label: 'Success',
+        label: t('deploy.detail.statusValue.success'),
       };
     case 'failed':
       return {
         dotClass: 'bg-error',
         textClass: 'text-error',
-        label: 'Failed',
+        label: t('deploy.detail.statusValue.failed'),
       };
     case 'building':
       return {
         dotClass: 'bg-agent animate-pulse',
         textClass: 'text-agent',
-        label: 'Building',
+        label: t('deploy.detail.statusValue.building'),
       };
     default:
       return {
         dotClass: 'bg-muted-foreground/40',
         textClass: 'text-muted-foreground',
-        label: 'Cancelled',
+        label: t('deploy.detail.statusValue.cancelled'),
       };
   }
 }
 
 export function getDeploymentTriggerLabel(
   trigger: DeployLogSummary['trigger'],
-  triggerDetail?: string | null,
+  triggerDetail: string | null | undefined,
+  t: Translate,
 ): string {
   if (triggerDetail) {
     switch (triggerDetail) {
       case 'restart':
-        return 'Restart';
+        return t('deploy.triggerAction.restart');
       case 'env_update':
-        return 'Env Update';
+        return t('deploy.triggerAction.envUpdate');
       case 'deploy':
-        return 'Deploy';
+        return t('deploy.triggerAction.deploy');
       case 'deploy_plan':
-        return 'Deploy Plan';
+        return t('deploy.triggerAction.deployPlan');
       default:
         return triggerDetail;
     }
   }
   switch (trigger) {
     case 'chat':
-      return 'Agent Deploy';
+      return t('deploy.triggerAction.chat');
     case 'webhook':
-      return 'Webhook';
+      return t('deploy.triggerAction.webhook');
     case 'api':
-      return 'API Call';
+      return t('deploy.triggerAction.api');
     default:
-      return 'Deploy';
+      return t('deploy.triggerAction.deploy');
   }
 }
 
@@ -79,8 +82,18 @@ export function getDeploymentTriggerIcon(trigger: DeployLogSummary['trigger']): 
   }
 }
 
-export function getDeploymentTriggerMetaLabel(trigger: DeployLogSummary['trigger']): string {
-  return `${trigger} trigger`;
+export function getDeploymentTriggerMetaLabel(
+  trigger: DeployLogSummary['trigger'],
+  t: Translate,
+): string {
+  switch (trigger) {
+    case 'chat':
+      return t('deploy.detail.triggerValue.chat');
+    case 'webhook':
+      return t('deploy.detail.triggerValue.webhook');
+    case 'api':
+      return t('deploy.detail.triggerValue.api');
+  }
 }
 
 export function getShortCommitSha(commitSha: string | null): string | null {

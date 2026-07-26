@@ -1,5 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { useLanguage } from '@/i18n/context';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -17,12 +18,15 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   onConfirm,
 }: ConfirmDialogProps) {
+  const { t } = useLanguage();
   const isDestructive = variant === 'destructive';
+  const resolvedConfirmLabel = confirmLabel ?? t('common.confirm');
+  const resolvedCancelLabel = cancelLabel ?? t('common.cancel');
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-5">
@@ -38,7 +42,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             className="rounded-md border border-[color:var(--ol-border)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             type="button"
@@ -50,7 +54,7 @@ export function ConfirmDialog({
               isDestructive ? 'bg-[color:var(--ol-error)]' : 'bg-[color:var(--ol-primary)]'
             }`}
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </button>
         </div>
       </DialogContent>

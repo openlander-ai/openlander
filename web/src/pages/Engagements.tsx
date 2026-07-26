@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { AlertTriangle, BriefcaseBusiness, Plus, Search } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import {
@@ -23,6 +23,7 @@ import {
 import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 function healthClass(health: EngagementRuntimeHealth): string {
   if (health === 'healthy') return 'bg-success/10 text-[color:var(--ol-fg)]';
@@ -65,7 +66,9 @@ export function Engagements() {
         );
         setError(null);
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : t('engagements.errors.load'));
+        setError(
+          localizeApiError(loadError, t, 'engagements.errors.load', 'engagements.errors.codes'),
+        );
       } finally {
         if (showLoading) setLoading(false);
       }
@@ -109,7 +112,7 @@ export function Engagements() {
       navigate(`/engagements/${created.id}`);
     } catch (createFailure) {
       setCreateError(
-        createFailure instanceof Error ? createFailure.message : t('engagements.errors.create'),
+        localizeApiError(createFailure, t, 'engagements.errors.create', 'engagements.errors.codes'),
       );
     } finally {
       setCreating(false);

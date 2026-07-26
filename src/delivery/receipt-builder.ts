@@ -6,6 +6,19 @@ import type { PDFImage, PDFPage, PDFFont } from 'pdf-lib';
 import { ReceiptGenerationError } from '../errors.js';
 import type { ProjectRow } from '../db/types.js';
 import type { ArtifactStore } from './artifact-store.js';
+import {
+  formatReceiptArtifactKind,
+  formatReceiptDeliveryMaturity,
+  formatReceiptDeliveryStatus,
+  formatReceiptDeliveryType,
+  formatReceiptDeployRelation,
+  formatReceiptDeployStatus,
+  formatReceiptEnvironment,
+  formatReceiptGateLabel,
+  formatReceiptGateStatus,
+  formatReceiptReadinessCheck,
+  type ReceiptLocale,
+} from './receipt-locale.js';
 import type { DeliveryDetail, DeliveryReadiness, ReceiptSnapshot } from './types.js';
 import { MAX_RECEIPT_PAGES } from './types.js';
 
@@ -256,9 +269,12 @@ class ReceiptWriter {
   }
 }
 
-function artifactLabel(detail: DeliveryDetail, artifactId: string): string {
+function artifactLabel(detail: DeliveryDetail, artifactId: string, locale: ReceiptLocale): string {
   const artifact = detail.artifacts.find((item) => item.id === artifactId);
-  return artifact ? `${artifact.original_filename} (r${String(artifact.revision)})` : artifactId;
+  if (!artifact) return artifactId;
+  const revision =
+    locale === 'ko' ? `버전 ${String(artifact.revision)}` : `r${String(artifact.revision)}`;
+  return `${artifact.original_filename} (${revision})`;
 }
 
 function makeTheme(detail: DeliveryDetail): ReceiptTheme {
@@ -266,7 +282,9 @@ function makeTheme(detail: DeliveryDetail): ReceiptTheme {
     primary: parseColor(detail.settings.primary_color),
     organizationName: detail.settings.organization_name || 'OpenLander',
     documentName: detail.settings.document_name,
-    footerText: detail.settings.footer_text || 'OpenLander Delivery Receipt',
+    footerText:
+      detail.settings.footer_text ||
+      (detail.settings.locale === 'ko' ? 'OpenLander 납품 확인서' : 'OpenLander Delivery Receipt'),
     locale: detail.settings.locale,
   };
 }
@@ -382,19 +400,30 @@ export class ReceiptBuilder {
       writer.cover(
         delivery.title,
         project.display_name || project.name,
-        `Delivery ID: ${delivery.id}`,
+        `${locale === 'ko' ? '납품 건 ID' : 'Delivery ID'}: ${delivery.id}`,
         logo,
       );
 
       writer.heading(locale === 'ko' ? '범위 및 변경 요약' : 'Scope and change summary');
       writer.row(locale === 'ko' ? '프로젝트' : 'Project', project.display_name || project.name);
-      writer.row(locale === 'ko' ? '유형' : 'Type', delivery.delivery_type);
-      writer.row(locale === 'ko' ? '성숙도' : 'Maturity', delivery.maturity);
-      writer.row(locale === 'ko' ? '상태' : 'Status', delivery.status);
+      writer.row(
+        locale === 'ko' ? '유형' : 'Type',
+        formatReceiptDeliveryType(delivery.delivery_type, locale),
+      );
+      writer.row(
+        locale === 'ko' ? '납품 단계' : 'Maturity',
+        formatReceiptDeliveryMaturity(delivery.maturity, locale),
+      );
+      writer.row(
+        locale === 'ko' ? '상태' : 'Status',
+        formatReceiptDeliveryStatus(delivery.status, locale),
+      );
       writer.spacer();
       writer.text(delivery.summary);
 
-      writer.heading(locale === 'ko' ? '고객 결정과 승인 증거' : 'Decisions and approval evidence');
+      writer.heading(
+        locale === 'ko' ? '고객 결정 및 승인 근거' : 'Decisions and approval evidence',
+      );
       const decisions = detail.work_items.filter(
         (item) =>
           item.kind === 'decision' && (item.status === 'confirmed' || item.status === 'resolved'),
@@ -407,17 +436,26 @@ export class ReceiptBuilder {
         writer.bullet(
           `${approval.approver_display_name} · ${approval.approved_at} · ${approval.approval_excerpt}`,
         );
-        writer.text(approval.artifact_ids.map((id) => artifactLabel(detail, id)).join(', '), {
-          size: 8,
-        });
+        writer.text(
+          approval.artifact_ids.map((id) => artifactLabel(detail, id, locale)).join(', '),
+          { size: 8 },
+        );
       }
 
-      writer.heading(locale === 'ko' ? 'Gate 결과' : 'Gate results');
+      writer.heading(locale === 'ko' ? '통과 기준 결과' : 'Gate results');
       for (const gate of detail.gates) {
-        const waiver = gate.status === 'waived' ? ` · ${gate.waiver_reason ?? ''}` : '';
-        const warning = gate.status === 'warning' && gate.warning_accepted ? ' · acknowledged' : '';
+        const waiver =
+          gate.status === 'waived'
+            ? ` · ${locale === 'ko' ? '면제 사유' : 'waiver'}: ${gate.waiver_reason ?? ''}`
+            : '';
+        const warning =
+          gate.status === 'warning' && gate.warning_accepted
+            ? ` · ${locale === 'ko' ? '경고 확인됨' : 'acknowledged'}`
+            : '';
         writer.bullet(
-          `${gate.label} [${gate.status}]${gate.required ? ' · required' : ''}${waiver}${warning}`,
+          `${formatReceiptGateLabel(gate.gate_key, gate.label, locale)} [${formatReceiptGateStatus(gate.status, locale)}]${
+            gate.required ? ` · ${locale === 'ko' ? '필수' : 'required'}` : ''
+          }${waiver}${warning}`,
         );
         if (gate.summary) writer.text(gate.summary, { size: 8 });
         if (gate.report_artifact_id) {
@@ -426,41 +464,57 @@ export class ReceiptBuilder {
           );
           writer.text(
             report
-              ? `report=${report.original_filename} sha256=${report.blob.sha256}`
-              : `report=${gate.report_artifact_id}`,
+              ? `${locale === 'ko' ? '보고서' : 'report'}=${report.original_filename} sha256=${report.blob.sha256}`
+              : `${locale === 'ko' ? '보고서' : 'report'}=${gate.report_artifact_id}`,
             { size: 7.5 },
           );
         }
       }
 
-      writer.heading(locale === 'ko' ? '배포 증거' : 'Deployment evidence');
+      writer.heading(locale === 'ko' ? '배포 근거' : 'Deployment evidence');
       if (detail.deploy_links.length === 0) {
         writer.text(locale === 'ko' ? '연결된 배포 없음' : 'No linked deployment');
       }
       for (const evidence of detail.deploy_links) {
         writer.bullet(
-          `${evidence.link.relation} · ${evidence.service.name} · ${evidence.environment?.type ?? 'unknown'} · ${evidence.deploy.status ?? 'unknown'}`,
+          `${formatReceiptDeployRelation(evidence.link.relation, locale)} · ${
+            evidence.service.name
+          } · ${formatReceiptEnvironment(evidence.environment?.type ?? null, locale)} · ${formatReceiptDeployStatus(
+            evidence.deploy.status ?? null,
+            locale,
+          )}`,
         );
+        const unknown = locale === 'ko' ? '정보 없음' : 'unknown';
         writer.text(
-          `deploy=${evidence.deploy.id} commit=${evidence.deploy.commit_sha ?? 'unknown'} created=${evidence.deploy.created_at ?? 'unknown'}`,
+          `${locale === 'ko' ? '배포 ID' : 'deploy'}=${evidence.deploy.id} ${
+            locale === 'ko' ? '커밋' : 'commit'
+          }=${evidence.deploy.commit_sha ?? unknown} ${
+            locale === 'ko' ? '생성 시각' : 'created'
+          }=${evidence.deploy.created_at ?? unknown}`,
           { size: 8 },
         );
       }
 
-      writer.heading(locale === 'ko' ? '알려진 제한사항' : 'Known limitations');
+      writer.heading(locale === 'ko' ? '알려진 제한 사항' : 'Known limitations');
       writer.text(delivery.limitations || (locale === 'ko' ? '없음' : 'None'));
 
       writer.heading(locale === 'ko' ? '산출물 및 SHA-256' : 'Artifacts and SHA-256');
       for (const artifact of detail.artifacts.filter((item) => item.status === 'approved')) {
+        const revision =
+          locale === 'ko' ? `버전 ${String(artifact.revision)}` : `r${String(artifact.revision)}`;
         writer.bullet(
-          `${artifact.original_filename} · ${artifact.kind} · r${String(artifact.revision)}`,
+          `${artifact.original_filename} · ${formatReceiptArtifactKind(artifact.kind, locale)} · ${revision}`,
         );
         writer.text(artifact.blob.sha256, { size: 7.5 });
       }
 
-      writer.heading(locale === 'ko' ? 'Readiness 기록' : 'Readiness record');
+      writer.heading(locale === 'ko' ? '확정 준비 상태' : 'Readiness record');
       for (const check of readiness.checks) {
-        writer.bullet(`${check.passed ? 'PASS' : 'BLOCK'} · ${check.message}`);
+        const result =
+          locale === 'ko' ? (check.passed ? '충족' : '미충족') : check.passed ? 'PASS' : 'BLOCK';
+        writer.bullet(
+          `${result} · ${formatReceiptReadinessCheck(check, locale, delivery.delivery_type)}`,
+        );
       }
       writer.text(`${locale === 'ko' ? '생성 시각' : 'Generated at'}: ${generatedAt}`, {
         size: 8,

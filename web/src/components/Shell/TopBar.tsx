@@ -11,7 +11,7 @@
  * so the user can see what the agent actually did, in time order.
  */
 import { Bot, ChevronRight, PanelLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
 import { formatRelativeTime } from '@/lib/time';

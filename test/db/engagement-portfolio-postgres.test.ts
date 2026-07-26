@@ -165,6 +165,33 @@ describeWithDatabase('Engagement Portfolio persistence on Postgres', () => {
             'engagement:unarchived',
           ]),
         );
+        const metadataByEvent = new Map(
+          activity.map((entry) => [
+            entry.event_type,
+            JSON.parse(entry.metadata) as Record<string, unknown>,
+          ]),
+        );
+        expect(metadataByEvent.get('engagement:created')).toMatchObject({
+          schema_version: 1,
+          engagement_id: atlas.id,
+          engagement_title: 'Atlas rollout',
+          customer_name: 'Atlas Synthetic',
+          engagement_status: 'active',
+          actor: 'admin',
+        });
+        expect(metadataByEvent.get('engagement:project_linked')).toMatchObject({
+          schema_version: 1,
+          engagement_id: atlas.id,
+          engagement_title: 'Atlas rollout',
+          project_id: 'project-atlas-web',
+          project_name: 'atlas-web',
+        });
+        expect(metadataByEvent.get('engagement:archived')).toMatchObject({
+          previous_status: 'active',
+          engagement_status: 'archived',
+          linked_projects_changed: false,
+          deliveries_changed: false,
+        });
       } finally {
         await db.close();
       }

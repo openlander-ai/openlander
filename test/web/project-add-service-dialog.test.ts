@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { translations as en } from '../../web/src/i18n/en';
+import { translations as ko } from '../../web/src/i18n/ko';
 import { deriveServiceName } from '../../web/src/lib/service-name';
 
 function readRepoFile(relativePath: string): string {
@@ -86,14 +88,8 @@ describe('Image source: command field is gone (v0.1 spec drift fix)', () => {
   });
 
   it('drops the projectDetail.addService.command i18n key in both languages', () => {
-    // The `command:` key still exists at top level (settings/cli).
-    // Inside `projectDetail.addService` it should be gone.
-    const enAddServiceBlock =
-      enSource.match(/addService:\s*\{[\s\S]*?\n {4}\},/)?.[0] ?? '';
-    const koAddServiceBlock =
-      koSource.match(/addService:\s*\{[\s\S]*?\n {4}\},/)?.[0] ?? '';
-    expect(enAddServiceBlock).not.toMatch(/^\s*command:/m);
-    expect(koAddServiceBlock).not.toMatch(/^\s*command:/m);
+    expect(en.projectDetail.addService).not.toHaveProperty('command');
+    expect(ko.projectDetail.addService).not.toHaveProperty('command');
   });
 });
 
@@ -102,10 +98,7 @@ describe('i18n polish (Gemini CCG)', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
 
   it('localizes the Soon tag to Korean instead of leaving the English word', () => {
-    // Gemini CCG flagged "Soon" left in ko.ts as English residue.
-    const koAddServiceBlock =
-      koSource.match(/addService:\s*\{[\s\S]*?\n {4}\},/)?.[0] ?? '';
-    expect(koAddServiceBlock).toMatch(/soon: ['"]곧 출시['"]/);
+    expect(ko.projectDetail.addService.soon).toBe('곧 출시');
   });
 
   it('lists the planned templates so users know what is coming', () => {

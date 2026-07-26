@@ -64,32 +64,30 @@ export function getConsoleSurfaceState({
   return 'ready';
 }
 
-export const CONSOLE_LABELS = {
-  terminal: 'Terminal',
-  searchPlaceholder: 'Search logs...',
-  clear: 'Clear',
-  live: 'Live',
-  bottom: 'Bottom',
-  jumpToLatest: 'Jump to latest',
-  loadOlder: 'Load older logs',
-  loadingOlder: 'Loading older...',
-  disconnected: 'Disconnected',
-  connecting: 'Connecting',
-  lines: 'lines',
+export const CONSOLE_LABEL_KEYS = {
+  searchPlaceholder: 'logs.console.searchPlaceholder',
+  clear: 'logs.console.clear',
+  live: 'logs.console.live',
+  jumpToLatest: 'logs.console.jumpToLatest',
+  loadOlder: 'logs.console.loadOlder',
+  loadingOlder: 'logs.console.loadingOlder',
+  disconnected: 'logs.console.disconnected',
+  connecting: 'logs.console.connecting',
+  lines: 'logs.console.lines',
   followMode: {
-    follow: 'Follow',
-    paused: 'Paused',
+    follow: 'logs.console.followMode.follow',
+    paused: 'logs.console.followMode.paused',
   },
   searchMode: {
-    text: 'Text',
-    regex: 'Regex',
+    text: 'logs.console.searchMode.text',
+    regex: 'logs.console.searchMode.regex',
   },
   logLevel: {
-    all: 'All Levels',
-    error: 'Errors',
-    warn: 'Warnings',
-    info: 'Info',
-    debug: 'Debug',
-    plain: 'Plain',
+    all: 'logs.console.logLevel.all',
+    error: 'logs.console.logLevel.error',
+    warn: 'logs.console.logLevel.warn',
+    info: 'logs.console.logLevel.info',
+    debug: 'logs.console.logLevel.debug',
+    plain: 'logs.console.logLevel.plain',
   },
 } as const;

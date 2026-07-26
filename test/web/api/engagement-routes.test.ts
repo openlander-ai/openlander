@@ -16,8 +16,30 @@ function harness(authKind: AuthKind) {
     status: 'active',
     projects: [],
     deliveries: [],
-    blockers: [],
-    recent_activity: [],
+    blockers: [
+      {
+        kind: 'revision_requested',
+        project_id: 'project-1',
+        delivery_id: 'delivery-1',
+        resource_id: 'delivery-1',
+        title: 'Revision requested',
+        detail: 'Legacy fallback text',
+        metadata: { delivery_status: 'revision_requested' },
+      },
+    ],
+    recent_activity: [
+      {
+        id: 'activity-1',
+        event_type: 'engagement:created',
+        title: 'Legacy fallback title',
+        description: 'Legacy fallback description',
+        metadata: {
+          schema_version: 1,
+          engagement_id: 'engagement-1',
+          engagement_title: 'Atlas rollout',
+        },
+      },
+    ],
   };
   const engagementService = {
     list: vi.fn(async () => [detail]),
@@ -69,6 +91,24 @@ describe('Engagement REST routes', () => {
       engagements: [{ id: 'engagement-1' }],
     });
     expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      blockers: [
+        {
+          kind: 'revision_requested',
+          metadata: { delivery_status: 'revision_requested' },
+        },
+      ],
+      recent_activity: [
+        {
+          event_type: 'engagement:created',
+          metadata: {
+            schema_version: 1,
+            engagement_id: 'engagement-1',
+            engagement_title: 'Atlas rollout',
+          },
+        },
+      ],
+    });
     expect(unassigned.status).toBe(200);
     await expect(unassigned.json()).resolves.toMatchObject({
       projects: [{ id: 'project-1' }],

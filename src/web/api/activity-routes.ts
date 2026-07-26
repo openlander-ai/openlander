@@ -289,6 +289,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         serviceName: serviceRef?.serviceName ?? null,
         title: row.title,
         detail: row.description,
+        detailCode: 'config_changed',
+        detailParams: {},
       });
     }
 
@@ -320,6 +322,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         serviceName: serviceRef?.serviceName ?? null,
         title: `Data source read · ${dataAccess.operation}`,
         detail: dataAccessDetail(row.description, dataAccess),
+        detailCode: 'data_access_read',
+        detailParams: {},
         dataAccess,
       });
     }
@@ -354,6 +358,11 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         // out of the headline so the timeline stays uniform.
         title: 'Service crashed',
         detail: detailBits.length > 0 ? detailBits.join(' · ') : undefined,
+        detailCode: 'service_crashed',
+        detailParams: {
+          exitCode: inc.exit_code ?? '—',
+          restartCount: inc.restart_count ?? 0,
+        },
       });
     }
 
@@ -374,6 +383,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         service: serviceRef.serviceId,
         title: 'Service recovered',
         detail: inc.category ? `from ${inc.category}` : undefined,
+        detailCode: 'service_recovered',
+        detailParams: {},
       });
     }
 
@@ -406,6 +417,11 @@ export function createActivityRoutes(ctx: AppContext): Hono {
           service: null,
           title: `${identity} connected`,
           detail: `session ${s.id.slice(0, 8)} · ${s.transport.toUpperCase()}`,
+          detailCode: 'mcp_connected',
+          detailParams: {
+            session: s.id.slice(0, 8),
+            transport: s.transport.toUpperCase(),
+          },
         });
       }
 
@@ -429,6 +445,12 @@ export function createActivityRoutes(ctx: AppContext): Hono {
           service: null,
           title: `${identity} disconnected`,
           detail: `session ${s.session_id.slice(0, 8)} · ${s.transport.toUpperCase()} · lasted ${String(durationSec)}s`,
+          detailCode: 'mcp_disconnected',
+          detailParams: {
+            session: s.session_id.slice(0, 8),
+            transport: s.transport.toUpperCase(),
+            duration: durationSec,
+          },
         });
       }
     }

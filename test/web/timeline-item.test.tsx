@@ -64,6 +64,8 @@ vi.mock('@/lib/time', () => ({
 const mockTranslations: Record<string, string> = {
   'timeline.toolExecuting': 'Executing',
   'timeline.analyzing': 'Analyzing...',
+  'timeline.arguments': 'Arguments ▾',
+  'timeline.buildLog': 'Build log ▾',
   'timeline.buildFailed': 'Build failed',
   'timeline.detailedCauseExplanation': 'Detailed cause explanation ▾',
   'timeline.recovery.complete': 'AI recovery complete',

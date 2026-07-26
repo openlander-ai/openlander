@@ -124,20 +124,40 @@ describe('Project Data Access UX contract', () => {
   });
 
   it('pins the visible safety facts in both locales', () => {
-    for (const locale of ['en', 'ko']) {
-      const dict = readRepoFile(`web/src/i18n/${locale}.ts`);
-      expect(dict).toContain(locale === 'en' ? 'Off by default' : '기본값은 꺼짐');
-      expect(dict).toContain(locale === 'en' ? 'All public schema tables' : '모든 table');
-      expect(dict).toContain(locale === 'en' ? 'Only enable this' : 'source 전체');
-      expect(dict).toContain('factScopeLabel');
-      expect(dict).toContain('factCredentialLabel');
-      expect(dict).toContain('factAuditLabel');
-      expect(dict).toContain('enableConfirmDescription');
-      expect(dict).toContain('Hidden from agents');
-      expect(dict).toContain('Every read logged');
-      expect(dict).toContain('emptyStateData');
-      expect(dict).toContain('Agent read: On');
-      expect(dict).toContain('Agent read: Off');
+    const en = readRepoFile('web/src/i18n/en.ts');
+    const ko = readRepoFile('web/src/i18n/ko.ts');
+    for (const dict of [en, ko]) {
+      for (const key of [
+        'factScopeLabel',
+        'factCredentialLabel',
+        'factAuditLabel',
+        'enableConfirmDescription',
+        'emptyStateData',
+      ]) {
+        expect(dict).toContain(key);
+      }
+    }
+    for (const text of [
+      'Off by default',
+      'All public schema tables',
+      'Only enable this',
+      'Hidden from agents',
+      'Every read logged',
+      'Agent read: On',
+      'Agent read: Off',
+    ]) {
+      expect(en).toContain(text);
+    }
+    for (const text of [
+      '기본값은 꺼짐',
+      'public 스키마의 모든 테이블',
+      '데이터 소스 전체',
+      '에이전트에게 공개하지 않음',
+      '모든 읽기 기록',
+      '에이전트 읽기: 켜짐',
+      '에이전트 읽기: 꺼짐',
+    ]) {
+      expect(ko).toContain(text);
     }
   });
 

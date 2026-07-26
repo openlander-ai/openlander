@@ -15,7 +15,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,11 +48,69 @@ import {
   type DeliveryDetail,
   type DeliveryGate,
   type DeliveryReadiness,
+  type DeliveryReadinessCheck,
   type DeliveryStatus,
+  type DeliveryType,
 } from '@/lib/api/deliveries';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
+import { localizeApiError } from '@/lib/localized-api-error';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function formatArtifactRevision(revision: number, t: Translate): string {
+  return t('delivery.artifacts.revisionValue', { revision });
+}
+
+function formatDefaultGateLabel(gate: DeliveryGate, t: Translate): string {
+  if (gate.gate_key === 'review' && gate.label === 'Review') {
+    return t('delivery.gates.defaultLabel.review');
+  }
+  if (gate.gate_key === 'qa' && gate.label === 'QA') {
+    return t('delivery.gates.defaultLabel.qa');
+  }
+  if (gate.gate_key === 'data' && gate.label === 'Data') {
+    return t('delivery.gates.defaultLabel.data');
+  }
+  return gate.label;
+}
+
+function hasReadinessParam(check: DeliveryReadinessCheck, key: string): boolean {
+  return typeof check.params?.[key] === 'number';
+}
+
+export function formatReadinessCheck(
+  check: DeliveryReadinessCheck,
+  deliveryType: DeliveryType,
+  t: Translate,
+): string {
+  if (
+    check.key === 'production_deploy' &&
+    (deliveryType === 'artifact_delivery' || check.params?.['not_required'] === 1)
+  ) {
+    return t('delivery.receipt.check.production_deploy.notRequired');
+  }
+
+  const result = check.passed ? 'passed' : 'blocked';
+  const needsCount =
+    (check.key === 'approved_artifact' && check.passed) ||
+    (check.key === 'customer_approval' && check.passed) ||
+    (check.key === 'work_items_resolved' && !check.passed) ||
+    (check.key === 'required_gates' && !check.passed) ||
+    (check.key === 'warnings_acknowledged' && !check.passed) ||
+    (check.key === 'html_companion_pdf' && !check.passed);
+  if (needsCount && !hasReadinessParam(check, 'count')) {
+    return t(`delivery.receipt.check.${check.key}.${result}Generic`);
+  }
+  if (
+    check.key === 'page_limit' &&
+    (!hasReadinessParam(check, 'count') || (!check.passed && !hasReadinessParam(check, 'max')))
+  ) {
+    return t(`delivery.receipt.check.page_limit.${result}Generic`);
+  }
+  return t(`delivery.receipt.check.${check.key}.${result}`, check.params);
+}
 
 function SectionCard({
   title,
@@ -128,7 +186,7 @@ export function DeliveryDetailPage() {
           nextDetail.delivery.previewed_evidence_version === nextDetail.delivery.evidence_version,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.errors.load'));
+      setError(localizeApiError(err, t, 'delivery.errors.load', 'delivery.errors.codes'));
     } finally {
       setLoading(false);
     }
@@ -150,7 +208,7 @@ export function DeliveryDetailPage() {
       if (success) setMessage(success);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.errors.action'));
+      setError(localizeApiError(err, t, 'delivery.errors.action', 'delivery.errors.codes'));
     } finally {
       setBusy(null);
     }
@@ -664,7 +722,7 @@ function ArtifactsPanel(props: PanelProps) {
                   <option value="">{t('delivery.artifacts.noCompanion')}</option>
                   {htmlArtifacts.map((artifact) => (
                     <option key={artifact.id} value={artifact.id}>
-                      {artifact.original_filename} · r{artifact.revision}
+                      {artifact.original_filename} · {formatArtifactRevision(artifact.revision, t)}
                     </option>
                   ))}
                 </select>
@@ -690,7 +748,7 @@ function ArtifactsPanel(props: PanelProps) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
                   <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
-                    {artifact.logical_key} · r{artifact.revision} ·{' '}
+                    {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
                     {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
                     {t(`delivery.artifacts.statusValue.${artifact.status}`)}
                   </p>
@@ -1013,7 +1071,7 @@ function ReviewPanel(props: PanelProps) {
                       )
                     }
                   />
-                  {artifact.original_filename} · r{artifact.revision}
+                  {artifact.original_filename} · {formatArtifactRevision(artifact.revision, t)}
                 </label>
               ))}
             </div>
@@ -1167,7 +1225,7 @@ function GatesPanel(props: PanelProps) {
               className="grid gap-3 rounded-md border border-[color:var(--ol-border-subtle)] p-3 sm:grid-cols-[160px_1fr]"
             >
               <div>
-                <p className="text-xs font-semibold">{gate.label}</p>
+                <p className="text-xs font-semibold">{formatDefaultGateLabel(gate, t)}</p>
                 <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
                   {t(`delivery.gates.type.${gate.gate_type}`)} ·{' '}
                   {gate.required ? t('delivery.gates.required') : t('delivery.gates.optional')}
@@ -1250,7 +1308,8 @@ function GatesPanel(props: PanelProps) {
                     )
                     .map((artifact) => (
                       <option key={artifact.id} value={artifact.id}>
-                        {artifact.original_filename} · r{artifact.revision}
+                        {artifact.original_filename} ·{' '}
+                        {formatArtifactRevision(artifact.revision, t)}
                       </option>
                     ))}
                 </select>
@@ -1473,7 +1532,9 @@ function ReceiptPanel({
                 ) : (
                   <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                 )}
-                <span className="text-xs leading-5">{check.message}</span>
+                <span className="text-xs leading-5">
+                  {formatReadinessCheck(check, detail.delivery.delivery_type, t)}
+                </span>
               </div>
             ))}
             <p className="pt-1 text-[10px] text-[color:var(--ol-fg-muted)]">

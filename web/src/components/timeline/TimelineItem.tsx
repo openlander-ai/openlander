@@ -24,10 +24,10 @@ interface TimelineItemProps {
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
 }
-function cleanMarkdown(text: string): string {
+function cleanMarkdown(text: string, codeBlockLabel: string): string {
   if (!text) return '';
   return text
-    .replace(/```[\s\S]*?```/g, '[Code Block]')
+    .replace(/```[\s\S]*?```/g, codeBlockLabel)
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -82,7 +82,7 @@ export function TimelineItemCard({
 
   const primaryText = useMemo(() => {
     if (isAgentToolCall) {
-      return `▸ ${item.toolName || 'tool'} ${t('timeline.toolExecuting')}`;
+      return `▸ ${item.toolName || t('timeline.unnamedTool')} ${t('timeline.toolExecuting')}`;
     }
 
     if (isAgentMessage) {
@@ -94,7 +94,7 @@ export function TimelineItemCard({
     }
 
     if (isAgentEvent) {
-      return cleanMarkdown(item.title);
+      return cleanMarkdown(item.title, t('timeline.codeBlock'));
     }
 
     return item.title;
@@ -208,7 +208,7 @@ export function TimelineItemCard({
                   setIsCollapsed((prev) => !prev);
                 }}
                 className="inline-flex items-center justify-center text-agent/70 hover:text-agent transition-colors cursor-pointer"
-                aria-label={isCollapsed ? '이벤트 펼치기' : '이벤트 접기'}
+                aria-label={isCollapsed ? t('timeline.expandEvent') : t('timeline.collapseEvent')}
               >
                 {isCollapsed ? (
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -241,7 +241,7 @@ export function TimelineItemCard({
           Object.keys(item.toolArguments).length > 0 && (
             <details className="mt-2 group/args">
               <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
-                Arguments ▾
+                {t('timeline.arguments')}
               </summary>
               <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
                 {JSON.stringify(item.toolArguments, null, 2)}
@@ -252,7 +252,7 @@ export function TimelineItemCard({
         {!isCollapsed && isError && item.detail && (
           <details className="mt-2 group/log">
             <summary className="text-xs font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
-              Build log ▾
+              {t('timeline.buildLog')}
             </summary>
             <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail.slice(-2000)}

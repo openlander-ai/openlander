@@ -130,13 +130,16 @@ describe('Deploy Kill build button → backend cancel route (PR #259 wire-up)', 
   it('disables the Kill button + shows a transient state during the network call', () => {
     expect(logViewerSource).toMatch(/const \[isCancelling, setIsCancelling\] = useState\(false\)/);
     expect(logViewerSource).toMatch(/disabled=\{isCancelling\}/);
-    expect(logViewerSource).toMatch(/isCancelling \? 'Cancelling…' : 'Kill build'/);
+    expect(logViewerSource).toContain("? t('deployShell.viewer.cancelling')");
+    expect(logViewerSource).toContain(": t('deployShell.viewer.killBuild')");
   });
 
   it('captures cancel errors so the operator sees a useful tooltip instead of a silent no-op', () => {
     // PR #259 spec returns 409 DEPLOYMENT_NOT_ACTIVE for terminal /
     // dead docker builds; the button surfaces the message via title.
-    expect(logViewerSource).toMatch(/const \[cancelError, setCancelError\] = useState<string \| null>\(null\)/);
+    expect(logViewerSource).toMatch(
+      /const \[cancelError, setCancelError\] = useState<string \| null>\(null\)/,
+    );
     expect(logViewerSource).toMatch(/title=\{cancelError \?\? undefined\}/);
   });
 });

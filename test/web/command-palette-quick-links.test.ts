@@ -27,7 +27,7 @@ describe('CommandPalette quick-links (post-#244 v0.1 IA)', () => {
 
   it('exposes a Web Server quick-link wired to /settings/web-server', () => {
     expect(source).toMatch(/id:\s*['"]nav-web-server['"]/);
-    expect(source).toContain("label: 'Web Server'");
+    expect(source).toContain("label: t('command.webServer')");
     expect(source).toMatch(/navigate\(['"]\/settings\/web-server['"]\)/);
     // Keyword breadth — the user might type any of `proxy`,
     // `traefik`, `routes`, `ports`, `entrypoints`, `settings`, or
@@ -38,7 +38,7 @@ describe('CommandPalette quick-links (post-#244 v0.1 IA)', () => {
 
   it('exposes a Git Providers quick-link wired to /settings/git-providers', () => {
     expect(source).toMatch(/id:\s*['"]nav-git-providers['"]/);
-    expect(source).toContain("label: 'Git Providers'");
+    expect(source).toContain("label: t('command.gitProviders')");
     expect(source).toMatch(/navigate\(['"]\/settings\/git-providers['"]\)/);
     // Users typing `github`, `oauth`, or `git` should also reach it.
     expect(source).toMatch(/keywords:\s*['"][^'"]*github/);

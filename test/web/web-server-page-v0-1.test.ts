@@ -108,26 +108,17 @@ describe('Web Server page v0.1', () => {
     expect(pageSource).toMatch(/summary\.data\?\.lastReloadAt \? \(/);
   });
 
-  it('localizes proxy.statusCode with a verbatim proxy.status fallback for stale backends', () => {
+  it('localizes proxy status for current and stale backends without rendering server prose', () => {
     // Backend PR #242 added `proxy.statusCode` + `proxy.statusSeverity`.
     // The frontend now i18n-maps `statusCode` and reads `statusSeverity`
-    // for the Pip color when present. Older builds (or a frontend talking
-    // to a stale backend mid-rolling-upgrade) still need to render
-    // *something*, so the verbatim `proxy.status` fallback stays in place.
-    //
-    // Earlier (#213-era) the contract was the opposite — verbatim only,
-    // no enum mapping. That was correct *before* the backend exposed
-    // structured codes; this PR moves the contract forward now that
-    // codes exist.
+    // for the Pip color when present. For an older backend, locale-neutral
+    // type/mode/provider fields derive the same code instead of exposing its
+    // free-form English status string.
     expect(pageSource).toMatch(/t\(`webServer\.proxy\.statusCode\.\$\{code\}`/);
     expect(pageSource).toMatch(/proxy\.statusSeverity === 'error'/);
-    expect(pageSource).toMatch(/proxy\.statusSeverity === 'warning'/);
     expect(pageSource).toMatch(/proxy\.statusSeverity === 'ok'/);
-    // Verbatim fallback stays — render `{proxy.status}` when statusCode
-    // is missing.
-    expect(pageSource).toContain('{proxy.status}');
-    // The legacy type/docker-provider derivation only runs in the
-    // fallback branch.
+    expect(pageSource).not.toContain('{proxy.status}');
+    expect(pageSource).toContain('const legacyCode = (): ProxyStatusCode =>');
     expect(pageSource).toMatch(/proxy\.type === 'none'/);
     expect(pageSource).toMatch(/proxy\.traefikDockerProvider === false/);
     // i18n exposes a row per backend code in both locales.

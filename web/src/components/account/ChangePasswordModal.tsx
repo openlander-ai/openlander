@@ -13,6 +13,7 @@ import { changePassword } from '@/lib/api/auth';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import { MIN_PASSWORD_LENGTH, isPasswordTooShort } from '@/lib/auth/password-policy';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -61,7 +62,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
       reset();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('account.changePassword.failed'));
+      setError(localizeApiError(err, t, 'account.changePassword.failed', 'common.errors.codes'));
       setSubmitting(false);
     }
   };

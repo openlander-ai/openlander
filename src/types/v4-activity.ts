@@ -32,6 +32,14 @@ export interface DataAccessActivitySummary {
   queryHash?: string | undefined;
 }
 
+export type ActivityDetailCode =
+  | 'config_changed'
+  | 'data_access_read'
+  | 'service_crashed'
+  | 'service_recovered'
+  | 'mcp_connected'
+  | 'mcp_disconnected';
+
 export interface V4ActivityEvent {
   id: string;
   actor: Actor;
@@ -55,6 +63,9 @@ export interface V4ActivityEvent {
   title: string;
   /** One-line detail / context. NOT a paragraph. */
   detail?: string;
+  /** Locale-neutral system detail. `detail` remains for legacy clients and user-authored text. */
+  detailCode?: ActivityDetailCode;
+  detailParams?: Record<string, string | number>;
   /** Data Inspector audit metadata. Result values and credentials are never included. */
   dataAccess?: DataAccessActivitySummary;
 }

@@ -4,6 +4,8 @@ WORKDIR /app
 ENV HUSKY=0
 ENV OPENLANDER_BUILD_DTS=false
 ENV OPENLANDER_BUILD_SOURCEMAP=false
+ENV NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_FUND=false
 
 COPY package.json package-lock.json ./
 COPY web/package.json web/package-lock.json ./web/
@@ -24,6 +26,9 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git openssh-client \
   && rm -rf /var/lib/apt/lists/*
+
+ENV NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_FUND=false
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force

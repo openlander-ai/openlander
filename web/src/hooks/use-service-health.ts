@@ -17,6 +17,8 @@ import { useCallback, useState } from 'react';
 import { fetchServiceHealth } from '../lib/api/services';
 import type { ServiceHealth } from '../lib/projectTopology';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
@@ -28,6 +30,7 @@ export interface UseServiceHealthResult {
 }
 
 export function useServiceHealth(serviceId: string | null): UseServiceHealthResult {
+  const { t } = useLanguage();
   const [health, setHealth] = useState<ServiceHealth | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,11 +52,11 @@ export function useServiceHealth(serviceId: string | null): UseServiceHealthResu
       // `liveHealth.health ?? resolvedService?.health`, so null lets
       // the topology snapshot take over.
       setHealth(null);
-      setError(err instanceof Error ? err.message : 'Failed to fetch health');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setIsLoading(false);
     }
-  }, [serviceId]);
+  }, [serviceId, t]);
 
   // Active polling for any non-steady state so the badge flips
   // promptly when a redeploy finishes or a crashed service recovers.

@@ -5,6 +5,7 @@ import type { EngagementRow } from '../db/schema.drizzle.js';
 import { EngagementValidationError } from '../errors.js';
 import type {
   EngagementActivity,
+  EngagementActivityMetadata,
   EngagementBlocker,
   EngagementDeliverySummary,
   EngagementDeliveryView,
@@ -97,6 +98,7 @@ function createDeliveryBlockers(
       resource_id: delivery.id,
       title: 'Revision requested',
       detail: `${delivery.title} requires revision before it can progress.`,
+      metadata: { delivery_status: 'revision_requested' },
     });
   }
   for (const gate of gates) {
@@ -107,6 +109,13 @@ function createDeliveryBlockers(
         resource_id: gate.id,
         title: gate.label,
         detail: gate.summary ?? 'A required Delivery Gate failed.',
+        metadata: {
+          gate_key: gate.gate_key,
+          gate_label: gate.label,
+          gate_summary: gate.summary,
+          gate_required: true,
+          gate_status: 'failed',
+        },
       });
     }
     if (gate.status === 'warning' && !gate.warning_accepted) {
@@ -116,6 +125,14 @@ function createDeliveryBlockers(
         resource_id: gate.id,
         title: gate.label,
         detail: gate.summary ?? 'A Delivery Gate warning has not been acknowledged.',
+        metadata: {
+          gate_key: gate.gate_key,
+          gate_label: gate.label,
+          gate_summary: gate.summary,
+          gate_required: gate.required,
+          gate_status: 'warning',
+          warning_accepted: false,
+        },
       });
     }
   }
@@ -134,6 +151,12 @@ function createDeliveryBlockers(
           (item.kind === 'question'
             ? 'A confirmed question remains unresolved.'
             : 'A confirmed change request remains unresolved.'),
+        metadata: {
+          work_item_kind: item.kind,
+          work_item_status: 'confirmed',
+          work_item_title: item.title,
+          work_item_detail: item.detail,
+        },
       });
     }
   }
@@ -169,6 +192,13 @@ export class EngagementService {
       const deliveryId =
         typeof metadata['delivery_id'] === 'string' ? metadata['delivery_id'] : null;
       const relatedProjectId = row.project_id.startsWith('engagement:') ? null : row.project_id;
+      const normalizedMetadata: EngagementActivityMetadata = {
+        ...metadata,
+        schema_version: 1,
+        engagement_id: id,
+        ...(relatedProjectId ? { project_id: relatedProjectId } : {}),
+        ...(deliveryId ? { delivery_id: deliveryId } : {}),
+      };
       return {
         id: row.id,
         event_type: row.event_type,
@@ -178,7 +208,7 @@ export class EngagementService {
         title: row.title,
         description: row.description,
         status: row.status,
-        metadata,
+        metadata: normalizedMetadata,
         created_at: row.created_at,
         deep_link:
           relatedProjectId && deliveryId
@@ -297,9 +327,8 @@ export class EngagementService {
       const projectViews: EngagementProjectSummary[] = [];
 
       for (const membership of memberships) {
-        const runtimeStatus = projectRuntimeStatus(
-          servicesByProject.get(membership.project_id) ?? [],
-        );
+        const projectServices = servicesByProject.get(membership.project_id) ?? [];
+        const runtimeStatus = projectRuntimeStatus(projectServices);
         const projectDeliveries = deliveriesByProject.get(membership.project_id) ?? [];
         const projectBlockers: EngagementBlocker[] = [];
         if (!membership.project_archived_at && runtimeStatus === 'error') {
@@ -312,6 +341,12 @@ export class EngagementService {
             resource_id: membership.project_id,
             title: 'Project runtime error',
             detail: 'At least one active service is in an error state.',
+            metadata: {
+              runtime_status: 'error',
+              error_service_count: projectServices.filter(
+                (service) => !service.archived_at && service.status === 'error',
+              ).length,
+            },
             deep_link: `/projects/${encodeURIComponent(membership.project_id)}`,
           });
         }

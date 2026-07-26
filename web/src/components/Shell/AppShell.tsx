@@ -17,44 +17,48 @@
  * trigger is exposed via the TopBar's hamburger affordance.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AppDataProvider } from '@/contexts/app-data-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
+import { useLanguage } from '@/i18n/context';
 import { PendingApprovalsStrip } from './PendingApprovalsStrip';
 import { Sidebar } from './Sidebar';
 import { TopBar, type Crumb } from './TopBar';
 
 const STORAGE_KEY = 'ol-shell-sidebar-collapsed';
 
-const ROUTE_LABELS: Record<string, string> = {
-  home: 'Home',
-  activity: 'Activity',
+const ROUTE_LABEL_KEYS: Record<string, string> = {
+  home: 'routes.home',
+  activity: 'routes.activity',
   // /mcp lost the React surface (backend's JSON-RPC endpoint owns that path);
   // the UI lives at /mcp-server now. Both keys land here so the breadcrumb
   // stays "MCP Server" even on the legacy URL during transition.
-  mcp: 'MCP Server',
-  'mcp-server': 'MCP Server',
-  projects: 'Projects',
-  services: 'Services',
-  monitoring: 'Monitoring',
-  overview: 'Overview',
-  settings: 'Settings',
+  mcp: 'routes.mcp',
+  'mcp-server': 'routes.mcp',
+  projects: 'routes.projects',
+  services: 'routes.services',
+  engagements: 'routes.engagements',
+  monitoring: 'routes.monitoring',
+  overview: 'routes.overview',
+  settings: 'routes.settings',
 };
 
-function deriveCrumbs(pathname: string): Crumb[] {
+function deriveCrumbs(pathname: string, t: (key: string) => string): Crumb[] {
   // Flat top-level crumbs for now. PR5 introduces parent crumbs once
   // nested routes (e.g. /projects/:id/services/:id) get formalized.
   const segs = pathname.replace(/^\//, '').split('/').filter(Boolean);
   const head = segs[0] ?? 'home';
-  const label = ROUTE_LABELS[head] ?? head.charAt(0).toUpperCase() + head.slice(1);
+  const labelKey = ROUTE_LABEL_KEYS[head];
+  const label = labelKey ? t(labelKey) : head.charAt(0).toUpperCase() + head.slice(1);
   return [{ label }];
 }
 
 export function AppShell() {
   const location = useLocation();
   const isBelowMd = useIsBelowMd();
+  const { t } = useLanguage();
 
   // Sidebar collapse — persisted choice, but `isBelowMd` overrides
   // (we always collapse to icon-only on narrow viewports).
@@ -98,7 +102,7 @@ export function AppShell() {
     };
   }, []);
 
-  const crumbs = useMemo(() => deriveCrumbs(location.pathname), [location.pathname]);
+  const crumbs = useMemo(() => deriveCrumbs(location.pathname, t), [location.pathname, t]);
 
   return (
     <AppDataProvider>
@@ -118,7 +122,7 @@ export function AppShell() {
             className="w-[260px] border-r border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)] p-0"
             aria-describedby={undefined}
           >
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <SheetTitle className="sr-only">{t('topBar.navigationTitle')}</SheetTitle>
             <Sidebar collapsed={false} />
           </SheetContent>
         </Sheet>

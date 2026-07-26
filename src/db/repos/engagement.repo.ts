@@ -7,7 +7,7 @@ import {
   ProjectNotFoundError,
   RepoPersistenceError,
 } from '../../errors.js';
-import type { EngagementStatus } from '../../engagement/types.js';
+import type { EngagementStatus, EngagementSystemEventType } from '../../engagement/types.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import {
   activityLog,
@@ -80,6 +80,7 @@ export interface EngagementPortfolioRows {
   gateRows: Array<{
     id: string;
     delivery_id: string;
+    gate_key: string;
     label: string;
     required: boolean;
     status: 'pending' | 'passed' | 'warning' | 'failed' | 'waived';
@@ -115,7 +116,7 @@ async function insertEngagementActivity(
   tx: EngagementTransaction,
   input: {
     engagementId: string;
-    eventType: string;
+    eventType: EngagementSystemEventType;
     title: string;
     description: string;
     status: string;
@@ -136,7 +137,12 @@ async function insertEngagementActivity(
       title: input.title,
       description: input.description,
       status: input.status,
-      metadata: JSON.stringify({ actor: input.actor, ...input.metadata }),
+      metadata: JSON.stringify({
+        schema_version: 1,
+        ...input.metadata,
+        actor: input.actor,
+        engagement_id: input.engagementId,
+      }),
       created_at: new Date().toISOString(),
     })
     .returning({ id: activityLog.id });
@@ -204,6 +210,11 @@ export class EngagementRepo {
         description: `Created for ${created.customer_name}.`,
         status: created.status,
         actor,
+        metadata: {
+          engagement_title: created.title,
+          customer_name: created.customer_name,
+          engagement_status: created.status,
+        },
       });
       return created;
     });
@@ -232,6 +243,12 @@ export class EngagementRepo {
         .where(eq(engagements.id, id))
         .returning();
       if (!updated) throw new EngagementNotFoundError(id);
+      const changedFields = [
+        input.customerName !== undefined ? 'customer_name' : null,
+        input.title !== undefined ? 'title' : null,
+        input.summary !== undefined ? 'summary' : null,
+        input.status !== undefined ? 'status' : null,
+      ].filter((field): field is string => field !== null);
       await insertEngagementActivity(tx, {
         engagementId: id,
         eventType: 'engagement:updated',
@@ -239,6 +256,14 @@ export class EngagementRepo {
         description: 'Engagement metadata was updated.',
         status: updated.status,
         actor,
+        metadata: {
+          engagement_title: updated.title,
+          previous_engagement_title: current.title,
+          customer_name: updated.customer_name,
+          previous_status: current.status,
+          engagement_status: updated.status,
+          changed_fields: changedFields,
+        },
       });
       return updated;
     });
@@ -283,6 +308,14 @@ export class EngagementRepo {
           : 'The Engagement was restored to active status.',
         status,
         actor,
+        metadata: {
+          engagement_title: updated.title,
+          customer_name: updated.customer_name,
+          previous_status: current.status,
+          engagement_status: updated.status,
+          linked_projects_changed: false,
+          deliveries_changed: false,
+        },
       });
       return updated;
     });
@@ -341,7 +374,13 @@ export class EngagementRepo {
           description: `Project "${project.name}" was linked to ${engagement.title}.`,
           status: engagement.status,
           actor,
-          metadata: { project_id: projectId },
+          metadata: {
+            engagement_title: engagement.title,
+            customer_name: engagement.customer_name,
+            engagement_status: engagement.status,
+            project_id: projectId,
+            project_name: project.name,
+          },
         });
         return linked;
       });
@@ -404,7 +443,13 @@ export class EngagementRepo {
         description: `Project "${project?.name ?? projectId}" was unlinked from ${engagement.title}.`,
         status: engagement.status,
         actor,
-        metadata: { project_id: projectId },
+        metadata: {
+          engagement_title: engagement.title,
+          customer_name: engagement.customer_name,
+          engagement_status: engagement.status,
+          project_id: projectId,
+          project_name: project?.name ?? projectId,
+        },
       });
     });
   }
@@ -528,6 +573,7 @@ export class EngagementRepo {
         .select({
           id: deliveryGates.id,
           delivery_id: deliveryGates.delivery_id,
+          gate_key: deliveryGates.gate_key,
           label: deliveryGates.label,
           required: deliveryGates.required,
           status: deliveryGates.status,

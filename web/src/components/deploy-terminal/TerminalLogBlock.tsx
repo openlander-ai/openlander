@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { terminalTokens } from './terminal-tokens';
 
@@ -9,6 +10,7 @@ export interface TerminalLogBlockProps {
 }
 
 export function TerminalLogBlock({ logs, maxHeight = 384, className }: TerminalLogBlockProps) {
+  const { t } = useLanguage();
   const logArray = Array.isArray(logs) ? logs : logs.split('\n');
 
   return (
@@ -28,7 +30,7 @@ export function TerminalLogBlock({ logs, maxHeight = 384, className }: TerminalL
           }}
         >
           {logArray.length === 0 ? (
-            <div className="italic opacity-50">No logs available</div>
+            <div className="italic opacity-50">{t('terminal.noLogs')}</div>
           ) : (
             logArray.map((log, i) => (
               <div key={i} className="min-h-[1.5em]">

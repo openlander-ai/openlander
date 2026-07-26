@@ -7,6 +7,7 @@ import { useLanguage } from '@/i18n/context';
 import { approveActionRun, rejectActionRun, type PendingApproval } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const RECENTLY_RESOLVED_MS = 5_000;
 const DETAIL_ORDER = ['keys', 'key', 'filename', 'path', 'name', 'service_name', 'project_name'];
@@ -124,7 +125,7 @@ export function PendingApprovalsStrip() {
       suppressResolvedApproval(actionRunId);
       void refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('approval.pendingStrip.error'));
+      toast.error(localizeApiError(err, t, 'approval.pendingStrip.error', 'common.errors.codes'));
     } finally {
       setBusyId(null);
     }

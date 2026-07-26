@@ -7,6 +7,8 @@ interface ApiErrorPayload {
   details?: unknown;
 }
 
+const STABLE_ERROR_CODE = /^[A-Z][A-Z0-9_]*$/;
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -17,7 +19,8 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.code = payload?.code ?? payload?.error;
+    const candidateCode = payload?.code ?? payload?.error;
+    this.code = candidateCode && STABLE_ERROR_CODE.test(candidateCode) ? candidateCode : undefined;
     this.details = payload?.details;
     this.payload = payload;
   }
@@ -40,7 +43,7 @@ function parseApiErrorPayload(text: string): ApiErrorPayload | undefined {
   }
 }
 
-async function handleError(res: Response, fallbackMessage: string): Promise<never> {
+export async function throwApiError(res: Response, fallbackMessage: string): Promise<never> {
   const text = await res.text().catch(() => '');
   const payload = parseApiErrorPayload(text);
   const message = (payload?.message ?? payload?.error ?? text) || fallbackMessage;
@@ -49,7 +52,7 @@ async function handleError(res: Response, fallbackMessage: string): Promise<neve
 
 export async function apiGet<T>(url: string): Promise<T> {
   const res = await fetchWithAuth(url);
-  if (!res.ok) await handleError(res, `GET ${url} failed`);
+  if (!res.ok) await throwApiError(res, `GET ${url} failed`);
   return res.json();
 }
 
@@ -60,7 +63,7 @@ export async function apiPost<T>(url: string, body?: unknown): Promise<T> {
     options.body = JSON.stringify(body);
   }
   const res = await fetchWithAuth(url, options);
-  if (!res.ok) await handleError(res, `POST ${url} failed`);
+  if (!res.ok) await throwApiError(res, `POST ${url} failed`);
   return res.json();
 }
 
@@ -71,7 +74,7 @@ export async function apiPostVoid(url: string, body?: unknown): Promise<void> {
     options.body = JSON.stringify(body);
   }
   const res = await fetchWithAuth(url, options);
-  if (!res.ok) await handleError(res, `POST ${url} failed`);
+  if (!res.ok) await throwApiError(res, `POST ${url} failed`);
 }
 
 export async function apiPut<T>(url: string, body: unknown): Promise<T> {
@@ -80,7 +83,7 @@ export async function apiPut<T>(url: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) await handleError(res, `PUT ${url} failed`);
+  if (!res.ok) await throwApiError(res, `PUT ${url} failed`);
   return res.json();
 }
 
@@ -90,11 +93,21 @@ export async function apiPatch<T>(url: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) await handleError(res, `PATCH ${url} failed`);
+  if (!res.ok) await throwApiError(res, `PATCH ${url} failed`);
   return res.json();
 }
 
 export async function apiDelete(url: string): Promise<void> {
   const res = await fetchWithAuth(url, { method: 'DELETE' });
-  if (!res.ok) await handleError(res, `DELETE ${url} failed`);
+  if (!res.ok) await throwApiError(res, `DELETE ${url} failed`);
+}
+
+export async function apiDeleteWithBody<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetchWithAuth(url, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `DELETE ${url} failed`);
+  return res.json();
 }

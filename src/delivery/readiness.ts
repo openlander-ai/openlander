@@ -63,6 +63,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'approved_artifact',
       passed: approvedArtifacts.length > 0,
+      params: { count: approvedArtifacts.length },
       message:
         approvedArtifacts.length > 0
           ? `${String(approvedArtifacts.length)} approved artifact(s)`
@@ -71,6 +72,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'customer_approval',
       passed: activeApprovals.length > 0,
+      params: { count: activeApprovals.length },
       message:
         activeApprovals.length > 0
           ? `${String(activeApprovals.length)} active customer approval record(s)`
@@ -79,6 +81,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'work_items_resolved',
       passed: unresolved.length === 0,
+      params: { count: unresolved.length },
       message:
         unresolved.length === 0
           ? 'All confirmed questions and change requests are resolved.'
@@ -87,6 +90,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'required_gates',
       passed: requiredGateFailures.length === 0,
+      params: { count: requiredGateFailures.length },
       message:
         requiredGateFailures.length === 0
           ? 'All required Gates passed or were waived with a reason.'
@@ -95,6 +99,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'warnings_acknowledged',
       passed: warningFailures.length === 0,
+      params: { count: warningFailures.length },
       message:
         warningFailures.length === 0
           ? 'All Gate warnings are acknowledged.'
@@ -110,6 +115,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'html_companion_pdf',
       passed: htmlWithoutPdf.length === 0,
+      params: { count: htmlWithoutPdf.length },
       message:
         htmlWithoutPdf.length === 0
           ? 'Every included HTML artifact has an approved companion PDF.'
@@ -120,6 +126,10 @@ export function evaluateDeliveryReadiness(
       passed:
         detail.delivery.delivery_type === 'artifact_delivery' ||
         releasedProductionDeploys.length > 0,
+      params: {
+        count: releasedProductionDeploys.length,
+        not_required: detail.delivery.delivery_type === 'artifact_delivery' ? 1 : 0,
+      },
       message:
         detail.delivery.delivery_type === 'artifact_delivery'
           ? 'Production deployment is not required for artifact delivery.'
@@ -130,6 +140,7 @@ export function evaluateDeliveryReadiness(
     {
       key: 'page_limit',
       passed: estimatedPages <= MAX_RECEIPT_PAGES,
+      params: { count: estimatedPages, max: MAX_RECEIPT_PAGES },
       message:
         estimatedPages <= MAX_RECEIPT_PAGES
           ? `Estimated Receipt length is ${String(estimatedPages)} page(s).`

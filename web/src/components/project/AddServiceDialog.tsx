@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { GitCredentialWizard } from '@/components/git-credentials/GitCredentialWizard';
 import { listGitCredentials, type GitCredential } from '@/lib/api/git-credentials';
 import { selectMatchingGitCredential } from '@/lib/git-credential-selection';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 type SourceKind = 'git' | 'image' | 'template';
 
@@ -171,7 +172,9 @@ export function AddServiceDialog({
       onCreated();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('projectDetail.addService.errorCreate'));
+      setError(
+        localizeApiError(err, t, 'projectDetail.addService.errorCreate', 'common.errors.codes'),
+      );
     } finally {
       setSubmitting(false);
     }

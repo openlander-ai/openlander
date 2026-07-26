@@ -212,6 +212,7 @@ describe('createTerminalRoutes shell fallback', () => {
     expect(harness.ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'error',
+        code: 'SHELL_UNAVAILABLE',
         message:
           'No shell available (/bin/bash and /bin/sh not found). This container may be a distroless image.',
       }),
@@ -225,7 +226,11 @@ describe('createTerminalRoutes container gate (S2.2 ServiceView)', () => {
     vi.restoreAllMocks();
   });
 
-  const NOT_RUNNING = JSON.stringify({ type: 'error', message: 'Container is not running' });
+  const NOT_RUNNING = JSON.stringify({
+    type: 'error',
+    code: 'CONTAINER_NOT_RUNNING',
+    message: 'Container is not running',
+  });
   const failIfProbed = () => {
     throw new Error('shell should not be probed when the container gate closes');
   };

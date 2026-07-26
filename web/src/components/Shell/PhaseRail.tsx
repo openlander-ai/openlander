@@ -12,17 +12,18 @@
  *             a step that did not actually run.
  */
 import { Check, Minus, X } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped';
 
 export const PHASE_DEFS = [
-  { id: 'clone', label: 'Clone' },
-  { id: 'image_pull', label: 'Pull' },
-  { id: 'build', label: 'Build' },
-  { id: 'container_create', label: 'Create' },
-  { id: 'container_start', label: 'Start' },
-  { id: 'healthcheck_wait', label: 'Health' },
+  { id: 'clone', labelKey: 'deployShell.phase.clone' },
+  { id: 'image_pull', labelKey: 'deployShell.phase.pull' },
+  { id: 'build', labelKey: 'deployShell.phase.build' },
+  { id: 'container_create', labelKey: 'deployShell.phase.create' },
+  { id: 'container_start', labelKey: 'deployShell.phase.start' },
+  { id: 'healthcheck_wait', labelKey: 'deployShell.phase.health' },
 ] as const;
 
 export type PhaseId = (typeof PHASE_DEFS)[number]['id'];
@@ -32,10 +33,12 @@ export interface PhaseRailProps {
 }
 
 export function PhaseRail({ status }: PhaseRailProps) {
+  const { t } = useLanguage();
+
   return (
     <div
       role="status"
-      aria-label="Deploy phase progression"
+      aria-label={t('deployShell.phaseProgression')}
       className="flex flex-wrap items-center gap-2 border-b border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-2.5"
     >
       {PHASE_DEFS.map((p, i) => {
@@ -76,7 +79,7 @@ export function PhaseRail({ status }: PhaseRailProps) {
                   style={{ backgroundColor: 'var(--ol-primary)' }}
                 />
               )}
-              {p.label}
+              {t(p.labelKey)}
             </span>
           </div>
         );

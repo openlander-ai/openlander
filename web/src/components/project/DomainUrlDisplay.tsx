@@ -27,7 +27,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
     allUrls.push({
       url: publicUrl,
       type: 'public',
-      label: 'Public',
+      label: t('domainUrls.label.public'),
       icon: Globe,
     });
   }
@@ -47,7 +47,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
     allUrls.push({
       url: u.url,
       type: 'host',
-      label: 'Local',
+      label: t('domainUrls.label.local'),
       icon: Monitor,
     });
   }
@@ -80,7 +80,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
           target="_blank"
           rel="noopener noreferrer"
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-bg-panel hover:bg-bg-subtle text-foreground/80 hover:text-foreground transition-colors border border-border shadow-sm"
-          title={`Open ${primaryUrl.label} URL`}
+          title={t('domainUrls.openTitle', { label: primaryUrl.label })}
         >
           <PrimaryIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
           <span className="font-mono tracking-tight text-[11px] truncate max-w-[200px]">
@@ -124,9 +124,9 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
           sideOffset={6}
         >
           <div className="bg-bg-subtle px-3 py-2.5 border-b border-border">
-            <h4 className="text-[13px] font-semibold text-foreground">Deployment URLs</h4>
+            <h4 className="text-[13px] font-semibold text-foreground">{t('domainUrls.title')}</h4>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Explore your service across available networks.
+              {t('domainUrls.description')}
             </p>
           </div>
           <div className="p-1.5 flex flex-col gap-0.5 max-h-[260px] overflow-y-auto">

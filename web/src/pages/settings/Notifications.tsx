@@ -19,20 +19,23 @@ import { useEffect, useState } from 'react';
 import { Bell, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { OuterCard } from '@/components/Shell/OuterCard';
+import { useLanguage } from '@/i18n/context';
 import { fetchNotificationWebhook, saveNotificationWebhook } from '@/lib/api/notifications';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { cn } from '@/lib/utils';
 
 const EVENTS = [
-  { id: 'deploy.started', label: 'Deploy started' },
-  { id: 'deploy.completed', label: 'Deploy completed' },
-  { id: 'deploy.failed', label: 'Deploy failed' },
-  { id: 'service.crashed', label: 'Service crashed' },
-  { id: 'service.recovered', label: 'Service recovered' },
-];
+  { id: 'deploy.started', labelKey: 'notifications.settings.event.deployStarted' },
+  { id: 'deploy.completed', labelKey: 'notifications.settings.event.deployCompleted' },
+  { id: 'deploy.failed', labelKey: 'notifications.settings.event.deployFailed' },
+  { id: 'service.crashed', labelKey: 'notifications.settings.event.serviceCrashed' },
+  { id: 'service.recovered', labelKey: 'notifications.settings.event.serviceRecovered' },
+] as const;
 
 const DEFAULT_EVENTS = new Set(['deploy.completed', 'deploy.failed', 'service.crashed']);
 
 export function NotificationsSettings() {
+  const { t } = useLanguage();
   const [url, setUrl] = useState('');
   const [enabledEvents, setEnabledEvents] = useState<Set<string>>(new Set(DEFAULT_EVENTS));
   const [isLoadingExisting, setIsLoadingExisting] = useState(true);
@@ -81,9 +84,11 @@ export function NotificationsSettings() {
         url: url.trim(),
         events: Array.from(enabledEvents),
       });
-      toast.success('Webhook saved');
+      toast.success(t('notifications.settings.saved'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save webhook');
+      toast.error(
+        localizeApiError(err, t, 'notifications.settings.saveFailed', 'common.errors.codes'),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -97,19 +102,18 @@ export function NotificationsSettings() {
         title={
           <span className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-[color:var(--ol-fg-muted)]" />
-            Notifications
+            {t('notifications.title')}
           </span>
         }
-        subtitle="Generic webhook. Pick the events you care about; OpenLander POSTs JSON to your URL."
+        subtitle={t('notifications.settings.subtitle')}
       >
         <p className="mb-4 text-[12px] text-[color:var(--ol-fg-muted)]">
-          1.0 ships a single, transport-agnostic webhook. Wire it to n8n, IFTTT, your own bot, or a
-          Discord/Slack incoming webhook.
+          {t('notifications.settings.description')}
         </p>
 
         <label className="block">
           <span className="text-[11.5px] font-medium uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
-            Webhook URL
+            {t('notifications.settings.webhookUrl')}
           </span>
           <input
             type="url"
@@ -123,7 +127,7 @@ export function NotificationsSettings() {
 
         <fieldset className="mt-5" disabled={isLoadingExisting}>
           <legend className="text-[11.5px] font-medium uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
-            Events
+            {t('notifications.settings.events')}
           </legend>
           <ul className="mt-2 flex flex-col gap-1.5">
             {EVENTS.map((e) => {
@@ -144,7 +148,7 @@ export function NotificationsSettings() {
                       checked={checked}
                       onChange={() => toggle(e.id)}
                     />
-                    <span className="flex-1">{e.label}</span>
+                    <span className="flex-1">{t(e.labelKey)}</span>
                     <code className="ol-mono text-[11px] text-[color:var(--ol-fg-subtle)]">
                       {e.id}
                     </code>
@@ -166,19 +170,19 @@ export function NotificationsSettings() {
             )}
           >
             {isSaving && <Loader2 className="h-3 w-3 animate-spin" />}
-            {isSaving ? 'Saving…' : 'Save webhook'}
+            {isSaving ? t('notifications.settings.saving') : t('notifications.settings.save')}
           </button>
           {!url.trim() && !isLoadingExisting && (
             <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-              Add a URL to enable save.
+              {t('notifications.settings.urlRequired')}
             </span>
           )}
         </div>
       </OuterCard>
 
       <OuterCard
-        title="Future providers"
-        subtitle="Discord / Slack / Email presets land in v1.1. They'll point at the same webhook plumbing."
+        title={t('notifications.settings.futureTitle')}
+        subtitle={t('notifications.settings.futureSubtitle')}
       >
         <button
           type="button"
@@ -186,7 +190,7 @@ export function NotificationsSettings() {
           className="inline-flex items-center gap-1 rounded-md border border-dashed border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[12px] text-[color:var(--ol-fg-subtle)] opacity-60"
         >
           <Plus className="h-3 w-3" />
-          Add preset (v1.1)
+          {t('notifications.settings.addPreset')}
         </button>
       </OuterCard>
     </div>

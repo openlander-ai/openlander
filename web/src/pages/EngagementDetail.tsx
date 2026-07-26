@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
   AlertTriangle,
   Archive,
@@ -40,6 +40,8 @@ import {
   unarchiveEngagement,
   unlinkEngagementProject,
   updateEngagement,
+  type EngagementActivity,
+  type EngagementBlocker,
   type EngagementDetail,
   type EngagementStatus,
   type UnassignedEngagementProject,
@@ -47,6 +49,125 @@ import {
 import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const ACTIVITY_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
+  'engagement:created': 'engagementCreated',
+  'engagement:updated': 'engagementUpdated',
+  'engagement:archived': 'engagementArchived',
+  'engagement:unarchived': 'engagementUnarchived',
+  'engagement:project_linked': 'projectLinked',
+  'engagement:project_unlinked': 'projectUnlinked',
+  'delivery.created': 'deliveryCreated',
+  'delivery.updated': 'deliveryUpdated',
+  'delivery.status_changed': 'deliveryStatusChanged',
+  'delivery.artifact_uploaded': 'artifactUploaded',
+  'delivery.artifact_attached': 'artifactAttached',
+  'delivery.artifact_status_changed': 'artifactStatusChanged',
+  'delivery.companion_pdf_linked': 'companionPdfLinked',
+  'delivery.external_ref_added': 'externalRefAdded',
+  'delivery.feedback_recorded': 'feedbackRecorded',
+  'delivery.work_item_drafts_submitted': 'workItemDraftsSubmitted',
+  'delivery.work_item_updated': 'workItemUpdated',
+  'delivery.approval_recorded': 'approvalRecorded',
+  'delivery.gate_template_updated': 'gateTemplateUpdated',
+  'delivery.gate_recorded': 'gateRecorded',
+  'delivery.deploy_linked': 'deployLinked',
+  'delivery.deploy_unlinked': 'deployUnlinked',
+  'delivery.receipt_previewed': 'receiptPreviewed',
+  'delivery.receipt_finalized': 'receiptFinalized',
+  'delivery.settings_updated': 'settingsUpdated',
+  'deploy:start': 'deployStarted',
+  'deploy:clone': 'sourceCloneStarted',
+  'deploy:build': 'imageBuildStarted',
+  'deploy:run': 'applicationStartStarted',
+  'deploy:success': 'deploySucceeded',
+  'deploy:failed': 'deployFailed',
+  'deploy:crash': 'deployCrashed',
+  'deploy:rollback': 'rollbackStarted',
+  'container:start': 'containerStarted',
+  'container:stop': 'containerStopped',
+  'container:remove': 'containerRemoved',
+  'container:health': 'containerHealthChecked',
+  'container:die': 'containerExited',
+  'container:oom': 'containerOomKilled',
+  'container:missing': 'containerMissing',
+  'tunnel:start': 'tunnelStarted',
+  'tunnel:stop': 'tunnelStopped',
+  'tunnel:url': 'tunnelUrlReady',
+  'env:set': 'environmentSet',
+  'env:delete': 'environmentDeleted',
+  'compose:start': 'composeStarted',
+  'compose:up': 'composeReady',
+  'compose:failed': 'composeFailed',
+  'monitor:inactive': 'monitorInactive',
+  'health:degraded': 'healthDegraded',
+  'recovery:start': 'recoveryStarted',
+  'recovery:success': 'recoverySucceeded',
+  'recovery:failed': 'recoveryFailed',
+  'recovery:exhausted': 'recoveryExhausted',
+  'recovery:approval-needed': 'recoveryApprovalNeeded',
+  'recovery:approval-auto-skipped': 'recoveryApprovalSkipped',
+  'recovery:approval-resolved': 'recoveryApprovalResolved',
+  'recovery:blocked': 'recoveryBlocked',
+  'recovery:degraded': 'recoveryDegraded',
+  'recovery:stopped': 'recoveryStopped',
+  'recovery:started': 'automaticRecoveryStarted',
+  'ai:invoked': 'aiDiagnosisStarted',
+  'ai:completed': 'aiDiagnosisCompleted',
+  'alert:new': 'alertCreated',
+  'alert:resolved': 'alertResolved',
+  'webhook:skipped': 'webhookSkipped',
+};
+
+function formatDefaultGateLabel(gateKey: string, label: string, t: Translate): string {
+  if (gateKey === 'review' && label === 'Review') return t('delivery.gates.defaultLabel.review');
+  if (gateKey === 'qa' && label === 'QA') return t('delivery.gates.defaultLabel.qa');
+  if (gateKey === 'data' && label === 'Data') return t('delivery.gates.defaultLabel.data');
+  return label;
+}
+
+function blockerContext(blocker: EngagementBlocker, t: Translate): string {
+  const parts = [blocker.project_name, blocker.delivery_title];
+  if (blocker.kind === 'required_gate_failed' || blocker.kind === 'warning_unacknowledged') {
+    parts.push(formatDefaultGateLabel(blocker.metadata.gate_key, blocker.metadata.gate_label, t));
+  } else if (blocker.kind === 'work_item_unresolved') {
+    parts.push(blocker.metadata.work_item_title);
+  }
+  return parts.filter((part): part is string => Boolean(part)).join(' · ');
+}
+
+function blockerDetail(blocker: EngagementBlocker, t: Translate): string {
+  switch (blocker.kind) {
+    case 'project_error':
+      return t('engagements.blockerDetail.project_error', {
+        count: blocker.metadata.error_service_count,
+      });
+    case 'revision_requested':
+      return t('engagements.blockerDetail.revision_requested');
+    case 'required_gate_failed':
+      return (
+        blocker.metadata.gate_summary?.trim() || t('engagements.blockerDetail.required_gate_failed')
+      );
+    case 'warning_unacknowledged':
+      return (
+        blocker.metadata.gate_summary?.trim() ||
+        t('engagements.blockerDetail.warning_unacknowledged')
+      );
+    case 'work_item_unresolved':
+      return (
+        blocker.metadata.work_item_detail.trim() ||
+        t(`engagements.blockerDetail.${blocker.metadata.work_item_kind}`)
+      );
+  }
+}
+
+function activityTitle(activity: EngagementActivity, t: Translate): string {
+  const key = ACTIVITY_TRANSLATION_KEYS[activity.event_type];
+  return key ? t(`engagements.activityEvent.${key}`) : t('engagements.activityEvent.unknown');
+}
 
 function SectionCard({
   title,
@@ -100,7 +221,12 @@ export function EngagementDetailPage() {
         setError(null);
       } catch (loadError) {
         setError(
-          loadError instanceof Error ? loadError.message : t('engagements.errors.loadDetail'),
+          localizeApiError(
+            loadError,
+            t,
+            'engagements.errors.loadDetail',
+            'engagements.errors.codes',
+          ),
         );
       } finally {
         if (showLoading) setLoading(false);
@@ -153,7 +279,7 @@ export function EngagementDetailPage() {
       setEditOpen(false);
     } catch (updateError) {
       setEditError(
-        updateError instanceof Error ? updateError.message : t('engagements.errors.update'),
+        localizeApiError(updateError, t, 'engagements.errors.update', 'engagements.errors.codes'),
       );
     } finally {
       setBusy(false);
@@ -172,7 +298,7 @@ export function EngagementDetailPage() {
       );
     } catch (archiveError) {
       setError(
-        archiveError instanceof Error ? archiveError.message : t('engagements.errors.archive'),
+        localizeApiError(archiveError, t, 'engagements.errors.archive', 'engagements.errors.codes'),
       );
     } finally {
       setBusy(false);
@@ -190,7 +316,9 @@ export function EngagementDetailPage() {
       setSelectedProject('');
       setLinkOpen(false);
     } catch (linkError) {
-      setLinkError(linkError instanceof Error ? linkError.message : t('engagements.errors.link'));
+      setLinkError(
+        localizeApiError(linkError, t, 'engagements.errors.link', 'engagements.errors.codes'),
+      );
     } finally {
       setBusy(false);
     }
@@ -203,7 +331,9 @@ export function EngagementDetailPage() {
       await unlinkEngagementProject(engagementId, projectId);
       await load();
     } catch (unlinkError) {
-      setError(unlinkError instanceof Error ? unlinkError.message : t('engagements.errors.unlink'));
+      setError(
+        localizeApiError(unlinkError, t, 'engagements.errors.unlink', 'engagements.errors.codes'),
+      );
     } finally {
       setBusy(false);
     }
@@ -468,12 +598,10 @@ export function EngagementDetailPage() {
                         {t(`engagements.blocker.${blocker.kind}`)}
                       </strong>
                       <span className="mt-0.5 block text-[10px] text-[color:var(--ol-fg-muted)]">
-                        {blocker.project_name}
-                        {blocker.delivery_title ? ` · ${blocker.delivery_title}` : ''}
-                        {blocker.title ? ` · ${blocker.title}` : ''}
+                        {blockerContext(blocker, t)}
                       </span>
                       <span className="mt-1 block text-[10px] text-[color:var(--ol-fg-muted)]">
-                        {blocker.detail}
+                        {blockerDetail(blocker, t)}
                       </span>
                     </span>
                     <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-fg-muted)]" />
@@ -500,7 +628,7 @@ export function EngagementDetailPage() {
                     <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--ol-primary)]" />
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate text-xs text-[color:var(--ol-fg)]">
-                        {activity.title}
+                        {activityTitle(activity, t)}
                       </strong>
                       <span className="block text-[10px] text-[color:var(--ol-fg-muted)]">
                         {formatRelativeTime(activity.created_at, t)}

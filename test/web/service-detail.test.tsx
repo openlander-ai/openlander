@@ -77,7 +77,7 @@ const hookDispatcher: HookDispatcher = {
   useLayoutEffect(effect: () => void | (() => void), deps?: unknown[]) {},
 };
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useParams: () => ({ id: '123' }),
   useNavigate: () => vi.fn(),
   useLocation: () => ({ pathname: '/' }),

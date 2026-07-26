@@ -39,6 +39,7 @@ import { CopyButton } from './shared';
 import { useLanguage } from '@/i18n/context';
 import { buildAllClientConfigs } from '@/lib/mcp-config-snippets';
 import { useMcpInstance } from '@/hooks/use-mcp-instance';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface McpGuideStepProps {
   onNext: () => void;
@@ -74,7 +75,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
         }
       } catch (err) {
         if (cancelled) return;
-        setTokenError(err instanceof Error ? err.message : t('setup.mcp.tokenError'));
+        setTokenError(localizeApiError(err, t, 'setup.mcp.tokenError', 'common.errors.codes'));
       } finally {
         if (!cancelled) setIsFetching(false);
       }
@@ -108,7 +109,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
         setLegacyRotated(true);
       }
     } catch (err) {
-      setTokenError(err instanceof Error ? err.message : t('setup.mcp.tokenError'));
+      setTokenError(localizeApiError(err, t, 'setup.mcp.tokenError', 'common.errors.codes'));
     } finally {
       setIsGenerating(false);
     }

@@ -134,7 +134,7 @@ describe('Git Providers page v0.1', () => {
     expect(pageSource).toContain("t('gitProviders.others.laterBadge')");
     expect(pageSource).toContain("t('gitProviders.others.comingLater')");
     expect(enSource).toContain("laterBadge: 'Later'");
-    expect(koSource).toContain("laterBadge: 'Later'");
+    expect(koSource).toContain("laterBadge: '추후 제공'");
   });
 
   it('keeps tokenValid ternary state separate from connected (no fake green pip)', () => {

@@ -11,6 +11,7 @@
  *   - Dot: the animated dot used inside HeaderPill
  */
 import type { ReactNode } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 export type ConnState =
@@ -47,6 +48,7 @@ export interface HeaderPillProps {
 }
 
 export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps) {
+  const { t } = useLanguage();
   const base =
     'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-none';
   if (connState === 'CONNECTING') {
@@ -58,7 +60,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot color="var(--ol-fg-muted)" />
-        Connecting…
+        {t('deployShell.header.connecting')}
       </span>
     );
   }
@@ -71,7 +73,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot pulse color="var(--ol-success)" />
-        Live · {liveDur}
+        {t('deployShell.header.live', { duration: liveDur })}
       </span>
     );
   }
@@ -84,7 +86,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot pulse color="var(--ol-warning)" />
-        Reconnecting · {liveDur}
+        {t('deployShell.header.reconnecting', { duration: liveDur })}
       </span>
     );
   }
@@ -97,7 +99,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot pulse color="var(--ol-info)" />
-        Backfilling…
+        {t('deployShell.header.backfilling')}
       </span>
     );
   }
@@ -110,7 +112,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot color="var(--ol-error)" />
-        Failed · {liveDur}
+        {t('deployShell.header.failed', { duration: liveDur })}
       </span>
     );
   }
@@ -123,7 +125,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot color="var(--ol-success)" />
-        Done · {liveDur}
+        {t('deployShell.header.done', { duration: liveDur })}
       </span>
     );
   }
@@ -136,7 +138,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot color="var(--ol-error)" />
-        Stream error · {liveDur}
+        {t('deployShell.header.streamError', { duration: liveDur })}
       </span>
     );
   }
@@ -149,7 +151,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
         )}
       >
         <Dot color="var(--ol-fg-muted)" />
-        Cancelled · {liveDur}
+        {t('deployShell.header.cancelled', { duration: liveDur })}
       </span>
     );
   }
@@ -157,6 +159,7 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
 }
 
 export function FsmBadge({ connState, viewState }: { connState: ConnState; viewState: ViewState }) {
+  const { t } = useLanguage();
   const isDefault =
     (connState === 'LIVE' || connState === 'ENDED' || connState === 'CANCELLED') &&
     viewState === 'FOLLOWING';
@@ -164,7 +167,7 @@ export function FsmBadge({ connState, viewState }: { connState: ConnState; viewS
   return (
     <span
       className="ol-mono inline-flex rounded border border-[color:var(--log-header-border)] px-1.5 py-0.5 text-[10px] text-[color:var(--log-header-muted)]"
-      title="Connection × Viewport state"
+      title={t('deployShell.header.fsmTitle')}
     >
       {connState} · {viewState}
     </span>

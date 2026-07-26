@@ -12,6 +12,8 @@ import { useCallback, useState } from 'react';
 import { getProjectDeployments, getServiceDeployments } from '@/lib/api';
 import { usePollingTask } from '@/hooks/use-polling-task';
 import type { DeployLogSummary } from '@/types';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
@@ -28,6 +30,7 @@ export function useProjectDeployments(
   status?: string,
   environmentId?: string,
 ): UseDeploymentsReturn {
+  const { t } = useLanguage();
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +41,11 @@ export function useProjectDeployments(
       setDeployments(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch deployments');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, environmentId]);
+  }, [projectId, environmentId, t]);
 
   const pollMs = status === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
   usePollingTask(fetchDeployments, {
@@ -66,6 +69,7 @@ export function useServiceDeployments(
   status?: string,
   environmentId?: string,
 ): UseDeploymentsReturn {
+  const { t } = useLanguage();
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +80,11 @@ export function useServiceDeployments(
       setDeployments(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch service deployments');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, serviceId, environmentId]);
+  }, [projectId, serviceId, environmentId, t]);
 
   const pollMs = status === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
   usePollingTask(fetchDeployments, {

@@ -22,7 +22,7 @@
  * monitoring detail on the service-level identifier under the new schema.
  */
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { BarChart3, ChevronDown } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { Sparkline } from '@/components/Shell/Sparkline';

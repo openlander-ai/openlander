@@ -65,6 +65,8 @@ export interface DeliveryReadinessCheck {
     | 'page_limit';
   passed: boolean;
   message: string;
+  /** Values used by locale-aware clients while `message` preserves API compatibility. */
+  params?: Record<string, number>;
 }
 
 export interface DeliveryReadiness {

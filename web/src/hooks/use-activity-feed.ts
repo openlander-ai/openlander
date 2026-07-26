@@ -9,6 +9,9 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { fetchWithAuth } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import type { ActivityEvent, Actor } from '@/lib/agentActivity';
 import { usePollingTask } from './use-polling-task';
 
@@ -35,6 +38,7 @@ interface ActivityResponse {
 
 export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivityFeedReturn {
   const { limit = 100, actor, project } = options;
+  const { t } = useLanguage();
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,17 +55,17 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
     try {
       const res = await fetchWithAuth(`/api/activity?${queryString}`);
       if (!res.ok) {
-        throw new Error(`Activity fetch failed: ${res.status}`);
+        throw new ApiError('Activity request failed', res.status);
       }
       const body = (await res.json()) as ActivityResponse;
       setEvents(body.activities ?? []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch activity feed');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [queryString]);
+  }, [queryString, t]);
 
   usePollingTask(fetchEvents, { intervalMs: POLL_MS });
 

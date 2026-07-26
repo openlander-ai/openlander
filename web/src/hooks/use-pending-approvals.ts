@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { listPendingApprovals, type PendingApproval } from '@/lib/api';
 import { usePollingTask } from './use-polling-task';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const POLL_MS = 1_500;
 
@@ -12,6 +14,7 @@ export interface UsePendingApprovalsReturn {
 }
 
 export function usePendingApprovals(enabled = true): UsePendingApprovalsReturn {
+  const { t } = useLanguage();
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -23,11 +26,11 @@ export function usePendingApprovals(enabled = true): UsePendingApprovalsReturn {
       setApprovals(body.approvals ?? []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load pending approvals');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, t]);
 
   usePollingTask(fetchApprovals, {
     intervalMs: POLL_MS,

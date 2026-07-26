@@ -21,6 +21,7 @@ import {
   type GitCredential,
   type GitCredentialStatus,
 } from '@/lib/api/git-credentials';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 export function SSHKeysSettings() {
   const { language, t } = useLanguage();
@@ -37,7 +38,7 @@ export function SSHKeysSettings() {
     try {
       setCredentials(await listGitCredentials());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('repositoryKeys.errors.load'));
+      setError(localizeApiError(err, t, 'repositoryKeys.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ export function SSHKeysSettings() {
       );
       if (verified.status === 'verified') toast.success(t('repositoryKeys.messages.verified'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('repositoryKeys.errors.verify'));
+      toast.error(localizeApiError(err, t, 'repositoryKeys.errors.verify', 'common.errors.codes'));
       await load();
     } finally {
       setWorkingId(null);
@@ -72,7 +73,7 @@ export function SSHKeysSettings() {
       setDeleteTarget(null);
       toast.success(t('repositoryKeys.messages.deleted'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('repositoryKeys.errors.delete'));
+      toast.error(localizeApiError(err, t, 'repositoryKeys.errors.delete', 'common.errors.codes'));
     } finally {
       setWorkingId(null);
     }

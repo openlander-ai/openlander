@@ -111,6 +111,8 @@ describe('GET /api/activity v4 feed', () => {
       service: null,
       title: 'Environment variables set',
       detail: 'set 2 environment variable(s)',
+      detailCode: 'config_changed',
+      detailParams: {},
     });
   });
 
@@ -155,6 +157,8 @@ describe('GET /api/activity v4 feed', () => {
       service: 'svc-1',
       title: 'Data source read · sql.query',
       detail: 'sql.query on app-db',
+      detailCode: 'data_access_read',
+      detailParams: {},
       dataAccess: {
         operation: 'sql.query',
         sourceKind: 'postgres',
@@ -164,6 +168,33 @@ describe('GET /api/activity v4 feed', () => {
         preview: "SELECT $[redacted]$ FROM users WHERE email='[redacted]'",
         queryHash: 'abcdef1234567890',
       },
+    });
+  });
+
+  it('returns locale-neutral parameters for system-generated incident detail', async () => {
+    const app = createApp(
+      baseDb({
+        listUnresolvedRuntimeIncidents: async () => [
+          {
+            id: 'incident-1',
+            service_id: 'svc-1',
+            exit_code: 137,
+            category: 'restart_loop',
+            restart_count: 4,
+            created_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+
+    const res = await app.request('/api/activity?limit=5');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.activities[0]).toMatchObject({
+      kind: 'service_crashed',
+      detail: 'exit 137 · restart_loop · restart ×4',
+      detailCode: 'service_crashed',
+      detailParams: { exitCode: 137, restartCount: 4 },
     });
   });
 });

@@ -7,6 +7,9 @@
  */
 import { useCallback, useState } from 'react';
 import { fetchWithAuth } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
+import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { usePollingTask } from './use-polling-task';
 
 const POLL_MS = 15_000;
@@ -43,6 +46,7 @@ export interface UseMonitoringReturn {
 
 export function useMonitoring(options: UseMonitoringOptions = {}): UseMonitoringReturn {
   const { project } = options;
+  const { t } = useLanguage();
   const [snapshot, setSnapshot] = useState<MonitoringSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,17 +58,17 @@ export function useMonitoring(options: UseMonitoringOptions = {}): UseMonitoring
       const qs = params.toString();
       const res = await fetchWithAuth(`/api/monitoring/services${qs ? `?${qs}` : ''}`);
       if (!res.ok) {
-        throw new Error(`Monitoring fetch failed: ${res.status}`);
+        throw new ApiError('Monitoring request failed', res.status);
       }
       const body = (await res.json()) as MonitoringSnapshot;
       setSnapshot(body);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch monitoring snapshot');
+      setError(localizeApiError(err, t, 'common.errors.load', 'common.errors.codes'));
     } finally {
       setLoading(false);
     }
-  }, [project]);
+  }, [project, t]);
 
   usePollingTask(fetchSnapshot, { intervalMs: POLL_MS });
 

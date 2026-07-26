@@ -34,9 +34,12 @@ export interface AgentGuideContext {
   managedServiceName?: string;
 }
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export function getAgentGuideContent(
   kind: AgentGuideKind,
   ctx: AgentGuideContext = {},
+  t: Translate,
 ): AgentGuideContent {
   const projectName = ctx.projectName ?? 'your-project';
   const serviceName = ctx.serviceName ?? 'your-service';
@@ -44,90 +47,105 @@ export function getAgentGuideContent(
   switch (kind) {
     case 'add-service':
       return {
-        heading: 'Tell your agent what to deploy',
-        lead: 'A Project is the workspace; Applications and Compose stacks are the workloads inside it. Paste a prompt and your agent will deploy through MCP.',
+        heading: t('agentGuide.content.addService.heading'),
+        lead: t('agentGuide.content.addService.lead'),
         prompts: [
           {
-            text: `Deploy github.com/myorg/myapp to Project ${projectName} as a new Application.`,
+            text: t('agentGuide.content.addService.prompt.deploy', { projectName }),
           },
           {
-            text: `Add a PostgreSQL Database resource, then wire DATABASE_URL into Project ${projectName}.`,
-            hint: 'Database/Cache/Storage resources are provisioned by the agent, then wired into Applications through env vars.',
+            text: t('agentGuide.content.addService.prompt.database', { projectName }),
+            hint: t('agentGuide.content.addService.hint.database'),
           },
           {
-            text: `Connect the existing redis-prod Cache resource to the Application in ${projectName}.`,
+            text: t('agentGuide.content.addService.prompt.cache', { projectName }),
           },
         ],
       };
     case 'add-managed-db':
       return {
-        heading: 'Tell your agent what to provision',
-        lead: 'Database, Cache, and Storage resources are provisioned first, then wired into Applications or Compose stacks as env vars.',
+        heading: t('agentGuide.content.addManagedDb.heading'),
+        lead: t('agentGuide.content.addManagedDb.lead'),
         prompts: [
           {
-            text: 'Provision a PostgreSQL Database resource named app-db.',
-            hint: 'Then: add the connection string to an Application as `DATABASE_URL` and redeploy it.',
+            text: t('agentGuide.content.addManagedDb.prompt.postgres'),
+            hint: t('agentGuide.content.addManagedDb.hint.postgres'),
           },
           {
-            text: 'Provision a Redis Cache resource named sessions, then wire it into my app as `REDIS_URL`.',
+            text: t('agentGuide.content.addManagedDb.prompt.redis'),
           },
           {
-            text: 'List existing Database/Cache/Storage resources and tell me which ones are unwired.',
+            text: t('agentGuide.content.addManagedDb.prompt.list'),
           },
         ],
       };
     case 'add-domain':
       return {
-        heading: 'Tell your agent which domain to attach',
-        lead: 'Domain attachment registers an OpenLander route for a host that already points at this server. DNS and TLS stay outside OpenLander in v0.1; your agent can verify route health after registration.',
+        heading: t('agentGuide.content.addDomain.heading'),
+        lead: t('agentGuide.content.addDomain.lead'),
         prompts: [
           {
-            text: `Attach app.example.com to ${serviceName} on Project ${projectName}, then verify the domain route health.`,
+            text: t('agentGuide.content.addDomain.prompt.attach', {
+              serviceName,
+              projectName,
+            }),
           },
           {
-            text: `List domain routes for ${serviceName} and tell me which hosts are healthy.`,
+            text: t('agentGuide.content.addDomain.prompt.list', { serviceName }),
           },
         ],
       };
     case 'scale-service':
       return {
-        heading: 'Tell your agent how to scale',
-        lead: 'Replica counts and resource limits are agent-driven so the change is reviewable and reversible from your chat history.',
+        heading: t('agentGuide.content.scaleService.heading'),
+        lead: t('agentGuide.content.scaleService.lead'),
         prompts: [
           {
-            text: `Scale ${serviceName} in ${projectName} to 3 replicas.`,
+            text: t('agentGuide.content.scaleService.prompt.replicas', {
+              serviceName,
+              projectName,
+            }),
           },
           {
-            text: `Bump ${serviceName} memory in ${projectName} to 1Gi and tell me when it's stable.`,
+            text: t('agentGuide.content.scaleService.prompt.memory', {
+              serviceName,
+              projectName,
+            }),
           },
         ],
       };
     case 'delete-service':
       return {
-        heading: 'Tell your agent to archive this Application',
-        lead: 'Permanent Project/Application deletion is human UI-only. Your agent can request reversible archive/restore, then explain what remains before you use the web Danger zone.',
+        heading: t('agentGuide.content.deleteService.heading'),
+        lead: t('agentGuide.content.deleteService.lead'),
         prompts: [
           {
-            text: `Archive ${serviceName} in Project ${projectName} and tell me what will remain restorable.`,
+            text: t('agentGuide.content.deleteService.prompt.archive', {
+              serviceName,
+              projectName,
+            }),
           },
           {
-            text: `Check whether ${serviceName} in Project ${projectName} still references any Database/Cache resource before I delete anything in the web UI.`,
-            hint: 'Use the web Danger zone for permanent deletion; MCP archive is reversible and approval-gated.',
+            text: t('agentGuide.content.deleteService.prompt.checkReferences', {
+              serviceName,
+              projectName,
+            }),
+            hint: t('agentGuide.content.deleteService.hint.checkReferences'),
           },
         ],
       };
     case 'remove-domain': {
       const domain = ctx.domain ?? 'app.example.com';
       return {
-        heading: 'Tell your agent which domain to detach',
-        lead: 'Domain removal is handled in the web Domains tab in v0.1. Your agent can inspect current route health and confirm which Host/path route you are about to remove.',
+        heading: t('agentGuide.content.removeDomain.heading'),
+        lead: t('agentGuide.content.removeDomain.lead'),
         prompts: [
           {
-            text: `List domain routes for ${serviceName} and confirm whether ${domain} is currently healthy before I remove it in the web UI.`,
+            text: t('agentGuide.content.removeDomain.prompt.check', { serviceName, domain }),
           },
           {
-            text: `Diagnose why ${domain} is failing on ${serviceName} before I change the route.`,
-            hint: 'OpenLander v0.1 does not create DNS records or TLS certificates; check those outside OpenLander.',
+            text: t('agentGuide.content.removeDomain.prompt.diagnose', { serviceName, domain }),
+            hint: t('agentGuide.content.removeDomain.hint.diagnose'),
           },
         ],
       };
@@ -135,15 +153,19 @@ export function getAgentGuideContent(
     case 'set-env-var': {
       const key = ctx.envVarKey ?? 'KEY_NAME';
       return {
-        heading: 'Tell your agent which env var to set',
-        lead: 'Env var changes are saved through MCP. Ask the agent to apply them with a redeploy, or request immediate runtime apply only when that is intentional.',
+        heading: t('agentGuide.content.setEnvVar.heading'),
+        lead: t('agentGuide.content.setEnvVar.lead'),
         prompts: [
           {
-            text: `Set ${key} on ${projectName} to <value> and redeploy.`,
-            hint: 'Replace `<value>` before pasting.',
+            text: t('agentGuide.content.setEnvVar.prompt.project', { key, projectName }),
+            hint: t('agentGuide.content.setEnvVar.hint.project'),
           },
           {
-            text: `Set ${key} only on ${serviceName} (not the whole ${projectName} group) and redeploy ${serviceName}.`,
+            text: t('agentGuide.content.setEnvVar.prompt.service', {
+              key,
+              serviceName,
+              projectName,
+            }),
           },
         ],
       };
@@ -151,14 +173,14 @@ export function getAgentGuideContent(
     case 'delete-env-var': {
       const key = ctx.envVarKey ?? 'KEY_NAME';
       return {
-        heading: 'Tell your agent which env var to remove',
-        lead: 'Env var removals are saved through MCP. Ask the agent to check impact and redeploy the affected Application/Compose workload when needed.',
+        heading: t('agentGuide.content.deleteEnvVar.heading'),
+        lead: t('agentGuide.content.deleteEnvVar.lead'),
         prompts: [
           {
-            text: `Remove ${key} from ${projectName} and redeploy.`,
+            text: t('agentGuide.content.deleteEnvVar.prompt.project', { key, projectName }),
           },
           {
-            text: `Remove ${key} from every service in ${projectName} and confirm none of them still reference it.`,
+            text: t('agentGuide.content.deleteEnvVar.prompt.allServices', { key, projectName }),
           },
         ],
       };
@@ -166,15 +188,19 @@ export function getAgentGuideContent(
     case 'wire-managed-db': {
       const managed = ctx.managedServiceName ?? 'cache';
       return {
-        heading: 'Tell your agent which project to wire',
-        lead: `${managed} is provisioned but not yet wired. Hand the agent a target project and an env var key — it'll set the connection string and queue a redeploy.`,
+        heading: t('agentGuide.content.wireManagedDb.heading'),
+        lead: t('agentGuide.content.wireManagedDb.lead', { managed }),
         prompts: [
           {
-            text: `Wire ${managed} into ${projectName} as DATABASE_URL.`,
+            text: t('agentGuide.content.wireManagedDb.prompt.project', { managed, projectName }),
           },
           {
-            text: `Wire ${managed} into ${projectName} as a service-scoped REDIS_URL on ${serviceName}.`,
-            hint: 'Use the service-scoped form when only one service should see the variable.',
+            text: t('agentGuide.content.wireManagedDb.prompt.service', {
+              managed,
+              projectName,
+              serviceName,
+            }),
+            hint: t('agentGuide.content.wireManagedDb.hint.service'),
           },
         ],
       };

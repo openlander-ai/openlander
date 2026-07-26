@@ -21,7 +21,7 @@
  * pre-v0.1 behaviour for users running older backends).
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
 import { useLanguage } from '@/i18n/context';
@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { getSetupStatus } from '@/lib/api';
 import { setupPassword } from '@/lib/api/auth';
 import { isPasswordTooShort } from '@/lib/auth/password-policy';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 type Mode = 'signin' | 'setup';
 
@@ -79,7 +80,7 @@ export function LoginPage() {
       navigate('/projects', { replace: true });
     } catch (err) {
       if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : t('login.errorGeneric'));
+        setError(localizeApiError(err, t, 'login.errorGeneric', 'common.errors.codes'));
       }
     } finally {
       if (mountedRef.current) setLoading(false);
@@ -109,7 +110,7 @@ export function LoginPage() {
       window.location.replace('/setup');
     } catch (err) {
       if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : t('setup.password.errorGeneric'));
+        setError(localizeApiError(err, t, 'setup.password.errorGeneric', 'common.errors.codes'));
         setLoading(false);
       }
     }

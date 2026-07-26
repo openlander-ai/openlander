@@ -14,13 +14,13 @@ interface LanguageToggleProps {
 }
 
 export function LanguageToggle({ className, size = 'sm' }: LanguageToggleProps) {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const pad = size === 'xs' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]';
 
   return (
     <div
       role="group"
-      aria-label="Language"
+      aria-label={t('accessibility.language')}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-0.5',
         className,

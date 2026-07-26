@@ -1,4 +1,4 @@
-import { LanguageProvider } from '@/i18n/context';
+import { LanguageProvider, useLanguage } from '@/i18n/context';
 import {
   Component,
   type ErrorInfo,
@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router';
 import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
@@ -73,8 +73,14 @@ function RouteSuspense({ children }: { children: ReactNode }) {
   );
 }
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  title: string;
+  message: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, { hasError: boolean }> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -92,8 +98,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
       return (
         <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground">
           <div className="text-center">
-            <h1 className="text-2xl font-bold">Something went wrong.</h1>
-            <p className="text-muted-foreground">Please refresh the page.</p>
+            <h1 className="text-2xl font-bold">{this.props.title}</h1>
+            <p className="text-muted-foreground">{this.props.message}</p>
           </div>
         </div>
       );
@@ -101,6 +107,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
     return this.props.children;
   }
+}
+
+function LocalizedErrorBoundary({ children }: { children: ReactNode }) {
+  const { t } = useLanguage();
+  return (
+    <ErrorBoundary title={t('appError.title')} message={t('appError.message')}>
+      {children}
+    </ErrorBoundary>
+  );
 }
 
 /**
@@ -221,7 +236,7 @@ function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <ErrorBoundary>
+        <LocalizedErrorBoundary>
           <Toaster
             toastOptions={{
               className: 'bg-bg-panel border-border text-primary-ol font-body',
@@ -366,7 +381,7 @@ function App() {
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </BrowserRouter>
-        </ErrorBoundary>
+        </LocalizedErrorBoundary>
       </AuthProvider>
     </LanguageProvider>
   );

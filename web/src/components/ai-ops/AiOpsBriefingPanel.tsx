@@ -3,6 +3,7 @@ import { ChevronRight, ShieldCheck, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { getProjectAiOps, updateProjectAiOps, type AiOpsProjectMode } from '@/lib/api/ai-ops';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface AiOpsBriefingPanelProps {
   projectId: string;
@@ -27,7 +28,7 @@ export function AiOpsBriefingPanel({ projectId, onViewBriefings }: AiOpsBriefing
       setResolvedMode(policy.policy.mode);
       setBudgetText(`${policy.budget.projectUsed}/${policy.budget.projectLimit}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiOps.error.load'));
+      setError(localizeApiError(err, t, 'aiOps.error.load', 'aiOps.error.codes'));
     } finally {
       setLoading(false);
     }
@@ -46,7 +47,7 @@ export function AiOpsBriefingPanel({ projectId, onViewBriefings }: AiOpsBriefing
       setResolvedMode(response.policy.mode);
       setBudgetText(`${response.budget.projectUsed}/${response.budget.projectLimit}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiOps.error.save'));
+      setError(localizeApiError(err, t, 'aiOps.error.save', 'aiOps.error.codes'));
     } finally {
       setSaving(false);
     }

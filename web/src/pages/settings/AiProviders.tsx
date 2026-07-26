@@ -22,6 +22,7 @@ import {
   type SaveAiProviderInput,
 } from '@/lib/api/ai-providers';
 import { cn } from '@/lib/utils';
+import { localizeApiError } from '@/lib/localized-api-error';
 
 const DEFAULT_MODELS: Record<AiProviderKind, string> = {
   openai: 'gpt-4.1-mini',
@@ -81,7 +82,7 @@ export function AiProvidersSettings() {
         setForm(formFromProvider(response.provider));
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : t('aiProviders.error.load'));
+        setError(localizeApiError(err, t, 'aiProviders.error.load', 'common.errors.codes'));
       })
       .finally(() => setLoading(false));
   }, [t]);
@@ -126,7 +127,7 @@ export function AiProvidersSettings() {
       setForm(formFromProvider(response.provider));
       setMessage(t('aiProviders.status.saved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiProviders.error.save'));
+      setError(localizeApiError(err, t, 'aiProviders.error.save', 'common.errors.codes'));
     } finally {
       setSaving(false);
     }
@@ -142,10 +143,10 @@ export function AiProvidersSettings() {
       if (response.health.ok) {
         setMessage(t('aiProviders.status.testPassed'));
       } else {
-        setError(response.health.error ?? t('aiProviders.error.test'));
+        setError(t('aiProviders.error.test'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiProviders.error.test'));
+      setError(localizeApiError(err, t, 'aiProviders.error.test', 'common.errors.codes'));
     } finally {
       setTesting(false);
     }
@@ -161,7 +162,7 @@ export function AiProvidersSettings() {
       setForm(formFromProvider(response.provider));
       setMessage(t('aiProviders.status.deleted'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiProviders.error.delete'));
+      setError(localizeApiError(err, t, 'aiProviders.error.delete', 'common.errors.codes'));
     } finally {
       setDeleting(false);
     }

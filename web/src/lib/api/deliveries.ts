@@ -1,5 +1,5 @@
 import { fetchWithAuth } from './auth';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, ApiError } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, throwApiError } from './client';
 
 export type DeliveryType = 'software_release' | 'artifact_delivery';
 export type DeliveryStatus =
@@ -144,9 +144,26 @@ export interface DeliveryDetail {
   receipt: DeliveryReceipt | null;
 }
 
+export interface DeliveryReadinessCheck {
+  key:
+    | 'delivery_approved'
+    | 'approved_artifact'
+    | 'customer_approval'
+    | 'work_items_resolved'
+    | 'required_gates'
+    | 'warnings_acknowledged'
+    | 'limitations_recorded'
+    | 'html_companion_pdf'
+    | 'production_deploy'
+    | 'page_limit';
+  passed: boolean;
+  message: string;
+  params?: Record<string, number>;
+}
+
 export interface DeliveryReadiness {
   ready: boolean;
-  checks: Array<{ key: string; passed: boolean; message: string }>;
+  checks: DeliveryReadinessCheck[];
   blockers: string[];
   estimated_pages: number;
 }
@@ -157,17 +174,7 @@ function base(projectId: string): string {
 
 async function blobRequest(url: string, method: 'GET' | 'POST'): Promise<Blob> {
   const response = await fetchWithAuth(url, { method });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    let message = text || `Request failed (${String(response.status)})`;
-    try {
-      const payload = JSON.parse(text) as { message?: string };
-      message = payload.message ?? message;
-    } catch {
-      // Keep the plain response body.
-    }
-    throw new ApiError(message, response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Delivery document request failed');
   return await response.blob();
 }
 
@@ -245,10 +252,7 @@ export async function uploadDeliveryArtifact(
     `${base(projectId)}/${encodeURIComponent(deliveryId)}/artifacts`,
     { method: 'POST', body: form },
   );
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new ApiError(text || 'Artifact upload failed.', response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Artifact upload failed');
   return response.json();
 }
 
@@ -427,10 +431,7 @@ export async function uploadDeliveryLogo(projectId: string, file: File): Promise
     `/api/projects/${encodeURIComponent(projectId)}/delivery-settings/logo`,
     { method: 'POST', body: form },
   );
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new ApiError(text || 'Receipt logo upload failed.', response.status);
-  }
+  if (!response.ok) await throwApiError(response, 'Receipt logo upload failed');
   const result = (await response.json()) as { settings: DeliverySettings };
   return result.settings;
 }

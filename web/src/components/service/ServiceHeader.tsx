@@ -6,7 +6,7 @@
  * backward compatibility. The no-dropped-columns rule is name-based and
  * would misfire here.
  */
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Play, Square, Trash2, Database, ArrowLeft } from 'lucide-react';

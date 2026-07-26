@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 import type { ConsoleFollowMode } from '@/types';
+import { useLanguage } from '@/i18n/context';
 
 export interface LogEntry {
   id: number;
@@ -285,9 +286,7 @@ export function mergeOlderLogEntries(
 }
 
 export type ParsedStreamLine =
-  | { type: 'entry'; entry: LogEntry }
-  | { type: 'error'; error: string }
-  | { type: 'ignore' };
+  { type: 'entry'; entry: LogEntry } | { type: 'error'; error: string } | { type: 'ignore' };
 
 /** Parse one NDJSON stream frame into an entry, stream error, or ignore marker. */
 export function parseStreamLine(rawLine: string): ParsedStreamLine {
@@ -338,6 +337,7 @@ export function useLogStream({
   serviceId,
   enabled = true,
 }: UseLogStreamOptions): UseLogStreamReturn {
+  const { t } = useLanguage();
   const [state, setState] = useState<LogStreamState>(() => createInitialLogStreamState());
   const abortRef = useRef<AbortController | null>(null);
   const stateRef = useRef(state);
@@ -413,7 +413,7 @@ export function useLogStream({
             newEntries.push(parsedLine.entry);
           }
           if (parsedLine.type === 'error') {
-            nextError = parsedLine.error;
+            nextError = t('logs.errorBody');
             streamError = parsedLine.error;
           }
         }
@@ -445,15 +445,14 @@ export function useLogStream({
           current.error,
         ),
       );
-    } catch (err) {
+    } catch {
       if (controller.signal.aborted) {
         return;
       }
 
-      const message = err instanceof Error ? err.message : 'Stream failed';
-      setState((current) => setLogConnectionState(current, 'error', message));
+      setState((current) => setLogConnectionState(current, 'error', t('logs.errorBody')));
     }
-  }, [enabled, projectId, serviceId]);
+  }, [enabled, projectId, serviceId, t]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -521,15 +520,14 @@ export function useLogStream({
         canLoadOlder: snapshotEntries.length >= nextLineCount,
         historyLineCount: nextLineCount,
       }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load older logs';
+    } catch {
       setState((current) => ({
         ...current,
-        error: message,
+        error: t('common.errors.load'),
         isLoadingOlder: false,
       }));
     }
-  }, [projectId, serviceId]);
+  }, [projectId, serviceId, t]);
 
   return {
     ...state,

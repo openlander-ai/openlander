@@ -165,7 +165,12 @@ If you find yourself wrapping the same `try/catch` in two places, you've found a
 
 ## Internationalization
 
-The dashboard ships in English and Korean. Before adding or editing UI copy, read [`docs/i18n-policy.md`](docs/i18n-policy.md). The short version: menu/button labels stay in English in both `web/src/i18n/en.ts` and `web/src/i18n/ko.ts`; descriptions translate. The policy doc also covers the Korean register guide, the suffix-based mechanical convention for picking a register, the `[TODO-KO]` fallback for contributors who can't write Korean, and the screen-by-screen migration plan.
+The dashboard ships in English and Korean. Before adding or editing UI copy,
+read [`docs/i18n-policy.md`](docs/i18n-policy.md). Localize the user's task and
+status, but keep established developer terms when translating them would reduce
+precision. Proper names, protocols, code, logs, and machine identifiers keep
+their original spelling. Both locale files must keep the same key tree and
+interpolation placeholders.
 
 ## Submitting Changes
 

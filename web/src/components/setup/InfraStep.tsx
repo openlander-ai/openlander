@@ -8,6 +8,7 @@ interface SetupStatus {
     ok: boolean;
     message: string;
     state?: string;
+    groupFixed?: boolean;
   };
   traefik: {
     ok: boolean;
@@ -42,6 +43,17 @@ export function InfraStep({
   onNext,
 }: InfraStepProps) {
   const { t } = useLanguage();
+  const dockerDetail = status.docker.ok
+    ? t('setup.infra.running')
+    : status.docker.state === 'not_installed'
+      ? t('setup.infra.dockerNotInstalled')
+      : status.docker.state === 'not_running'
+        ? t('setup.infra.dockerNotRunning')
+        : status.docker.state === 'permission_denied' && status.docker.groupFixed
+          ? t('setup.infra.dockerPermissionFixed')
+          : status.docker.state === 'permission_denied'
+            ? t('setup.infra.dockerPermissionDenied')
+            : t('setup.infra.dockerUnavailable');
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -61,7 +73,7 @@ export function InfraStep({
           <StatusRow
             ok={status.docker.ok}
             label={t('setup.infra.dockerEngine')}
-            detail={status.docker.message}
+            detail={dockerDetail}
           />
           {!status.docker.ok && (
             <div className="ml-10 space-y-2">

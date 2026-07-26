@@ -14,10 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback;
-}
+import { localizeApiError } from '@/lib/localized-api-error';
 
 interface CreateServiceDialogProps {
   open: boolean;
@@ -83,7 +80,12 @@ export function CreateServiceDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err: unknown) {
-      const message = getErrorMessage(err, t('services.create.toasts.errorFallback'));
+      const message = localizeApiError(
+        err,
+        t,
+        'services.create.toasts.errorFallback',
+        'common.errors.codes',
+      );
       setCreateError(message);
       toast.error(message);
     } finally {
@@ -127,12 +129,14 @@ export function CreateServiceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{'Create resource'}</DialogTitle>
+          <DialogTitle>{t('serviceDialogs.createResource')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
           <div>
-            <h3 className="text-sm font-medium text-foreground mb-3">Templates</h3>
+            <h3 className="text-sm font-medium text-foreground mb-3">
+              {t('serviceDialogs.templates')}
+            </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {templates.map((tmpl) => (
                 <button
@@ -157,7 +161,9 @@ export function CreateServiceDialog({
               <span className="w-full border-t border-[hsl(var(--border))]" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-bg-panel px-2 text-foreground/80">or Custom</span>
+              <span className="bg-bg-panel px-2 text-foreground/80">
+                {t('serviceDialogs.customDivider')}
+              </span>
             </div>
           </div>
 
@@ -165,7 +171,7 @@ export function CreateServiceDialog({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {'Resource name'}
+                  {t('serviceDialogs.resourceName')}
                 </label>
                 <Input
                   value={name}
@@ -182,12 +188,12 @@ export function CreateServiceDialog({
                 selectedTemplate.versions.length > 0 && (
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">
-                      {'Version'}
+                      {t('serviceDialogs.version')}
                     </label>
                     <div className="max-w-md">
                       <Select value={selectedVersion} onValueChange={setSelectedVersion}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a version" />
+                          <SelectValue placeholder={t('serviceDialogs.selectVersion')} />
                         </SelectTrigger>
                         <SelectContent>
                           {selectedTemplate.versions.map((v) => (
@@ -206,7 +212,7 @@ export function CreateServiceDialog({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">
-                        {'Docker Image'}
+                        {t('serviceDialogs.dockerImage')}
                       </label>
                       <Input
                         value={image}
@@ -217,7 +223,7 @@ export function CreateServiceDialog({
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">
-                        {'Port'}
+                        {t('serviceDialogs.port')}
                       </label>
                       <Input
                         value={port}
@@ -231,11 +237,11 @@ export function CreateServiceDialog({
                   <div>
                     <div className="flex items-center justify-between max-w-2xl mb-2">
                       <label className="block text-sm font-medium text-foreground">
-                        {'Environment Variables'}
+                        {t('serviceDialogs.environmentVariables')}
                       </label>
                       <Button type="button" variant="outline" size="sm" onClick={addEnvVar}>
                         <Plus className="h-3 w-3 mr-1" />
-                        {'Add Variable'}
+                        {t('serviceDialogs.addVariable')}
                       </Button>
                     </div>
                     <div className="space-y-2 max-w-2xl">
@@ -275,14 +281,14 @@ export function CreateServiceDialog({
 
             <div className="pt-4 flex justify-end gap-2">
               <Button variant="ghost" type="button" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t('serviceDialogs.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={creating || !name || (createMode === 'custom' && !image)}
               >
                 {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {creating ? 'Creating...' : 'Create resource'}
+                {creating ? t('serviceDialogs.creating') : t('serviceDialogs.create')}
               </Button>
             </div>
           </form>

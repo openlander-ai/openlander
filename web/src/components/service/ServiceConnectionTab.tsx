@@ -1,4 +1,3 @@
-/* eslint-disable openlander-internal/no-dropped-columns */
 /**
  * Lint note: reads `service.env_vars` off the typed wire shape exposed
  * by `@/lib/api`, not the dropped DB column. The wire layer continues to
@@ -12,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { type Service, type NetworkIp, getAllIps } from '@/lib/api';
 import { useCopy } from '@/hooks/use-copy';
+import { useLanguage } from '@/i18n/context';
 
 interface ServiceConnectionTabProps {
   service: Service;
@@ -33,6 +33,7 @@ function parseRecordJson(raw: string | null): Record<string, unknown> | null {
 }
 
 export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
+  const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const [networkIps, setNetworkIps] = useState<NetworkIp[]>([]);
 
@@ -67,9 +68,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <Monitor className="h-8 w-8 text-muted-foreground mb-3" />
-        <p className="text-sm font-body text-foreground/80">
-          No connection information available for this service.
-        </p>
+        <p className="text-sm font-body text-foreground/80">{t('serviceConnection.empty')}</p>
       </div>
     );
   }
@@ -80,23 +79,23 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
             <Key className="h-4 w-4 text-muted-foreground" />
-            Credentials
+            {t('serviceConnection.credentials')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
             {Object.entries(creds).map(([key, value]) => {
               const displayKey =
                 key === 'connectionString'
-                  ? 'Connection String'
+                  ? t('serviceConnection.field.connectionString')
                   : key === 'host'
-                    ? 'Host'
+                    ? t('serviceConnection.field.host')
                     : key === 'port'
-                      ? 'Port'
+                      ? t('serviceConnection.field.port')
                       : key === 'user'
-                        ? 'User'
+                        ? t('serviceConnection.field.user')
                         : key === 'password'
-                          ? 'Password'
+                          ? t('serviceConnection.field.password')
                           : key === 'database'
-                            ? 'Database'
+                            ? t('serviceConnection.field.database')
                             : key;
 
               const fieldId = `${service.id}-${key}`;
@@ -138,7 +137,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
             <Network className="h-4 w-4 text-muted-foreground" />
-            External Access
+            {t('serviceConnection.externalAccess')}
           </h3>
           <div className="space-y-3">
             {networkIps.map((ip) => {
@@ -184,7 +183,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-foreground" />
-            Environment Variables
+            {t('serviceConnection.environmentVariables')}
           </h3>
           <div className="grid grid-cols-1 gap-3">
             {Object.entries(parsedEnv).map(([key, value]) => {

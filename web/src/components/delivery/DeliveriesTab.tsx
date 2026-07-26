@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ChevronRight, FileCheck2, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import {
   type DeliveryType,
 } from '@/lib/api/deliveries';
 import { useLanguage } from '@/i18n/context';
+import { localizeApiError } from '@/lib/localized-api-error';
 import { cn } from '@/lib/utils';
 
 function statusClass(status: Delivery['status']): string {
@@ -51,7 +52,7 @@ export function DeliveriesTab({
     try {
       setDeliveries(await listDeliveries(projectId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.errors.load'));
+      setError(localizeApiError(err, t, 'delivery.errors.load', 'delivery.errors.codes'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +77,7 @@ export function DeliveriesTab({
       });
       navigate(`/projects/${projectId}/deliveries/${delivery.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.errors.create'));
+      setError(localizeApiError(err, t, 'delivery.errors.create', 'delivery.errors.codes'));
     } finally {
       setSubmitting(false);
     }
