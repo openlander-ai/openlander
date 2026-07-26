@@ -496,10 +496,10 @@ test.describe('Quality Gate — external Agent FDE golden path', () => {
     ]);
     expect(internalReport.status, internalHtml).toBe(200);
     expect(customerReport.status, customerHtml).toBe(200);
-    expect(internalHtml).toContain('Agent Run');
-    expect(internalHtml).toContain('log sha256');
-    expect(customerHtml).not.toContain('Agent Run');
-    expect(customerHtml).not.toContain('log sha256');
+    expect(internalHtml).toMatch(/Agent (?:Run|실행)/);
+    expect(internalHtml).toMatch(/(?:log sha256|로그 SHA-256)/);
+    expect(customerHtml).not.toMatch(/Agent (?:Run|실행)/);
+    expect(customerHtml).not.toMatch(/(?:log sha256|로그 SHA-256)/);
 
     const completed = await callAction<Record<string, unknown>>(
       'openlander_project',
