@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.11-rc.3] - 2026-07-26
+
+### Fixed
+
+- Preserve a saved or explicitly supplied image command when starting a
+  blue-green candidate container, so image services do not fall back to the
+  image's default command during an update.
+- Keep the Interface-first external Agent golden scenario in the RC cold-agent
+  smoke lane with a contract test that prevents accidental removal.
+
 ## [0.2.11-rc.2] - 2026-07-26
 
 ### Added
