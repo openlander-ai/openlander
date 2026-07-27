@@ -357,7 +357,12 @@ export async function createAppContext(
     deliveryAgentRunService,
   );
   const evidenceUploadService = new EvidenceUploadService(db, deliveryService);
-  const weeklyReportService = new WeeklyReportService(db, engagementService, artifactStore);
+  const weeklyReportService = new WeeklyReportService(
+    db,
+    engagementService,
+    artifactStore,
+    () => config.language,
+  );
   const runtime: RuntimeBackend = docker;
   const serverContext = createLocalServerContext(docker);
 

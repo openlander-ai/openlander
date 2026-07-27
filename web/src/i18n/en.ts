@@ -2808,6 +2808,16 @@ export const translations = {
         failed: 'Failed',
         cancelled: 'Cancelled',
       },
+      phaseValue: {
+        planning: 'Planning',
+        implementation: 'Implementation',
+        implementationFixed: 'Implementation updated',
+        qa: 'QA',
+        scenarioQa: 'Scenario QA',
+        verification: 'Verification',
+        qualityGatesPassed: 'Quality Gates passed',
+        completed: 'Completed',
+      },
       checkStatus: {
         pending: 'Pending',
         running: 'Running',

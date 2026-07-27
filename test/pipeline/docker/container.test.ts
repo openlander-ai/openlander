@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
 
 import { Docker } from '../../../src/pipeline/docker.js';
 
@@ -265,8 +270,15 @@ describe('runEphemeralContainer', () => {
   beforeEach(resetMocks);
   afterEach(() => vi.restoreAllMocks());
 
-  it('runs argv directly in a bounded disposable workspace and removes the container', async () => {
+  it('copies a workspace snapshot, runs argv directly, and removes the container', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openlander-ephemeral-test-'));
+    writeFileSync(join(workspacePath, 'package.json'), '{}');
     const containerHandle = {
+      putArchive: vi.fn(async (stream: NodeJS.ReadableStream) => {
+        for await (const _chunk of stream) {
+          // Drain the real tar process so the snapshot copy can finish.
+        }
+      }),
       start: vi.fn().mockResolvedValueOnce(undefined),
       wait: vi.fn().mockResolvedValueOnce({ StatusCode: 0 }),
       logs: vi.fn().mockResolvedValueOnce(Buffer.from('2 tests passed')),
@@ -274,35 +286,91 @@ describe('runEphemeralContainer', () => {
     };
     mockCreateContainer.mockResolvedValueOnce(containerHandle);
 
-    const docker = new Docker(undefined, undefined, 'olinst_quality');
-    const result = await docker.runEphemeralContainer({
-      imageTag: 'node:22',
-      name: 'ol-quality-run-1-unit',
-      projectId: 'project-1',
-      workspacePath: '/tmp/openlander-repo',
-      command: ['npm', 'test', '--', '--run'],
-      timeoutMs: 30_000,
-    });
+    try {
+      const docker = new Docker(undefined, undefined, 'olinst_quality');
+      const result = await docker.runEphemeralContainer({
+        imageTag: 'node:22',
+        name: 'ol-quality-run-1-unit',
+        projectId: 'project-1',
+        workspacePath,
+        command: ['npm', 'test', '--', '--run'],
+        timeoutMs: 30_000,
+      });
 
-    expect(result).toMatchObject({ exitCode: 0, logs: '2 tests passed', timedOut: false });
-    expect(mockCreateContainer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Cmd: ['npm', 'test', '--', '--run'],
-        WorkingDir: '/workspace',
-        Tty: true,
-        Labels: expect.objectContaining({
-          'openlander.instance': 'olinst_quality',
-          'openlander.project': 'project-1',
-          'openlander.purpose': 'delivery-quality-check',
+      expect(result).toMatchObject({ exitCode: 0, logs: '2 tests passed', timedOut: false });
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Cmd: ['npm', 'test', '--', '--run'],
+          WorkingDir: '/workspace',
+          Tty: true,
+          Labels: expect.objectContaining({
+            'openlander.instance': 'olinst_quality',
+            'openlander.project': 'project-1',
+            'openlander.purpose': 'delivery-quality-check',
+          }),
+          HostConfig: expect.objectContaining({
+            AutoRemove: false,
+            RestartPolicy: { Name: 'no' },
+          }),
         }),
-        HostConfig: expect.objectContaining({
-          AutoRemove: false,
-          Binds: ['/tmp/openlander-repo:/workspace:rw'],
-          RestartPolicy: { Name: 'no' },
-        }),
+      );
+      const createOptions = mockCreateContainer.mock.calls[0]?.[0] as {
+        HostConfig?: { Binds?: string[] };
+      };
+      expect(createOptions.HostConfig?.Binds).toBeUndefined();
+      expect(containerHandle.putArchive).toHaveBeenCalledWith(expect.anything(), {
+        path: '/workspace',
+      });
+      expect(containerHandle.start).toHaveBeenCalledAfter(containerHandle.putArchive);
+      expect(containerHandle.remove).toHaveBeenCalledWith({ force: true });
+    } finally {
+      rmSync(workspacePath, { recursive: true, force: true });
+    }
+  });
+
+  it('copies declared report outputs back without exposing the host workspace as a bind', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openlander-ephemeral-output-'));
+    const archivePath = mkdtempSync(join(tmpdir(), 'openlander-ephemeral-archive-'));
+    writeFileSync(join(workspacePath, 'package.json'), '{}');
+    writeFileSync(join(archivePath, 'quality.xml'), '<testsuite failures="0"/>');
+    const archivedReport = spawnSync('tar', ['-C', archivePath, '-cf', '-', 'quality.xml']);
+    expect(archivedReport.status).toBe(0);
+    const containerHandle = {
+      putArchive: vi.fn(async (stream: NodeJS.ReadableStream) => {
+        for await (const _chunk of stream) {
+          // Drain the workspace upload.
+        }
       }),
-    );
-    expect(containerHandle.remove).toHaveBeenCalledWith({ force: true });
+      getArchive: vi.fn(async () => Readable.from(archivedReport.stdout)),
+      start: vi.fn().mockResolvedValueOnce(undefined),
+      wait: vi.fn().mockResolvedValueOnce({ StatusCode: 0 }),
+      logs: vi.fn().mockResolvedValueOnce(Buffer.from('report ready')),
+      remove: vi.fn().mockResolvedValueOnce(undefined),
+    };
+    mockCreateContainer.mockResolvedValueOnce(containerHandle);
+
+    try {
+      const docker = new Docker(undefined, undefined, 'olinst_quality');
+      await docker.runEphemeralContainer({
+        imageTag: 'node:22',
+        name: 'ol-quality-run-1-report',
+        projectId: 'project-1',
+        workspacePath,
+        command: ['node', 'quality.js'],
+        timeoutMs: 30_000,
+        outputPaths: ['reports/quality.xml'],
+      });
+
+      expect(containerHandle.getArchive).toHaveBeenCalledWith({
+        path: '/workspace/reports/quality.xml',
+      });
+      expect(readFileSync(join(workspacePath, 'reports/quality.xml'), 'utf8')).toBe(
+        '<testsuite failures="0"/>',
+      );
+    } finally {
+      rmSync(workspacePath, { recursive: true, force: true });
+      rmSync(archivePath, { recursive: true, force: true });
+    }
   });
 });
 

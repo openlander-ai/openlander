@@ -139,6 +139,7 @@ describe('Korean localization quality gate', () => {
       'delivery.artifacts.kindValue.markdown',
       'delivery.gates.type.qa',
       'delivery.gates.defaultLabel.qa',
+      'delivery.execution.phaseValue.qa',
       'delivery.review.externalProvider.drive',
       'delivery.review.externalProvider.github',
       'delivery.review.externalProvider.slack',

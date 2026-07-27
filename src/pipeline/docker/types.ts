@@ -49,6 +49,8 @@ export interface RunEphemeralContainerOptions {
   command: string[];
   timeoutMs: number;
   envVars?: Record<string, string>;
+  /** Relative files to copy back after the command exits (for example JUnit reports). */
+  outputPaths?: string[];
 }
 
 export interface RunEphemeralContainerResult {

@@ -11,7 +11,7 @@ import { WeeklyReportService } from '../../src/reporting/weekly-report-service.j
 
 const temporaryDirectories: string[] = [];
 
-async function createHarness() {
+async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-weekly-report-'));
   temporaryDirectories.push(dataDir);
   const artifacts = new ArtifactStore(dataDir);
@@ -60,8 +60,10 @@ async function createHarness() {
     activity: [
       {
         created_at: '2026-07-21T12:00:00.000Z',
+        event_type: 'internal.diagnosis',
         title: 'Internal diagnosis',
         description: 'API_KEY=customer-secret should stay internal',
+        metadata: '{}',
       },
     ],
   };
@@ -127,12 +129,24 @@ async function createHarness() {
     insertActivityLog: vi.fn(async () => undefined),
   };
   const engagements = { get: vi.fn(async () => engagement) };
+  let locale = initialLocale;
   const service = new WeeklyReportService(
     db as unknown as Database,
     engagements as unknown as EngagementService,
     artifacts,
+    () => locale,
   );
-  return { service, db, engagement, artifacts, stored };
+  return {
+    service,
+    db,
+    engagement,
+    evidence,
+    artifacts,
+    stored,
+    setLocale(nextLocale: 'en' | 'ko') {
+      locale = nextLocale;
+    },
+  };
 }
 
 afterEach(async () => {
@@ -169,6 +183,69 @@ describe('WeeklyReportService', () => {
     expect(published.internal_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.customer_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.evidence_sha256).toBe(draft.evidence_sha256);
+  }, 120_000);
+
+  it('pins Korean report copy to the locale in the immutable evidence snapshot', async () => {
+    const harness = await createHarness('ko');
+    harness.engagement.deliveries.push({
+      id: 'delivery_implicit_deploy-1',
+      title: 'Deployment deploy-1',
+      status: 'draft',
+    });
+    harness.evidence.activity.push(
+      {
+        created_at: '2026-07-22T12:00:00.000Z',
+        event_type: 'delivery.agent_run_started',
+        title: 'Agent Run started',
+        description: `Pinned to commit ${'d'.repeat(40)}.`,
+        metadata: JSON.stringify({ commit_sha: 'd'.repeat(40) }),
+      },
+      {
+        created_at: '2026-07-23T12:00:00.000Z',
+        event_type: 'engagement:archived',
+        title: 'Engagement archived: Claims modernization',
+        description:
+          'The Engagement was archived. Linked Projects and Deliveries were not changed.',
+        metadata: JSON.stringify({ engagement_title: 'Claims modernization' }),
+      },
+    );
+    harness.evidence.releases.push({
+      id: 'rel_implicit_deploy-1',
+      version: 'deploy-1',
+      status: 'ready',
+      commit_sha: 'e'.repeat(40),
+    });
+    const draft = await harness.service.generate({
+      engagementId: 'engagement-1',
+      periodStart: '2026-07-20',
+      periodEnd: '2026-07-26',
+      actor: 'agent-a',
+    });
+    expect(draft.evidence_snapshot).toMatchObject({ locale: 'ko' });
+
+    harness.setLocale('en');
+    const published = await harness.service.publish(draft.id);
+    const internalHtmlBlob = harness.stored.get(String(published.internal_html_blob_id));
+    const customerHtmlBlob = harness.stored.get(String(published.customer_html_blob_id));
+    if (!internalHtmlBlob || !customerHtmlBlob) throw new Error('Published HTML blobs are missing');
+    const [internalHtml, customerHtml] = await Promise.all([
+      harness.artifacts.read(internalHtmlBlob.storageKey),
+      harness.artifacts.read(customerHtmlBlob.storageKey),
+    ]);
+
+    expect(internalHtml.toString()).toContain('<html lang="ko">');
+    expect(internalHtml.toString()).toContain('내부 FDE 주간 보고서');
+    expect(internalHtml.toString()).toContain('품질 검증 통과');
+    expect(internalHtml.toString()).toContain('Agent 실행 시작');
+    expect(internalHtml.toString()).toContain('고객 과제 보관');
+    expect(internalHtml.toString()).not.toContain('Agent Run started');
+    expect(internalHtml.toString()).not.toContain('The Engagement was archived');
+    expect(customerHtml.toString()).toContain('고객 주간 진행 보고서');
+    expect(customerHtml.toString()).toContain('확인할 이슈 없음');
+    expect(customerHtml.toString()).not.toContain('Agent Run');
+    expect(customerHtml.toString()).not.toContain('Deployment deploy-1');
+    expect(customerHtml.toString()).not.toContain('릴리스 deploy-1');
+    expect(customerHtml.toString()).not.toContain('customer-secret');
   }, 120_000);
 
   it('rejects periods that are not bounded weekly ranges', async () => {

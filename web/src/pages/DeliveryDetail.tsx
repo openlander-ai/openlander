@@ -49,6 +49,24 @@ import { cn } from '@/lib/utils';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
+const DELIVERY_RUN_PHASE_KEYS: Record<string, string> = {
+  planning: 'planning',
+  implementation: 'implementation',
+  implementation_fixed: 'implementationFixed',
+  qa: 'qa',
+  scenario_qa: 'scenarioQa',
+  verification: 'verification',
+  quality_gates_passed: 'qualityGatesPassed',
+  completed: 'completed',
+};
+
+export function formatDeliveryRunPhase(phase: string, t: Translate): string {
+  const translationKey = DELIVERY_RUN_PHASE_KEYS[phase];
+  return translationKey
+    ? t(`delivery.execution.phaseValue.${translationKey}`)
+    : phase.replaceAll('_', ' ').replaceAll('-', ' ');
+}
+
 function formatArtifactRevision(revision: number, t: Translate): string {
   return t('delivery.artifacts.revisionValue', { revision });
 }
@@ -661,7 +679,7 @@ function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null
                 <dt className="text-[color:var(--ol-fg-subtle)]">
                   {t('delivery.execution.phase')}
                 </dt>
-                <dd className="mt-0.5 text-xs">{run.current_phase}</dd>
+                <dd className="mt-0.5 text-xs">{formatDeliveryRunPhase(run.current_phase, t)}</dd>
               </div>
               <div>
                 <dt className="text-[color:var(--ol-fg-subtle)]">
@@ -755,7 +773,11 @@ function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null
                     {new Date(event.created_at).toLocaleString(language)}
                   </time>
                   <span>
-                    {event.phase && <span className="font-medium">[{event.phase}] </span>}
+                    {event.phase && (
+                      <span className="font-medium">
+                        [{formatDeliveryRunPhase(event.phase, t)}]{' '}
+                      </span>
+                    )}
                     {event.summary}
                   </span>
                 </li>

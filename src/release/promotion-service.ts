@@ -19,6 +19,7 @@ import { createModuleLogger } from '../lib/logger.js';
 import type { Docker } from '../pipeline/docker.js';
 import { containerName } from '../pipeline/helpers.js';
 import { allocatePort, releasePortReservation } from '../pipeline/port.js';
+import { resolveContainerUrl } from '../pipeline/url-resolver.js';
 import {
   appRouteProviderForTraefikMode,
   buildTraefikLabels,
@@ -63,7 +64,7 @@ async function defaultSmokeProbe(
   timeoutMs: number,
 ): Promise<PromotionSmokeResult> {
   try {
-    const response = await fetch(`http://127.0.0.1:${String(port)}${path}`, {
+    const response = await fetch(`${resolveContainerUrl(port)}${path}`, {
       redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
     });
