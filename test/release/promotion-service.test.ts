@@ -15,6 +15,7 @@ function createHarness(
     soakSeconds?: number;
     smokePassed?: boolean;
     useDefaultSmokeProbe?: boolean;
+    healthTimeoutSeconds?: number;
   } = {},
 ) {
   const release = {
@@ -46,7 +47,7 @@ function createHarness(
       display_name: 'QA',
       tier: 'validation',
       promotion_order: 1,
-      health_timeout_seconds: 30,
+      health_timeout_seconds: options.healthTimeoutSeconds ?? 30,
       smoke_path: options.smokePath ?? null,
       soak_seconds: options.soakSeconds ?? 0,
     })),
@@ -135,6 +136,8 @@ function createHarness(
 }
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -188,6 +191,31 @@ describe('ReleasePromotionService', () => {
       }),
     );
     expect(result.status).toBe('succeeded');
+    expect(harness.releaseRuntimePort).toHaveBeenCalledWith(32123);
+  });
+
+  it('retains the candidate port reservation until Promotion commits', async () => {
+    const harness = createHarness({ priorSucceeded: true });
+    let finishHealthCheck: (() => void) | undefined;
+    harness.docker.waitForHealthy.mockImplementation(
+      async () =>
+        await new Promise<{ healthy: true }>((resolve) => {
+          finishHealthCheck = () => resolve({ healthy: true });
+        }),
+    );
+
+    const resultPromise = harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+    await vi.waitFor(() => expect(harness.docker.waitForHealthy).toHaveBeenCalledOnce());
+
+    expect(harness.releaseRuntimePort).not.toHaveBeenCalled();
+    finishHealthCheck?.();
+    await expect(resultPromise).resolves.toMatchObject({ status: 'succeeded' });
     expect(harness.releaseRuntimePort).toHaveBeenCalledWith(32123);
   });
 
@@ -335,6 +363,158 @@ describe('ReleasePromotionService', () => {
       'http://host.docker.internal:32123/smoke',
       expect.objectContaining({ redirect: 'manual' }),
     );
+  });
+
+  it('retries a transient containerized Smoke connection failure', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OPENLANDER_CONTAINERIZED', 'true');
+    const refused = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(refused)
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/smoke',
+      useDefaultSmokeProbe: true,
+    });
+
+    const resultPromise = harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+    await vi.advanceTimersByTimeAsync(250);
+
+    await expect(resultPromise).resolves.toMatchObject({ status: 'succeeded' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://host.docker.internal:32123/smoke',
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+  });
+
+  it('retries after a hung Smoke request reaches its per-attempt timeout', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OPENLANDER_CONTAINERIZED', 'true');
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), milliseconds);
+      return controller.signal;
+    });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        async (_input, init) =>
+          await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('The operation was aborted.', 'AbortError')),
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/smoke',
+      useDefaultSmokeProbe: true,
+    });
+
+    const resultPromise = harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+    await vi.advanceTimersByTimeAsync(3_250);
+
+    await expect(resultPromise).resolves.toMatchObject({ status: 'succeeded' });
+    expect(timeoutSpy).toHaveBeenNthCalledWith(1, 3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails a non-retryable Smoke response without waiting for the timeout', async () => {
+    vi.stubEnv('OPENLANDER_CONTAINERIZED', 'true');
+    const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/missing',
+      useDefaultSmokeProbe: true,
+    });
+
+    await expect(
+      harness.service.execute({
+        id: 'promotion-1',
+        releaseId: 'release-1',
+        projectEnvironmentId: 'penv-qa',
+        idempotencyKey: 'promote-1',
+        actor: 'agent-a',
+      }),
+    ).rejects.toThrow('Smoke Test returned HTTP 404.');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('retries a transient Smoke 503 response', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/smoke',
+      useDefaultSmokeProbe: true,
+    });
+
+    const resultPromise = harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+    await vi.advanceTimersByTimeAsync(250);
+
+    await expect(resultPromise).resolves.toMatchObject({ status: 'succeeded' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails and removes the candidate when retryable Smoke responses exhaust the deadline', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(null, { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({
+      priorSucceeded: true,
+      smokePath: '/smoke',
+      useDefaultSmokeProbe: true,
+      healthTimeoutSeconds: 1,
+    });
+
+    const resultPromise = harness.service.execute({
+      id: 'promotion-1',
+      releaseId: 'release-1',
+      projectEnvironmentId: 'penv-qa',
+      idempotencyKey: 'promote-1',
+      actor: 'agent-a',
+    });
+    const rejection = expect(resultPromise).rejects.toThrow('Smoke Test returned HTTP 503.');
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(harness.docker.safeRemoveContainer).toHaveBeenCalledWith('candidate-container');
+    expect(harness.promotion.status).toBe('failed');
+    expect(harness.db.finalizeReleasePromotion).not.toHaveBeenCalled();
   });
 
   it('rechecks health and Smoke Test after the configured soak window', async () => {

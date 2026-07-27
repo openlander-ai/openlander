@@ -63,15 +63,50 @@ async function defaultSmokeProbe(
   path: string,
   timeoutMs: number,
 ): Promise<PromotionSmokeResult> {
-  try {
-    const response = await fetch(`${resolveContainerUrl(port)}${path}`, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    return { passed: response.status >= 200 && response.status < 400, statusCode: response.status };
-  } catch (error) {
-    return { passed: false, error: error instanceof Error ? error.message : String(error) };
+  const target = `${resolveContainerUrl(port)}${path}`;
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+  let lastResult: PromotionSmokeResult = { passed: false, error: 'Smoke Test did not run.' };
+
+  while (Date.now() < deadline) {
+    attempt += 1;
+    const remainingMs = Math.max(1, deadline - Date.now());
+    try {
+      const response = await fetch(target, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(Math.min(remainingMs, 3_000)),
+      });
+      lastResult = {
+        passed: response.status >= 200 && response.status < 400,
+        statusCode: response.status,
+      };
+      if (lastResult.passed) return lastResult;
+      const retryableStatus = response.status >= 500 || [408, 425, 429].includes(response.status);
+      if (!retryableStatus) return lastResult;
+    } catch (error) {
+      const cause = error instanceof Error ? error.cause : undefined;
+      const causeMessage =
+        cause && typeof cause === 'object'
+          ? 'message' in cause && typeof cause.message === 'string'
+            ? cause.message
+            : 'code' in cause && typeof cause.code === 'string'
+              ? cause.code
+              : undefined
+          : undefined;
+      const message = error instanceof Error ? error.message : String(error);
+      lastResult = {
+        passed: false,
+        error: causeMessage ? `${message}: ${causeMessage}` : message,
+      };
+    }
+
+    const retryDelayMs = Math.min(250 * 2 ** Math.min(attempt - 1, 3), 2_000);
+    const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+    if (delayMs <= 0) break;
+    await wait(delayMs);
   }
+
+  return lastResult;
 }
 
 function wait(milliseconds: number): Promise<void> {
@@ -235,6 +270,7 @@ export class ReleasePromotionService {
         containerId: string;
         deployId: string;
       }> = [];
+      const reservedCandidatePorts: number[] = [];
       try {
         for (const artifact of artifacts) {
           const service = servicesById.get(artifact.service_id);
@@ -249,6 +285,7 @@ export class ReleasePromotionService {
             branch: null,
           });
           const port = await this.allocateRuntimePort(this.db, this.docker);
+          reservedCandidatePorts.push(port);
           const serviceRoute = getDeployableServiceRouteName(service);
           const routeName =
             projectEnvironment.tier === 'production'
@@ -262,30 +299,25 @@ export class ReleasePromotionService {
             service.id,
             runtimeEnvironment.id,
           );
-          let containerId: string;
-          try {
-            containerId = await this.docker.runContainer({
-              imageTag: artifact.image_reference,
-              name: candidateName,
-              port,
-              containerPort: service.container_port,
-              envVars,
-              cmd: imageCommand(service.image_cmd),
-              traefikLabels: buildTraefikLabels(
-                routeName,
-                service.container_port,
-                undefined,
-                projectEnvironment.tier === 'production' ? 'production' : 'development',
-                projectNetwork,
-                appRouteProviderForTraefikMode(this.config.traefik.mode),
-              ),
-              network: projectNetwork,
-              aliases: [routeName],
-              volumeProjectName: project.name,
-            });
-          } finally {
-            this.releaseRuntimePort(port);
-          }
+          const containerId = await this.docker.runContainer({
+            imageTag: artifact.image_reference,
+            name: candidateName,
+            port,
+            containerPort: service.container_port,
+            envVars,
+            cmd: imageCommand(service.image_cmd),
+            traefikLabels: buildTraefikLabels(
+              routeName,
+              service.container_port,
+              undefined,
+              projectEnvironment.tier === 'production' ? 'production' : 'development',
+              projectNetwork,
+              appRouteProviderForTraefikMode(this.config.traefik.mode),
+            ),
+            network: projectNetwork,
+            aliases: [routeName],
+            volumeProjectName: project.name,
+          });
           const healthTimeoutMs = healthTimeoutSeconds * 1_000;
           const health = await this.docker.waitForHealthy(containerId, healthTimeoutMs);
           if (!health.healthy) {
@@ -386,6 +418,8 @@ export class ReleasePromotionService {
           );
         }
         throw error;
+      } finally {
+        for (const port of reservedCandidatePorts) this.releaseRuntimePort(port);
       }
     } catch (error) {
       const currentPromotionState = await this.db.getReleasePromotion(promotion.id);
