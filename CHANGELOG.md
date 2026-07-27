@@ -5,42 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.11-rc.4] - 2026-07-27
-
-### Changed
-
-- Expand the Interface-first external Agent golden path to cover a failed check
-  followed by a fix, Agent handoff and resume, manifest-driven quality gates,
-  build-once Release promotion, weekly reporting, and immutable completion
-  evidence.
-- Polish Korean Agent execution phases and weekly report evidence while keeping
-  familiar developer and FDE terminology where translation would reduce
-  clarity.
-
-### Fixed
-
-- Copy manifest quality workspaces into disposable runners through the Docker
-  API so host filesystem paths are never assumed inside the runtime container.
-- Normalize generated image tags and probe promoted service health from the
-  target container runtime, preserving digest-based promotion across
-  environments.
-- Keep implicit compatibility Delivery and Release records out of customer
-  reports, and avoid repeating equivalent Agent status and phase labels.
-
-## [0.2.11-rc.3] - 2026-07-26
-
-### Fixed
-
-- Preserve a saved or explicitly supplied image command when starting a
-  blue-green candidate container, so image services do not fall back to the
-  image's default command during an update.
-- Keep the Interface-first external Agent golden scenario in the RC cold-agent
-  smoke lane with a contract test that prevents accidental removal.
-
-## [0.2.11-rc.2] - 2026-07-26
+## [0.2.11] - 2026-07-27
 
 ### Added
 
+- Add an internal FDE Engagement Portfolio above Projects with one-Engagement-
+  per-Project membership, batched runtime and Delivery blocker rollups,
+  archive-safe links, and organization-scoped MCP reads.
+- Add the Delivery Workspace for review artifacts, customer feedback, decisions,
+  approvals, external QA and Data Gates, Production evidence, and immutable
+  Receipt PDFs.
+- Add content-addressed artifact storage with streaming validation, 100 MiB
+  limits, isolated HTML downloads, approved companion-PDF merging, Korean font
+  support, Project Receipt themes, and a 250-page finalization gate.
+- Add external Agent operations for Engagement and Delivery lifecycle while
+  keeping binary uploads on authenticated Web/CI APIs and required human
+  approval evidence explicit.
+- Bind final Receipt confirmation to the exact evidence version that produced
+  the latest preview, with durable Gate idempotency records that preserve newer
+  results across CI retries.
 - Add a versioned Application Operation Registry shared by MCP and REST,
   including actor scope, idempotency, asynchronous status, and machine-readable
   error contracts.
@@ -52,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add Project manifest snapshots and drift inspection, Engagement lifecycle and
   Project-link operations, and internal/customer weekly reports generated from
   the same evidence snapshot.
+- Add Engagement and Delivery observation surfaces with runtime, blocker,
+  progress, evidence, and optional Engagement context across Project views.
+- Add an ephemeral RC quality gate that verifies the full external Agent FDE
+  path through failure, fix, handoff, promotion, reporting, and immutable
+  completion evidence.
 
 ### Changed
 
@@ -63,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Keep existing deploy and Delivery operations available through compatibility
   wrappers while routing new Agent workflows through shared application
   operations.
+- Polish Korean Agent execution phases and weekly report evidence while keeping
+  familiar developer and FDE terminology where translation improves clarity.
 
 ### Fixed
 
@@ -74,44 +64,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   cascade only with that explicit Project deletion.
 - Serialize weekly report PDF rendering and provide coverage runners enough
   headroom for Korean font subsetting.
-
-## [0.2.11-rc.1] - 2026-07-25
-
-### Added
-
-- Add an internal FDE Engagement Portfolio above Projects with one-Engagement-
-  per-Project membership, batched runtime and Delivery blocker rollups,
-  administrator-session-only mutation, and archive semantics that never alter
-  linked Project, Service, Delivery, or Receipt records.
-- Add `list_engagements` and `get_engagement` as organization-scoped,
-  read-only `openlander_project` MCP actions, with Project/service token
-  isolation and compact cross-Project guidance.
-- Add Engagement list/detail UI, Project linking, English/Korean copy, and
-  optional Engagement context chips on Project and Delivery pages.
-- Add an ephemeral RC quality gate that links a real Production deploy to
-  approved artifacts, resolved feedback, passed Gates, and an immutable
-  admin-finalized Receipt whose downloaded PDF hash is verified.
-- Add the Delivery Workspace Beta for project-scoped review artifacts, preserved
-  customer feedback, human-confirmed decisions and approvals, external QA/Data
-  Gate results, Production deployment evidence, and immutable Receipt PDFs.
-- Add content-addressed artifact storage with streaming validation, 100 MiB
-  limits, HTML download isolation, approved companion-PDF merging, Korean font
-  support, project Receipt themes/logos, and a 250-page finalization gate.
-- Add 11 `openlander_project` Delivery actions for external MCP agents while
-  keeping binary uploads on authenticated web/CI APIs and final Receipt
-  confirmation human-only.
-- Bind final Receipt confirmation to the exact evidence version that produced
-  the latest preview, and keep durable Gate idempotency records so CI retries
-  cannot overwrite newer results or reuse a key with different content.
-- Add a persistent Delivery progress rail plus accessible tab panels and
-  announced action results to guide FDEs through scope, artifacts, review,
-  Gates, deployment evidence, and Receipt confirmation.
-
-### Fixed
-
 - Keep source-only environment variables advisory for Compose deploy plans so
   optional features, tests, and build tooling do not block an explicit runtime
   contract with unrelated input requests.
+- Preserve a saved or explicitly supplied image command when starting a
+  blue-green candidate container, so image services do not fall back to the
+  image's default command during an update.
+- Copy manifest quality workspaces into disposable runners through the Docker
+  API so host filesystem paths are never assumed inside the runtime container.
+- Normalize generated image tags and probe promoted service health from the
+  target container runtime, preserving digest-based promotion across
+  environments.
+- Keep implicit compatibility Delivery and Release records out of customer
+  reports, and avoid repeating equivalent Agent status and phase labels.
 
 ## [0.2.10] - 2026-07-24
 
