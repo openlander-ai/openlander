@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PDFDocument } from 'pdf-lib';
 
 import type { Database } from '../../src/db/index.js';
 import { ArtifactStore, type StoredArtifact } from '../../src/delivery/artifact-store.js';
@@ -130,11 +131,17 @@ async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
   };
   const engagements = { get: vi.fn(async () => engagement) };
   let locale = initialLocale;
+  const renderPdf = vi.fn(async (_title: string, _lines: string[]) => {
+    const document = await PDFDocument.create();
+    document.addPage([100, 100]);
+    return await document.save({ useObjectStreams: false });
+  });
   const service = new WeeklyReportService(
     db as unknown as Database,
     engagements as unknown as EngagementService,
     artifacts,
     () => locale,
+    renderPdf,
   );
   return {
     service,
@@ -143,6 +150,7 @@ async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
     evidence,
     artifacts,
     stored,
+    renderPdf,
     setLocale(nextLocale: 'en' | 'ko') {
       locale = nextLocale;
     },
@@ -246,6 +254,20 @@ describe('WeeklyReportService', () => {
     expect(customerHtml.toString()).not.toContain('Deployment deploy-1');
     expect(customerHtml.toString()).not.toContain('릴리스 deploy-1');
     expect(customerHtml.toString()).not.toContain('customer-secret');
+    expect(harness.renderPdf).toHaveBeenNthCalledWith(
+      1,
+      '내부 FDE 주간 보고서',
+      expect.arrayContaining([
+        expect.stringContaining(
+          'Agent 실행 시작 — commit dddddddddddddddddddddddddddddddddddddddd에 고정했습니다.',
+        ),
+      ]),
+    );
+    expect(harness.renderPdf).toHaveBeenNthCalledWith(
+      2,
+      '고객 주간 진행 보고서',
+      expect.arrayContaining(['확인할 이슈 없음']),
+    );
   }, 120_000);
 
   it('rejects periods that are not bounded weekly ranges', async () => {
