@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.12-rc.1] - 2026-07-27
+
+### Added
+
+- Add a repository-owned Delivery manifest for OpenLander dogfood with explicit
+  unit, localization, type, release, and Agent golden-path quality checks.
+- Add Agent-facing Docker network inventory and approval-gated removal of an
+  exact zero-endpoint network through the shared Application Operation Registry,
+  REST, and the `openlander_monitor` MCP composite.
+
+### Changed
+
+- Extend the release suite to enforce the complete external Agent FDE path,
+  including a failed check and retry, handoff and resume, build-once promotion,
+  weekly reporting, and immutable completion evidence.
+
+### Fixed
+
+- Allow operators to recover exhausted Docker address pools without exposing
+  general network deletion: system, shared, external, active, non-local, and
+  other-instance networks remain blocked, while legacy `ol-*` networks require
+  an explicit opt-in and human approval.
+
 ## [0.2.11] - 2026-07-27
 
 ### Added
