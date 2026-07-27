@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.12-rc.2] - 2026-07-27
+
+### Fixed
+
+- Retry transient Release Promotion Smoke failures within the configured
+  timeout, cap each request so one hung connection cannot consume the full
+  window, fail permanent HTTP errors immediately, and preserve the underlying
+  connection error in diagnostics.
+- Keep candidate port reservations until Promotion commit or failure cleanup so
+  concurrent Promotions cannot select the same port before runtime state is
+  persisted.
+
 ## [0.2.12-rc.1] - 2026-07-27
 
 ### Added
