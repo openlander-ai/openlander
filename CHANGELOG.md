@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.11-rc.4] - 2026-07-27
+
+### Changed
+
+- Expand the Interface-first external Agent golden path to cover a failed check
+  followed by a fix, Agent handoff and resume, manifest-driven quality gates,
+  build-once Release promotion, weekly reporting, and immutable completion
+  evidence.
+- Polish Korean Agent execution phases and weekly report evidence while keeping
+  familiar developer and FDE terminology where translation would reduce
+  clarity.
+
+### Fixed
+
+- Copy manifest quality workspaces into disposable runners through the Docker
+  API so host filesystem paths are never assumed inside the runtime container.
+- Normalize generated image tags and probe promoted service health from the
+  target container runtime, preserving digest-based promotion across
+  environments.
+- Keep implicit compatibility Delivery and Release records out of customer
+  reports, and avoid repeating equivalent Agent status and phase labels.
+
 ## [0.2.11-rc.3] - 2026-07-26
 
 ### Fixed
