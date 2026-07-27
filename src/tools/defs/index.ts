@@ -9,6 +9,7 @@ export { envToolDefs } from './env.js';
 export { gitToolDefs } from './git.js';
 export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
+export { networkOperationToolDefs } from './network-operations.js';
 export { projectOpsToolDefs } from './project-ops.js';
 export { deliveryToolDefs } from './delivery.js';
 export { engagementToolDefs } from './engagement.js';

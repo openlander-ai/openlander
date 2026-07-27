@@ -179,6 +179,14 @@ export class Docker implements RuntimeBackend {
     return this.networkOps.getNetworkInfo(...args);
   }
 
+  listNetworks(...args: Parameters<NetworkOps['listNetworks']>) {
+    return this.networkOps.listNetworks(...args);
+  }
+
+  removeUnusedNetwork(...args: Parameters<NetworkOps['removeUnusedNetwork']>) {
+    return this.networkOps.removeUnusedNetwork(...args);
+  }
+
   ensureProjectNetwork(...args: Parameters<NetworkOps['ensureProjectNetwork']>) {
     return this.networkOps.ensureProjectNetwork(...args);
   }

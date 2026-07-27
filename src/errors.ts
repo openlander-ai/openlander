@@ -399,6 +399,18 @@ export class NetworkAddressPoolExhaustedError extends OpenLanderError {
   }
 }
 
+export class NetworkCleanupBlockedError extends OpenLanderError {
+  constructor(networkName: string, reason: string, details?: Record<string, unknown>) {
+    super(
+      `Docker network cleanup is blocked for ${networkName}: ${reason}`,
+      'NETWORK_CLEANUP_BLOCKED',
+      409,
+      { networkName, reason, ...details },
+    );
+    this.name = 'NetworkCleanupBlockedError';
+  }
+}
+
 export class VolumeNotFoundError extends OpenLanderError {
   constructor(identifier: string) {
     super(`Docker volume not found: ${identifier}`, 'VOLUME_NOT_FOUND', 404, { identifier });

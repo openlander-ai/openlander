@@ -133,6 +133,12 @@ function createMonitorComposite(execute = vi.fn(async () => ({ status: 'ok' })))
       execute,
     },
     {
+      name: 'list_docker_networks',
+      description: 'List Docker networks',
+      inputSchema: z.object({ include_external: z.boolean().optional() }),
+      execute,
+    },
+    {
       name: 'mcp_action_status',
       description: 'Get action status',
       inputSchema: z
@@ -599,7 +605,7 @@ describe('MCP scoped token enforcement', () => {
     });
 
     const result = (await tool.execute(
-      { action: 'get_system_stats', params: {} },
+      { action: 'list_docker_networks', params: {} },
       context,
     )) as Record<string, unknown>;
 

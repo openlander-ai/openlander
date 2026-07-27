@@ -30,6 +30,8 @@ const safeArgKeys = new Set([
   'serviceId',
   'serviceName',
   'target_project_id',
+  'network_name',
+  'network_id',
 ]);
 
 export function buildMcpActionStatusCall(actionRunId: string): McpCompositeCall {
@@ -83,6 +85,16 @@ export function lifecycleEffectForTool(toolName: string): LifecycleEffect {
     };
   }
 
+  if (toolName === 'remove_unused_docker_network') {
+    return {
+      kind: 'remove_unused_docker_network',
+      reversible: false,
+      runtime: 'remove_zero_endpoint_network',
+      data: 'preserve_containers_volumes',
+      hard_delete: false,
+    };
+  }
+
   return {
     kind: 'approval_hold',
     reversible: false,
@@ -108,6 +120,14 @@ export function afterApprovalGuidanceForTool(toolName: string): Record<string, s
         'Confirm active lifecycle state, then redeploy only if the user wants runtime started.',
       rejected: 'Stop and report that the human rejected the restore request.',
       failed: 'Report the failure; do not claim a container was started.',
+    };
+  }
+
+  if (toolName === 'remove_unused_docker_network') {
+    return {
+      succeeded: 'Re-list Docker networks, then retry the address-pool-blocked deployment.',
+      rejected: 'Stop and report that the operator rejected Docker network cleanup.',
+      failed: 'Report the typed cleanup blocker; do not remove another network as a substitute.',
     };
   }
 

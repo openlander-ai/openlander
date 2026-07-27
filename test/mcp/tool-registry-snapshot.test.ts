@@ -15,6 +15,7 @@ import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { networkOperationToolDefs } from '../../src/tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { volumeToolDefs } from '../../src/tools/defs/volume.js';
@@ -92,6 +93,7 @@ const EXPECTED_TOOLS = [
   'list_buckets',
   'list_data_sources',
   'list_deliveries',
+  'list_docker_networks',
   'list_domain_routes',
   'list_engagements',
   'list_env_vars',
@@ -120,6 +122,7 @@ const EXPECTED_TOOLS = [
   'remove_git_credential',
   'remove_secret_file',
   'remove_service',
+  'remove_unused_docker_network',
   'remove_volume',
   'restart_service',
   'restore_service',
@@ -172,6 +175,7 @@ function getMcpToolDefs(): ToolDef[] {
     ...infraToolDefs,
     ...gitToolDefs,
     ...monitoringToolDefs,
+    ...networkOperationToolDefs,
     ...debugToolDefs,
     ...deliveryToolDefs,
     ...engagementToolDefs,
@@ -199,8 +203,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 127 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(127);
+  it('maintains exactly 129 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(129);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

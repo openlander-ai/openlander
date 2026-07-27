@@ -49,6 +49,7 @@ function resultForMcp(
 export function operationToolDef(
   definition: ApplicationOperationDefinition,
   composite = 'openlander_project',
+  riskLevel: ToolDef['riskLevel'] = 'low',
 ): ToolDef {
   const operationInput = definition.inputSchema as z.ZodObject<z.ZodRawShape>;
   const inputSchema =
@@ -65,7 +66,7 @@ export function operationToolDef(
   return {
     name: definition.name,
     description: definition.description,
-    riskLevel: 'low',
+    riskLevel,
     targets: ['mcp'],
     inputSchema,
     execute: async (args, context) => {

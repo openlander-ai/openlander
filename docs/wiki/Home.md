@@ -63,7 +63,7 @@ to read logs, change repo/config, and call deploy/redeploy explicitly.
 
 ### Integration
 
-- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 127 unique default operations)
+- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 129 unique default operations)
 - [[Integration Guide]] — Connect OpenClaw, Claude Code, Cursor, and more
 
 ---

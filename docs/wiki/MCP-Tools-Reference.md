@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **127 unique default operations** surfaced through those composites
+- **129 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -30,6 +30,7 @@ Agent routing rule of thumb:
 | "Why is this failing?"                             | `openlander_monitor.diagnose_service` with `service_id`                                                     |
 | "What did AI Ops notice?"                          | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
 | "Was this killed by host memory/Docker?"           | `openlander_monitor.diagnose_host_resources`                                                                |
+| "Is Docker's network pool exhausted?"              | `openlander_monitor.list_docker_networks`                                                                   |
 | "Capture this customer review delivery"            | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
 | "Show FDE portfolio blockers across Projects"      | `openlander_project.list_engagements` / `get_engagement`                                                    |
 | "Start a customer engagement and Project"          | `openlander_project.bootstrap_engagement`                                                                   |
@@ -99,6 +100,10 @@ Approval-hold responses include both `actionRunId` and `action_run_id`, plus a
 what to do after approval.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
+`remove_unused_docker_network` follows the same approval hold. It rechecks the
+exact `network_name` and `network_id`, requires zero active endpoints, and never
+removes system/shared, external, or other-instance networks. Label-less legacy
+`ol-*` networks additionally require `allow_legacy_unlabeled=true`.
 
 **Project/app hard delete and purge remain human UI-only.** Composites do not expose
 `delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to those names return
@@ -126,7 +131,7 @@ Composite catalog:
 | `openlander_project`         | 46           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
 | `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
-| `openlander_monitor`         | 13           | Logs, alerts, AI Ops briefings, topology, system stats, host diagnosis, probes      |
+| `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
@@ -148,7 +153,7 @@ Composite catalog:
 | [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection                        |
 | [Domains](#domains)                                      | 2     | Register Host/path domain routes                                |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                                   |
-| [Monitoring](#monitoring--logs)                          | 12    | Logs, stats, alerts, AI Ops briefings, host diagnosis           |
+| [Monitoring](#monitoring--logs)                          | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis   |
 | [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis                          |
 | [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                                    |
 | [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                                       |
@@ -1313,6 +1318,40 @@ or stuck deploys. Does not stop, remove, restart, or clean anything.
 
 Use this before falling back to SSH/Docker when build logs suggest `SIGKILL`,
 OOM, disk pressure, or Docker daemon instability.
+
+### `list_docker_networks` / `remove_unused_docker_network`
+
+`list_docker_networks` is an instance/org-scoped, read-only inventory for Docker
+network address-pool incidents. It returns compact rows with `network_id`,
+`network_name`, subnet, endpoint count, instance ownership, `cleanup_eligible`,
+and a machine-readable `cleanup_blocker`. External and system networks are omitted
+by default; pass `include_external=true` to include them in the returned rows.
+Summary counts always cover the complete Docker network inventory.
+
+`remove_unused_docker_network` removes one exact network only after all of these
+conditions are revalidated immediately before removal:
+
+- `network_name` and `network_id` still identify the same Docker object
+- endpoint count is zero
+- driver is `bridge` and scope is `local`
+- the network belongs to the current OpenLander instance; or it is a label-less
+  legacy `ol-*` network and `allow_legacy_unlabeled=true`
+- it is not a Docker system network, the shared OpenLander network, an external
+  network, or a network owned by another OpenLander instance
+
+MCP calls enter the human approval queue and return `action_run_id` plus
+`poll_call`; they do not remove the network immediately. Project- and
+service-scoped tokens receive `SCOPE_VIOLATION`. Raw REST API-token mutation is
+also rejected; an authenticated web session may execute the operation after the
+operator has reviewed the exact name and id.
+
+| Parameter                | Type    | Required | Description                                            |
+| ------------------------ | ------- | -------- | ------------------------------------------------------ |
+| `include_external`       | boolean | No       | Include external and system networks in inventory rows |
+| `network_name`           | string  | Yes      | Exact name returned by `list_docker_networks`          |
+| `network_id`             | string  | Yes      | Exact immutable id returned by the inventory           |
+| `allow_legacy_unlabeled` | boolean | No       | Required for a label-less legacy `ol-*` network        |
+| `idempotency_key`        | string  | Yes      | Stable key for an exact cleanup command retry          |
 
 ### `get_project_stats`
 

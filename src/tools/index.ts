@@ -11,6 +11,7 @@ import { envToolDefs } from './defs/env.js';
 import { gitToolDefs } from './defs/git.js';
 import { infraToolDefs } from './defs/infra.js';
 import { monitoringToolDefs } from './defs/monitoring.js';
+import { networkOperationToolDefs } from './defs/network-operations.js';
 import { projectOpsToolDefs } from './defs/project-ops.js';
 import { deliveryToolDefs } from './defs/delivery.js';
 import { engagementToolDefs } from './defs/engagement.js';
@@ -31,6 +32,7 @@ export {
   gitToolDefs,
   infraToolDefs,
   monitoringToolDefs,
+  networkOperationToolDefs,
   projectOpsToolDefs,
   deliveryToolDefs,
   engagementToolDefs,
@@ -59,6 +61,7 @@ const agentToolDefs: ToolDef[] = [
   ...infraToolDefs,
   ...gitToolDefs,
   ...monitoringToolDefs,
+  ...networkOperationToolDefs,
   ...debugToolDefs,
 ];
 

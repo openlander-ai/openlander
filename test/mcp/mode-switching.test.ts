@@ -15,6 +15,7 @@ import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { networkOperationToolDefs } from '../../src/tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { volumeToolDefs } from '../../src/tools/defs/volume.js';
@@ -43,6 +44,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...infraToolDefs,
     ...gitToolDefs,
     ...monitoringToolDefs,
+    ...networkOperationToolDefs,
     ...debugToolDefs,
     ...(platformToolsEnabled
       ? [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs]
@@ -55,10 +57,10 @@ function isMcpTargeted(def: ToolDef): boolean {
 }
 
 describe('MCP Composite Tools', () => {
-  it('returns 5 composite tools from 127 underlying default tool defs', () => {
+  it('returns 5 composite tools from 129 underlying default tool defs', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
-    expect(mcpDefs).toHaveLength(127);
+    expect(mcpDefs).toHaveLength(129);
 
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(5);
