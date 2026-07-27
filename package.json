@@ -49,6 +49,7 @@
     "test:api-contract": "vitest run --config vitest.release.config.ts test/contract/system-routes-services.test.ts test/console-contract.test.ts",
     "test:watch": "vitest --config vitest.release.config.ts --watch",
     "test:coverage": "vitest run --config vitest.release.config.ts --coverage",
+    "qa:fde-contract": "mkdir -p reports && HUSKY=0 npm ci && vitest run --config vitest.release.config.ts --reporter=default --reporter=junit --outputFile=reports/fde-agent-contract.junit.xml test/e2e-interface-first-agent-contract.test.ts",
     "qa:i18n": "vitest run test/web/korean-localization-quality.test.ts",
     "qa:release": "npm run qa:i18n && npm run lint -- --quiet && npm run typecheck && npm run test:backend:release && npm run build",
     "qa:rc-smoke": "bash scripts/rc-cold-agent-smoke.sh",
