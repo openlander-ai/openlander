@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.12] - 2026-07-27
+
+### Added
+
+- Add the repository-owned FDE Delivery manifest and release contract that
+  exercises Agent planning, quality checks, handoff, immutable Release
+  Promotion, weekly reporting, and Completion Evidence.
+- Add Agent-facing Docker network inventory and approval-gated removal of an
+  exact unused OpenLander network through the shared operation interfaces.
+
+### Changed
+
+- Show only the latest Promotion result for each Environment in customer weekly
+  reports, while preserving the full attempt history in internal evidence.
+
+### Fixed
+
+- Retry transient Promotion Smoke failures within the configured deadline,
+  limit each individual probe, fail permanent HTTP errors immediately, and
+  retain useful connection diagnostics.
+- Hold candidate port reservations until Promotion commit or cleanup so
+  concurrent Promotions cannot reuse a port before runtime state is persisted.
+- Keep Docker address-pool recovery scoped to an exact unused OpenLander
+  network and reject active, shared, external, system, and other-instance
+  networks.
+
 ## [0.2.12-rc.2] - 2026-07-27
 
 ### Fixed
