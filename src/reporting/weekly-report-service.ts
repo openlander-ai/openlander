@@ -23,6 +23,7 @@ const PAGE_HEIGHT = 841.89;
 const MARGIN = 48;
 
 type ReportLocale = 'en' | 'ko';
+type ReportPdfRenderer = (title: string, lines: string[]) => Promise<Uint8Array>;
 
 const KOREAN_STATUS: Readonly<Record<string, string>> = {
   approved: '승인됨',
@@ -420,6 +421,7 @@ export class WeeklyReportService {
     private readonly engagements: EngagementService,
     private readonly artifacts: ArtifactStore,
     private readonly resolveLocale: () => ReportLocale = () => 'en',
+    private readonly renderPdf: ReportPdfRenderer = reportPdf,
   ) {}
 
   async generate(input: {
@@ -562,14 +564,14 @@ export class WeeklyReportService {
     // Font subsetting is CPU intensive. Keep the two renders sequential so one report cannot
     // saturate a small runner (or the self-hosted instance) with duplicate fontkit work.
     const storedInternalPdf = await this.artifacts.storeBuffer(
-      await reportPdf(internalTitle, internalReportLines),
+      await this.renderPdf(internalTitle, internalReportLines),
       {
         filename: `${report.id}-internal.pdf`,
         declaredMimeType: 'application/pdf',
       },
     );
     const storedCustomerPdf = await this.artifacts.storeBuffer(
-      await reportPdf(customerTitle, customerReportLines),
+      await this.renderPdf(customerTitle, customerReportLines),
       {
         filename: `${report.id}-customer.pdf`,
         declaredMimeType: 'application/pdf',
