@@ -43,8 +43,11 @@ output/
 /web/dist/
 
 
-# Runtime data
-.openlander/
+# Repository manifests; keep any other local OpenLander state out of Git.
+.openlander/*
+!.openlander/project.yml
+!.openlander/delivery.yml
+/reports/
 *.sock
 
 # Internal dev files (not part of OSS release)

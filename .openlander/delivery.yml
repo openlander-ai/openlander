@@ -1,0 +1,11 @@
+version: 1
+runner:
+  image: node:22-bookworm-slim
+  timeout_seconds: 600
+checks:
+  - key: fde-agent-contract
+    gate: qa
+    command: [npm, run, qa:fde-contract]
+    report:
+      path: reports/fde-agent-contract.junit.xml
+      format: junit
