@@ -347,6 +347,46 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   ];
 }
 
+function latestPromotionsByEnvironment(
+  promotions: Array<Record<string, unknown>>,
+  environments: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const promotion of promotions) {
+    const environmentId = display(promotion['project_environment_id']);
+    if (!environmentId) continue;
+    const current = latest.get(environmentId);
+    if (!current) {
+      latest.set(environmentId, promotion);
+      continue;
+    }
+    const promotionOrder = `${display(promotion['created_at'])}\u0000${display(promotion['id'])}`;
+    const currentOrder = `${display(current['created_at'])}\u0000${display(current['id'])}`;
+    if (promotionOrder.localeCompare(currentOrder) > 0) latest.set(environmentId, promotion);
+  }
+
+  const environmentOrder = new Map(
+    [...environments]
+      .sort((left, right) => {
+        const leftOrder = Number(left['promotion_order']);
+        const rightOrder = Number(right['promotion_order']);
+        if (Number.isFinite(leftOrder) && Number.isFinite(rightOrder) && leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return display(left['display_name']).localeCompare(display(right['display_name']));
+      })
+      .map((environment, index) => [display(environment['id']), index]),
+  );
+  return [...latest.values()].sort((left, right) => {
+    const leftOrder = environmentOrder.get(display(left['project_environment_id'])) ?? Infinity;
+    const rightOrder = environmentOrder.get(display(right['project_environment_id'])) ?? Infinity;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return display(left['project_environment_id']).localeCompare(
+      display(right['project_environment_id']),
+    );
+  });
+}
+
 function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale): string[] {
   const detail = snapshot['engagement'] as Record<string, unknown>;
   const evidence = snapshot['evidence'] as Record<string, unknown>;
@@ -363,6 +403,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
   const environments = evidence['environments'] as Array<Record<string, unknown>>;
   const environmentById = new Map(environments.map((entry) => [entry['id'], entry]));
+  const latestPromotions = latestPromotionsByEnvironment(promotions, environments);
   if (locale === 'ko') {
     return [
       `고객: ${String(detail['customer_name'])}`,
@@ -381,7 +422,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
         (release) =>
           `릴리스 ${String(release['version'])}: ${statusLabel(release['status'], locale)}`,
       ),
-      ...promotions.map((promotion) => {
+      ...latestPromotions.map((promotion) => {
         const environment = environmentById.get(promotion['project_environment_id']);
         return `환경 ${String(environment?.['display_name'] ?? promotion['project_environment_id'])}: ${statusLabel(promotion['status'], locale)}`;
       }),
@@ -405,7 +446,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
     ...customerReleases.map(
       (release) => `Release ${String(release['version'])}: ${String(release['status'])}`,
     ),
-    ...promotions.map((promotion) => {
+    ...latestPromotions.map((promotion) => {
       const environment = environmentById.get(promotion['project_environment_id']);
       return `Environment ${String(environment?.['display_name'] ?? promotion['project_environment_id'])}: ${String(promotion['status'])}`;
     }),

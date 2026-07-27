@@ -53,10 +53,16 @@ async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
         project_environment_id: 'environment-production',
         status: 'succeeded',
         health_status: 'healthy',
+        created_at: '2026-07-24T12:00:00.000Z',
       },
     ],
     environments: [
-      { id: 'environment-production', display_name: 'Production', tier: 'production' },
+      {
+        id: 'environment-production',
+        display_name: 'Production',
+        tier: 'production',
+        promotion_order: 4,
+      },
     ],
     activity: [
       {
@@ -191,6 +197,32 @@ describe('WeeklyReportService', () => {
     expect(published.internal_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.customer_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(published.evidence_sha256).toBe(draft.evidence_sha256);
+  }, 120_000);
+
+  it('shows only the latest Promotion result for each Environment in the customer report', async () => {
+    const harness = await createHarness();
+    harness.evidence.promotions.unshift({
+      id: 'promotion-failed',
+      project_environment_id: 'environment-production',
+      status: 'failed',
+      health_status: 'unhealthy',
+      created_at: '2026-07-23T12:00:00.000Z',
+    });
+    const draft = await harness.service.generate({
+      engagementId: 'engagement-1',
+      periodStart: '2026-07-20',
+      periodEnd: '2026-07-26',
+      actor: 'agent-a',
+    });
+
+    const published = await harness.service.publish(draft.id);
+    const customerHtmlBlob = harness.stored.get(String(published.customer_html_blob_id));
+    if (!customerHtmlBlob) throw new Error('Published customer HTML blob is missing');
+    const customerHtml = (await harness.artifacts.read(customerHtmlBlob.storageKey)).toString();
+
+    expect(customerHtml.match(/Environment Production:/g)).toHaveLength(1);
+    expect(customerHtml).toContain('Environment Production: succeeded');
+    expect(customerHtml).not.toContain('Environment Production: failed');
   }, 120_000);
 
   it('pins Korean report copy to the locale in the immutable evidence snapshot', async () => {
