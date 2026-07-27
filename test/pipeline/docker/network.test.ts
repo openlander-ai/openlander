@@ -16,6 +16,7 @@ const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
 const mockGetNetwork = vi.fn();
 const mockCreateNetwork = vi.fn();
+const mockListNetworks = vi.fn();
 const mockDemuxStream = vi.fn();
 const mockDf = vi.fn();
 const mockGetVolume = vi.fn();
@@ -33,6 +34,7 @@ const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
   this.getContainer = mockGetContainer;
   this.getNetwork = mockGetNetwork;
   this.createNetwork = mockCreateNetwork;
+  this.listNetworks = mockListNetworks;
   this.df = mockDf;
   this.getVolume = mockGetVolume;
   this.listVolumes = mockListVolumes;
@@ -66,6 +68,7 @@ const resetMocks = () => {
   mockFollowProgress.mockReset();
   mockGetNetwork.mockReset();
   mockCreateNetwork.mockReset();
+  mockListNetworks.mockReset().mockResolvedValue([]);
   mockDemuxStream.mockReset();
   mockDf.mockReset();
   mockGetVolume.mockReset();
@@ -188,6 +191,259 @@ describe('getNetworkInfo', () => {
 
     const docker = new Docker();
     await expect(docker.getNetworkInfo('broken')).rejects.toThrow('driver error');
+  });
+});
+
+describe('network cleanup inventory', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('classifies current, other-instance, legacy, external, and system networks', async () => {
+    mockListNetworks.mockResolvedValueOnce([
+      {
+        Id: 'current-id',
+        Name: 'ol-current',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.managed': 'true', 'openlander.instance': 'olinst_a' },
+        Containers: {},
+        IPAM: { Config: [{ Subnet: '172.30.0.0/16' }] },
+      },
+      {
+        Id: 'other-id',
+        Name: 'ol-other',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.managed': 'true', 'openlander.instance': 'olinst_b' },
+        Containers: {},
+        IPAM: { Config: [] },
+      },
+      {
+        Id: 'legacy-id',
+        Name: 'ol-legacy',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: {},
+        Containers: {},
+        IPAM: { Config: [] },
+      },
+      {
+        Id: 'external-id',
+        Name: 'compose_default',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'com.docker.compose.network': 'default' },
+        Containers: {},
+        IPAM: { Config: [] },
+      },
+      {
+        Id: 'system-id',
+        Name: 'bridge',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: {},
+        Containers: { c1: { Name: 'runtime' } },
+        IPAM: { Config: [{ Subnet: '172.17.0.0/16' }] },
+      },
+    ]);
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.listNetworks()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'current-id',
+        ownership: 'current_instance',
+        cleanupEligible: true,
+        cleanupBlocker: null,
+        subnets: ['172.30.0.0/16'],
+      }),
+      expect.objectContaining({
+        id: 'other-id',
+        ownership: 'other_instance',
+        cleanupEligible: false,
+        cleanupBlocker: 'different_instance',
+      }),
+      expect.objectContaining({
+        id: 'legacy-id',
+        ownership: 'legacy_unlabeled',
+        cleanupEligible: false,
+        cleanupBlocker: 'legacy_confirmation_required',
+      }),
+      expect.objectContaining({
+        id: 'external-id',
+        ownership: 'external',
+        cleanupBlocker: 'unmanaged_network',
+      }),
+      expect.objectContaining({
+        id: 'system-id',
+        ownership: 'system',
+        cleanupBlocker: 'system_network',
+        endpointCount: 1,
+      }),
+    ]);
+  });
+
+  it('removes an exact current-instance network only while it has zero endpoints', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'network-id',
+        Name: 'ol-demo',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.managed': 'true', 'openlander.instance': 'olinst_a' },
+        Containers: {},
+        IPAM: { Config: [] },
+      }),
+      remove,
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-demo',
+        expectedNetworkId: 'network-id',
+      }),
+    ).resolves.toMatchObject({ id: 'network-id', endpointCount: 0 });
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
+  it('requires the inspected network id to match before removal', async () => {
+    const remove = vi.fn();
+    mockGetNetwork.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'replacement-id',
+        Name: 'ol-demo',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.instance': 'olinst_a' },
+        Containers: {},
+        IPAM: { Config: [] },
+      }),
+      remove,
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-demo',
+        expectedNetworkId: 'old-id',
+      }),
+    ).rejects.toMatchObject({
+      code: 'NETWORK_CLEANUP_BLOCKED',
+      details: { reason: 'network_id_changed' },
+    });
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('refuses active and other-instance networks', async () => {
+    const remove = vi.fn();
+    mockGetNetwork
+      .mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          Id: 'active-id',
+          Name: 'ol-active',
+          Driver: 'bridge',
+          Scope: 'local',
+          Labels: { 'openlander.instance': 'olinst_a' },
+          Containers: { c1: { Name: 'app' } },
+          IPAM: { Config: [] },
+        }),
+        remove,
+      })
+      .mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          Id: 'other-id',
+          Name: 'ol-other',
+          Driver: 'bridge',
+          Scope: 'local',
+          Labels: { 'openlander.instance': 'olinst_b' },
+          Containers: {},
+          IPAM: { Config: [] },
+        }),
+        remove,
+      });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-active',
+        expectedNetworkId: 'active-id',
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'active_endpoints' } });
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-other',
+        expectedNetworkId: 'other-id',
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'different_instance' } });
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('requires explicit legacy opt-in and never removes external networks', async () => {
+    const legacyRemove = vi.fn().mockResolvedValue(undefined);
+    const externalRemove = vi.fn();
+    const sharedRemove = vi.fn();
+    const legacyInfo = {
+      Id: 'legacy-id',
+      Name: 'ol-legacy',
+      Driver: 'bridge',
+      Scope: 'local',
+      Labels: {},
+      Containers: {},
+      IPAM: { Config: [] },
+    };
+    mockGetNetwork
+      .mockReturnValueOnce({ inspect: vi.fn().mockResolvedValue(legacyInfo), remove: legacyRemove })
+      .mockReturnValueOnce({ inspect: vi.fn().mockResolvedValue(legacyInfo), remove: legacyRemove })
+      .mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          ...legacyInfo,
+          Id: 'external-id',
+          Name: 'compose_default',
+        }),
+        remove: externalRemove,
+      })
+      .mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          ...legacyInfo,
+          Id: 'shared-id',
+          Name: 'openlander',
+          Labels: { 'openlander.managed': 'true' },
+        }),
+        remove: sharedRemove,
+      });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-legacy',
+        expectedNetworkId: 'legacy-id',
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'legacy_confirmation_required' } });
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'ol-legacy',
+        expectedNetworkId: 'legacy-id',
+        allowLegacyUnlabeled: true,
+      }),
+    ).resolves.toMatchObject({ ownership: 'legacy_unlabeled' });
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'compose_default',
+        expectedNetworkId: 'external-id',
+        allowLegacyUnlabeled: true,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'unmanaged_network' } });
+    await expect(
+      docker.removeUnusedNetwork({
+        networkName: 'openlander',
+        expectedNetworkId: 'shared-id',
+        allowLegacyUnlabeled: true,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'shared_network' } });
+    expect(legacyRemove).toHaveBeenCalledOnce();
+    expect(externalRemove).not.toHaveBeenCalled();
+    expect(sharedRemove).not.toHaveBeenCalled();
   });
 });
 

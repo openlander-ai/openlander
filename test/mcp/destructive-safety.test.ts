@@ -142,6 +142,35 @@ describe('MCP destructive safety', () => {
     );
   });
 
+  it('holds exact unused-network cleanup for human approval with a compact effect preview', async () => {
+    const context = createContext({ projectId: null });
+    const result = await maybeHandleMcpSafety(
+      createTool('remove_unused_docker_network'),
+      {
+        network_name: 'ol-legacy',
+        network_id: 'network-id',
+        allow_legacy_unlabeled: true,
+        idempotency_key: 'cleanup-network-1',
+      },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'pending_approval',
+      action_run_id: 'action-run-1',
+      tool: 'remove_unused_docker_network',
+      effect_preview: {
+        kind: 'remove_unused_docker_network',
+        runtime: 'remove_zero_endpoint_network',
+        data: 'preserve_containers_volumes',
+        hard_delete: false,
+      },
+    });
+    expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: '', toolName: 'remove_unused_docker_network' }),
+    );
+  });
+
   it('routes deployable service archive/restore to pending approval rows', async () => {
     for (const toolName of ['archive_service', 'unarchive_service'] as const) {
       const context = createContext();

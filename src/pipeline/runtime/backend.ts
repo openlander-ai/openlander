@@ -102,6 +102,12 @@ export interface RuntimeBackend {
   getNetworkInfo(
     ...args: Parameters<NetworkOps['getNetworkInfo']>
   ): ReturnType<NetworkOps['getNetworkInfo']>;
+  listNetworks(
+    ...args: Parameters<NetworkOps['listNetworks']>
+  ): ReturnType<NetworkOps['listNetworks']>;
+  removeUnusedNetwork(
+    ...args: Parameters<NetworkOps['removeUnusedNetwork']>
+  ): ReturnType<NetworkOps['removeUnusedNetwork']>;
   ensureProjectNetwork(
     ...args: Parameters<NetworkOps['ensureProjectNetwork']>
   ): ReturnType<NetworkOps['ensureProjectNetwork']>;

@@ -1,14 +1,37 @@
 import type Dockerode from 'dockerode';
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
-import { isDockerNotFoundError, NetworkAddressPoolExhaustedError } from '../../errors.js';
+import {
+  isDockerNotFoundError,
+  NetworkAddressPoolExhaustedError,
+  NetworkCleanupBlockedError,
+  NetworkNotFoundError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName } from '../helpers.js';
 import type { DockerContext } from './context.js';
 import { isAlreadyConnectedError, isNotConnectedToNetwork, withTimeout } from './helpers.js';
 
 const NETWORK_INSPECT_TIMEOUT_MS = 15_000;
+const SYSTEM_NETWORK_NAMES = new Set(['bridge', 'host', 'none']);
 
 const log = createModuleLogger('docker:network');
+
+export type DockerNetworkOwnership =
+  'current_instance' | 'other_instance' | 'legacy_unlabeled' | 'external' | 'system';
+
+export interface DockerNetworkSummary {
+  id: string;
+  name: string;
+  driver: string;
+  scope: string;
+  subnets: string[];
+  labels: Record<string, string>;
+  endpointCount: number;
+  ownerInstanceId: string | null;
+  ownership: DockerNetworkOwnership;
+  cleanupEligible: boolean;
+  cleanupBlocker: string | null;
+}
 
 function isAddressPoolExhausted(error: unknown): boolean {
   const message =
@@ -21,6 +44,129 @@ function isAddressPoolExhausted(error: unknown): boolean {
 
 export class NetworkOps {
   constructor(private readonly ctx: DockerContext) {}
+
+  private summarizeNetwork(info: Dockerode.NetworkInspectInfo): DockerNetworkSummary {
+    const name = info.Name;
+    const labels = info.Labels ?? {};
+    const ownerInstanceId = labels[DOCKER_LABELS.INSTANCE] ?? null;
+    const endpointCount = Object.keys(info.Containers ?? {}).length;
+    const isSystem = SYSTEM_NETWORK_NAMES.has(name);
+    const isShared = name === SHARED_NETWORK_NAME;
+    const isLegacyOpenLander = labels[DOCKER_LABELS.MANAGED] === 'true' || name.startsWith('ol-');
+
+    let ownership: DockerNetworkOwnership;
+    if (isSystem) {
+      ownership = 'system';
+    } else if (ownerInstanceId) {
+      ownership =
+        this.ctx.instanceId && ownerInstanceId === this.ctx.instanceId
+          ? 'current_instance'
+          : 'other_instance';
+    } else if (isLegacyOpenLander) {
+      ownership = 'legacy_unlabeled';
+    } else {
+      ownership = 'external';
+    }
+
+    let cleanupBlocker: string | null = null;
+    if (isSystem) cleanupBlocker = 'system_network';
+    else if (isShared) cleanupBlocker = 'shared_network';
+    else if (info.Driver !== 'bridge') cleanupBlocker = 'unsupported_network_driver';
+    else if (info.Scope !== 'local') cleanupBlocker = 'unsupported_network_scope';
+    else if (endpointCount > 0) cleanupBlocker = 'active_endpoints';
+    else if (ownership === 'other_instance') cleanupBlocker = 'different_instance';
+    else if (ownership === 'legacy_unlabeled') cleanupBlocker = 'legacy_confirmation_required';
+    else if (ownership === 'external') cleanupBlocker = 'unmanaged_network';
+
+    return {
+      id: info.Id,
+      name,
+      driver: info.Driver,
+      scope: info.Scope,
+      subnets: (info.IPAM?.Config ?? [])
+        .map((config) => config.Subnet)
+        .filter((subnet): subnet is string => typeof subnet === 'string' && subnet.length > 0),
+      labels,
+      endpointCount,
+      ownerInstanceId,
+      ownership,
+      cleanupEligible: cleanupBlocker === null,
+      cleanupBlocker,
+    };
+  }
+
+  /** List Docker networks with ownership and zero-endpoint cleanup eligibility. */
+  async listNetworks(): Promise<DockerNetworkSummary[]> {
+    const networks = await withTimeout(
+      this.ctx.client.listNetworks(),
+      NETWORK_INSPECT_TIMEOUT_MS,
+      'Docker network list',
+    );
+    return networks.map((network) => this.summarizeNetwork(network));
+  }
+
+  /**
+   * Remove one exact zero-endpoint network after rechecking ownership and identity.
+   * Legacy OpenLander networks require an explicit opt-in; external and other-instance
+   * networks are never removed through this operation.
+   */
+  async removeUnusedNetwork(input: {
+    networkName: string;
+    expectedNetworkId: string;
+    allowLegacyUnlabeled?: boolean;
+  }): Promise<DockerNetworkSummary> {
+    const network = this.ctx.client.getNetwork(input.networkName);
+    let info: Dockerode.NetworkInspectInfo;
+    try {
+      info = await withTimeout(
+        network.inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${input.networkName})`,
+      );
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new NetworkNotFoundError(input.networkName);
+      throw error;
+    }
+
+    const summary = this.summarizeNetwork(info);
+    if (summary.id !== input.expectedNetworkId) {
+      throw new NetworkCleanupBlockedError(input.networkName, 'network_id_changed', {
+        expectedNetworkId: input.expectedNetworkId,
+        actualNetworkId: summary.id,
+      });
+    }
+    if (summary.endpointCount > 0) {
+      throw new NetworkCleanupBlockedError(input.networkName, 'active_endpoints', {
+        endpointCount: summary.endpointCount,
+      });
+    }
+    if (summary.cleanupBlocker && summary.cleanupBlocker !== 'legacy_confirmation_required') {
+      throw new NetworkCleanupBlockedError(input.networkName, summary.cleanupBlocker, {
+        ownerInstanceId: summary.ownerInstanceId,
+      });
+    }
+    if (summary.ownership === 'legacy_unlabeled') {
+      if (!input.allowLegacyUnlabeled) {
+        throw new NetworkCleanupBlockedError(input.networkName, 'legacy_confirmation_required');
+      }
+    }
+
+    try {
+      await withTimeout(
+        network.remove(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network remove (${input.networkName})`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('active endpoints')) {
+        throw new NetworkCleanupBlockedError(input.networkName, 'active_endpoints');
+      }
+      if (isDockerNotFoundError(error)) throw new NetworkNotFoundError(input.networkName);
+      throw error;
+    }
+    return summary;
+  }
 
   /** Attach a container to the shared OpenLander network with a DNS alias. Silently succeeds if already connected. */
   async ensureSharedNetworkAttachment(containerId: string, alias: string): Promise<void> {

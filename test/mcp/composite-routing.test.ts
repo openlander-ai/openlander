@@ -15,6 +15,7 @@ import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { networkOperationToolDefs } from '../../src/tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { volumeToolDefs } from '../../src/tools/defs/volume.js';
@@ -44,6 +45,7 @@ const allToolDefs: ToolDef[] = [
   ...infraToolDefs,
   ...gitToolDefs,
   ...monitoringToolDefs,
+  ...networkOperationToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
   ...engagementToolDefs,

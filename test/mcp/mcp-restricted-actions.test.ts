@@ -18,6 +18,7 @@ import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { networkOperationToolDefs } from '../../src/tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { volumeToolDefs } from '../../src/tools/defs/volume.js';
@@ -38,6 +39,7 @@ const ALL_DEFS = [
   ...infraToolDefs,
   ...gitToolDefs,
   ...monitoringToolDefs,
+  ...networkOperationToolDefs,
   ...debugToolDefs,
   ...deliveryToolDefs,
   ...engagementToolDefs,
@@ -82,6 +84,7 @@ describe('MCP restricted-action policy (single source)', () => {
     expect(APPROVAL_HOLD_TOOLS).toContain('unarchive_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('bulk_delete_env_vars');
     expect(APPROVAL_HOLD_TOOLS).toContain('remove_secret_file');
+    expect(APPROVAL_HOLD_TOOLS).toContain('remove_unused_docker_network');
     // delete_service is a (non-tool) alias only — it used to be duplicated into
     // the blocked-tools group, where it was dead since it isn't a real tool def.
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_service');

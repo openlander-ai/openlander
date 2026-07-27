@@ -54,6 +54,7 @@ export const APPROVAL_HOLD_TOOLS = [
   'bulk_delete_env_vars',
   'remove_secret_file',
   'remove_git_credential',
+  'remove_unused_docker_network',
 ] as const;
 
 export type HumanUiOnlyTool = (typeof HUMAN_UI_ONLY_TOOLS)[number];

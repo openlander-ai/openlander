@@ -24,6 +24,7 @@ import { envToolDefs } from '../tools/defs/env.js';
 import { gitToolDefs } from '../tools/defs/git.js';
 import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
+import { networkOperationToolDefs } from '../tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { deliveryToolDefs } from '../tools/defs/delivery.js';
 import { engagementToolDefs } from '../tools/defs/engagement.js';
@@ -65,6 +66,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...infraToolDefs,
     ...gitToolDefs,
     ...monitoringToolDefs,
+    ...networkOperationToolDefs,
     ...debugToolDefs,
     ...(platformToolsEnabled
       ? [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs]
@@ -108,8 +110,8 @@ Key actions: create_service, list_services, get_service_credentials, backup_serv
 All actions: action="help"
 
 ## openlander_monitor
-Monitoring & diagnostics: instance info, one-shot service diagnosis, host resource checks, logs, alerts, system stats, and connectivity checks.
-Key actions: get_instance_info, diagnose_service, diagnose_host_resources, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
+Monitoring & diagnostics: instance info, one-shot service diagnosis, host resource checks, Docker network inventory, logs, alerts, system stats, and connectivity checks.
+Key actions: get_instance_info, diagnose_service, diagnose_host_resources, list_docker_networks, remove_unused_docker_network, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage

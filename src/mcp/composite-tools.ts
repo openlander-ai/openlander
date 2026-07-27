@@ -215,7 +215,7 @@ export const SERVICE_ACTIONS = [
  * - Host/endpoint connectivity probing
  * - One-shot service diagnostics
  * - Host resource pressure diagnosis
- * Total: 13 tools
+ * Total: 15 tools
  */
 export const MONITOR_ACTIONS = [
   'get_instance_info',
@@ -224,6 +224,8 @@ export const MONITOR_ACTIONS = [
   'get_logs',
   'diagnose_service',
   'diagnose_host_resources',
+  'list_docker_networks',
+  'remove_unused_docker_network',
   'get_system_stats',
   'get_alerts',
   'dismiss_alert',
@@ -265,7 +267,7 @@ export const PLATFORM_ACTIONS = [
  * - PROJECT_ACTIONS: 30 tools
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
- * - MONITOR_ACTIONS: 13 tools
+ * - MONITOR_ACTIONS: 15 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
  */

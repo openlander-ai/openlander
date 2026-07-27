@@ -232,4 +232,70 @@ describe('destructive MCP approval executor', () => {
       'succeeded',
     );
   });
+
+  it('executes approved exact unused-network cleanup through the operation registry', async () => {
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-network-cleanup',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'remove_unused_docker_network',
+          args: {
+            network_name: 'ol-legacy',
+            network_id: 'network-id',
+            allow_legacy_unlabeled: true,
+            idempotency_key: 'cleanup-network-1',
+          },
+          targetProjectId: null,
+          requestedAt: '2026-07-27T00:00:00.000Z',
+        }),
+      }),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const operations = {
+      execute: vi.fn().mockResolvedValue({
+        operation_id: 'operation-1',
+        version: 1,
+        replayed: false,
+        result: {
+          status: 'removed',
+          network_name: 'ol-legacy',
+          network_id: 'network-id',
+        },
+      }),
+    };
+    const ctx = {
+      db,
+      operations,
+      config: { mcp: { instanceId: 'olinst_a' } },
+    } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-network-cleanup',
+      approved: true,
+      projectId: '',
+    });
+
+    expect(operations.execute).toHaveBeenCalledWith(
+      ctx,
+      'remove_unused_docker_network',
+      {
+        network_name: 'ol-legacy',
+        network_id: 'network-id',
+        allow_legacy_unlabeled: true,
+      },
+      expect.objectContaining({ idempotencyKey: 'cleanup-network-1' }),
+    );
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(
+      1,
+      'action-run-network-cleanup',
+      'running',
+    );
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-network-cleanup',
+      'succeeded',
+    );
+  });
 });
