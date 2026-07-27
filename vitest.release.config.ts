@@ -28,6 +28,7 @@ export default defineConfig({
       'test/deploy-plan-types.test.ts',
       'test/e2e-docker-cleanup.test.ts',
       'test/e2e-delivery-workspace-live-contract.test.ts',
+      'test/e2e-interface-first-agent-contract.test.ts',
       'test/console-contract.test.ts',
       'test/env-requirements.test.ts',
       'test/env-manager-scope.test.ts',
