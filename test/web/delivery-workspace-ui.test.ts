@@ -25,6 +25,7 @@ describe('Delivery Workspace UI contract', () => {
     expect(workflowSource).toContain("aria-current={active ? 'step' : undefined}");
     expect(workflowSource).toContain("detail.delivery.status === 'delivered'");
     expect(workflowSource).toContain('readiness.blockers.length');
+    expect(workflowSource).toContain("if (pendingExactReview) return 'gates'");
   });
 
   it('restores finalization eligibility only for the current evidence preview', () => {
@@ -32,5 +33,13 @@ describe('Delivery Workspace UI contract', () => {
       'nextDetail.delivery.previewed_evidence_version === nextDetail.delivery.evidence_version',
     );
     expect(detailSource).toContain("key !== 'receipt:preview'");
+  });
+
+  it('shows one exact review target and keeps its acceptance out of generic artifact actions', () => {
+    expect(detailSource).toContain('<ReviewCheckpointCard');
+    expect(detailSource).toContain('acceptDeliveryReview(deliveryId');
+    expect(detailSource).toContain('expected_sha256: artifact.blob.sha256');
+    expect(detailSource).toContain("artifact.status === 'draft' && !reviewTarget");
+    expect(detailSource).toContain('countDeliveryReviewAttention(detail)');
   });
 });

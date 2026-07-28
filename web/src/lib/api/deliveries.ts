@@ -372,6 +372,45 @@ export function setDeliveryArtifactStatus(
   );
 }
 
+export async function acceptDeliveryReview(
+  deliveryId: string,
+  input: {
+    gate_key: string;
+    artifact_id: string;
+    expected_sha256: string;
+  },
+): Promise<{
+  status: 'accepted';
+  delivery_id: string;
+  gate_key: string;
+  artifact_id: string;
+  revision: number;
+  sha256: string;
+  ready_for_next_step: true;
+}> {
+  const response = await fetchWithAuth('/api/v1/operations/accept_delivery_review', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': `review-accept:${input.artifact_id}:${input.expected_sha256}`,
+    },
+    body: JSON.stringify({ delivery_id: deliveryId, ...input }),
+  });
+  if (!response.ok) await throwApiError(response, 'Delivery review acceptance failed');
+  const payload = (await response.json()) as {
+    result: {
+      status: 'accepted';
+      delivery_id: string;
+      gate_key: string;
+      artifact_id: string;
+      revision: number;
+      sha256: string;
+      ready_for_next_step: true;
+    };
+  };
+  return payload.result;
+}
+
 export function recordDeliveryFeedback(
   projectId: string,
   deliveryId: string,

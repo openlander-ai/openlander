@@ -839,6 +839,40 @@ export class DeliveryService {
     return deriveDeliveryReviewStatus(await this.getDeliveryDetail(deliveryId), gateKey);
   }
 
+  async acceptReview(input: {
+    deliveryId: string;
+    gateKey: string;
+    artifactId: string;
+    expectedSha256: string;
+    summary?: string | null;
+    actor: string;
+  }): Promise<DeliveryReviewStatus> {
+    const delivery = await this.requireMutableDelivery(input.deliveryId);
+    const detail = await this.getDeliveryDetail(delivery.id);
+    const artifact = requireDeliveryReviewTarget(detail, input);
+    await this.db.acceptDeliveryReviewCheckpoint({
+      deliveryId: delivery.id,
+      gateKey: input.gateKey,
+      artifactId: artifact.id,
+      expectedSha256: input.expectedSha256,
+      summary: input.summary,
+      recordedBy: input.actor,
+    });
+    await this.audit(
+      delivery,
+      'delivery.review_accepted',
+      'Delivery review accepted',
+      `${artifact.original_filename} revision ${String(artifact.revision)} accepted.`,
+      {
+        gate_key: input.gateKey,
+        artifact_id: artifact.id,
+        revision: artifact.revision,
+        sha256: artifact.blob.sha256,
+      },
+    );
+    return await this.getReviewStatus(delivery.id, input.gateKey);
+  }
+
   async linkDeploy(input: {
     deliveryId: string;
     deployId: string;

@@ -78,6 +78,11 @@ describe('Korean localization quality gate', () => {
     expect(ko.delivery.type.software_release).toBe('소프트웨어 릴리스');
     expect(ko.delivery.gates.defaultLabel.review).toBe('검토');
     expect(ko.delivery.gates.defaultLabel.data).toBe('데이터');
+    expect(ko.delivery.reviewCheckpoint.acceptExactVersion).toBe('이 버전 승인');
+    expect(ko.delivery.reviewCheckpoint.requestChanges).toBe('수정 요청');
+    expect(ko.delivery.reviewCheckpoint.exactVersionHint).toBe(
+      '새 버전이 올라오면 이 승인은 새 버전에 적용되지 않습니다. 새 버전은 다시 검토하세요.',
+    );
     expect(ko.services.managedDetail.field.type).toBe('유형');
     expect(ko.notifications.type['container-crash']).toBe('컨테이너 비정상 종료');
     expect(ko.notifications.type['resource-saturation']).toBe('리소스 사용량 과다');

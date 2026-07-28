@@ -69,6 +69,19 @@ function getWorkflowStages(
   ];
 }
 
+export function getNextDeliveryWorkflowStage(
+  detail: DeliveryDetail,
+  readiness: DeliveryReadiness | null,
+): DeliveryDetailTab | null {
+  const pendingExactReview =
+    detail.delivery.status === 'in_review' &&
+    detail.gates.some(
+      (gate) => gate.gate_type === 'review' && gate.status !== 'passed' && gate.status !== 'waived',
+    );
+  if (pendingExactReview) return 'gates';
+  return getWorkflowStages(detail, readiness).find((stage) => !stage.complete)?.id ?? null;
+}
+
 export function DeliveryWorkflowRail({
   detail,
   readiness,
@@ -82,7 +95,8 @@ export function DeliveryWorkflowRail({
 }) {
   const { t } = useLanguage();
   const stages = getWorkflowStages(detail, readiness);
-  const nextStage = stages.find((stage) => !stage.complete);
+  const nextStageId = getNextDeliveryWorkflowStage(detail, readiness);
+  const nextStage = stages.find((stage) => stage.id === nextStageId);
   const finalized = detail.delivery.status === 'delivered';
 
   return (

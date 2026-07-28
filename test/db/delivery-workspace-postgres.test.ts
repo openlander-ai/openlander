@@ -364,6 +364,83 @@ describeWithDatabase('Delivery Workspace persistence on Postgres', () => {
     });
   });
 
+  it('accepts the exact latest review Artifact and Gate in one persisted checkpoint', async () => {
+    await withIsolatedPostgresDatabase('review_checkpoint', async (url) => {
+      const artifactDirectory = await mkdtemp(join(tmpdir(), 'openlander-review-checkpoint-'));
+      const db = await Database.connect(url);
+      const service = new DeliveryService(db, new ArtifactStore(artifactDirectory));
+      try {
+        const project = await db.createProject({ id: 'project-review', name: 'review-project' });
+        const delivery = await service.createDelivery({
+          projectId: project.id,
+          title: 'Weekly plan review',
+          summary: 'Review one exact proposed change.',
+          deliveryType: 'artifact_delivery',
+          maturity: 'functional_preview',
+          gates: [
+            {
+              gate_key: 'weekly-plan-review',
+              gate_type: 'review',
+              label: 'Weekly plan review',
+              required: true,
+              source: 'manifest',
+              definition_sha256: 'a'.repeat(64),
+            },
+          ],
+        });
+        const artifact = await service.uploadArtifact({
+          deliveryId: delivery.id,
+          source: Readable.from(['# Proposed weekly plan\n']),
+          filename: 'weekly-plan.md',
+          declaredMimeType: 'text/markdown',
+          logicalKey: 'weekly-plan',
+          revision: 1,
+          kind: 'markdown',
+        });
+        const blob = await db.getArtifactBlob(artifact.blob_id);
+        if (!blob) throw new Error('Expected review Artifact blob.');
+
+        await service.requestReview({
+          deliveryId: delivery.id,
+          gateKey: 'weekly-plan-review',
+          artifactId: artifact.id,
+          expectedSha256: blob.sha256,
+          idempotencyKey: 'weekly-plan-request',
+          actor: 'project-agent',
+        });
+        await expect(
+          service.acceptReview({
+            deliveryId: delivery.id,
+            gateKey: 'weekly-plan-review',
+            artifactId: artifact.id,
+            expectedSha256: 'f'.repeat(64),
+            actor: 'web-session',
+          }),
+        ).rejects.toMatchObject({ code: 'ARTIFACT_VALIDATION_FAILED' });
+
+        await expect(
+          service.acceptReview({
+            deliveryId: delivery.id,
+            gateKey: 'weekly-plan-review',
+            artifactId: artifact.id,
+            expectedSha256: blob.sha256,
+            actor: 'web-session',
+          }),
+        ).resolves.toMatchObject({
+          state: 'accepted',
+          ready_for_next_step: true,
+          artifact: { id: artifact.id, status: 'approved', sha256: blob.sha256 },
+          gate: { status: 'passed', recorded_by: 'web-session' },
+          approval_evidence_id: null,
+          blockers: [],
+        });
+      } finally {
+        await db.close();
+        await rm(artifactDirectory, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('dogfoods a synthetic storyboard state flow through immutable Receipt download', async () => {
     await withIsolatedPostgresDatabase('dogfood', async (url) => {
       const artifactDirectory = await mkdtemp(join(tmpdir(), 'openlander-delivery-dogfood-'));

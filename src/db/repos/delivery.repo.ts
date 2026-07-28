@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm';
 import {
+  ArtifactNotFoundError,
   ArtifactValidationError,
   DeliveryIdempotencyConflictError,
   DeliveryNotFoundError,
@@ -830,6 +831,144 @@ export class DeliveryRepo {
       }
       await touchMutableDelivery(tx, input.deliveryId);
       return row;
+    });
+  }
+
+  async acceptReviewCheckpoint(input: {
+    deliveryId: string;
+    gateKey: string;
+    artifactId: string;
+    expectedSha256: string;
+    summary?: string | null;
+    recordedBy: string;
+  }): Promise<{ artifact: DeliveryArtifactRow; gate: DeliveryGateRow }> {
+    return await this.db.transaction(async (tx) => {
+      const [delivery] = await tx
+        .select({ id: deliveries.id, status: deliveries.status })
+        .from(deliveries)
+        .where(eq(deliveries.id, input.deliveryId))
+        .for('update');
+      if (!delivery) throw new DeliveryNotFoundError(input.deliveryId);
+      if (delivery.status !== 'in_review') {
+        throw new DeliveryStateError(
+          input.deliveryId,
+          'Only a Delivery currently in review can accept a review checkpoint.',
+          delivery.status,
+        );
+      }
+
+      const [gate] = await tx
+        .select()
+        .from(deliveryGates)
+        .where(
+          and(
+            eq(deliveryGates.delivery_id, input.deliveryId),
+            eq(deliveryGates.gate_key, input.gateKey),
+          ),
+        )
+        .for('update');
+      if (!gate || gate.gate_type !== 'review') {
+        throw new ArtifactValidationError('The selected Gate is not a Delivery review Gate.', {
+          deliveryId: input.deliveryId,
+          gateKey: input.gateKey,
+        });
+      }
+      if (gate.report_artifact_id !== input.artifactId) {
+        throw new ArtifactValidationError(
+          'The selected artifact is not the exact version bound to this review Gate.',
+          {
+            deliveryId: input.deliveryId,
+            gateKey: input.gateKey,
+            artifactId: input.artifactId,
+            boundArtifactId: gate.report_artifact_id,
+          },
+        );
+      }
+
+      const [target] = await tx
+        .select({ artifact: deliveryArtifacts, blob: artifactBlobs })
+        .from(deliveryArtifacts)
+        .innerJoin(artifactBlobs, eq(deliveryArtifacts.blob_id, artifactBlobs.id))
+        .where(
+          and(
+            eq(deliveryArtifacts.id, input.artifactId),
+            eq(deliveryArtifacts.delivery_id, input.deliveryId),
+          ),
+        )
+        .for('update');
+      if (!target) throw new ArtifactNotFoundError(input.artifactId);
+      if (target.blob.sha256.toLowerCase() !== input.expectedSha256.toLowerCase()) {
+        throw new ArtifactValidationError('Artifact SHA-256 does not match the review request.', {
+          artifactId: input.artifactId,
+          expectedSha256: input.expectedSha256,
+          actualSha256: target.blob.sha256,
+        });
+      }
+      if (target.artifact.status === 'superseded') {
+        throw new ArtifactValidationError(
+          'A superseded artifact cannot be accepted; review the latest revision instead.',
+          { artifactId: input.artifactId },
+        );
+      }
+
+      const [latest] = await tx
+        .select({ id: deliveryArtifacts.id, revision: deliveryArtifacts.revision })
+        .from(deliveryArtifacts)
+        .where(
+          and(
+            eq(deliveryArtifacts.delivery_id, input.deliveryId),
+            eq(deliveryArtifacts.logical_key, target.artifact.logical_key),
+            eq(deliveryArtifacts.kind, target.artifact.kind),
+            notInArray(deliveryArtifacts.status, ['superseded']),
+          ),
+        )
+        .orderBy(desc(deliveryArtifacts.revision), desc(deliveryArtifacts.created_at))
+        .limit(1);
+      if (!latest || latest.id !== input.artifactId) {
+        throw new ArtifactValidationError(
+          'Only the latest non-superseded artifact can be accepted.',
+          {
+            artifactId: input.artifactId,
+            latestArtifactId: latest?.id ?? null,
+            latestRevision: latest?.revision ?? null,
+          },
+        );
+      }
+
+      if (gate.status === 'passed' && target.artifact.status === 'approved') {
+        return { artifact: target.artifact, gate };
+      }
+      if (gate.status !== 'pending') {
+        throw new DeliveryStateError(
+          input.deliveryId,
+          'Only a pending review Gate can be accepted.',
+          gate.status,
+        );
+      }
+
+      const now = new Date().toISOString();
+      const [artifact] = await tx
+        .update(deliveryArtifacts)
+        .set({ status: 'approved', updated_at: now })
+        .where(eq(deliveryArtifacts.id, input.artifactId))
+        .returning();
+      const [acceptedGate] = await tx
+        .update(deliveryGates)
+        .set({
+          status: 'passed',
+          summary: input.summary?.trim() || gate.summary,
+          waiver_reason: null,
+          warning_accepted: false,
+          recorded_by: input.recordedBy,
+          recorded_at: now,
+          updated_at: now,
+        })
+        .where(eq(deliveryGates.id, gate.id))
+        .returning();
+      if (!artifact) throw new RepoPersistenceError('delivery artifact', input.artifactId);
+      if (!acceptedGate) throw new RepoPersistenceError('delivery gate', input.gateKey);
+      await touchMutableDelivery(tx, input.deliveryId);
+      return { artifact, gate: acceptedGate };
     });
   }
 

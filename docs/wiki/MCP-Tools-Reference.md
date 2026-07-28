@@ -546,6 +546,11 @@ domain-specific workflow, not evidence that an external import, deployment, or
 other side effect already ran. Delivery-level customer approval and Receipt
 Readiness remain separate checks.
 
+Acceptance itself is intentionally absent from the MCP catalog. A signed-in
+reviewer uses **Accept this version** in the Delivery Gates tab; the underlying
+`accept_delivery_review` Application Operation rejects MCP and raw REST API-token
+actors with `OPERATION_REQUIRES_HUMAN_UI`.
+
 ## Project Manifest
 
 `register_project_repository` takes `project_id`, `repo_url`, and `branch`, then creates the Project's

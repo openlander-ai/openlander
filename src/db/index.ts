@@ -791,6 +791,7 @@ export class Database implements AuthDatabase {
   updateDeliveryGateTemplate(deliveryId: string, gateKey: string, patch: Parameters<DeliveryRepo['updateGateTemplate']>[2]) { return this.deliveryRepo.updateGateTemplate(deliveryId, gateKey, patch); }
   resetDeliveryGatesForType(deliveryId: string, deliveryType: Parameters<DeliveryRepo['resetGatesForType']>[1]) { return this.deliveryRepo.resetGatesForType(deliveryId, deliveryType); }
   recordDeliveryGateResult(input: Parameters<DeliveryRepo['recordGateResult']>[0]) { return this.deliveryRepo.recordGateResult(input); }
+  acceptDeliveryReviewCheckpoint(input: Parameters<DeliveryRepo['acceptReviewCheckpoint']>[0]) { return this.deliveryRepo.acceptReviewCheckpoint(input); }
   linkDeliveryDeploy(input: Parameters<DeliveryRepo['linkDeploy']>[0]) { return this.deliveryRepo.linkDeploy(input); }
   unlinkDeliveryDeploy(deliveryId: string, deployId: string) { return this.deliveryRepo.unlinkDeploy(deliveryId, deployId); }
   listDeliveryDeployEvidence(deliveryId: string) { return this.deliveryRepo.listDeployEvidence(deliveryId); }

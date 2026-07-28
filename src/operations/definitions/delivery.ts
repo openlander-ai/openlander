@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 import type { AppContext } from '../../app.js';
-import { ApplicationOperationContractError } from '../../errors.js';
+import { ApplicationOperationContractError, OperationRequiresHumanUiError } from '../../errors.js';
 import type { ApplicationOperationDefinition } from '../types.js';
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/i);
@@ -343,6 +343,88 @@ export const getDeliveryReviewStatusOperation: ApplicationOperationDefinition = 
           ? 'The exact Artifact revision cleared this review checkpoint.'
           : 'This review checkpoint is not ready for the next external action.',
         next_steps: nextSteps,
+      },
+    };
+  },
+};
+
+export const acceptDeliveryReviewOperation: ApplicationOperationDefinition = {
+  name: 'accept_delivery_review',
+  version: 1,
+  description:
+    'Accept one exact Artifact revision from the authenticated Web UI and pass its linked Review Gate.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance'],
+  resolveScopeTarget: projectForDelivery,
+  inputSchema: z
+    .object({
+      delivery_id: z.string().min(1),
+      gate_key: z.string().trim().min(1).max(100),
+      artifact_id: z.string().min(1),
+      expected_sha256: sha256,
+      summary: z.string().trim().min(1).max(20_000).nullable().optional(),
+    })
+    .strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('accepted'),
+      project_id: z.string(),
+      delivery_id: z.string(),
+      gate_key: z.string(),
+      artifact_id: z.string(),
+      revision: z.number().int().positive(),
+      sha256,
+      ready_for_next_step: z.literal(true),
+      status_call: z.object({
+        operation: z.literal('get_delivery_review_status'),
+        input: z.object({ delivery_id: z.string(), gate_key: z.string() }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: true },
+  execute: async (input, context) => {
+    if (context.actor.source !== 'web') {
+      throw new OperationRequiresHumanUiError(
+        'accept_delivery_review',
+        'Accepting an exact Delivery review version requires an authenticated Web session.',
+      );
+    }
+    const review = await context.appCtx.deliveryService.acceptReview({
+      deliveryId: String(input['delivery_id']),
+      gateKey: String(input['gate_key']),
+      artifactId: String(input['artifact_id']),
+      expectedSha256: String(input['expected_sha256']),
+      summary: typeof input['summary'] === 'string' ? input['summary'] : null,
+      actor: context.actor.label,
+    });
+    if (!review.artifact || !review.ready_for_next_step || review.state !== 'accepted') {
+      throw new ApplicationOperationContractError('accept_delivery_review', {
+        reason: 'review_checkpoint_not_accepted',
+      });
+    }
+    return {
+      status: 'accepted',
+      project_id: review.project_id,
+      delivery_id: review.delivery_id,
+      gate_key: review.gate_key,
+      artifact_id: review.artifact.id,
+      revision: review.artifact.revision,
+      sha256: review.artifact.sha256,
+      ready_for_next_step: true,
+      status_call: {
+        operation: 'get_delivery_review_status',
+        input: { delivery_id: review.delivery_id, gate_key: review.gate_key },
+      },
+      _agent_guidance: {
+        message:
+          'The human reviewer accepted this exact Artifact revision. This does not prove that the external change was applied.',
+        next_steps: [
+          'Continue with the domain-specific apply step using this exact Artifact revision.',
+          'Record the external apply result as new evidence.',
+        ],
       },
     };
   },
@@ -785,3 +867,5 @@ export const agentDeliveryOperations = [
   cancelDeliveryRunOperation,
   completeDeliveryOperation,
 ] as const;
+
+export const webDeliveryOperations = [acceptDeliveryReviewOperation] as const;

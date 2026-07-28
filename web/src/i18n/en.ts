@@ -2893,6 +2893,30 @@ export const translations = {
         superseded: 'Superseded',
       },
     },
+    reviewCheckpoint: {
+      eyebrow: 'Exact-version review',
+      description:
+        'Review the file and SHA-256 selected by the agent. Acceptance applies only to this exact version.',
+      targetBadge: 'Review target',
+      shaLabel: 'Artifact SHA-256',
+      notRequested: 'The agent has not selected a file version for review yet.',
+      targetMissing:
+        'The selected review file cannot be found. Ask the agent to request review with the latest version.',
+      newerVersionAvailable: 'Newer version available',
+      exactVersionHint:
+        'If a newer version is uploaded, this acceptance does not carry forward. Review the new version again.',
+      openFile: 'Open file',
+      requestChanges: 'Request changes',
+      acceptExactVersion: 'Accept this version',
+      status: {
+        notRequested: 'Not requested',
+        pending: 'Waiting for review',
+        changesRequested: 'Changes needed',
+        accepted: 'Accepted',
+        waived: 'Waived',
+        stale: 'Review newer version',
+      },
+    },
     review: {
       feedbackTitle: 'Preserve original feedback',
       feedbackDescription:
@@ -3095,6 +3119,9 @@ export const translations = {
       statusChanged: 'Delivery status changed.',
       uploaded: 'Artifact uploaded.',
       artifactApproved: 'Artifact approved.',
+      reviewAccepted: 'This exact file version was accepted.',
+      reviewChangesRequested:
+        'Changes requested. The agent must submit the new version for review.',
       workItemUpdated: 'Review item status changed.',
       feedbackRecorded: 'Feedback recorded.',
       approvalRecorded: 'Customer approval evidence recorded.',
@@ -3291,6 +3318,7 @@ export const translations = {
       approvalRecorded: 'Customer approval evidence recorded',
       gateTemplateUpdated: 'Gate requirement updated',
       gateRecorded: 'Gate result recorded',
+      reviewAccepted: 'Exact review version accepted',
       deployLinked: 'Production deployment evidence linked',
       deployUnlinked: 'Deployment evidence unlinked',
       receiptPreviewed: 'Receipt preview generated',

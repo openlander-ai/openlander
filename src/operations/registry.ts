@@ -13,7 +13,7 @@ import {
 } from '../errors.js';
 import { applicationOperationActorScopeKey } from './actor.js';
 import { engagementOperations } from './definitions/engagement.js';
-import { agentDeliveryOperations } from './definitions/delivery.js';
+import { agentDeliveryOperations, webDeliveryOperations } from './definitions/delivery.js';
 import { networkMaintenanceOperations } from './definitions/network-maintenance.js';
 import {
   applyProjectManifestOperation,
@@ -278,6 +278,7 @@ export function createApplicationOperationRegistry(): ApplicationOperationRegist
     getProjectManifestOperation,
     ...projectUpdateOperations,
     ...agentDeliveryOperations,
+    ...webDeliveryOperations,
     ...releaseOperations,
     ...reportingOperations,
     ...networkMaintenanceOperations,

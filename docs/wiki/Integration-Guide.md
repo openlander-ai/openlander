@@ -281,6 +281,9 @@ Application Operations are also available to authenticated automation at
 `POST /api/v1/operations/:name`. Send the operation input as the JSON body and
 commands' stable key in the `Idempotency-Key` header. Both REST and MCP call the
 same in-process operation handler; neither adapter calls the other.
+`accept_delivery_review` is the deliberate exception: it is callable only from
+an authenticated Web session and returns `OPERATION_REQUIRES_HUMAN_UI` to raw
+REST API tokens. It is not registered as an MCP action.
 
 MCP env changes target Applications. Use `service_id` or `service_name`;
 `project_name` works only for Projects with exactly one Application.

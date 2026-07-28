@@ -166,6 +166,14 @@ function createAgentDeliveryHarness() {
     approval_evidence_id: null,
     blockers: ['artifact_not_approved' as const, 'gate_pending' as const],
   };
+  const acceptedReviewStatus = {
+    ...reviewStatus,
+    state: 'accepted' as const,
+    ready_for_next_step: true,
+    artifact: { ...reviewStatus.artifact, status: 'approved' as const },
+    gate: { ...reviewStatus.gate, status: 'passed' as const, recorded_by: 'web-session' },
+    blockers: [],
+  };
   const operationKey = (input: {
     operationName: string;
     operationVersion: number;
@@ -239,10 +247,7 @@ function createAgentDeliveryHarness() {
     }),
     getDeployablesByGroup: vi.fn(async () => registeredServices),
     ensureDeployableServiceForProject: vi.fn(
-      async (
-        projectId: string,
-        input: { source: 'git'; repoUrl: string; branch: string },
-      ) => {
+      async (projectId: string, input: { source: 'git'; repoUrl: string; branch: string }) => {
         const service = {
           id: `${projectId}__svc`,
           source: input.source,
@@ -260,6 +265,7 @@ function createAgentDeliveryHarness() {
     assertProjectCanMutate: vi.fn(async () => undefined),
     requestReview: vi.fn(async () => reviewStatus),
     getReviewStatus: vi.fn(async () => reviewStatus),
+    acceptReview: vi.fn(async () => acceptedReviewStatus),
   };
   const deliveryAgentRunService = {
     start: vi.fn(async (input: { id: string; phase: string }) => {
@@ -313,6 +319,7 @@ function createAgentDeliveryHarness() {
     deliveryAgentRunService,
     deliveryQualityGateService,
     reviewStatus,
+    acceptedReviewStatus,
     db,
   };
 }
@@ -682,6 +689,58 @@ describe('Application Operation contract', () => {
         { actor: { ...harness.actor, projectId: 'sibling-project' } },
       ),
     ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+  });
+
+  it('accepts an exact review version only from an authenticated Web session', async () => {
+    const harness = createAgentDeliveryHarness();
+    const input = {
+      delivery_id: harness.delivery.id,
+      gate_key: 'change-review',
+      artifact_id: 'artifact-review',
+      expected_sha256: 'b'.repeat(64),
+    };
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'accept_delivery_review', input, {
+        actor: {
+          source: 'rest',
+          scope: 'instance',
+          instanceId: 'olinst_test',
+          label: 'api-token',
+        },
+        idempotencyKey: 'accept-review-rest',
+      }),
+    ).rejects.toMatchObject({ code: 'OPERATION_REQUIRES_HUMAN_UI' });
+    expect(harness.deliveryService.acceptReview).not.toHaveBeenCalled();
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'accept_delivery_review', input, {
+        actor: {
+          source: 'web',
+          scope: 'instance',
+          instanceId: 'olinst_test',
+          label: 'web-session',
+        },
+        idempotencyKey: 'accept-review-web',
+      }),
+    ).resolves.toMatchObject({
+      result: {
+        status: 'accepted',
+        artifact_id: 'artifact-review',
+        ready_for_next_step: true,
+      },
+    });
+    expect(harness.deliveryService.acceptReview).toHaveBeenCalledWith({
+      deliveryId: harness.delivery.id,
+      gateKey: 'change-review',
+      artifactId: 'artifact-review',
+      expectedSha256: 'b'.repeat(64),
+      summary: null,
+      actor: 'web-session',
+    });
+    expect(
+      agentDeliveryToolDefs.some((definition) => definition.name === 'accept_delivery_review'),
+    ).toBe(false);
   });
 
   it('registers a repository without deploy and enforces the Project scope boundary', async () => {

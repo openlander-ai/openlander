@@ -3098,6 +3098,30 @@ export const translations = {
         superseded: '대체됨',
       },
     },
+    reviewCheckpoint: {
+      eyebrow: '검토할 버전',
+      description:
+        '에이전트가 지정한 파일과 SHA-256을 확인하세요. 승인은 지금 표시된 버전에만 적용됩니다.',
+      targetBadge: '검토 대상',
+      shaLabel: '산출물 SHA-256',
+      notRequested: '아직 에이전트가 검토할 파일 버전을 지정하지 않았습니다.',
+      targetMissing:
+        '검토 대상으로 지정한 파일을 찾을 수 없습니다. 에이전트에게 최신 버전 검토를 다시 요청하세요.',
+      newerVersionAvailable: '최신 버전 아님',
+      exactVersionHint:
+        '새 버전이 올라오면 이 승인은 새 버전에 적용되지 않습니다. 새 버전은 다시 검토하세요.',
+      openFile: '파일 확인',
+      requestChanges: '수정 요청',
+      acceptExactVersion: '이 버전 승인',
+      status: {
+        notRequested: '검토 요청 전',
+        pending: '검토 대기',
+        changesRequested: '수정 필요',
+        accepted: '승인됨',
+        waived: '예외 승인',
+        stale: '새 버전 확인 필요',
+      },
+    },
     review: {
       feedbackTitle: '고객 피드백 원문',
       feedbackDescription:
@@ -3298,6 +3322,9 @@ export const translations = {
       statusChanged: '납품 상태를 변경했습니다.',
       uploaded: '산출물을 업로드했습니다.',
       artifactApproved: '산출물을 승인했습니다.',
+      reviewAccepted: '이 파일 버전을 승인했습니다.',
+      reviewChangesRequested:
+        '수정을 요청했습니다. 에이전트가 새 버전으로 검토를 다시 요청해야 합니다.',
       workItemUpdated: '검토 항목 상태를 변경했습니다.',
       feedbackRecorded: '피드백을 기록했습니다.',
       approvalRecorded: '고객 승인 근거를 기록했습니다.',
@@ -3494,6 +3521,7 @@ export const translations = {
       approvalRecorded: '고객 승인 근거 기록',
       gateTemplateUpdated: '통과 기준 설정 변경',
       gateRecorded: '통과 기준 결과 기록',
+      reviewAccepted: '검토 버전 승인',
       deployLinked: '운영 배포 근거 연결',
       deployUnlinked: '배포 근거 연결 해제',
       receiptPreviewed: '납품 확인서 미리보기 생성',
