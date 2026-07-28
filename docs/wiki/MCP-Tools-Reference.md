@@ -472,6 +472,10 @@ Delivery actions live under `openlander_project` and operate on evidence
 metadata. They do not activate an internal LLM, upload local binary files, or
 finalize a Receipt.
 
+For a local file, call `create_evidence_upload` first. Then send its exact bytes
+with `PUT` to the returned short-lived bearer `upload_url`, without an MCP
+Authorization header. Do not use an MCP token against the general REST API.
+
 | Action                              | Required parameters                       | Purpose                                                        |
 | ----------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
 | `create_delivery`                   | `project_id`, `title`                     | Create a Delivery and its project-default Gates                |
@@ -493,13 +497,14 @@ errors cannot be recorded as `passed`. Gate idempotency records are durable:
 the same key replays its original response, while using that key with different
 request content returns `IDEMPOTENCY_KEY_CONFLICT`.
 
-Upload artifacts through the authenticated multipart endpoint
-`POST /api/projects/:projectId/deliveries/:deliveryId/artifacts` before
-referencing their IDs. Project PAT uploads and Gate-result submissions require
-an `Idempotency-Key` header. Final Receipt confirmation is administrator
-web-session only; `finalize_delivery*` MCP requests return `HUMAN_UI_ONLY`.
-Finalization also requires the evidence version to match the most recently
-generated Receipt preview.
+MCP Agents should call `create_evidence_upload` before referencing an Artifact
+ID, then `PUT` the file to the returned bearer URL. The authenticated multipart
+endpoint `POST /api/projects/:projectId/deliveries/:deliveryId/artifacts`
+remains available to the web UI and supported CI clients. Project PAT uploads
+and Gate-result submissions require an `Idempotency-Key` header. Final Receipt
+confirmation is administrator web-session only; `finalize_delivery*` MCP
+requests return `HUMAN_UI_ONLY`. Finalization also requires the evidence version
+to match the most recently generated Receipt preview.
 
 ## Agent Delivery Run
 
@@ -658,7 +663,8 @@ feedback, Gate evidence, and Receipt metadata.
 
 `create_evidence_upload` returns a relative HTTP `upload_url`, `PUT` method,
 expiry, size limit, and the reserved `artifact_id`. The URL is a bearer
-capability: do not log or share it. Uploading validates type, size, hash, Project
+capability: do not log or share it. Send the file bytes to that URL without an
+MCP Authorization header. Uploading validates type, size, hash, Project
 ownership, Delivery mutability, and artifact revision. Replaying the same upload
 is idempotent. `record_project_update` accepts only artifacts from the specified
 Delivery and stores the structured update in Activity history for weekly report

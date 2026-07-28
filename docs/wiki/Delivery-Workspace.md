@@ -94,10 +94,16 @@ immutable snapshot. Finalization is blocked above 250 pages.
 
 ## External agents and CI
 
-Delivery metadata uses the existing `openlander_project` MCP composite. Binary
-files are uploaded from the web UI or the multipart REST API. Project-scoped
-PATs may POST only Delivery artifact and Gate-result CI routes and must include
-`Idempotency-Key`.
+Delivery metadata uses the existing `openlander_project` MCP composite. For a
+local file, an MCP Agent first calls `create_evidence_upload`, then sends the
+exact bytes with `PUT` to the returned 15-minute bearer `upload_url`. The upload
+request does not use the MCP token as REST authentication, and the capability
+URL must not be logged or shared.
+
+The multipart REST route remains available to the web UI and supported CI
+clients. Project-scoped PATs may POST only Delivery artifact and Gate-result CI
+routes and must include `Idempotency-Key`; an MCP token is not a PAT and is
+rejected by those routes.
 
 Agents that need a human checkpoint before an external side effect should call
 `request_delivery_review` with the exact latest Artifact ID and blob SHA-256,

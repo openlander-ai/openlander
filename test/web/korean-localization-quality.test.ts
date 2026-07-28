@@ -66,7 +66,9 @@ describe('Korean localization quality gate', () => {
 
   it('uses the approved Korean FDE product vocabulary', () => {
     expect(ko.delivery.title).toBe('납품 관리');
-    expect(ko.delivery.tabs.receipt).toBe('납품 확인서');
+    expect(ko.delivery.tabs.artifacts).toBe('자료·증빙');
+    expect(ko.delivery.tabs.gates).toBe('검토·품질');
+    expect(ko.delivery.tabs.receipt).toBe('완료 증빙');
     expect(ko.delivery.gates.title).toBe('납품 통과 기준');
     expect(ko.engagements.title).toBe('고객 과제 현황');
     expect(ko.engagements.sections.blockers.title).toBe('진행을 막는 항목');
@@ -85,6 +87,7 @@ describe('Korean localization quality gate', () => {
     );
     expect(ko.delivery.humanAction.review_version.eyebrow).toBe('확인 필요');
     expect(ko.delivery.humanAction.review_version.action).toBe('검토 열기');
+    expect(ko.delivery.humanAction.review_version.title).toBe('검토할 파일 {count}건이 있습니다');
     expect(ko.delivery.workflow.detailsTitle).toBe('상세 진행 기록');
     expect(ko.services.managedDetail.field.type).toBe('유형');
     expect(ko.notifications.type['container-crash']).toBe('컨테이너 비정상 종료');
@@ -276,6 +279,8 @@ describe('Korean localization quality gate', () => {
       'set-env-var',
       'delete-env-var',
       'wire-managed-db',
+      'plan-delivery',
+      'manage-delivery',
     ];
 
     for (const kind of kinds) {
@@ -286,6 +291,7 @@ describe('Korean localization quality gate', () => {
           serviceName: 'sample-service',
           envVarKey: 'DATABASE_URL',
           managedServiceName: 'sample-db',
+          deliveryId: 'del_sample',
         },
         translateKo,
       );
@@ -303,6 +309,20 @@ describe('Korean localization quality gate', () => {
       translateKo,
     );
     expect(envGuide.prompts[0]?.text).toContain('DATABASE_URL');
+    const deliveryGuide = getAgentGuideContent(
+      'manage-delivery',
+      { projectName: 'sample-project', deliveryId: 'del_sample' },
+      translateKo,
+    );
+    expect(deliveryGuide.prompts[0]?.text).toContain('결과 중심');
+    expect(deliveryGuide.prompts[0]?.text).toContain('최소 구성');
+    const deliveryPlanGuide = getAgentGuideContent(
+      'plan-delivery',
+      { projectName: 'sample-project' },
+      translateKo,
+    );
+    expect(deliveryPlanGuide.prompts[0]?.text).toContain('내부 절차 표현은 넣지 마세요');
+    expect(deliveryPlanGuide.prompts[0]?.text).toContain('QA와 이력은 내부 증빙');
     expect(ko.agentGuide.mcpSetupCheck).toContain('openlander_project({ action: "help" })');
     expect(ko.agentGuide.mcpSetupCheck).toContain('/api');
   });

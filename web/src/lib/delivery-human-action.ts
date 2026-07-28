@@ -18,7 +18,7 @@ export type DeliveryHumanState =
 export interface DeliveryHumanAction {
   state: DeliveryHumanState;
   count: number;
-  targetTab: 'review' | 'gates' | 'receipt' | null;
+  targetTab: 'gates' | 'receipt' | null;
   asksAgent: boolean;
 }
 
@@ -53,7 +53,7 @@ export function deriveDeliveryHumanAction(
       (item.status === 'confirmed' && (item.kind === 'question' || item.kind === 'change_request')),
   ).length;
   if (reviewItems > 0) {
-    return { state: 'review_items', count: reviewItems, targetTab: 'review', asksAgent: false };
+    return { state: 'review_items', count: reviewItems, targetTab: 'gates', asksAgent: false };
   }
 
   const warnings = detail.gates.filter(
