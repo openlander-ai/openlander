@@ -33,6 +33,7 @@ import {
   deliveryGates,
   deliveryIdempotencyRecords,
   deliveryReceipts,
+  deliveryReviewPackageItems,
   deliveryWorkItems,
   deployLogs,
   environments,
@@ -466,7 +467,7 @@ export class DeliveryRepo {
   }
 
   async listArtifacts(deliveryId: string) {
-    return await this.db
+    const rows = await this.db
       .select({ artifact: deliveryArtifacts, blob: artifactBlobs })
       .from(deliveryArtifacts)
       .innerJoin(artifactBlobs, eq(deliveryArtifacts.blob_id, artifactBlobs.id))
@@ -476,6 +477,24 @@ export class DeliveryRepo {
         asc(deliveryArtifacts.logical_key),
         asc(deliveryArtifacts.revision),
       );
+    const artifactIds = rows.map(({ artifact }) => artifact.id);
+    const packageItems =
+      artifactIds.length > 0
+        ? await this.db
+            .select({
+              artifact_id: deliveryReviewPackageItems.artifact_id,
+              role: deliveryReviewPackageItems.role,
+            })
+            .from(deliveryReviewPackageItems)
+            .where(inArray(deliveryReviewPackageItems.artifact_id, artifactIds))
+        : [];
+    const roleByArtifactId = new Map(
+      packageItems.flatMap((item) => (item.artifact_id ? [[item.artifact_id, item.role]] : [])),
+    );
+    return rows.map((row) => ({
+      ...row,
+      review_package_role: roleByArtifactId.get(row.artifact.id) ?? null,
+    }));
   }
 
   async updateArtifact(

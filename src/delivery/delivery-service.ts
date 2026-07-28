@@ -229,7 +229,11 @@ export class DeliveryService {
     return {
       delivery,
       settings,
-      artifacts: artifacts.map(({ artifact, blob }) => ({ ...artifact, blob })),
+      artifacts: artifacts.map(({ artifact, blob, review_package_role }) => ({
+        ...artifact,
+        blob,
+        review_package_role,
+      })),
       external_refs: externalRefs,
       feedback_sources: feedback,
       work_items: workItems,
@@ -836,7 +840,21 @@ export class DeliveryService {
   }
 
   async getReviewStatus(deliveryId: string, gateKey: string): Promise<DeliveryReviewStatus> {
-    return deriveDeliveryReviewStatus(await this.getDeliveryDetail(deliveryId), gateKey);
+    const detail = await this.getDeliveryDetail(deliveryId);
+    const status = deriveDeliveryReviewStatus(detail, gateKey);
+    const gate = detail.gates.find((candidate) => candidate.gate_key === gateKey);
+    if (!gate?.review_package_id) return status;
+    const reviewPackage = await this.db.getDeliveryReviewPackage(gate.review_package_id);
+    if (!reviewPackage) return status;
+    return {
+      ...status,
+      review_package: {
+        id: reviewPackage.package.id,
+        revision: reviewPackage.package.revision,
+        manifest_sha256: reviewPackage.package.manifest_sha256,
+        status: reviewPackage.package.status === 'superseded' ? 'superseded' : 'published',
+      },
+    };
   }
 
   async acceptReview(input: {
@@ -844,12 +862,45 @@ export class DeliveryService {
     gateKey: string;
     artifactId: string;
     expectedSha256: string;
+    packageId?: string | null;
+    expectedManifestSha256?: string | null;
     summary?: string | null;
     actor: string;
   }): Promise<DeliveryReviewStatus> {
     const delivery = await this.requireMutableDelivery(input.deliveryId);
     const detail = await this.getDeliveryDetail(delivery.id);
     const artifact = requireDeliveryReviewTarget(detail, input);
+    const gate = detail.gates.find((candidate) => candidate.gate_key === input.gateKey);
+    if (gate?.review_package_id) {
+      if (input.packageId !== gate.review_package_id || !input.expectedManifestSha256) {
+        throw new ArtifactValidationError(
+          'Package review requires the exact package id and manifest SHA-256.',
+          { gateKey: input.gateKey, reviewPackageId: gate.review_package_id },
+        );
+      }
+      const accepted = await this.db.acceptDeliveryReviewPackage({
+        deliveryId: delivery.id,
+        gateKey: input.gateKey,
+        packageId: input.packageId,
+        expectedManifestSha256: input.expectedManifestSha256,
+        summary: input.summary,
+        recordedBy: input.actor,
+      });
+      await this.audit(
+        delivery,
+        'delivery.review_package_accepted',
+        'Customer review package accepted',
+        `Revision ${String(accepted.package.revision)} accepted.`,
+        {
+          gate_key: input.gateKey,
+          review_package_id: accepted.package.id,
+          manifest_sha256: accepted.package.manifest_sha256,
+          artifact_ids: accepted.artifacts.map((candidate) => candidate.id),
+          approval_id: accepted.approval.id,
+        },
+      );
+      return await this.getReviewStatus(delivery.id, input.gateKey);
+    }
     await this.db.acceptDeliveryReviewCheckpoint({
       deliveryId: delivery.id,
       gateKey: input.gateKey,

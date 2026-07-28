@@ -5,6 +5,7 @@ import {
   ArtifactNotFoundError,
   DeliveryNotFoundError,
   DeliveryAgentRunNotFoundError,
+  DeliveryReviewPackageNotReadyError,
   ProjectNotFoundError,
   ProjectEnvironmentNotFoundError,
   ReleaseStateError,
@@ -145,6 +146,19 @@ async function targetFromDeliveryRunId(appCtx: AppContext, runId: string): Promi
   const run = await appCtx.db.getDeliveryAgentRun(runId);
   if (!run) throw new DeliveryAgentRunNotFoundError(runId);
   return await targetFromDeliveryId(appCtx, run.delivery_id, 'run_id');
+}
+
+async function targetFromDeliveryReviewPackageId(
+  appCtx: AppContext,
+  packageId: string,
+): Promise<ScopeTarget> {
+  const detail = await appCtx.db.getDeliveryReviewPackage(packageId);
+  if (!detail) throw new DeliveryReviewPackageNotReadyError(packageId, 'package_not_found');
+  return {
+    projectId: detail.delivery.project_id,
+    serviceId: null,
+    resolvedFrom: 'package_id',
+  };
 }
 
 async function targetFromReleaseId(appCtx: AppContext, releaseId: string): Promise<ScopeTarget> {
@@ -317,6 +331,9 @@ async function resolveMcpScopeTargets(
   const deliveryId = readString(args, 'delivery_id');
   if (deliveryId) push(await targetFromDeliveryId(appCtx, deliveryId));
 
+  const packageId = readString(args, 'package_id');
+  if (packageId) push(await targetFromDeliveryReviewPackageId(appCtx, packageId));
+
   const runId = readString(args, 'run_id');
   if (runId) push(await targetFromDeliveryRunId(appCtx, runId));
 
@@ -420,6 +437,7 @@ export async function maybeRejectMcpScope(
       err instanceof ServiceNotFoundError ||
       err instanceof DeliveryNotFoundError ||
       err instanceof DeliveryAgentRunNotFoundError ||
+      err instanceof DeliveryReviewPackageNotReadyError ||
       err instanceof ArtifactNotFoundError
     ) {
       return buildScopeViolationResponse(identity, null, 'target_not_found_or_out_of_scope');

@@ -275,6 +275,7 @@ describe('Postgres migration sanity gate', () => {
       '0020_delivery-deploy-link-hard-delete-cascade',
       '0021_project-manifest-state',
       '0022_receipt-hard-delete-cascade',
+      '0023_delivery_review_packages',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -300,6 +301,7 @@ describe('Postgres migration sanity gate', () => {
       '0020_delivery-deploy-link-hard-delete-cascade.sql',
       '0021_project-manifest-state.sql',
       '0022_receipt-hard-delete-cascade.sql',
+      '0023_delivery_review_packages.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -320,6 +322,9 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "delivery_agent_runs"');
     expect(sql).toContain('CREATE TABLE "delivery_agent_run_events"');
     expect(sql).toContain('CREATE TABLE "delivery_run_checks"');
+    expect(sql).toContain('CREATE TABLE "delivery_review_packages"');
+    expect(sql).toContain('CREATE TABLE "delivery_review_package_items"');
+    expect(sql).toContain('ADD COLUMN "review_package_id" text');
     expect(sql).toContain('ADD COLUMN "health_timeout_seconds" integer DEFAULT 30 NOT NULL');
     expect(sql).toContain('ADD COLUMN "smoke_path" text');
     expect(sql).toContain('ADD COLUMN "soak_seconds" integer DEFAULT 0 NOT NULL');
@@ -533,6 +538,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 24 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -553,7 +565,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 24 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 25 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

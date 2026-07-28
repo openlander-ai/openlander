@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **132 unique default operations** surfaced through those composites
+- **135 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -143,7 +143,7 @@ Composite catalog:
 | [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans                   |
 | [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                              |
 | [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
-| [Delivery Workspace](#delivery-workspace)                | 11    | Review evidence, feedback, Gates, deploy links, Receipt preview |
+| [Delivery Workspace](#delivery-workspace)                | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview |
 | [Agent Delivery Run](#agent-delivery-run)                | 8     | Plan, verify, hand off, resume, cancel, or complete             |
 | [Project Manifest](#project-manifest)                    | 3     | Register source and apply/inspect Project configuration         |
 | [Release and Promotion](#release-and-promotion)          | 6     | Build once, promote an immutable digest, recall, or roll back   |
@@ -475,6 +475,36 @@ finalize a Receipt.
 For a local file, call `create_evidence_upload` first. Then send its exact bytes
 with `PUT` to the returned short-lived bearer `upload_url`, without an MCP
 Authorization header. Do not use an MCP token against the general REST API.
+
+For a customer-facing review, use the higher-level package flow instead of
+registering each Artifact role manually:
+
+| Action                               | Required parameters                                                               | Purpose                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `prepare_delivery_review_package`    | `idempotency_key`, `delivery_id`, `review_note`, `files`, `overview`              | Declare one PDF-led customer review package                     |
+| `get_delivery_review_package_status` | `delivery_id`, optional `package_id`, optional `include_upload_capabilities`      | Read uploaded/missing files and mint fresh URLs only when asked |
+| `publish_delivery_review_package`    | `idempotency_key`, `package_id`, manifest SHA, expected Delivery evidence version | Publish all prepared files and bind the package to Review       |
+
+`prepare_delivery_review_package` requires exactly one PDF `review_document`.
+It may also declare one HTML `interactive_preview` and one PNG/JPEG/WebP
+`representative_image`. Agents provide filenames, expected SHA-256 values,
+sizes, and MIME types; OpenLander derives logical keys, Artifact kinds, Receipt
+order, and HTML companion links. The prepare response contains no bearer URL.
+
+Call `get_delivery_review_package_status` with
+`include_upload_capabilities=true` only when ready to upload. Its 15-minute PUT
+URLs are returned for missing files and are not stored in operation history.
+Partial uploads remain staged and do not appear as Delivery Artifacts or change
+the active Review Gate. The draft can be resumed for seven days.
+
+`publish_delivery_review_package` verifies the manifest and Delivery evidence
+version, then creates the visible Artifacts in one transaction. The same PDF
+Artifact is both the HTML companion and the Review Gate target. A package-bound
+review must be accepted with its `package_id` and exact manifest SHA-256; legacy
+Artifact-only review remains supported during the compatibility period.
+Instance, organization, and matching Project tokens may use the three package
+actions. Service-scoped tokens receive `SCOPE_VIOLATION` because a review
+package is a Project-level object.
 
 | Action                              | Required parameters                       | Purpose                                                        |
 | ----------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |

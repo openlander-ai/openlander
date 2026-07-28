@@ -1423,6 +1423,63 @@ export class EvidenceUploadTokenError extends OpenLanderError {
   }
 }
 
+export class DeliveryReviewPackageFileMismatchError extends OpenLanderError {
+  constructor(itemId: string, reason: string, details?: Record<string, unknown>) {
+    super(
+      'The uploaded file does not match the customer review package declaration.',
+      'REVIEW_PACKAGE_FILE_MISMATCH',
+      400,
+      { itemId, reason, ...details },
+    );
+    this.name = 'DeliveryReviewPackageFileMismatchError';
+  }
+}
+
+export class DeliveryReviewPackageExpiredError extends OpenLanderError {
+  constructor(packageId: string) {
+    super('The customer review package draft has expired.', 'REVIEW_PACKAGE_EXPIRED', 410, {
+      packageId,
+    });
+    this.name = 'DeliveryReviewPackageExpiredError';
+  }
+}
+
+export class DeliveryReviewPackageNotReadyError extends OpenLanderError {
+  constructor(packageId: string, reason: string, details?: Record<string, unknown>) {
+    super(
+      'The customer review package is not ready for this operation.',
+      'REVIEW_PACKAGE_NOT_READY',
+      409,
+      { packageId, reason, ...details },
+    );
+    this.name = 'DeliveryReviewPackageNotReadyError';
+  }
+}
+
+export class DeliveryReviewPackageManifestMismatchError extends OpenLanderError {
+  constructor(packageId: string, expected: string, actual: string) {
+    super(
+      'The customer review package manifest does not match the prepared revision.',
+      'REVIEW_PACKAGE_MANIFEST_MISMATCH',
+      409,
+      { packageId, expectedManifestSha256: expected, actualManifestSha256: actual },
+    );
+    this.name = 'DeliveryReviewPackageManifestMismatchError';
+  }
+}
+
+export class DeliveryEvidenceVersionConflictError extends OpenLanderError {
+  constructor(deliveryId: string, expected: number, actual: number) {
+    super(
+      'The Delivery evidence changed after the customer review package was prepared.',
+      'DELIVERY_EVIDENCE_VERSION_CONFLICT',
+      409,
+      { deliveryId, expectedEvidenceVersion: expected, actualEvidenceVersion: actual },
+    );
+    this.name = 'DeliveryEvidenceVersionConflictError';
+  }
+}
+
 export class ArtifactNotFoundError extends OpenLanderError {
   constructor(artifactId: string) {
     super(`Artifact "${artifactId}" was not found.`, 'ARTIFACT_NOT_FOUND', 404, { artifactId });

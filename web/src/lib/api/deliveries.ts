@@ -38,6 +38,7 @@ export interface DeliveryArtifact {
   companion_pdf_artifact_id: string | null;
   include_in_receipt: boolean;
   receipt_order: number;
+  review_package_role?: 'review_document' | 'interactive_preview' | 'representative_image' | null;
   blob: {
     id: string;
     sha256: string;
@@ -76,6 +77,8 @@ export interface DeliveryApproval {
   source_url: string | null;
   approved_at: string;
   invalidated_at: string | null;
+  review_package_id?: string | null;
+  package_manifest_sha256?: string | null;
 }
 
 export interface DeliveryGate {
@@ -89,6 +92,48 @@ export interface DeliveryGate {
   waiver_reason: string | null;
   warning_accepted: boolean;
   report_artifact_id: string | null;
+  review_package_id?: string | null;
+}
+
+export interface DeliveryReviewPackageStatus {
+  status: 'ok';
+  project_id: string;
+  delivery_id: string;
+  selected: {
+    package_id: string;
+    revision: number;
+    status: 'draft' | 'published' | 'superseded' | 'aborted' | 'expired';
+    manifest_sha256: string;
+    base_evidence_version: number;
+    expires_at: string;
+    published_at: string | null;
+  };
+  files: Array<{
+    item_id: string;
+    role: 'review_document' | 'interactive_preview' | 'representative_image';
+    filename: string;
+    required: boolean;
+    status: 'pending' | 'uploaded' | 'failed';
+    artifact_id: string | null;
+    actual_sha256: string | null;
+    actual_size_bytes: number | null;
+    actual_mime_type: string | null;
+    error_code: string | null;
+  }>;
+  missing_roles: Array<'review_document' | 'interactive_preview' | 'representative_image'>;
+  blockers: string[];
+  review_gate: {
+    gate_key: string;
+    status: GateStatus;
+    review_package_id: string | null;
+    report_artifact_id: string | null;
+  } | null;
+  overview: {
+    mode: 'update' | 'keep';
+    keep_reason: string | null;
+    before_sha256: string;
+    after_sha256: string;
+  };
 }
 
 export interface DeliveryDeployEvidence {
@@ -378,6 +423,8 @@ export async function acceptDeliveryReview(
     gate_key: string;
     artifact_id: string;
     expected_sha256: string;
+    package_id?: string;
+    expected_manifest_sha256?: string;
   },
 ): Promise<{
   status: 'accepted';
@@ -392,7 +439,7 @@ export async function acceptDeliveryReview(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Idempotency-Key': `review-accept:${input.artifact_id}:${input.expected_sha256}`,
+      'Idempotency-Key': `review-accept:${input.package_id ?? input.artifact_id}:${input.expected_manifest_sha256 ?? input.expected_sha256}`,
     },
     body: JSON.stringify({ delivery_id: deliveryId, ...input }),
   });
@@ -408,6 +455,20 @@ export async function acceptDeliveryReview(
       ready_for_next_step: true;
     };
   };
+  return payload.result;
+}
+
+export async function getDeliveryReviewPackageStatus(
+  deliveryId: string,
+  packageId: string,
+): Promise<DeliveryReviewPackageStatus> {
+  const response = await fetchWithAuth('/api/v1/operations/get_delivery_review_package_status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delivery_id: deliveryId, package_id: packageId }),
+  });
+  if (!response.ok) await throwApiError(response, 'Delivery review package status failed');
+  const payload = (await response.json()) as { result: DeliveryReviewPackageStatus };
   return payload.result;
 }
 

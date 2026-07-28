@@ -63,6 +63,14 @@ const reviewGate = z
     waiver_reason: z.string().nullable(),
   })
   .strict();
+const reviewPackage = z
+  .object({
+    id: z.string(),
+    revision: z.number().int().positive(),
+    manifest_sha256: sha256,
+    status: z.enum(['published', 'superseded']),
+  })
+  .strict();
 
 function definitionSha256(value: Record<string, unknown>): string {
   const ordered = Object.fromEntries(
@@ -296,6 +304,7 @@ export const getDeliveryReviewStatusOperation: ApplicationOperationDefinition = 
       artifact: reviewArtifact.nullable(),
       gate: reviewGate,
       approval_evidence_id: z.string().nullable(),
+      review_package: reviewPackage.nullable().optional(),
       blockers: z.array(reviewBlocker),
       status_call: z.object({
         operation: z.literal('get_delivery_review_status'),
@@ -333,6 +342,7 @@ export const getDeliveryReviewStatusOperation: ApplicationOperationDefinition = 
       artifact: review.artifact,
       gate: review.gate,
       approval_evidence_id: review.approval_evidence_id,
+      review_package: review.review_package,
       blockers: review.blockers,
       status_call: {
         operation: 'get_delivery_review_status',
@@ -364,6 +374,8 @@ export const acceptDeliveryReviewOperation: ApplicationOperationDefinition = {
       gate_key: z.string().trim().min(1).max(100),
       artifact_id: z.string().min(1),
       expected_sha256: sha256,
+      package_id: z.string().min(1).optional(),
+      expected_manifest_sha256: sha256.optional(),
       summary: z.string().trim().min(1).max(20_000).nullable().optional(),
     })
     .strict(),
@@ -376,6 +388,7 @@ export const acceptDeliveryReviewOperation: ApplicationOperationDefinition = {
       artifact_id: z.string(),
       revision: z.number().int().positive(),
       sha256,
+      review_package: reviewPackage.nullable().optional(),
       ready_for_next_step: z.literal(true),
       status_call: z.object({
         operation: z.literal('get_delivery_review_status'),
@@ -397,6 +410,10 @@ export const acceptDeliveryReviewOperation: ApplicationOperationDefinition = {
       gateKey: String(input['gate_key']),
       artifactId: String(input['artifact_id']),
       expectedSha256: String(input['expected_sha256']),
+      ...(typeof input['package_id'] === 'string' ? { packageId: input['package_id'] } : {}),
+      ...(typeof input['expected_manifest_sha256'] === 'string'
+        ? { expectedManifestSha256: input['expected_manifest_sha256'] }
+        : {}),
       summary: typeof input['summary'] === 'string' ? input['summary'] : null,
       actor: context.actor.label,
     });
@@ -413,6 +430,7 @@ export const acceptDeliveryReviewOperation: ApplicationOperationDefinition = {
       artifact_id: review.artifact.id,
       revision: review.artifact.revision,
       sha256: review.artifact.sha256,
+      review_package: review.review_package,
       ready_for_next_step: true,
       status_call: {
         operation: 'get_delivery_review_status',

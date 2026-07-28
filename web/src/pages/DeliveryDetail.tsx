@@ -32,6 +32,7 @@ import {
   generateReceiptPreview,
   getDelivery,
   getDeliveryExecution,
+  getDeliveryReviewPackageStatus,
   getDeliveryReadiness,
   recordDeliveryGate,
   setDeliveryArtifactStatus,
@@ -42,6 +43,7 @@ import {
   type DeliveryGate,
   type DeliveryReadiness,
   type DeliveryReadinessCheck,
+  type DeliveryReviewPackageStatus,
   type DeliveryStatus,
   type DeliveryType,
 } from '@/lib/api/deliveries';
@@ -829,6 +831,11 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
                 {t('delivery.reviewCheckpoint.targetBadge')}
               </span>
             )}
+            {artifact.review_package_role && (
+              <span className="rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2 py-0.5 text-[9px] text-[color:var(--ol-fg-muted)]">
+                {t(`delivery.reviewPackage.role.${artifact.review_package_role}`)}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
             {formatArtifactRevision(artifact.revision, t)} ·{' '}
@@ -1134,6 +1141,28 @@ function ReviewCheckpointCard({
   deliveryId,
 }: Omit<PanelProps, 'execution'> & { gate: DeliveryGate }) {
   const { t } = useLanguage();
+  const [packageLoad, setPackageLoad] = useState<{
+    packageId: string;
+    data: DeliveryReviewPackageStatus | null;
+    failed: boolean;
+  } | null>(null);
+  const reviewPackage = packageLoad?.packageId === gate.review_package_id ? packageLoad.data : null;
+  const packageLoadFailed = packageLoad?.packageId === gate.review_package_id && packageLoad.failed;
+  useEffect(() => {
+    let active = true;
+    if (!gate.review_package_id) return () => undefined;
+    const packageId = gate.review_package_id;
+    void getDeliveryReviewPackageStatus(deliveryId, gate.review_package_id)
+      .then((status) => {
+        if (active) setPackageLoad({ packageId, data: status, failed: false });
+      })
+      .catch(() => {
+        if (active) setPackageLoad({ packageId, data: null, failed: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [deliveryId, gate.review_package_id]);
   const artifact = gate.report_artifact_id
     ? detail.artifacts.find((candidate) => candidate.id === gate.report_artifact_id)
     : undefined;
@@ -1182,7 +1211,13 @@ function ReviewCheckpointCard({
           <p className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-primary)]">
             {t('delivery.reviewCheckpoint.eyebrow')}
           </p>
-          <h4 className="mt-1 text-sm font-semibold">{formatDefaultGateLabel(gate, t)}</h4>
+          <h4 className="mt-1 text-sm font-semibold">
+            {reviewPackage
+              ? t('delivery.reviewPackage.versionTitle', {
+                  revision: reviewPackage.selected.revision,
+                })
+              : formatDefaultGateLabel(gate, t)}
+          </h4>
         </div>
         <span
           className={cn(
@@ -1205,6 +1240,23 @@ function ReviewCheckpointCard({
         <p className="mt-3 whitespace-pre-wrap rounded-md bg-[color:var(--ol-panel)] px-3 py-2 text-xs leading-5">
           {gate.summary}
         </p>
+      )}
+      {reviewPackage && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+          <span>
+            {t('delivery.reviewPackage.fileCount', { count: reviewPackage.files.length })}
+          </span>
+          <span
+            className="ol-mono"
+            title={reviewPackage.selected.manifest_sha256}
+            aria-label={t('delivery.reviewPackage.manifestSha')}
+          >
+            manifest:{reviewPackage.selected.manifest_sha256.slice(0, 12)}
+          </span>
+        </div>
+      )}
+      {packageLoadFailed && (
+        <p className="mt-3 text-xs text-warning">{t('delivery.reviewPackage.loadFailed')}</p>
       )}
 
       {!gate.report_artifact_id ? (
@@ -1238,6 +1290,39 @@ function ReviewCheckpointCard({
           <p className="mt-2 text-[10px] leading-4 text-[color:var(--ol-fg-muted)]">
             {t('delivery.reviewCheckpoint.exactVersionHint')}
           </p>
+          {reviewPackage && reviewPackage.files.length > 1 && (
+            <div className="mt-3 border-t border-[color:var(--ol-border-subtle)] pt-3">
+              <p className="text-[10px] font-medium text-[color:var(--ol-fg-muted)]">
+                {t('delivery.reviewPackage.includedFiles')}
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {reviewPackage.files
+                  .filter((file) => file.role !== 'review_document')
+                  .map((file) => (
+                    <li
+                      key={file.item_id}
+                      className="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <span className="min-w-0 truncate">
+                        {t(`delivery.reviewPackage.role.${file.role}`)} · {file.filename}
+                      </span>
+                      {file.artifact_id ? (
+                        <a
+                          className="shrink-0 text-[color:var(--ol-primary)] hover:underline"
+                          href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(file.artifact_id)}/download`}
+                        >
+                          {t('delivery.reviewCheckpoint.openFile')}
+                        </a>
+                      ) : (
+                        <span className="shrink-0 text-warning">
+                          {t(`delivery.reviewPackage.fileStatus.${file.status}`)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             <Button asChild variant="outline" size="sm">
@@ -1277,13 +1362,23 @@ function ReviewCheckpointCard({
                         gate_key: gate.gate_key,
                         artifact_id: artifact.id,
                         expected_sha256: artifact.blob.sha256,
+                        ...(reviewPackage
+                          ? {
+                              package_id: reviewPackage.selected.package_id,
+                              expected_manifest_sha256: reviewPackage.selected.manifest_sha256,
+                            }
+                          : {}),
                       }),
-                    t('delivery.messages.reviewAccepted'),
+                    reviewPackage
+                      ? t('delivery.messages.reviewPackageAccepted')
+                      : t('delivery.messages.reviewAccepted'),
                   )
                 }
               >
                 <Check className="h-3.5 w-3.5" />
-                {t('delivery.reviewCheckpoint.acceptExactVersion')}
+                {reviewPackage
+                  ? t('delivery.reviewPackage.accept')
+                  : t('delivery.reviewCheckpoint.acceptExactVersion')}
               </Button>
             )}
           </div>

@@ -9,6 +9,7 @@ const EXEMPT_PREFIXES = [
   '/mcp',
   '/api/traefik/',
   '/api/evidence-uploads/',
+  '/api/review-package-uploads/',
 ];
 
 // Auth endpoints that intentionally bypass session validation.

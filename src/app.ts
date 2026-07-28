@@ -60,6 +60,7 @@ import { DeliveryAgentRunService } from './delivery/agent-run-service.js';
 import { DeliveryQualityGateService } from './delivery/quality-gate-service.js';
 import { DeliveryCompletionService } from './delivery/completion-service.js';
 import { EvidenceUploadService } from './delivery/evidence-upload-service.js';
+import { DeliveryReviewPackageService } from './delivery/review-package-service.js';
 import { EngagementService } from './engagement/engagement-service.js';
 import { ProjectManifestService } from './project/project-manifest-service.js';
 import { ReleaseService } from './release/release-service.js';
@@ -77,10 +78,12 @@ let activeIncidentReporter: IncidentReporter | null = null;
 let activeActivityLogger: ActivityLogger | null = null;
 let activeAiUsageListener: AiUsageListener | null = null;
 let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
+let activeReviewPackageCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
 const ACTIVITY_LOG_TTL_DAYS = 30;
 const ACTIVITY_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REVIEW_PACKAGE_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const POSTMORTEM_CANCEL_EVENTS = [
   'recovery:failed',
   'recovery:exhausted',
@@ -223,6 +226,7 @@ export interface AppContext {
   deliveryQualityGateService: DeliveryQualityGateService;
   deliveryCompletionService: DeliveryCompletionService;
   evidenceUploadService: EvidenceUploadService;
+  deliveryReviewPackageService: DeliveryReviewPackageService;
   projectManifestService: ProjectManifestService;
   releaseService: ReleaseService;
   releasePromotionService: ReleasePromotionService;
@@ -357,6 +361,11 @@ export async function createAppContext(
     deliveryAgentRunService,
   );
   const evidenceUploadService = new EvidenceUploadService(db, deliveryService);
+  const deliveryReviewPackageService = new DeliveryReviewPackageService(
+    db,
+    deliveryService,
+    artifactStore,
+  );
   const weeklyReportService = new WeeklyReportService(
     db,
     engagementService,
@@ -605,6 +614,7 @@ export async function createAppContext(
     deliveryQualityGateService,
     deliveryCompletionService,
     evidenceUploadService,
+    deliveryReviewPackageService,
     projectManifestService,
     releaseService,
     releasePromotionService,
@@ -680,6 +690,25 @@ export async function createAppContext(
     ACTIVITY_LOG_CLEANUP_INTERVAL_MS,
   );
 
+  const runReviewPackageCleanup = (): void => {
+    void db
+      .cleanupDeliveryReviewPackageStaging()
+      .then((result) => {
+        if (result.expiredPackages + result.releasedItems + result.deletedBlobRows > 0) {
+          log.info(result, 'Delivery review package staging cleanup completed');
+        }
+      })
+      .catch((err: unknown) => {
+        log.error({ err }, 'Delivery review package staging cleanup failed');
+      });
+  };
+  runReviewPackageCleanup();
+  if (activeReviewPackageCleanupInterval) clearInterval(activeReviewPackageCleanupInterval);
+  activeReviewPackageCleanupInterval = setInterval(
+    runReviewPackageCleanup,
+    REVIEW_PACKAGE_CLEANUP_INTERVAL_MS,
+  );
+
   // Activity event persistence subscriber
   activeActivityLogger?.stop();
   const activityLogger = new ActivityLogger(eventBus, db);
@@ -705,6 +734,10 @@ export async function shutdownAppContext(ctx: AppContext): Promise<void> {
   if (activeActivityLogCleanupInterval) {
     clearInterval(activeActivityLogCleanupInterval);
     activeActivityLogCleanupInterval = null;
+  }
+  if (activeReviewPackageCleanupInterval) {
+    clearInterval(activeReviewPackageCleanupInterval);
+    activeReviewPackageCleanupInterval = null;
   }
   activeIncidentReporter = null;
   activeActivityLogger = null;

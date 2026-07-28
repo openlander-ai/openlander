@@ -17,6 +17,7 @@ import { createDeliveryRoutes } from './delivery-routes.js';
 import { createEngagementRoutes } from './engagement-routes.js';
 import { createOperationRoutes } from './operation-routes.js';
 import { createEvidenceUploadRoutes } from './evidence-upload-routes.js';
+import { createReviewPackageUploadRoutes } from './review-package-upload-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
 import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectGroupRoutes } from './project-group-routes.js';
@@ -565,6 +566,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createEngagementRoutes(ctx));
   api.route('/', createOperationRoutes(ctx));
   api.route('/', createEvidenceUploadRoutes(ctx));
+  api.route('/', createReviewPackageUploadRoutes(ctx));
 
   return api;
 }

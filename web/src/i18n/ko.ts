@@ -873,7 +873,7 @@ export const translations = {
         lead: '납품 작업 설정과 증거는 버전이 남는 작업 명령으로 반영합니다. 이 화면에서는 범위, 검증 결과, 승인, 배포 근거와 완료 증빙을 확인하세요.',
         prompt: {
           continue:
-            '프로젝트 {projectName}의 납품 작업 {deliveryId}에서 현재 막힌 항목을 확인하고, 진행 중인 에이전트 실행을 이어받아 다음으로 안전한 작업까지 진행해 주세요. 이름과 요약은 결과 중심의 자연스러운 문장으로 정리하고, 고객 공유 파일은 지금 검토할 최소 구성만 유지하세요.',
+            '프로젝트 {projectName}의 납품 작업 {deliveryId}에서 막힌 항목을 확인하고 다음으로 안전한 작업까지 진행해 주세요. 고객 검토가 가능해지면 꼭 필요한 파일만 담은 최소 구성으로 prepare_delivery_review_package를 실행하고, 상태 조회에서 빠진 파일만 올린 뒤 확인된 manifest를 발행하세요. 이름과 요약은 결과 중심의 자연스러운 문장으로 정리해 주세요.',
           evidence:
             '프로젝트 {projectName}의 납품 작업 {deliveryId}에 이 문서를 증거로 보존하고 프로젝트 기록을 구조화해 갱신한 뒤, 영향받은 품질 검증만 다시 실행해 주세요.',
         },
@@ -3191,6 +3191,24 @@ export const translations = {
         stale: '새 버전 확인 필요',
       },
     },
+    reviewPackage: {
+      versionTitle: '고객 검토본 버전 {revision}',
+      fileCount: '검토할 파일 {count}개',
+      manifestSha: '고객 검토본 manifest SHA-256',
+      includedFiles: '함께 검토할 파일',
+      accept: '이 검토본 승인',
+      loadFailed: '검토본 정보를 불러오지 못했습니다. 새로고침한 뒤 승인해 주세요.',
+      role: {
+        review_document: '대표 PDF',
+        interactive_preview: '화면 확인용 HTML',
+        representative_image: '대표 화면',
+      },
+      fileStatus: {
+        pending: '업로드 전',
+        uploaded: '업로드됨',
+        failed: '업로드 실패',
+      },
+    },
     review: {
       feedbackTitle: '고객 피드백 원문',
       feedbackDescription:
@@ -3395,6 +3413,7 @@ export const translations = {
       uploaded: '산출물을 업로드했습니다.',
       artifactApproved: '산출물을 승인했습니다.',
       reviewAccepted: '이 파일 버전을 승인했습니다.',
+      reviewPackageAccepted: '고객 검토본을 승인했습니다.',
       reviewChangesRequested:
         '수정을 요청했습니다. 에이전트가 새 버전으로 검토를 다시 요청해야 합니다.',
       workItemUpdated: '검토 항목 상태를 변경했습니다.',
