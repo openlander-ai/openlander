@@ -9,8 +9,7 @@ import { deriveDeliveryHumanAction } from '@/lib/delivery-human-action';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
-export type DeliveryDetailTab =
-  'overview' | 'artifacts' | 'review' | 'gates' | 'deployments' | 'receipt';
+export type DeliveryDetailTab = 'overview' | 'artifacts' | 'gates' | 'deployments' | 'receipt';
 
 interface WorkflowStage {
   id: DeliveryDetailTab;
@@ -141,8 +140,7 @@ function getWorkflowStages(
       complete: Boolean(detail.delivery.summary.trim() && detail.delivery.limitations?.trim()),
     },
     { id: 'artifacts', complete: artifactsComplete },
-    { id: 'review', complete: reviewComplete },
-    { id: 'gates', complete: gatesComplete },
+    { id: 'gates', complete: reviewComplete && gatesComplete },
     { id: 'deployments', complete: deploymentsComplete },
     {
       id: 'receipt',
@@ -227,7 +225,7 @@ export function DeliveryWorkflowRail({
 
         <ol
           aria-label={t('delivery.workflow.title')}
-          className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6"
+          className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5"
         >
           {stages.map((stage, index) => {
             const active = activeTab === stage.id;

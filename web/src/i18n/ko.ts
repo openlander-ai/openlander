@@ -863,17 +863,17 @@ export const translations = {
         heading: '입력 항목 대신 원하는 결과를 설명하세요',
         lead: '에이전트가 목표를 납품 작업, 완료 조건, manifest 검증 항목, 정확한 커밋, 품질 실행, 릴리스와 환경 승격 순서로 구성합니다.',
         prompt: {
-          plan: '프로젝트 {projectName}에서 이 요구사항을 다음 납품 작업으로 계획해 주세요. `.openlander/delivery.yml`을 작성하고 품질 검증을 실행하되, 실제 막힘이 있으면 멈추고 알려주세요.',
+          plan: '프로젝트 {projectName}에서 이 요구사항을 다음 납품 작업으로 계획해 주세요. 이름은 고객이 이해할 결과 중심으로 짧게 쓰고 `Agent Run`, `exact commit` 같은 내부 절차 표현은 넣지 마세요. `.openlander/delivery.yml`을 작성해 품질 검증을 실행하고, 고객 공유 파일은 검토에 필요한 최소 구성만 남기며 QA와 이력은 내부 증빙으로 구분해 주세요. 실제 막힘이 있으면 멈추고 알려주세요.',
           continue:
             '프로젝트 {projectName}의 진행 중인 에이전트 실행과 납품 작업을 확인하고, 안전하게 이어갈 수 있는 최신 인수인계부터 재개한 뒤 다음 작업을 알려주세요.',
         },
       },
       manageDelivery: {
         heading: '다음 작업을 에이전트에게 알려주세요',
-        lead: '납품 작업 설정과 증거는 버전이 남는 작업 명령으로 반영합니다. 이 화면에서는 범위, 검증 결과, 승인, 배포 근거와 납품 확인서를 확인하세요.',
+        lead: '납품 작업 설정과 증거는 버전이 남는 작업 명령으로 반영합니다. 이 화면에서는 범위, 검증 결과, 승인, 배포 근거와 완료 증빙을 확인하세요.',
         prompt: {
           continue:
-            '프로젝트 {projectName}의 납품 작업 {deliveryId}에서 현재 막힌 항목을 확인하고, 진행 중인 에이전트 실행을 이어받아 다음으로 안전한 작업까지 진행해 주세요.',
+            '프로젝트 {projectName}의 납품 작업 {deliveryId}에서 현재 막힌 항목을 확인하고, 진행 중인 에이전트 실행을 이어받아 다음으로 안전한 작업까지 진행해 주세요. 이름과 요약은 결과 중심의 자연스러운 문장으로 정리하고, 고객 공유 파일은 지금 검토할 최소 구성만 유지하세요.',
           evidence:
             '프로젝트 {projectName}의 납품 작업 {deliveryId}에 이 문서를 증거로 보존하고 프로젝트 기록을 구조화해 갱신한 뒤, 영향받은 품질 검증만 다시 실행해 주세요.',
         },
@@ -2905,11 +2905,11 @@ export const translations = {
     },
     tabs: {
       overview: '개요',
-      artifacts: '산출물',
-      review: '고객 검토',
-      gates: '통과 기준',
+      artifacts: '자료·증빙',
+      review: '의견·결정',
+      gates: '검토·품질',
       deployments: '배포',
-      receipt: '납품 확인서',
+      receipt: '완료 증빙',
     },
     workflow: {
       title: '납품 진행 단계',
@@ -2922,17 +2922,17 @@ export const translations = {
       blocked: '확인할 조건 {count}개 남음',
       steps: {
         overview: '범위',
-        artifacts: '산출물',
-        review: '고객 검토',
-        gates: '통과 기준',
+        artifacts: '자료·증빙',
+        review: '의견·결정',
+        gates: '검토·품질',
         deployments: '배포',
-        receipt: '납품 확인서',
+        receipt: '완료 증빙',
       },
     },
     humanAction: {
       review_version: {
         eyebrow: '확인 필요',
-        title: '검토할 파일 버전 {count}건이 있습니다',
+        title: '검토할 파일 {count}건이 있습니다',
         description: '에이전트가 지정한 파일을 확인한 뒤 이 버전을 승인하거나 수정을 요청하세요.',
         action: '검토 열기',
       },
@@ -3299,11 +3299,14 @@ export const translations = {
       },
     },
     receipt: {
-      readinessTitle: '납품 확인서 준비 상태',
+      readinessTitle: '완료 전 확인',
       readinessDescription:
-        '모든 확인 항목을 충족하면 납품 확인서 PDF를 미리 본 뒤 확정할 수 있습니다.',
+        '아직 충족하지 못한 조건을 먼저 보여줍니다. 완료된 조건은 필요할 때 펼쳐볼 수 있습니다.',
+      remainingTitle: '완료 전에 확인할 항목 {count}개',
+      satisfiedTitle: '충족한 조건 {count}개',
+      allSatisfied: '완료 조건을 모두 충족했습니다.',
       pageEstimate: '예상 전체 분량: {count}페이지',
-      actionsTitle: '납품 확인서',
+      actionsTitle: '완료 증빙',
       finalizeWarning:
         '확정하면 납품 건과 근거 자료가 잠겨 더 이상 바꿀 수 없습니다. 먼저 납품 확인서 PDF 전체를 확인하세요.',
       finalizedTitle: '납품 확인서가 확정되었습니다',

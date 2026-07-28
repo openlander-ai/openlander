@@ -8,7 +8,6 @@ import {
   FileCheck2,
   FileText,
   Loader2,
-  MessageSquareText,
   PackageCheck,
   Rocket,
   ShieldCheck,
@@ -251,8 +250,13 @@ export function DeliveryDetailPage() {
     }
   };
 
-  const proposedReviewItemCount =
-    detail?.work_items.filter((item) => item.status === 'proposed').length ?? 0;
+  const pendingReviewItemCount =
+    detail?.work_items.filter(
+      (item) =>
+        item.status === 'proposed' ||
+        (item.status === 'confirmed' &&
+          (item.kind === 'question' || item.kind === 'change_request')),
+    ).length ?? 0;
   const pendingReviewGateCount = detail ? countPendingReviewGates(detail) : 0;
   const artifactGroups = detail ? groupDeliveryArtifacts(detail.artifacts, detail.gates) : null;
   const tabs: TabDef<DeliveryDetailTab>[] = [
@@ -264,16 +268,13 @@ export function DeliveryDetailPage() {
       count: artifactGroups?.currentCount,
     },
     {
-      id: 'review',
-      label: t('delivery.tabs.review'),
-      icon: MessageSquareText,
-      count: proposedReviewItemCount > 0 ? proposedReviewItemCount : undefined,
-    },
-    {
       id: 'gates',
       label: t('delivery.tabs.gates'),
       icon: ShieldCheck,
-      count: pendingReviewGateCount > 0 ? pendingReviewGateCount : undefined,
+      count:
+        pendingReviewGateCount + pendingReviewItemCount > 0
+          ? pendingReviewGateCount + pendingReviewItemCount
+          : undefined,
     },
     { id: 'deployments', label: t('delivery.tabs.deployments'), icon: Rocket },
     { id: 'receipt', label: t('delivery.tabs.receipt'), icon: PackageCheck },
@@ -420,34 +421,30 @@ export function DeliveryDetailPage() {
             />
           </TabPanel>
           <TabPanel
-            active={activeTab === 'review'}
-            panelId="deliverypanel-review"
-            labelledBy="delivery-review"
-          >
-            <ReviewPanel
-              detail={detail}
-              immutable={immutable}
-              busy={busy}
-              onRun={run}
-              projectId={projectId}
-              deliveryId={deliveryId}
-              execution={execution}
-            />
-          </TabPanel>
-          <TabPanel
             active={activeTab === 'gates'}
             panelId="deliverypanel-gates"
             labelledBy="delivery-gates"
           >
-            <GatesPanel
-              detail={detail}
-              immutable={immutable}
-              busy={busy}
-              onRun={run}
-              projectId={projectId}
-              deliveryId={deliveryId}
-              execution={execution}
-            />
+            <div className="space-y-4">
+              <GatesPanel
+                detail={detail}
+                immutable={immutable}
+                busy={busy}
+                onRun={run}
+                projectId={projectId}
+                deliveryId={deliveryId}
+                execution={execution}
+              />
+              <ReviewPanel
+                detail={detail}
+                immutable={immutable}
+                busy={busy}
+                onRun={run}
+                projectId={projectId}
+                deliveryId={deliveryId}
+                execution={execution}
+              />
+            </div>
           </TabPanel>
           <TabPanel
             active={activeTab === 'deployments'}
@@ -939,15 +936,14 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
 
 function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
   const { t, language } = useLanguage();
+  const activeApprovals = detail.approvals.filter((approval) => !approval.invalidated_at);
   return (
     <div className="space-y-4">
-      <SectionCard
-        title={t('delivery.review.sourcesTitle')}
-        description={t('delivery.formless.reviewDescription')}
-      >
-        {detail.feedback_sources.length === 0 ? (
-          <EmptyEvidence>{t('delivery.review.noFeedback')}</EmptyEvidence>
-        ) : (
+      {detail.feedback_sources.length > 0 && (
+        <SectionCard
+          title={t('delivery.review.sourcesTitle')}
+          description={t('delivery.formless.reviewDescription')}
+        >
           <div className="space-y-3">
             {detail.feedback_sources.map((source) => (
               <article
@@ -977,16 +973,14 @@ function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: 
               </article>
             ))}
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
 
-      <SectionCard
-        title={t('delivery.review.itemsTitle')}
-        description={t('delivery.review.itemsDescription')}
-      >
-        {detail.work_items.length === 0 ? (
-          <EmptyEvidence>{t('delivery.review.noItems')}</EmptyEvidence>
-        ) : (
+      {detail.work_items.length > 0 && (
+        <SectionCard
+          title={t('delivery.review.itemsTitle')}
+          description={t('delivery.review.itemsDescription')}
+        >
           <div className="space-y-3">
             {detail.work_items.map((item) => (
               <article
@@ -1078,40 +1072,34 @@ function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: 
               </article>
             ))}
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
 
-      <SectionCard title={t('delivery.formless.approvalsTitle')}>
-        {detail.approvals.filter((approval) => !approval.invalidated_at).length === 0 ? (
-          <EmptyEvidence>{t('delivery.formless.noApprovals')}</EmptyEvidence>
-        ) : (
+      {activeApprovals.length > 0 && (
+        <SectionCard title={t('delivery.formless.approvalsTitle')}>
           <div className="space-y-3">
-            {detail.approvals
-              .filter((approval) => !approval.invalidated_at)
-              .map((approval) => (
-                <article
-                  key={approval.id}
-                  className="rounded-md border border-success/25 bg-success/5 p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <strong>{approval.approver_display_name}</strong>
-                    <time className="text-[10px] text-[color:var(--ol-fg-muted)]">
-                      {new Date(approval.approved_at).toLocaleString(language)}
-                    </time>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5">
-                    {approval.approval_excerpt}
-                  </p>
-                </article>
-              ))}
+            {activeApprovals.map((approval) => (
+              <article
+                key={approval.id}
+                className="rounded-md border border-success/25 bg-success/5 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <strong>{approval.approver_display_name}</strong>
+                  <time className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                    {new Date(approval.approved_at).toLocaleString(language)}
+                  </time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-5">
+                  {approval.approval_excerpt}
+                </p>
+              </article>
+            ))}
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
 
-      <SectionCard title={t('delivery.review.externalRefTitle')}>
-        {detail.external_refs.length === 0 ? (
-          <EmptyEvidence>{t('delivery.review.noExternalRefs')}</EmptyEvidence>
-        ) : (
+      {detail.external_refs.length > 0 && (
+        <SectionCard title={t('delivery.review.externalRefTitle')}>
           <ul className="space-y-2">
             {detail.external_refs.map((reference) => (
               <li key={reference.id}>
@@ -1130,8 +1118,8 @@ function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: 
               </li>
             ))}
           </ul>
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
     </div>
   );
 }
@@ -1565,6 +1553,8 @@ function ReceiptPanel({
   const { t, language } = useLanguage();
   const [localBusy, setLocalBusy] = useState<string | null>(null);
   const actionBusy = busy !== null || localBusy !== null;
+  const pendingChecks = readiness?.checks.filter((check) => !check.passed) ?? [];
+  const passedChecks = readiness?.checks.filter((check) => check.passed) ?? [];
 
   const preview = async () => {
     setLocalBusy('preview');
@@ -1597,21 +1587,46 @@ function ReceiptPanel({
           <EmptyEvidence>{t('delivery.loading')}</EmptyEvidence>
         ) : (
           <>
-            <ul className="space-y-2">
-              {readiness.checks.map((check) => (
-                <li
-                  key={check.key}
-                  className="flex gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs"
-                >
-                  {check.passed ? (
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-                  ) : (
-                    <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-                  )}
-                  <span>{formatReadinessCheck(check, detail.delivery.delivery_type, t)}</span>
-                </li>
-              ))}
-            </ul>
+            {pendingChecks.length === 0 ? (
+              <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+                {t('delivery.receipt.allSatisfied')}
+              </p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs font-medium">
+                  {t('delivery.receipt.remainingTitle', { count: pendingChecks.length })}
+                </p>
+                <ul className="space-y-2">
+                  {pendingChecks.map((check) => (
+                    <li
+                      key={check.key}
+                      className="flex gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs"
+                    >
+                      <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                      <span>{formatReadinessCheck(check, detail.delivery.delivery_type, t)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {passedChecks.length > 0 && (
+              <details className="mt-3 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2">
+                <summary className="cursor-pointer select-none text-xs font-medium">
+                  {t('delivery.receipt.satisfiedTitle', { count: passedChecks.length })}
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {passedChecks.map((check) => (
+                    <li
+                      key={check.key}
+                      className="flex gap-2 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2 text-xs"
+                    >
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                      <span>{formatReadinessCheck(check, detail.delivery.delivery_type, t)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <p className="mt-3 text-[10px] text-[color:var(--ol-fg-muted)]">
               {t('delivery.receipt.pageEstimate', { count: readiness.estimated_pages })}
             </p>

@@ -857,17 +857,17 @@ export const translations = {
         heading: 'Describe the outcome, not the form fields',
         lead: 'The agent will turn the goal into a Delivery, Definition of Done, manifest Gates, exact commit, quality run, Release, and Promotion sequence.',
         prompt: {
-          plan: 'For Project {projectName}, plan the next Delivery from this requirement. Write `.openlander/delivery.yml`, run the quality Gates, and stop at any real blocker.',
+          plan: 'For Project {projectName}, plan the next Delivery from this requirement. Use a short, outcome-focused title without workflow jargon such as `Agent Run` or `exact commit`. Write `.openlander/delivery.yml`, run the quality Gates, keep the customer package to the minimum reviewable files, and classify QA and history as internal evidence. Stop at any real blocker.',
           continue:
             'Inspect active Agent Runs and Deliveries in {projectName}; resume the most recent safe handoff and tell me the next required operation.',
         },
       },
       manageDelivery: {
         heading: 'Tell your agent what to do next',
-        lead: 'Delivery configuration and evidence enter through versioned operations. Use this page to inspect the resulting scope, checks, approvals, deployment evidence, and Receipt.',
+        lead: 'Delivery configuration and evidence enter through versioned operations. Use this page to inspect the resulting scope, checks, approvals, deployment evidence, and completion evidence.',
         prompt: {
           continue:
-            'For Delivery {deliveryId} in Project {projectName}, inspect the current blockers, resume its active Agent Run, and continue through the next safe operation.',
+            'For Delivery {deliveryId} in Project {projectName}, inspect the current blockers, resume its active Agent Run, and continue through the next safe operation. Keep its title and summary outcome-focused, and keep only the files needed for the current customer review in the customer package.',
           evidence:
             'For Delivery {deliveryId} in Project {projectName}, preserve this document as evidence, update the structured project record, and rerun only the affected quality Gates.',
         },
@@ -2698,11 +2698,11 @@ export const translations = {
     },
     tabs: {
       overview: 'Overview',
-      artifacts: 'Artifacts',
-      review: 'Review',
-      gates: 'Gates',
+      artifacts: 'Files & evidence',
+      review: 'Feedback & decisions',
+      gates: 'Review & quality',
       deployments: 'Deployments',
-      receipt: 'Receipt',
+      receipt: 'Completion evidence',
     },
     workflow: {
       title: 'Delivery progress',
@@ -2715,17 +2715,17 @@ export const translations = {
       blocked: '{count} readiness checks remaining',
       steps: {
         overview: 'Scope',
-        artifacts: 'Artifacts',
-        review: 'Review',
-        gates: 'Gates',
+        artifacts: 'Files & evidence',
+        review: 'Feedback & decisions',
+        gates: 'Review & quality',
         deployments: 'Deployment',
-        receipt: 'Receipt',
+        receipt: 'Completion evidence',
       },
     },
     humanAction: {
       review_version: {
         eyebrow: 'Needs your review',
-        title: '{count} file version needs review',
+        title: '{count} file needs review',
         description:
           'Check the file selected by the agent, then accept this version or request changes.',
         action: 'Open review',
@@ -3095,11 +3095,14 @@ export const translations = {
       },
     },
     receipt: {
-      readinessTitle: 'Receipt Readiness',
+      readinessTitle: 'Before completion',
       readinessDescription:
-        'Every check must pass before the full evidence PDF can be previewed and finalized.',
+        'Unmet conditions appear first. Completed conditions stay collapsed until you need them.',
+      remainingTitle: '{count} item(s) to check before completion',
+      satisfiedTitle: '{count} condition(s) satisfied',
+      allSatisfied: 'All completion conditions are satisfied.',
       pageEstimate: 'Estimated total: {count} pages',
-      actionsTitle: 'Receipt',
+      actionsTitle: 'Completion evidence',
       finalizeWarning:
         'Finalization permanently locks this Delivery and its evidence snapshot. Preview the entire PDF first.',
       finalizedTitle: 'Immutable Receipt finalized',

@@ -92,7 +92,7 @@ describe('Delivery human action summary', () => {
     expect(deriveDeliveryHumanAction(detail, null, null)).toMatchObject({
       state: 'review_items',
       count: 1,
-      targetTab: 'review',
+      targetTab: 'gates',
     });
   });
 
