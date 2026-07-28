@@ -225,6 +225,65 @@ describe('WeeklyReportService', () => {
     expect(customerHtml).not.toContain('Environment Production: failed');
   }, 120_000);
 
+  it('summarizes open project updates without exposing their detail to the customer', async () => {
+    const harness = await createHarness('ko');
+    harness.engagement.projects[0] = {
+      id: 'project-1',
+      display_name: 'Claims API',
+      runtime_status: 'stopped',
+    };
+    harness.evidence.releases.splice(0);
+    harness.evidence.promotions.splice(0);
+    harness.evidence.activity.push({
+      created_at: '2026-07-24T12:00:00.000Z',
+      event_type: 'project.update_recorded',
+      title: 'Project update recorded',
+      description: 'Customer data preflight needs follow-up.',
+      metadata: JSON.stringify({
+        entries: [
+          {
+            kind: 'risk',
+            status: 'open',
+            title: 'Missing source value',
+            detail: 'internal-row-detail-must-not-leak',
+          },
+          {
+            kind: 'question',
+            status: 'open',
+            title: 'Placeholder semantics',
+            detail: 'internal-question-detail-must-not-leak',
+          },
+          {
+            kind: 'action',
+            status: 'open',
+            title: 'Internal implementation action',
+            detail: 'internal-action-detail-must-not-leak',
+          },
+        ],
+      }),
+    });
+    const draft = await harness.service.generate({
+      engagementId: 'engagement-1',
+      periodStart: '2026-07-20',
+      periodEnd: '2026-07-26',
+      actor: 'agent-a',
+    });
+
+    const published = await harness.service.publish(draft.id);
+    const customerHtmlBlob = harness.stored.get(String(published.customer_html_blob_id));
+    if (!customerHtmlBlob) throw new Error('Published customer HTML blob is missing');
+    const customerHtml = (await harness.artifacts.read(customerHtmlBlob.storageKey)).toString();
+
+    expect(customerHtml).toContain('프로젝트 Claims API: 배포 전');
+    expect(customerHtml).toContain('추가 확인 필요 항목: 2건');
+    expect(customerHtml).not.toContain('확인할 이슈 없음');
+    expect(customerHtml).not.toContain('Missing source value');
+    expect(customerHtml).not.toContain('Placeholder semantics');
+    expect(customerHtml).not.toContain('internal-row-detail-must-not-leak');
+    expect(customerHtml).not.toContain('internal-question-detail-must-not-leak');
+    expect(customerHtml).not.toContain('internal-action-detail-must-not-leak');
+  }, 120_000);
+
   it('pins Korean report copy to the locale in the immutable evidence snapshot', async () => {
     const harness = await createHarness('ko');
     harness.engagement.deliveries.push({

@@ -387,6 +387,38 @@ function latestPromotionsByEnvironment(
   });
 }
 
+function openProjectUpdateItemCount(activity: Array<Record<string, unknown>>): number {
+  const items = new Set<string>();
+  for (const entry of activity) {
+    if (entry['event_type'] !== 'project.update_recorded') continue;
+    const metadata = activityMetadata(entry);
+    const entries = Array.isArray(metadata['entries']) ? metadata['entries'] : [];
+    for (const rawEntry of entries) {
+      const update = recordValue(rawEntry);
+      const kind = display(update['kind']);
+      const status = display(update['status']);
+      const title = display(update['title']).trim();
+      if ((kind === 'risk' || kind === 'question') && status === 'open' && title) {
+        items.add(`${kind}:${title}`);
+      }
+    }
+  }
+  return items.size;
+}
+
+function projectsWithRelease(evidence: Record<string, unknown>): Set<string> {
+  const deliveries = evidence['deliveries'] as Array<Record<string, unknown>>;
+  const releases = evidence['releases'] as Array<Record<string, unknown>>;
+  const projectByDelivery = new Map(
+    deliveries.map((delivery) => [display(delivery['id']), display(delivery['project_id'])]),
+  );
+  return new Set(
+    releases
+      .map((release) => projectByDelivery.get(display(release['delivery_id'])) ?? '')
+      .filter(Boolean),
+  );
+}
+
 function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale): string[] {
   const detail = snapshot['engagement'] as Record<string, unknown>;
   const evidence = snapshot['evidence'] as Record<string, unknown>;
@@ -402,18 +434,39 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   );
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
   const environments = evidence['environments'] as Array<Record<string, unknown>>;
+  const activity = evidence['activity'] as Array<Record<string, unknown>>;
   const environmentById = new Map(environments.map((entry) => [entry['id'], entry]));
   const latestPromotions = latestPromotionsByEnvironment(promotions, environments);
+  const releasedProjects = projectsWithRelease(evidence);
+  const openUpdateItems = openProjectUpdateItemCount(activity);
+  const issueLines = [
+    ...blockers.map((blocker) =>
+      locale === 'ko'
+        ? `확인할 이슈: ${String(blocker['title'])}`
+        : `Open issue: ${String(blocker['title'])}`,
+    ),
+    ...(openUpdateItems > 0
+      ? [
+          locale === 'ko'
+            ? `추가 확인 필요 항목: ${String(openUpdateItems)}건`
+            : `Additional items requiring confirmation: ${String(openUpdateItems)}`,
+        ]
+      : []),
+  ];
   if (locale === 'ko') {
     return [
       `고객: ${String(detail['customer_name'])}`,
       `고객 과제: ${String(detail['title'])}`,
       `기간: ${String(snapshot['period_start'])} – ${String(snapshot['period_end'])}`,
       `전체 상태: ${statusLabel(detail['runtime_health'], locale)}`,
-      ...projects.map(
-        (project) =>
-          `프로젝트 ${String(project['display_name'])}: ${statusLabel(project['runtime_status'], locale)}`,
-      ),
+      ...projects.map((project) => {
+        const runtimeStatus = display(project['runtime_status']);
+        const projectStatus =
+          runtimeStatus === 'stopped' && !releasedProjects.has(display(project['id']))
+            ? '배포 전'
+            : statusLabel(runtimeStatus, locale);
+        return `프로젝트 ${String(project['display_name'])}: ${projectStatus}`;
+      }),
       ...customerDeliveries.map(
         (delivery) =>
           `납품 ${String(delivery['title'])}: ${statusLabel(delivery['status'], locale)}`,
@@ -426,9 +479,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
         const environment = environmentById.get(promotion['project_environment_id']);
         return `환경 ${String(environment?.['display_name'] ?? promotion['project_environment_id'])}: ${statusLabel(promotion['status'], locale)}`;
       }),
-      ...(blockers.length > 0
-        ? blockers.map((blocker) => `확인할 이슈: ${String(blocker['title'])}`)
-        : ['확인할 이슈 없음']),
+      ...(issueLines.length > 0 ? issueLines : ['확인할 이슈 없음']),
     ];
   }
   return [
@@ -436,10 +487,14 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
     `Engagement: ${String(detail['title'])}`,
     `Period: ${String(snapshot['period_start'])} – ${String(snapshot['period_end'])}`,
     `Overall status: ${String(detail['runtime_health'])}`,
-    ...projects.map(
-      (project) =>
-        `Project ${String(project['display_name'])}: ${String(project['runtime_status'])}`,
-    ),
+    ...projects.map((project) => {
+      const runtimeStatus = display(project['runtime_status']);
+      const projectStatus =
+        runtimeStatus === 'stopped' && !releasedProjects.has(display(project['id']))
+          ? 'pre-deployment'
+          : runtimeStatus;
+      return `Project ${String(project['display_name'])}: ${projectStatus}`;
+    }),
     ...customerDeliveries.map(
       (delivery) => `Delivery ${String(delivery['title'])}: ${String(delivery['status'])}`,
     ),
@@ -450,9 +505,7 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
       const environment = environmentById.get(promotion['project_environment_id']);
       return `Environment ${String(environment?.['display_name'] ?? promotion['project_environment_id'])}: ${String(promotion['status'])}`;
     }),
-    ...(blockers.length > 0
-      ? blockers.map((blocker) => `Open issue: ${String(blocker['title'])}`)
-      : ['Open issues: none']),
+    ...(issueLines.length > 0 ? issueLines : ['Open issues: none']),
   ];
 }
 
