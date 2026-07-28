@@ -2648,7 +2648,7 @@ export const translations = {
       noSummary: 'No structured scope has been recorded.',
       noLimitations: 'No limitation statement has been recorded.',
       artifactsDescription:
-        'Artifacts are uploaded and versioned through the application interface. Human reviewers can approve a pending revision here.',
+        'Customer-ready files are shown first. Internal evidence and previous versions remain available in collapsed sections.',
       reviewDescription:
         'Original customer messages and source links are preserved as evidence. Structured decisions remain traceable to them.',
       approvalsTitle: 'Approval evidence',
@@ -2788,7 +2788,7 @@ export const translations = {
       save: 'Save',
       upload: 'Upload artifact',
       download: 'Download',
-      approveArtifact: 'Approve artifact',
+      approveArtifact: 'Approve file',
       startReview: 'Start review',
       requestRevision: 'Request revision',
       resumeReview: 'Resume review',
@@ -2935,8 +2935,18 @@ export const translations = {
       order: 'Receipt order',
       companionFor: 'Companion PDF for HTML',
       noCompanion: 'Select matching HTML (optional)',
-      listTitle: 'Artifact revisions',
+      listTitle: 'Shared files and evidence',
       empty: 'No artifacts uploaded.',
+      customerTitle: 'Customer shareables',
+      customerDescription:
+        'Current files intended for the customer are shown first. Duplicate records for the same file are shown only once.',
+      noCustomer: 'No customer-facing file is ready yet.',
+      internalTitle: 'Internal evidence ({count})',
+      internalDescription:
+        'QA results, data checks, and supporting captures stay available here and are not part of the customer package.',
+      historyTitle: 'Previous versions and duplicate records ({count})',
+      historyDescription: 'These records are retained for audit and history.',
+      fileInfo: 'File details',
       kindValue: {
         review_html: 'Review HTML',
         companion_pdf: 'Companion PDF',

@@ -52,4 +52,13 @@ describe('Delivery Workspace UI contract', () => {
       'count: pendingReviewGateCount > 0 ? pendingReviewGateCount : undefined',
     );
   });
+
+  it('prioritizes customer shareables while keeping internal evidence and history collapsed', () => {
+    expect(detailSource).toContain('groupDeliveryArtifacts(detail.artifacts, detail.gates)');
+    expect(detailSource).toContain("t('delivery.artifacts.customerTitle')");
+    expect(detailSource).toContain("t('delivery.artifacts.internalTitle'");
+    expect(detailSource).toContain("t('delivery.artifacts.historyTitle'");
+    expect(detailSource).toContain('<details className=');
+    expect(detailSource).not.toContain('<details open');
+  });
 });

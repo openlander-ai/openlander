@@ -46,6 +46,7 @@ import {
   type DeliveryStatus,
   type DeliveryType,
 } from '@/lib/api/deliveries';
+import { groupDeliveryArtifacts } from '@/lib/delivery-artifact-groups';
 import { localizeApiError } from '@/lib/localized-api-error';
 import { cn } from '@/lib/utils';
 
@@ -253,13 +254,14 @@ export function DeliveryDetailPage() {
   const proposedReviewItemCount =
     detail?.work_items.filter((item) => item.status === 'proposed').length ?? 0;
   const pendingReviewGateCount = detail ? countPendingReviewGates(detail) : 0;
+  const artifactGroups = detail ? groupDeliveryArtifacts(detail.artifacts, detail.gates) : null;
   const tabs: TabDef<DeliveryDetailTab>[] = [
     { id: 'overview', label: t('delivery.tabs.overview'), icon: FileCheck2 },
     {
       id: 'artifacts',
       label: t('delivery.tabs.artifacts'),
       icon: FileText,
-      count: detail?.artifacts.length,
+      count: artifactGroups?.currentCount,
     },
     {
       id: 'review',
@@ -817,6 +819,62 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
       .filter((gate) => gate.gate_type === 'review' && gate.report_artifact_id)
       .map((gate) => gate.report_artifact_id as string),
   );
+  const groups = groupDeliveryArtifacts(detail.artifacts, detail.gates);
+  const renderArtifact = (artifact: DeliveryDetail['artifacts'][number], allowActions = true) => {
+    const reviewTarget = reviewArtifactIds.has(artifact.id);
+    return (
+      <article key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
+            {reviewTarget && (
+              <span className="rounded-full border border-[color:var(--ol-primary)]/30 bg-[color:var(--ol-primary-soft)] px-2 py-0.5 text-[9px] font-medium text-[color:var(--ol-primary)]">
+                {t('delivery.reviewCheckpoint.targetBadge')}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+            {formatArtifactRevision(artifact.revision, t)} ·{' '}
+            {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
+            {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+          </p>
+          <details className="mt-1 text-[9px] text-[color:var(--ol-fg-subtle)]">
+            <summary className="w-fit cursor-pointer select-none">
+              {t('delivery.artifacts.fileInfo')}
+            </summary>
+            <p className="ol-mono mt-1 break-all">{artifact.logical_key}</p>
+            <p className="ol-mono mt-1 break-all">sha256:{artifact.blob.sha256}</p>
+          </details>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t('delivery.actions.download')}
+            </a>
+          </Button>
+          {allowActions && !immutable && artifact.status === 'draft' && !reviewTarget && (
+            <Button
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void onRun(
+                  `artifact:${artifact.id}`,
+                  () => setDeliveryArtifactStatus(projectId, deliveryId, artifact.id, 'approved'),
+                  t('delivery.messages.artifactApproved'),
+                )
+              }
+            >
+              <Check className="h-3.5 w-3.5" />
+              {t('delivery.actions.approveArtifact')}
+            </Button>
+          )}
+        </div>
+      </article>
+    );
+  };
   return (
     <SectionCard
       title={t('delivery.artifacts.listTitle')}
@@ -825,64 +883,54 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
       {detail.artifacts.length === 0 ? (
         <EmptyEvidence>{t('delivery.artifacts.empty')}</EmptyEvidence>
       ) : (
-        <div className="divide-y divide-[color:var(--ol-border-subtle)]">
-          {detail.artifacts.map((artifact) => {
-            const reviewTarget = reviewArtifactIds.has(artifact.id);
-            return (
-              <div key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
-                    {reviewTarget && (
-                      <span className="rounded-full border border-[color:var(--ol-primary)]/30 bg-[color:var(--ol-primary-soft)] px-2 py-0.5 text-[9px] font-medium text-[color:var(--ol-primary)]">
-                        {t('delivery.reviewCheckpoint.targetBadge')}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
-                    {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
-                    {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
-                    {t(`delivery.artifacts.statusValue.${artifact.status}`)}
-                  </p>
-                  <p className="ol-mono mt-1 truncate text-[9px] text-[color:var(--ol-fg-subtle)]">
-                    sha256:{artifact.blob.sha256}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {t('delivery.actions.download')}
-                    </a>
-                  </Button>
-                  {!immutable && artifact.status === 'draft' && !reviewTarget && (
-                    <Button
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        void onRun(
-                          `artifact:${artifact.id}`,
-                          () =>
-                            setDeliveryArtifactStatus(
-                              projectId,
-                              deliveryId,
-                              artifact.id,
-                              'approved',
-                            ),
-                          t('delivery.messages.artifactApproved'),
-                        )
-                      }
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      {t('delivery.actions.approveArtifact')}
-                    </Button>
-                  )}
-                </div>
+        <div className="space-y-4">
+          <section aria-labelledby="delivery-customer-shareables">
+            <h4 id="delivery-customer-shareables" className="text-sm font-semibold">
+              {t('delivery.artifacts.customerTitle')}
+            </h4>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+              {t('delivery.artifacts.customerDescription')}
+            </p>
+            {groups.customerShareables.length === 0 ? (
+              <div className="mt-3">
+                <EmptyEvidence>{t('delivery.artifacts.noCustomer')}</EmptyEvidence>
               </div>
-            );
-          })}
+            ) : (
+              <div className="mt-3 divide-y divide-[color:var(--ol-border-subtle)] rounded-md border border-[color:var(--ol-border-subtle)] px-3">
+                {groups.customerShareables.map((artifact) => renderArtifact(artifact))}
+              </div>
+            )}
+          </section>
+
+          {groups.internalEvidence.length > 0 && (
+            <details className="rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2">
+              <summary className="cursor-pointer select-none text-xs font-medium">
+                {t('delivery.artifacts.internalTitle', {
+                  count: groups.internalEvidence.length,
+                })}
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                {t('delivery.artifacts.internalDescription')}
+              </p>
+              <div className="mt-2 divide-y divide-[color:var(--ol-border-subtle)]">
+                {groups.internalEvidence.map((artifact) => renderArtifact(artifact))}
+              </div>
+            </details>
+          )}
+
+          {groups.history.length > 0 && (
+            <details className="rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2">
+              <summary className="cursor-pointer select-none text-xs font-medium">
+                {t('delivery.artifacts.historyTitle', { count: groups.history.length })}
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                {t('delivery.artifacts.historyDescription')}
+              </p>
+              <div className="mt-2 divide-y divide-[color:var(--ol-border-subtle)]">
+                {groups.history.map((artifact) => renderArtifact(artifact, false))}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </SectionCard>
