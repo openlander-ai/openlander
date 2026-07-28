@@ -60,7 +60,10 @@ checks:
         git_credential_id: null,
       },
     ]),
-    listDeliveryGates: vi.fn(async () => [{ id: 'gate-qa', gate_key: 'qa', source: 'manifest' }]),
+    listDeliveryGates: vi.fn(async () => [
+      { id: 'gate-qa', gate_key: 'qa', source: 'manifest' },
+      { id: 'gate-review', gate_key: 'customer-review', source: 'manifest' },
+    ]),
     setDeliveryAgentRunRunnerDigest: vi.fn(async (_id: string, digest: string) => {
       run.runner_image_digest = digest;
       return run;
@@ -166,6 +169,9 @@ describe('DeliveryQualityGateService', () => {
     );
     expect(harness.deliveryService.recordGateResult).toHaveBeenCalledWith(
       expect.objectContaining({ gateKey: 'qa', status: 'passed' }),
+    );
+    expect(harness.deliveryService.recordGateResult).not.toHaveBeenCalledWith(
+      expect.objectContaining({ gateKey: 'customer-review' }),
     );
     expect(harness.agentRunService.recordProgress).toHaveBeenCalled();
     expect(harness.agentRunService.fail).not.toHaveBeenCalled();

@@ -2706,6 +2706,8 @@ export const translations = {
     },
     workflow: {
       title: 'Delivery progress',
+      detailsTitle: 'Detailed progress',
+      detailsDescription: 'Review the stages and evidence recorded by the agent.',
       next: 'Next recommended step: {step}',
       ready: 'All evidence checks are satisfied. Review and finalize the Receipt.',
       complete: 'Delivery and its immutable Receipt are complete.',
@@ -2718,6 +2720,63 @@ export const translations = {
         gates: 'Gates',
         deployments: 'Deployment',
         receipt: 'Receipt',
+      },
+    },
+    humanAction: {
+      review_version: {
+        eyebrow: 'Needs your review',
+        title: '{count} file version needs review',
+        description:
+          'Check the file selected by the agent, then accept this version or request changes.',
+        action: 'Open review',
+      },
+      review_items: {
+        eyebrow: 'Needs your review',
+        title: '{count} feedback item needs review',
+        description: 'Review the items extracted from customer feedback and decide how to proceed.',
+        action: 'Open review items',
+      },
+      gate_warning: {
+        eyebrow: 'Needs your review',
+        title: '{count} warning needs acknowledgment',
+        description: 'Review the result, then accept the warning or ask the agent to run it again.',
+        action: 'Review warnings',
+      },
+      agent_working: {
+        eyebrow: 'Agent working',
+        title: 'The agent is continuing the work',
+        description: 'You will be notified here when it finishes or needs a human decision.',
+        action: 'View agent status',
+      },
+      revision_in_progress: {
+        eyebrow: 'Waiting for agent',
+        title: 'Your change request was recorded',
+        description: 'Ask the agent to continue and prepare a new version for review.',
+        action: 'Ask agent',
+      },
+      ready: {
+        eyebrow: 'Ready to complete',
+        title: 'All completion conditions are satisfied',
+        description: 'No manual entry is needed. The agent can finalize the completion evidence.',
+        action: 'Ask to complete',
+      },
+      complete: {
+        eyebrow: 'Complete',
+        title: 'This Delivery is complete',
+        description: 'The finalized evidence and Receipt are ready to review.',
+        action: 'View completion evidence',
+      },
+      cancelled: {
+        eyebrow: 'Closed',
+        title: 'This Delivery was cancelled',
+        description: 'Its records remain available for audit and handoff.',
+        action: 'View record',
+      },
+      idle: {
+        eyebrow: 'Ready for agent',
+        title: 'The agent can continue with the next task',
+        description: 'There is nothing to fill in. Ask the agent for the outcome you need.',
+        action: 'Ask agent',
       },
     },
     actions: {
@@ -2891,6 +2950,30 @@ export const translations = {
         draft: 'Draft',
         approved: 'Approved',
         superseded: 'Superseded',
+      },
+    },
+    reviewCheckpoint: {
+      eyebrow: 'Exact-version review',
+      description:
+        'Review the file and SHA-256 selected by the agent. Acceptance applies only to this exact version.',
+      targetBadge: 'Review target',
+      shaLabel: 'Artifact SHA-256',
+      notRequested: 'The agent has not selected a file version for review yet.',
+      targetMissing:
+        'The selected review file cannot be found. Ask the agent to request review with the latest version.',
+      newerVersionAvailable: 'Newer version available',
+      exactVersionHint:
+        'If a newer version is uploaded, this acceptance does not carry forward. Review the new version again.',
+      openFile: 'Open file',
+      requestChanges: 'Request changes',
+      acceptExactVersion: 'Accept this version',
+      status: {
+        notRequested: 'Not requested',
+        pending: 'Waiting for review',
+        changesRequested: 'Changes needed',
+        accepted: 'Accepted',
+        waived: 'Waived',
+        stale: 'Review newer version',
       },
     },
     review: {
@@ -3095,6 +3178,9 @@ export const translations = {
       statusChanged: 'Delivery status changed.',
       uploaded: 'Artifact uploaded.',
       artifactApproved: 'Artifact approved.',
+      reviewAccepted: 'This exact file version was accepted.',
+      reviewChangesRequested:
+        'Changes requested. The agent must submit the new version for review.',
       workItemUpdated: 'Review item status changed.',
       feedbackRecorded: 'Feedback recorded.',
       approvalRecorded: 'Customer approval evidence recorded.',
@@ -3291,6 +3377,7 @@ export const translations = {
       approvalRecorded: 'Customer approval evidence recorded',
       gateTemplateUpdated: 'Gate requirement updated',
       gateRecorded: 'Gate result recorded',
+      reviewAccepted: 'Exact review version accepted',
       deployLinked: 'Production deployment evidence linked',
       deployUnlinked: 'Deployment evidence unlinked',
       receiptPreviewed: 'Receipt preview generated',

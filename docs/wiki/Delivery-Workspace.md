@@ -91,6 +91,20 @@ files are uploaded from the web UI or the multipart REST API. Project-scoped
 PATs may POST only Delivery artifact and Gate-result CI routes and must include
 `Idempotency-Key`.
 
+Agents that need a human checkpoint before an external side effect should call
+`request_delivery_review` with the exact latest Artifact ID and blob SHA-256,
+then poll `get_delivery_review_status`. The compact status deliberately does
+not execute the external change. A passed checkpoint and customer approval
+evidence are reported separately, so an Agent cannot mistake review for proof
+that an import or rollout completed.
+
+The Delivery Gates tab shows the bound filename, revision, and SHA-256 as one
+review checkpoint. Its **Accept this version** action calls the Web-session-only
+`accept_delivery_review` Application Operation, which atomically approves the
+exact Artifact and passes the linked Review Gate. Raw REST API tokens and MCP
+Agents cannot execute that human decision. Uploading a newer revision makes the
+old target stale and requires another review request.
+
 Gate submissions keep an immutable idempotency record. Retrying the same key
 returns the original response even if a later Gate result exists; reusing the
 key with different request content returns `IDEMPOTENCY_KEY_CONFLICT`.

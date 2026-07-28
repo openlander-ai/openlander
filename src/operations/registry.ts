@@ -13,11 +13,12 @@ import {
 } from '../errors.js';
 import { applicationOperationActorScopeKey } from './actor.js';
 import { engagementOperations } from './definitions/engagement.js';
-import { agentDeliveryOperations } from './definitions/delivery.js';
+import { agentDeliveryOperations, webDeliveryOperations } from './definitions/delivery.js';
 import { networkMaintenanceOperations } from './definitions/network-maintenance.js';
 import {
   applyProjectManifestOperation,
   getProjectManifestOperation,
+  registerProjectRepositoryOperation,
 } from './definitions/project-manifest.js';
 import { projectUpdateOperations } from './definitions/project-update.js';
 import { releaseOperations } from './definitions/release.js';
@@ -272,10 +273,12 @@ export class ApplicationOperationRegistry {
 export function createApplicationOperationRegistry(): ApplicationOperationRegistry {
   return new ApplicationOperationRegistry([
     ...engagementOperations,
+    registerProjectRepositoryOperation,
     applyProjectManifestOperation,
     getProjectManifestOperation,
     ...projectUpdateOperations,
     ...agentDeliveryOperations,
+    ...webDeliveryOperations,
     ...releaseOperations,
     ...reportingOperations,
     ...networkMaintenanceOperations,

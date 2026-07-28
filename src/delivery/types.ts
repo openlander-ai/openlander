@@ -93,6 +93,43 @@ export interface DeliveryReadiness {
   estimated_pages: number;
 }
 
+export type DeliveryReviewState =
+  'not_requested' | 'pending' | 'changes_requested' | 'accepted' | 'waived' | 'stale';
+
+export type DeliveryReviewBlocker =
+  | 'review_not_requested'
+  | 'artifact_not_found'
+  | 'artifact_not_latest'
+  | 'artifact_not_approved'
+  | 'gate_pending'
+  | 'gate_failed'
+  | 'gate_warning';
+
+export interface DeliveryReviewStatus {
+  project_id: string;
+  delivery_id: string;
+  gate_key: string;
+  state: DeliveryReviewState;
+  ready_for_next_step: boolean;
+  artifact: {
+    id: string;
+    logical_key: string;
+    revision: number;
+    sha256: string;
+    status: ArtifactStatus;
+    is_latest_revision: boolean;
+  } | null;
+  gate: {
+    status: GateStatus;
+    required: boolean;
+    recorded_by: string;
+    recorded_at: string | null;
+    waiver_reason: string | null;
+  };
+  approval_evidence_id: string | null;
+  blockers: DeliveryReviewBlocker[];
+}
+
 export interface ReceiptSnapshot {
   schema_version: 1;
   generated_at: string;

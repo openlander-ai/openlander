@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentGuideDialog } from '@/components/agent-guide/AgentGuideDialog';
 import {
+  DeliveryHumanActionCard,
   DeliveryWorkflowRail,
   type DeliveryDetailTab,
 } from '@/components/delivery/DeliveryWorkflowRail';
@@ -27,6 +28,7 @@ import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTa
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n/context';
 import {
+  acceptDeliveryReview,
   downloadReceipt,
   generateReceiptPreview,
   getDelivery,
@@ -118,6 +120,12 @@ export function formatReadinessCheck(
     return t(`delivery.receipt.check.page_limit.${result}Generic`);
   }
   return t(`delivery.receipt.check.${check.key}.${result}`, check.params);
+}
+
+export function countPendingReviewGates(detail: DeliveryDetail): number {
+  return detail.gates.filter(
+    (gate) => gate.gate_type === 'review' && gate.status !== 'passed' && gate.status !== 'waived',
+  ).length;
 }
 
 function SectionCard({
@@ -242,6 +250,9 @@ export function DeliveryDetailPage() {
     }
   };
 
+  const proposedReviewItemCount =
+    detail?.work_items.filter((item) => item.status === 'proposed').length ?? 0;
+  const pendingReviewGateCount = detail ? countPendingReviewGates(detail) : 0;
   const tabs: TabDef<DeliveryDetailTab>[] = [
     { id: 'overview', label: t('delivery.tabs.overview'), icon: FileCheck2 },
     {
@@ -254,9 +265,14 @@ export function DeliveryDetailPage() {
       id: 'review',
       label: t('delivery.tabs.review'),
       icon: MessageSquareText,
-      count: detail?.work_items.filter((item) => item.status === 'proposed').length,
+      count: proposedReviewItemCount > 0 ? proposedReviewItemCount : undefined,
     },
-    { id: 'gates', label: t('delivery.tabs.gates'), icon: ShieldCheck },
+    {
+      id: 'gates',
+      label: t('delivery.tabs.gates'),
+      icon: ShieldCheck,
+      count: pendingReviewGateCount > 0 ? pendingReviewGateCount : undefined,
+    },
     { id: 'deployments', label: t('delivery.tabs.deployments'), icon: Rocket },
     { id: 'receipt', label: t('delivery.tabs.receipt'), icon: PackageCheck },
   ];
@@ -335,16 +351,20 @@ export function DeliveryDetailPage() {
         />
 
         <div className="space-y-4 p-4">
+          <DeliveryHumanActionCard
+            detail={detail}
+            execution={execution}
+            readiness={readiness}
+            onOpenTab={setActiveTab}
+            onAskAgent={() => setAgentGuideOpen(true)}
+          />
+
           <DeliveryWorkflowRail
             detail={detail}
             readiness={readiness}
             activeTab={activeTab}
             onChange={setActiveTab}
           />
-
-          <div className="rounded-md border border-[color:var(--ol-primary)]/25 bg-[color:var(--ol-primary-soft)] px-3 py-2 text-xs text-[color:var(--ol-fg-muted)]">
-            {t('delivery.formless.detailDescription')}
-          </div>
           {error && (
             <div
               role="alert"
@@ -792,6 +812,11 @@ function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null
 
 function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
   const { t } = useLanguage();
+  const reviewArtifactIds = new Set(
+    detail.gates
+      .filter((gate) => gate.gate_type === 'review' && gate.report_artifact_id)
+      .map((gate) => gate.report_artifact_id as string),
+  );
   return (
     <SectionCard
       title={t('delivery.artifacts.listTitle')}
@@ -801,48 +826,63 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
         <EmptyEvidence>{t('delivery.artifacts.empty')}</EmptyEvidence>
       ) : (
         <div className="divide-y divide-[color:var(--ol-border-subtle)]">
-          {detail.artifacts.map((artifact) => (
-            <div key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
-                <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
-                  {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
-                  {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
-                  {t(`delivery.artifacts.statusValue.${artifact.status}`)}
-                </p>
-                <p className="ol-mono mt-1 truncate text-[9px] text-[color:var(--ol-fg-subtle)]">
-                  sha256:{artifact.blob.sha256}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    {t('delivery.actions.download')}
-                  </a>
-                </Button>
-                {!immutable && artifact.status === 'draft' && (
-                  <Button
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() =>
-                      void onRun(
-                        `artifact:${artifact.id}`,
-                        () =>
-                          setDeliveryArtifactStatus(projectId, deliveryId, artifact.id, 'approved'),
-                        t('delivery.messages.artifactApproved'),
-                      )
-                    }
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    {t('delivery.actions.approveArtifact')}
+          {detail.artifacts.map((artifact) => {
+            const reviewTarget = reviewArtifactIds.has(artifact.id);
+            return (
+              <div key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-xs font-medium">{artifact.original_filename}</p>
+                    {reviewTarget && (
+                      <span className="rounded-full border border-[color:var(--ol-primary)]/30 bg-[color:var(--ol-primary-soft)] px-2 py-0.5 text-[9px] font-medium text-[color:var(--ol-primary)]">
+                        {t('delivery.reviewCheckpoint.targetBadge')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                    {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
+                    {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
+                    {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+                  </p>
+                  <p className="ol-mono mt-1 truncate text-[9px] text-[color:var(--ol-fg-subtle)]">
+                    sha256:{artifact.blob.sha256}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {t('delivery.actions.download')}
+                    </a>
                   </Button>
-                )}
+                  {!immutable && artifact.status === 'draft' && !reviewTarget && (
+                    <Button
+                      size="sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void onRun(
+                          `artifact:${artifact.id}`,
+                          () =>
+                            setDeliveryArtifactStatus(
+                              projectId,
+                              deliveryId,
+                              artifact.id,
+                              'approved',
+                            ),
+                          t('delivery.messages.artifactApproved'),
+                        )
+                      }
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {t('delivery.actions.approveArtifact')}
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </SectionCard>
@@ -1048,15 +1088,198 @@ function ReviewPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: 
   );
 }
 
+function ReviewCheckpointCard({
+  detail,
+  gate,
+  immutable,
+  busy,
+  onRun,
+  projectId,
+  deliveryId,
+}: Omit<PanelProps, 'execution'> & { gate: DeliveryGate }) {
+  const { t } = useLanguage();
+  const artifact = gate.report_artifact_id
+    ? detail.artifacts.find((candidate) => candidate.id === gate.report_artifact_id)
+    : undefined;
+  const latestRevision = artifact
+    ? Math.max(
+        ...detail.artifacts
+          .filter(
+            (candidate) =>
+              candidate.logical_key === artifact.logical_key && candidate.kind === artifact.kind,
+          )
+          .map((candidate) => candidate.revision),
+      )
+    : null;
+  const isLatest = Boolean(
+    artifact && artifact.status !== 'superseded' && artifact.revision === latestRevision,
+  );
+  const accepted = Boolean(
+    artifact && isLatest && artifact.status === 'approved' && gate.status === 'passed',
+  );
+  const state = !gate.report_artifact_id
+    ? 'notRequested'
+    : !artifact || !isLatest
+      ? 'stale'
+      : detail.delivery.status === 'revision_requested' || gate.status === 'failed'
+        ? 'changesRequested'
+        : accepted
+          ? 'accepted'
+          : gate.status === 'waived'
+            ? 'waived'
+            : 'pending';
+  const canAccept = Boolean(
+    !immutable &&
+    artifact &&
+    isLatest &&
+    gate.status === 'pending' &&
+    detail.delivery.status === 'in_review',
+  );
+  const canRequestChanges = Boolean(
+    !immutable && gate.status === 'pending' && detail.delivery.status === 'in_review',
+  );
+
+  return (
+    <article className="rounded-lg border border-[color:var(--ol-primary)]/30 bg-[color:var(--ol-primary-soft)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-primary)]">
+            {t('delivery.reviewCheckpoint.eyebrow')}
+          </p>
+          <h4 className="mt-1 text-sm font-semibold">{formatDefaultGateLabel(gate, t)}</h4>
+        </div>
+        <span
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+            accepted
+              ? 'border-success/30 bg-success/10 text-success'
+              : state === 'changesRequested' || state === 'stale'
+                ? 'border-warning/30 bg-warning/10 text-warning'
+                : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] text-[color:var(--ol-fg-muted)]',
+          )}
+        >
+          {t(`delivery.reviewCheckpoint.status.${state}`)}
+        </span>
+      </div>
+
+      <p className="mt-2 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+        {t('delivery.reviewCheckpoint.description')}
+      </p>
+      {gate.summary && (
+        <p className="mt-3 whitespace-pre-wrap rounded-md bg-[color:var(--ol-panel)] px-3 py-2 text-xs leading-5">
+          {gate.summary}
+        </p>
+      )}
+
+      {!gate.report_artifact_id ? (
+        <p className="mt-3 text-xs text-[color:var(--ol-fg-muted)]">
+          {t('delivery.reviewCheckpoint.notRequested')}
+        </p>
+      ) : !artifact ? (
+        <p className="mt-3 text-xs text-error">{t('delivery.reviewCheckpoint.targetMissing')}</p>
+      ) : (
+        <div className="mt-3 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)] p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold">{artifact.original_filename}</p>
+              <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
+                {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
+                {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+              </p>
+            </div>
+            {!isLatest && (
+              <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning">
+                {t('delivery.reviewCheckpoint.newerVersionAvailable')}
+              </span>
+            )}
+          </div>
+          <p
+            className="ol-mono mt-2 break-all text-[9px] text-[color:var(--ol-fg-subtle)]"
+            aria-label={t('delivery.reviewCheckpoint.shaLabel')}
+          >
+            sha256:{artifact.blob.sha256}
+          </p>
+          <p className="mt-2 text-[10px] leading-4 text-[color:var(--ol-fg-muted)]">
+            {t('delivery.reviewCheckpoint.exactVersionHint')}
+          </p>
+
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={`/api/projects/${encodeURIComponent(projectId)}/deliveries/${encodeURIComponent(deliveryId)}/artifacts/${encodeURIComponent(artifact.id)}/download`}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {t('delivery.reviewCheckpoint.openFile')}
+              </a>
+            </Button>
+            {canRequestChanges && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() =>
+                  void onRun(
+                    `review:${gate.id}:revision`,
+                    () => transitionDelivery(projectId, deliveryId, 'revision_requested'),
+                    t('delivery.messages.reviewChangesRequested'),
+                  )
+                }
+              >
+                <X className="h-3.5 w-3.5" />
+                {t('delivery.reviewCheckpoint.requestChanges')}
+              </Button>
+            )}
+            {canAccept && (
+              <Button
+                size="sm"
+                disabled={busy !== null}
+                onClick={() =>
+                  void onRun(
+                    `review:${gate.id}:accept`,
+                    () =>
+                      acceptDeliveryReview(deliveryId, {
+                        gate_key: gate.gate_key,
+                        artifact_id: artifact.id,
+                        expected_sha256: artifact.blob.sha256,
+                      }),
+                    t('delivery.messages.reviewAccepted'),
+                  )
+                }
+              >
+                <Check className="h-3.5 w-3.5" />
+                {t('delivery.reviewCheckpoint.acceptExactVersion')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function GatesPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
   const { t } = useLanguage();
+  const reviewGates = detail.gates.filter((gate) => gate.gate_type === 'review');
+  const automatedGates = detail.gates.filter((gate) => gate.gate_type !== 'review');
   return (
     <SectionCard
       title={t('delivery.gates.title')}
       description={t('delivery.formless.gatesDescription')}
     >
       <div className="space-y-3">
-        {detail.gates.map((gate) => (
+        {reviewGates.map((gate) => (
+          <ReviewCheckpointCard
+            key={gate.id}
+            detail={detail}
+            gate={gate}
+            immutable={immutable}
+            busy={busy}
+            onRun={onRun}
+            projectId={projectId}
+            deliveryId={deliveryId}
+          />
+        ))}
+        {automatedGates.map((gate) => (
           <article
             key={gate.id}
             className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"

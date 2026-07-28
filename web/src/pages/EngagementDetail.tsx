@@ -55,6 +55,7 @@ const ACTIVITY_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'delivery.approval_recorded': 'approvalRecorded',
   'delivery.gate_template_updated': 'gateTemplateUpdated',
   'delivery.gate_recorded': 'gateRecorded',
+  'delivery.review_accepted': 'reviewAccepted',
   'delivery.deploy_linked': 'deployLinked',
   'delivery.deploy_unlinked': 'deployUnlinked',
   'delivery.receipt_previewed': 'receiptPreviewed',

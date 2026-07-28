@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { ApplicationOperationInvocationRow } from '../../src/db/schema.drizzle.js';
 import { createApplicationOperationRegistry } from '../../src/operations/index.js';
-import { agentDeliveryToolDefs } from '../../src/tools/defs/agent-delivery.js';
+import {
+  agentDeliveryToolDefs,
+  projectManifestToolDefs,
+} from '../../src/tools/defs/agent-delivery.js';
 import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { createOperationRoutes } from '../../src/web/api/operation-routes.js';
 
@@ -133,6 +136,44 @@ function createAgentDeliveryHarness() {
     commit_sha: 'a'.repeat(40),
     manifest_sha256: 'a'.repeat(64),
   };
+  const registeredServices: Array<{
+    id: string;
+    source: 'git';
+    repo_url: string;
+    branch: string;
+  }> = [];
+  const reviewStatus = {
+    project_id: delivery.project_id,
+    delivery_id: delivery.id,
+    gate_key: 'change-review',
+    state: 'pending' as const,
+    ready_for_next_step: false,
+    artifact: {
+      id: 'artifact-review',
+      logical_key: 'change-plan',
+      revision: 1,
+      sha256: 'b'.repeat(64),
+      status: 'draft' as const,
+      is_latest_revision: true,
+    },
+    gate: {
+      status: 'pending' as const,
+      required: true,
+      recorded_by: 'project-agent',
+      recorded_at: now,
+      waiver_reason: null,
+    },
+    approval_evidence_id: null,
+    blockers: ['artifact_not_approved' as const, 'gate_pending' as const],
+  };
+  const acceptedReviewStatus = {
+    ...reviewStatus,
+    state: 'accepted' as const,
+    ready_for_next_step: true,
+    artifact: { ...reviewStatus.artifact, status: 'approved' as const },
+    gate: { ...reviewStatus.gate, status: 'passed' as const, recorded_by: 'web-session' },
+    blockers: [],
+  };
   const operationKey = (input: {
     operationName: string;
     operationVersion: number;
@@ -204,9 +245,27 @@ function createAgentDeliveryHarness() {
       if (id !== delivery.id) throw new Error('missing delivery');
       return delivery;
     }),
+    getDeployablesByGroup: vi.fn(async () => registeredServices),
+    ensureDeployableServiceForProject: vi.fn(
+      async (projectId: string, input: { source: 'git'; repoUrl: string; branch: string }) => {
+        const service = {
+          id: `${projectId}__svc`,
+          source: input.source,
+          repo_url: input.repoUrl,
+          branch: input.branch,
+        };
+        registeredServices.push(service);
+        return service;
+      },
+    ),
+    insertActivityLog: vi.fn(async () => undefined),
   };
   const deliveryService = {
     createDelivery: vi.fn(async (input: { id: string }) => ({ ...delivery, id: input.id })),
+    assertProjectCanMutate: vi.fn(async () => undefined),
+    requestReview: vi.fn(async () => reviewStatus),
+    getReviewStatus: vi.fn(async () => reviewStatus),
+    acceptReview: vi.fn(async () => acceptedReviewStatus),
   };
   const deliveryAgentRunService = {
     start: vi.fn(async (input: { id: string; phase: string }) => {
@@ -259,6 +318,8 @@ function createAgentDeliveryHarness() {
     deliveryService,
     deliveryAgentRunService,
     deliveryQualityGateService,
+    reviewStatus,
+    acceptedReviewStatus,
     db,
   };
 }
@@ -540,6 +601,212 @@ describe('Application Operation contract', () => {
         { actor: harness.actor, idempotencyKey: 'cancel-1' },
       ),
     ).resolves.toMatchObject({ result: { status: 'cancelled' } });
+  });
+
+  it('binds and polls an exact Artifact review through the common operation contract', async () => {
+    const harness = createAgentDeliveryHarness();
+    const requested = await harness.operations.execute(
+      harness.ctx,
+      'request_delivery_review',
+      {
+        delivery_id: harness.delivery.id,
+        gate_key: 'change-review',
+        artifact_id: 'artifact-review',
+        expected_sha256: 'b'.repeat(64),
+        summary: 'Review the proposed change before applying it.',
+      },
+      { actor: harness.actor, idempotencyKey: 'review-1' },
+    );
+
+    expect(requested.result).toMatchObject({
+      status: 'pending_review',
+      project_id: harness.delivery.project_id,
+      artifact_id: 'artifact-review',
+      sha256: 'b'.repeat(64),
+      status_call: {
+        operation: 'get_delivery_review_status',
+        input: { delivery_id: harness.delivery.id, gate_key: 'change-review' },
+      },
+    });
+    expect(harness.deliveryService.requestReview).toHaveBeenCalledWith({
+      deliveryId: harness.delivery.id,
+      gateKey: 'change-review',
+      artifactId: 'artifact-review',
+      expectedSha256: 'b'.repeat(64),
+      summary: 'Review the proposed change before applying it.',
+      idempotencyKey: 'review-request:operation-1',
+      actor: 'project-agent',
+    });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'get_delivery_review_status',
+        { delivery_id: harness.delivery.id, gate_key: 'change-review' },
+        { actor: harness.actor },
+      ),
+    ).resolves.toMatchObject({
+      result: {
+        status: 'pending',
+        ready_for_next_step: false,
+        blockers: ['artifact_not_approved', 'gate_pending'],
+      },
+    });
+
+    const tool = agentDeliveryToolDefs.find(
+      (definition) => definition.name === 'get_delivery_review_status',
+    );
+    expect(tool).toBeDefined();
+    await expect(
+      tool?.execute(
+        { delivery_id: harness.delivery.id, gate_key: 'change-review' },
+        {
+          target: 'mcp',
+          appCtx: harness.ctx,
+          identity: {
+            source: 'mcp',
+            mcpScopeKind: 'project',
+            mcpScopeProjectId: harness.delivery.project_id,
+          },
+        },
+      ),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      status_call: {
+        tool: 'openlander_project',
+        arguments: {
+          action: 'get_delivery_review_status',
+          params: { delivery_id: harness.delivery.id, gate_key: 'change-review' },
+        },
+      },
+    });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'get_delivery_review_status',
+        { delivery_id: harness.delivery.id, gate_key: 'change-review' },
+        { actor: { ...harness.actor, projectId: 'sibling-project' } },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+  });
+
+  it('accepts an exact review version only from an authenticated Web session', async () => {
+    const harness = createAgentDeliveryHarness();
+    const input = {
+      delivery_id: harness.delivery.id,
+      gate_key: 'change-review',
+      artifact_id: 'artifact-review',
+      expected_sha256: 'b'.repeat(64),
+    };
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'accept_delivery_review', input, {
+        actor: {
+          source: 'rest',
+          scope: 'instance',
+          instanceId: 'olinst_test',
+          label: 'api-token',
+        },
+        idempotencyKey: 'accept-review-rest',
+      }),
+    ).rejects.toMatchObject({ code: 'OPERATION_REQUIRES_HUMAN_UI' });
+    expect(harness.deliveryService.acceptReview).not.toHaveBeenCalled();
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'accept_delivery_review', input, {
+        actor: {
+          source: 'web',
+          scope: 'instance',
+          instanceId: 'olinst_test',
+          label: 'web-session',
+        },
+        idempotencyKey: 'accept-review-web',
+      }),
+    ).resolves.toMatchObject({
+      result: {
+        status: 'accepted',
+        artifact_id: 'artifact-review',
+        ready_for_next_step: true,
+      },
+    });
+    expect(harness.deliveryService.acceptReview).toHaveBeenCalledWith({
+      deliveryId: harness.delivery.id,
+      gateKey: 'change-review',
+      artifactId: 'artifact-review',
+      expectedSha256: 'b'.repeat(64),
+      summary: null,
+      actor: 'web-session',
+    });
+    expect(
+      agentDeliveryToolDefs.some((definition) => definition.name === 'accept_delivery_review'),
+    ).toBe(false);
+  });
+
+  it('registers a repository without deploy and enforces the Project scope boundary', async () => {
+    const harness = createAgentDeliveryHarness();
+    const input = {
+      project_id: harness.delivery.project_id,
+      repo_url: 'https://github.com/example/incar-app.git',
+      branch: 'codex/admin-collateral-storyboard',
+    };
+
+    const registered = await harness.operations.execute(
+      harness.ctx,
+      'register_project_repository',
+      input,
+      { actor: harness.actor, idempotencyKey: 'register-repository-1' },
+    );
+    expect(registered.result).toMatchObject({
+      status: 'registered',
+      project_id: harness.delivery.project_id,
+      service_id: `${harness.delivery.project_id}__svc`,
+      repo_url: input.repo_url,
+      branch: input.branch,
+      suggested_call: {
+        operation: 'plan_delivery',
+        input: { project_id: harness.delivery.project_id },
+      },
+    });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledWith(
+      harness.delivery.project_id,
+      { source: 'git', repoUrl: input.repo_url, branch: input.branch },
+    );
+    expect(harness.db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'project.repository_registered',
+        project_id: harness.delivery.project_id,
+      }),
+    );
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'register_project_repository', input, {
+        actor: harness.actor,
+        idempotencyKey: 'register-repository-2',
+      }),
+    ).resolves.toMatchObject({ result: registered.result });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledOnce();
+    expect(harness.db.insertActivityLog).toHaveBeenCalledOnce();
+
+    const tool = projectManifestToolDefs.find(
+      (definition) => definition.name === 'register_project_repository',
+    );
+    expect(tool).toBeDefined();
+    await expect(
+      tool?.execute(
+        { idempotency_key: 'register-sibling', ...input, project_id: 'sibling-project' },
+        {
+          target: 'mcp',
+          appCtx: harness.ctx,
+          identity: {
+            source: 'mcp',
+            mcpScopeKind: 'project',
+            mcpScopeProjectId: harness.delivery.project_id,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledOnce();
   });
 
   it('maps interface-neutral Agent Delivery call links into MCP composite calls', async () => {

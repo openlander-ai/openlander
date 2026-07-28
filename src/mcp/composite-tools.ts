@@ -87,6 +87,8 @@ export const PROJECT_ACTIONS = [
   'unarchive_engagement',
   'plan_delivery',
   'create_evidence_upload',
+  'request_delivery_review',
+  'get_delivery_review_status',
   'start_delivery_run',
   'get_delivery_run',
   'run_quality_gates',
@@ -97,6 +99,7 @@ export const PROJECT_ACTIONS = [
   'generate_weekly_report',
   'publish_weekly_report',
   'get_weekly_report',
+  'register_project_repository',
   'apply_project_manifest',
   'get_project_manifest',
   'record_project_update',
@@ -264,7 +267,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 30 tools
+ * - PROJECT_ACTIONS: 47 tools
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 15 tools

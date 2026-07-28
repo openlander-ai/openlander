@@ -96,7 +96,7 @@ All actions: action="help"
 
 ## openlander_project
 Projects, shared config, Agent Delivery Runs, Delivery Workspace metadata, and Engagement portfolio summaries. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
-Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
+Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, request_delivery_review, get_delivery_review_status, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
 All actions: action="help"
 
 ## openlander_service
