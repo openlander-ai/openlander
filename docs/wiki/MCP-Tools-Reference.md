@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **129 unique default operations** surfaced through those composites
+- **130 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -34,6 +34,7 @@ Agent routing rule of thumb:
 | "Capture this customer review delivery"            | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
 | "Show FDE portfolio blockers across Projects"      | `openlander_project.list_engagements` / `get_engagement`                                                    |
 | "Start a customer engagement and Project"          | `openlander_project.bootstrap_engagement`                                                                   |
+| "Register a repo before deployment is defined"     | `openlander_project.register_project_repository`                                                            |
 | "Plan and hand off an Agent delivery run"          | `openlander_project.plan_delivery` / `record_delivery_run_progress` / `resume_delivery_run`                 |
 | "Apply or inspect the repository Project manifest" | `openlander_project.apply_project_manifest` / `get_project_manifest`                                        |
 | "Build once and promote the same artifact"         | `openlander_deploy.create_release` / `promote_release` / `evaluate_promotion`                               |
@@ -128,7 +129,7 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                             |
 | ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git              |
-| `openlander_project`         | 46           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
+| `openlander_project`         | 47           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
 | `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
@@ -144,7 +145,7 @@ Composite catalog:
 | [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
 | [Delivery Workspace](#delivery-workspace)                | 11    | Review evidence, feedback, Gates, deploy links, Receipt preview |
 | [Agent Delivery Run](#agent-delivery-run)                | 8     | Plan, verify, hand off, resume, cancel, or complete             |
-| [Project Manifest](#project-manifest)                    | 1     | Apply ordered Project Environments from Git                     |
+| [Project Manifest](#project-manifest)                    | 3     | Register source and apply/inspect Project configuration         |
 | [Release and Promotion](#release-and-promotion)          | 6     | Build once, promote an immutable digest, recall, or roll back   |
 | [Weekly Reporting](#weekly-reporting)                    | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
 | [Engagement Portfolio](#engagement-portfolio)            | 3     | Engagement bootstrap and cross-Project portfolio reads          |
@@ -531,6 +532,12 @@ optional JUnit/Playwright/JSON report artifact. A Delivery can have only one `ru
 return `OPERATION_IDEMPOTENCY_CONFLICT`.
 
 ## Project Manifest
+
+`register_project_repository` takes `project_id`, `repo_url`, and `branch`, then creates the Project's
+single stopped Git Application record without cloning, building, or deploying it.
+Use it when requirements and quality work start before an Environment has been
+chosen. It rejects Projects that already contain a different Application source;
+changing an existing source remains `update_application_source`.
 
 `apply_project_manifest` applies `.openlander/project.yml` through
 `openlander_project`. It stores the exact path, SHA-256, optional Service

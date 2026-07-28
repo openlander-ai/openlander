@@ -18,6 +18,7 @@ import { networkMaintenanceOperations } from './definitions/network-maintenance.
 import {
   applyProjectManifestOperation,
   getProjectManifestOperation,
+  registerProjectRepositoryOperation,
 } from './definitions/project-manifest.js';
 import { projectUpdateOperations } from './definitions/project-update.js';
 import { releaseOperations } from './definitions/release.js';
@@ -272,6 +273,7 @@ export class ApplicationOperationRegistry {
 export function createApplicationOperationRegistry(): ApplicationOperationRegistry {
   return new ApplicationOperationRegistry([
     ...engagementOperations,
+    registerProjectRepositoryOperation,
     applyProjectManifestOperation,
     getProjectManifestOperation,
     ...projectUpdateOperations,

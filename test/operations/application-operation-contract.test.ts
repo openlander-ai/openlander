@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { ApplicationOperationInvocationRow } from '../../src/db/schema.drizzle.js';
 import { createApplicationOperationRegistry } from '../../src/operations/index.js';
-import { agentDeliveryToolDefs } from '../../src/tools/defs/agent-delivery.js';
+import {
+  agentDeliveryToolDefs,
+  projectManifestToolDefs,
+} from '../../src/tools/defs/agent-delivery.js';
 import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { createOperationRoutes } from '../../src/web/api/operation-routes.js';
 
@@ -133,6 +136,12 @@ function createAgentDeliveryHarness() {
     commit_sha: 'a'.repeat(40),
     manifest_sha256: 'a'.repeat(64),
   };
+  const registeredServices: Array<{
+    id: string;
+    source: 'git';
+    repo_url: string;
+    branch: string;
+  }> = [];
   const operationKey = (input: {
     operationName: string;
     operationVersion: number;
@@ -204,9 +213,27 @@ function createAgentDeliveryHarness() {
       if (id !== delivery.id) throw new Error('missing delivery');
       return delivery;
     }),
+    getDeployablesByGroup: vi.fn(async () => registeredServices),
+    ensureDeployableServiceForProject: vi.fn(
+      async (
+        projectId: string,
+        input: { source: 'git'; repoUrl: string; branch: string },
+      ) => {
+        const service = {
+          id: `${projectId}__svc`,
+          source: input.source,
+          repo_url: input.repoUrl,
+          branch: input.branch,
+        };
+        registeredServices.push(service);
+        return service;
+      },
+    ),
+    insertActivityLog: vi.fn(async () => undefined),
   };
   const deliveryService = {
     createDelivery: vi.fn(async (input: { id: string }) => ({ ...delivery, id: input.id })),
+    assertProjectCanMutate: vi.fn(async () => undefined),
   };
   const deliveryAgentRunService = {
     start: vi.fn(async (input: { id: string; phase: string }) => {
@@ -540,6 +567,72 @@ describe('Application Operation contract', () => {
         { actor: harness.actor, idempotencyKey: 'cancel-1' },
       ),
     ).resolves.toMatchObject({ result: { status: 'cancelled' } });
+  });
+
+  it('registers a repository without deploy and enforces the Project scope boundary', async () => {
+    const harness = createAgentDeliveryHarness();
+    const input = {
+      project_id: harness.delivery.project_id,
+      repo_url: 'https://github.com/example/incar-app.git',
+      branch: 'codex/admin-collateral-storyboard',
+    };
+
+    const registered = await harness.operations.execute(
+      harness.ctx,
+      'register_project_repository',
+      input,
+      { actor: harness.actor, idempotencyKey: 'register-repository-1' },
+    );
+    expect(registered.result).toMatchObject({
+      status: 'registered',
+      project_id: harness.delivery.project_id,
+      service_id: `${harness.delivery.project_id}__svc`,
+      repo_url: input.repo_url,
+      branch: input.branch,
+      suggested_call: {
+        operation: 'plan_delivery',
+        input: { project_id: harness.delivery.project_id },
+      },
+    });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledWith(
+      harness.delivery.project_id,
+      { source: 'git', repoUrl: input.repo_url, branch: input.branch },
+    );
+    expect(harness.db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: 'project.repository_registered',
+        project_id: harness.delivery.project_id,
+      }),
+    );
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'register_project_repository', input, {
+        actor: harness.actor,
+        idempotencyKey: 'register-repository-2',
+      }),
+    ).resolves.toMatchObject({ result: registered.result });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledOnce();
+    expect(harness.db.insertActivityLog).toHaveBeenCalledOnce();
+
+    const tool = projectManifestToolDefs.find(
+      (definition) => definition.name === 'register_project_repository',
+    );
+    expect(tool).toBeDefined();
+    await expect(
+      tool?.execute(
+        { idempotency_key: 'register-sibling', ...input, project_id: 'sibling-project' },
+        {
+          target: 'mcp',
+          appCtx: harness.ctx,
+          identity: {
+            source: 'mcp',
+            mcpScopeKind: 'project',
+            mcpScopeProjectId: harness.delivery.project_id,
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+    expect(harness.db.ensureDeployableServiceForProject).toHaveBeenCalledOnce();
   });
 
   it('maps interface-neutral Agent Delivery call links into MCP composite calls', async () => {

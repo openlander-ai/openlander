@@ -232,12 +232,12 @@ the same database.
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **129 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **130 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                            |
 | ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 22      | Deploy lifecycle: plans, execution, rollback, build                                |
-| `openlander_project`         | 38      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure        |
+| `openlander_deploy`          | 28      | Deploy lifecycle: plans, execution, rollback, build                                |
+| `openlander_project`         | 47      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure        |
 | `openlander_service`         | 25      | Application lifecycle, config, domains                                             |
 | `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                  |
 | `openlander_monitor`         | 15      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, host/network diagnosis |
@@ -259,6 +259,7 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | Delivery  | `openlander_project` → `create_delivery`              | Start an FDE delivery evidence record               |
 | Portfolio | `openlander_project` → `list_engagements`             | Read internal cross-Project FDE status              |
 | Bootstrap | `openlander_project` → `bootstrap_engagement`         | Create an Engagement and initial Project atomically |
+| Register  | `openlander_project` → `register_project_repository`  | Attach a Git source without deploying               |
 | Feedback  | `openlander_project` → `record_delivery_feedback`     | Preserve pasted customer feedback                   |
 | Receipt   | `openlander_project` → `get_delivery_readiness`       | Check deterministic finalization gates              |
 | Plan run  | `openlander_project` → `plan_delivery`                | Store objective, DoD, manifest, and Gates           |

@@ -119,6 +119,7 @@ const EXPECTED_TOOLS = [
   'record_delivery_run_progress',
   'record_project_update',
   'redeploy_app',
+  'register_project_repository',
   'remove_git_credential',
   'remove_secret_file',
   'remove_service',
@@ -203,8 +204,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 129 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(129);
+  it('maintains exactly 130 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(130);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

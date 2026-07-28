@@ -5,6 +5,7 @@ import { agentDeliveryOperations } from '../../operations/definitions/delivery.j
 import {
   applyProjectManifestOperation,
   getProjectManifestOperation,
+  registerProjectRepositoryOperation,
 } from '../../operations/definitions/project-manifest.js';
 import { projectUpdateOperations } from '../../operations/definitions/project-update.js';
 import type { ApplicationOperationDefinition } from '../../operations/types.js';
@@ -89,6 +90,7 @@ export const agentDeliveryToolDefs: ToolDef[] = agentDeliveryOperations.map((def
   operationToolDef(definition),
 );
 export const projectManifestToolDefs: ToolDef[] = [
+  registerProjectRepositoryOperation,
   applyProjectManifestOperation,
   getProjectManifestOperation,
   ...projectUpdateOperations,
