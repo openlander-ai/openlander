@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentGuideDialog } from '@/components/agent-guide/AgentGuideDialog';
 import {
+  DeliveryHumanActionCard,
   DeliveryWorkflowRail,
   type DeliveryDetailTab,
 } from '@/components/delivery/DeliveryWorkflowRail';
@@ -350,16 +351,20 @@ export function DeliveryDetailPage() {
         />
 
         <div className="space-y-4 p-4">
+          <DeliveryHumanActionCard
+            detail={detail}
+            execution={execution}
+            readiness={readiness}
+            onOpenTab={setActiveTab}
+            onAskAgent={() => setAgentGuideOpen(true)}
+          />
+
           <DeliveryWorkflowRail
             detail={detail}
             readiness={readiness}
             activeTab={activeTab}
             onChange={setActiveTab}
           />
-
-          <div className="rounded-md border border-[color:var(--ol-primary)]/25 bg-[color:var(--ol-primary-soft)] px-3 py-2 text-xs text-[color:var(--ol-fg-muted)]">
-            {t('delivery.formless.detailDescription')}
-          </div>
           {error && (
             <div
               role="alert"

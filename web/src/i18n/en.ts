@@ -2706,6 +2706,8 @@ export const translations = {
     },
     workflow: {
       title: 'Delivery progress',
+      detailsTitle: 'Detailed progress',
+      detailsDescription: 'Review the stages and evidence recorded by the agent.',
       next: 'Next recommended step: {step}',
       ready: 'All evidence checks are satisfied. Review and finalize the Receipt.',
       complete: 'Delivery and its immutable Receipt are complete.',
@@ -2718,6 +2720,63 @@ export const translations = {
         gates: 'Gates',
         deployments: 'Deployment',
         receipt: 'Receipt',
+      },
+    },
+    humanAction: {
+      review_version: {
+        eyebrow: 'Needs your review',
+        title: '{count} file version needs review',
+        description:
+          'Check the file selected by the agent, then accept this version or request changes.',
+        action: 'Open review',
+      },
+      review_items: {
+        eyebrow: 'Needs your review',
+        title: '{count} feedback item needs review',
+        description: 'Review the items extracted from customer feedback and decide how to proceed.',
+        action: 'Open review items',
+      },
+      gate_warning: {
+        eyebrow: 'Needs your review',
+        title: '{count} warning needs acknowledgment',
+        description: 'Review the result, then accept the warning or ask the agent to run it again.',
+        action: 'Review warnings',
+      },
+      agent_working: {
+        eyebrow: 'Agent working',
+        title: 'The agent is continuing the work',
+        description: 'You will be notified here when it finishes or needs a human decision.',
+        action: 'View agent status',
+      },
+      revision_in_progress: {
+        eyebrow: 'Waiting for agent',
+        title: 'Your change request was recorded',
+        description: 'Ask the agent to continue and prepare a new version for review.',
+        action: 'Ask agent',
+      },
+      ready: {
+        eyebrow: 'Ready to complete',
+        title: 'All completion conditions are satisfied',
+        description: 'No manual entry is needed. The agent can finalize the completion evidence.',
+        action: 'Ask to complete',
+      },
+      complete: {
+        eyebrow: 'Complete',
+        title: 'This Delivery is complete',
+        description: 'The finalized evidence and Receipt are ready to review.',
+        action: 'View completion evidence',
+      },
+      cancelled: {
+        eyebrow: 'Closed',
+        title: 'This Delivery was cancelled',
+        description: 'Its records remain available for audit and handoff.',
+        action: 'View record',
+      },
+      idle: {
+        eyebrow: 'Ready for agent',
+        title: 'The agent can continue with the next task',
+        description: 'There is nothing to fill in. Ask the agent for the outcome you need.',
+        action: 'Ask agent',
       },
     },
     actions: {

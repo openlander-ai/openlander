@@ -2913,6 +2913,8 @@ export const translations = {
     },
     workflow: {
       title: '납품 진행 단계',
+      detailsTitle: '상세 진행 기록',
+      detailsDescription: '에이전트가 남긴 단계와 증거 상태를 확인합니다.',
       next: '다음 권장 단계: {step}',
       ready: '모든 조건을 충족했습니다. 납품 확인서를 검토한 뒤 확정하세요.',
       complete: '납품 건과 납품 확인서가 확정되었습니다.',
@@ -2925,6 +2927,63 @@ export const translations = {
         gates: '통과 기준',
         deployments: '배포',
         receipt: '납품 확인서',
+      },
+    },
+    humanAction: {
+      review_version: {
+        eyebrow: '확인 필요',
+        title: '검토할 파일 버전 {count}건이 있습니다',
+        description: '에이전트가 지정한 파일을 확인한 뒤 이 버전을 승인하거나 수정을 요청하세요.',
+        action: '검토 열기',
+      },
+      review_items: {
+        eyebrow: '확인 필요',
+        title: '검토할 의견과 질문 {count}건이 있습니다',
+        description: '고객 피드백에서 정리한 항목을 확인하고 처리 방향을 결정하세요.',
+        action: '검토 항목 열기',
+      },
+      gate_warning: {
+        eyebrow: '확인 필요',
+        title: '확인하지 않은 경고 {count}건이 있습니다',
+        description: '검증 결과를 확인한 뒤 경고를 수용할지 다시 실행할지 결정하세요.',
+        action: '경고 확인',
+      },
+      agent_working: {
+        eyebrow: '에이전트 작업 중',
+        title: '에이전트가 작업을 진행하고 있습니다',
+        description: '완료되거나 사람의 판단이 필요해지면 이곳에 알려드립니다.',
+        action: '에이전트 상태 보기',
+      },
+      revision_in_progress: {
+        eyebrow: '에이전트 작업 대기',
+        title: '수정 요청이 전달되었습니다',
+        description: '에이전트가 새 버전을 만들 수 있도록 작업을 이어서 요청하세요.',
+        action: '에이전트에게 요청',
+      },
+      ready: {
+        eyebrow: '완료 준비',
+        title: '완료 조건을 모두 충족했습니다',
+        description:
+          '사람이 추가로 입력할 내용은 없습니다. 에이전트가 완료 증빙을 확정할 수 있습니다.',
+        action: '완료 요청',
+      },
+      complete: {
+        eyebrow: '완료',
+        title: '이 납품 작업이 완료되었습니다',
+        description: '확정된 증거와 납품 확인서를 확인할 수 있습니다.',
+        action: '완료 증빙 보기',
+      },
+      cancelled: {
+        eyebrow: '종료됨',
+        title: '이 납품 작업은 취소되었습니다',
+        description: '기존 기록은 감사와 인수인계를 위해 그대로 보존됩니다.',
+        action: '기록 보기',
+      },
+      idle: {
+        eyebrow: '진행 가능',
+        title: '에이전트가 다음 작업을 진행할 수 있습니다',
+        description: '사람이 직접 입력할 내용은 없습니다. 필요한 결과를 에이전트에게 요청하세요.',
+        action: '에이전트에게 요청',
       },
     },
     actions: {
