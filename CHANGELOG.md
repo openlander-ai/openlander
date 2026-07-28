@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.2] - 2026-07-29
+
+### Added
+
+- Add resumable customer-review packages that stage one required PDF and
+  optional HTML or representative image files, publish them atomically, and
+  bind the exact package manifest SHA-256 to human approval.
+- Expose review-package prepare, status, resume, and publish workflows through
+  the shared Application Operation Registry, REST API, and
+  `openlander_project` MCP composite.
+
+### Changed
+
+- Make high-level package operations the default FDE review path so Agents no
+  longer need to assign low-level Artifact keys, receipt ordering, revisions,
+  or companion relationships.
+- Surface the MCP evidence-upload ticket flow earlier in Agent guidance and
+  show one customer-review package card in the formless Delivery workspace.
+
+### Fixed
+
+- Keep partial uploads out of Delivery artifacts and Review Gates, allow failed
+  items to resume with fresh short-lived capabilities, and preserve published
+  review evidence until the replacement package is published.
+- Narrow customer-review package loading explicitly so clean Web TypeScript
+  builds reject no valid nullable state.
+
 ## [0.2.13-rc.1] - 2026-07-28
 
 ### Added
