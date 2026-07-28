@@ -1146,8 +1146,10 @@ function ReviewCheckpointCard({
     data: DeliveryReviewPackageStatus | null;
     failed: boolean;
   } | null>(null);
-  const reviewPackage = packageLoad?.packageId === gate.review_package_id ? packageLoad.data : null;
-  const packageLoadFailed = packageLoad?.packageId === gate.review_package_id && packageLoad.failed;
+  const matchingPackageLoad =
+    packageLoad?.packageId === gate.review_package_id ? packageLoad : null;
+  const reviewPackage = matchingPackageLoad?.data ?? null;
+  const packageLoadFailed = matchingPackageLoad?.failed ?? false;
   useEffect(() => {
     let active = true;
     if (!gate.review_package_id) return () => undefined;
