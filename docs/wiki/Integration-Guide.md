@@ -269,6 +269,11 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | Review    | `openlander_project` → `request_delivery_review` / `get_delivery_review_status` | Bind and poll an exact Artifact revision            |
 | Update    | `openlander_project` → `record_project_update`                                  | Record source-linked decisions, actions, and risks  |
 
+For Agent-originated evidence, call `create_evidence_upload` first and `PUT`
+the exact bytes to the returned bearer URL. The upload request does not use the
+MCP token as REST authentication. Use the multipart REST endpoint only from a
+supported web session or CI client with its own API/PAT authentication.
+
 `bootstrap_engagement`, `update_engagement_from_brief`, `archive_engagement`,
 `unarchive_engagement`, `list_engagements`, and `get_engagement` require an
 instance/organization MCP token. `link_project_to_engagement` and

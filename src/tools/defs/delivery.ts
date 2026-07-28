@@ -75,7 +75,11 @@ export const deliveryToolDefs: ToolDef[] = [
         },
         _agent_guidance: {
           message:
-            'Delivery created. Upload binaries through the authenticated web/API multipart endpoint, then attach URLs or record feedback here.',
+            'Delivery created. For a local file, call create_evidence_upload, then PUT its bytes to the returned short-lived bearer URL. Do not use the MCP token as REST authentication.',
+          next_steps: [
+            'Call create_evidence_upload with the file metadata and a stable idempotency key.',
+            'Upload the exact bytes to upload_url without an MCP Authorization header.',
+          ],
         },
       };
     },
