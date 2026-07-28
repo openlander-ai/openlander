@@ -36,6 +36,7 @@ export type FeedbackSourceType = DeliveryFeedbackSourceRow['source_type'];
 
 export interface DeliveryArtifactWithBlob extends DeliveryArtifactRow {
   blob: ArtifactBlobRow;
+  review_package_role?: 'review_document' | 'interactive_preview' | 'representative_image' | null;
 }
 
 export interface DeliveryDeployEvidence {
@@ -127,6 +128,12 @@ export interface DeliveryReviewStatus {
     waiver_reason: string | null;
   };
   approval_evidence_id: string | null;
+  review_package: {
+    id: string;
+    revision: number;
+    manifest_sha256: string;
+    status: 'published' | 'superseded';
+  } | null;
   blockers: DeliveryReviewBlocker[];
 }
 

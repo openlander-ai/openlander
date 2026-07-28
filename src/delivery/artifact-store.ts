@@ -60,6 +60,39 @@ function normalizedMime(value: string | null | undefined): string | null {
   return mime?.trim() || null;
 }
 
+export function validateArtifactMetadata(
+  filenameValue: string,
+  declaredMimeType?: string | null,
+): { filename: string; mimeType: string } {
+  const filename = basename(filenameValue);
+  if (!filename || filename === '.' || filename === '..') {
+    throw new ArtifactValidationError('A valid display filename is required.');
+  }
+
+  const extensionMime = MIME_BY_EXTENSION[extname(filename).toLowerCase()] ?? null;
+  const declaredMime = normalizedMime(declaredMimeType);
+  const mimeType = declaredMime ?? extensionMime;
+  if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
+    throw new ArtifactValidationError('Artifact type is not allowed.', {
+      filename,
+      declaredMimeType: declaredMime,
+    });
+  }
+  if (extensionMime && declaredMime && extensionMime !== declaredMime) {
+    const xmlPair =
+      extensionMime === 'application/xml' &&
+      (declaredMime === 'text/xml' || declaredMime === 'application/junit+xml');
+    if (!xmlPair) {
+      throw new ArtifactValidationError('Artifact filename and MIME type do not match.', {
+        filename,
+        extensionMime,
+        declaredMime,
+      });
+    }
+  }
+  return { filename, mimeType };
+}
+
 function isPng(bytes: Buffer): boolean {
   return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
 }
@@ -149,32 +182,7 @@ export class ArtifactStore {
     source: AsyncIterable<Uint8Array>,
     options: StoreArtifactOptions,
   ): Promise<StoredArtifact> {
-    const filename = basename(options.filename);
-    if (!filename || filename === '.' || filename === '..') {
-      throw new ArtifactValidationError('A valid display filename is required.');
-    }
-
-    const extensionMime = MIME_BY_EXTENSION[extname(filename).toLowerCase()] ?? null;
-    const declaredMime = normalizedMime(options.declaredMimeType);
-    const mimeType = declaredMime ?? extensionMime;
-    if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
-      throw new ArtifactValidationError('Artifact type is not allowed.', {
-        filename,
-        declaredMimeType: declaredMime,
-      });
-    }
-    if (extensionMime && declaredMime && extensionMime !== declaredMime) {
-      const xmlPair =
-        extensionMime === 'application/xml' &&
-        (declaredMime === 'text/xml' || declaredMime === 'application/junit+xml');
-      if (!xmlPair) {
-        throw new ArtifactValidationError('Artifact filename and MIME type do not match.', {
-          filename,
-          extensionMime,
-          declaredMime,
-        });
-      }
-    }
+    const { mimeType } = validateArtifactMetadata(options.filename, options.declaredMimeType);
 
     const maxBytes = options.maxBytes ?? MAX_ARTIFACT_BYTES;
     await fs.mkdir(this.tempDir, { recursive: true, mode: 0o700 });

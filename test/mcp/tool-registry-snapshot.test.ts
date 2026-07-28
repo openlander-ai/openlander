@@ -68,6 +68,7 @@ const EXPECTED_TOOLS = [
   'get_build_log',
   'get_delivery',
   'get_delivery_readiness',
+  'get_delivery_review_package_status',
   'get_delivery_review_status',
   'get_delivery_run',
   'get_deploy_history',
@@ -109,9 +110,11 @@ const EXPECTED_TOOLS = [
   'list_volumes',
   'mcp_action_status',
   'plan_delivery',
+  'prepare_delivery_review_package',
   'preview_deploy',
   'probe_host',
   'promote_release',
+  'publish_delivery_review_package',
   'publish_weekly_report',
   'read_data_source',
   'recall_release',
@@ -206,8 +209,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 132 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(132);
+  it('maintains exactly 135 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(135);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

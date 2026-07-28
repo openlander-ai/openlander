@@ -867,7 +867,7 @@ export const translations = {
         lead: 'Delivery configuration and evidence enter through versioned operations. Use this page to inspect the resulting scope, checks, approvals, deployment evidence, and completion evidence.',
         prompt: {
           continue:
-            'For Delivery {deliveryId} in Project {projectName}, inspect the current blockers, resume its active Agent Run, and continue through the next safe operation. Keep its title and summary outcome-focused, and keep only the files needed for the current customer review in the customer package.',
+            'For Delivery {deliveryId} in Project {projectName}, inspect the current blockers and continue through the next safe operation. When a customer review is ready, keep its package to the minimum reviewable files, use prepare_delivery_review_package, upload only the missing files returned by its status action, then publish the exact manifest. Keep the title and summary outcome-focused.',
           evidence:
             'For Delivery {deliveryId} in Project {projectName}, preserve this document as evidence, update the structured project record, and rerun only the affected quality Gates.',
         },
@@ -2986,6 +2986,24 @@ export const translations = {
         stale: 'Review newer version',
       },
     },
+    reviewPackage: {
+      versionTitle: 'Customer review package version {revision}',
+      fileCount: '{count} review file(s)',
+      manifestSha: 'Review package manifest SHA-256',
+      includedFiles: 'Files included in this review',
+      accept: 'Accept this review package',
+      loadFailed: 'Package details could not be loaded. Reload before approving.',
+      role: {
+        review_document: 'Primary PDF',
+        interactive_preview: 'Interactive HTML',
+        representative_image: 'Representative image',
+      },
+      fileStatus: {
+        pending: 'Upload pending',
+        uploaded: 'Uploaded',
+        failed: 'Upload failed',
+      },
+    },
     review: {
       feedbackTitle: 'Preserve original feedback',
       feedbackDescription:
@@ -3192,6 +3210,7 @@ export const translations = {
       uploaded: 'Artifact uploaded.',
       artifactApproved: 'Artifact approved.',
       reviewAccepted: 'This exact file version was accepted.',
+      reviewPackageAccepted: 'Customer review package accepted.',
       reviewChangesRequested:
         'Changes requested. The agent must submit the new version for review.',
       workItemUpdated: 'Review item status changed.',

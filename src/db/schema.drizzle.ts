@@ -1516,6 +1516,136 @@ export const deliveryArtifacts = pgTable(
   ],
 );
 
+export const deliveryReviewPackages = pgTable(
+  'delivery_review_packages',
+  {
+    id: text('id').primaryKey(),
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    revision: integer('revision').notNull(),
+    status: text('status', {
+      enum: ['draft', 'published', 'superseded', 'aborted', 'expired'],
+    })
+      .notNull()
+      .default('draft'),
+    manifest_sha256: text('manifest_sha256').notNull(),
+    base_evidence_version: integer('base_evidence_version').notNull(),
+    source_run_id: text('source_run_id').references((): AnyPgColumn => deliveryAgentRuns.id, {
+      onDelete: 'set null',
+    }),
+    review_gate_key: text('review_gate_key').notNull().default('review'),
+    review_note: text('review_note').notNull(),
+    overview_mode: text('overview_mode', { enum: ['update', 'keep'] }).notNull(),
+    overview_patch: jsonb('overview_patch').$type<{
+      title?: string;
+      summary?: string;
+      limitations?: string | null;
+    }>(),
+    overview_keep_reason: text('overview_keep_reason'),
+    overview_before_sha256: text('overview_before_sha256').notNull(),
+    overview_after_sha256: text('overview_after_sha256').notNull(),
+    expires_at: text('expires_at').notNull(),
+    published_at: text('published_at'),
+    created_by: text('created_by').notNull().default('external-agent'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_review_packages_delivery_revision_unique').on(
+      table.delivery_id,
+      table.revision,
+    ),
+    uniqueIndex('delivery_review_packages_active_draft_unique')
+      .on(table.delivery_id)
+      .where(sql`${table.status} = 'draft'`),
+    uniqueIndex('delivery_review_packages_current_published_unique')
+      .on(table.delivery_id)
+      .where(sql`${table.status} = 'published'`),
+    check(
+      'delivery_review_packages_status_check',
+      sql`${table.status} IN ('draft', 'published', 'superseded', 'aborted', 'expired')`,
+    ),
+    check('delivery_review_packages_revision_check', sql`${table.revision} > 0`),
+    check(
+      'delivery_review_packages_manifest_sha256_check',
+      sql`length(${table.manifest_sha256}) = 64`,
+    ),
+    check(
+      'delivery_review_packages_base_evidence_version_check',
+      sql`${table.base_evidence_version} >= 0`,
+    ),
+    check(
+      'delivery_review_packages_overview_mode_check',
+      sql`${table.overview_mode} IN ('update', 'keep')`,
+    ),
+    index('idx_delivery_review_packages_delivery').on(table.delivery_id, table.created_at),
+  ],
+);
+
+export const deliveryReviewPackageItems = pgTable(
+  'delivery_review_package_items',
+  {
+    id: text('id').primaryKey(),
+    package_id: text('package_id')
+      .notNull()
+      .references(() => deliveryReviewPackages.id, { onDelete: 'cascade' }),
+    role: text('role', {
+      enum: ['review_document', 'interactive_preview', 'representative_image'],
+    }).notNull(),
+    filename: text('filename').notNull(),
+    expected_sha256: text('expected_sha256').notNull(),
+    expected_size_bytes: bigint('expected_size_bytes', { mode: 'number' }).notNull(),
+    expected_mime_type: text('expected_mime_type').notNull(),
+    required: boolean('required').notNull().default(true),
+    blob_id: text('blob_id').references(() => artifactBlobs.id, { onDelete: 'set null' }),
+    artifact_id: text('artifact_id').references(() => deliveryArtifacts.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status', { enum: ['pending', 'uploaded', 'failed'] })
+      .notNull()
+      .default('pending'),
+    attempt_count: integer('attempt_count').notNull().default(0),
+    actual_sha256: text('actual_sha256'),
+    actual_size_bytes: bigint('actual_size_bytes', { mode: 'number' }),
+    actual_mime_type: text('actual_mime_type'),
+    last_error_code: text('last_error_code'),
+    last_error_details: jsonb('last_error_details').$type<Record<string, unknown>>(),
+    uploaded_at: text('uploaded_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_review_package_items_role_unique').on(table.package_id, table.role),
+    check(
+      'delivery_review_package_items_role_check',
+      sql`${table.role} IN ('review_document', 'interactive_preview', 'representative_image')`,
+    ),
+    check(
+      'delivery_review_package_items_status_check',
+      sql`${table.status} IN ('pending', 'uploaded', 'failed')`,
+    ),
+    check(
+      'delivery_review_package_items_expected_sha256_check',
+      sql`length(${table.expected_sha256}) = 64`,
+    ),
+    check(
+      'delivery_review_package_items_expected_size_check',
+      sql`${table.expected_size_bytes} > 0`,
+    ),
+    check('delivery_review_package_items_attempt_count_check', sql`${table.attempt_count} >= 0`),
+    index('idx_delivery_review_package_items_package').on(table.package_id),
+  ],
+);
+
 export const deliveryExternalRefs = pgTable(
   'delivery_external_refs',
   {
@@ -1621,6 +1751,10 @@ export const deliveryApprovals = pgTable(
       .notNull()
       .references(() => deliveries.id, { onDelete: 'cascade' }),
     artifact_ids: jsonb('artifact_ids').$type<string[]>().notNull(),
+    review_package_id: text('review_package_id').references(() => deliveryReviewPackages.id, {
+      onDelete: 'set null',
+    }),
+    package_manifest_sha256: text('package_manifest_sha256'),
     approver_display_name: text('approver_display_name').notNull(),
     approval_excerpt: text('approval_excerpt').notNull(),
     source_type: text('source_type', {
@@ -1641,6 +1775,10 @@ export const deliveryApprovals = pgTable(
       sql`${table.source_type} IN ('slack', 'teams', 'email', 'meeting', 'other')`,
     ),
     index('idx_delivery_approvals_delivery').on(table.delivery_id, table.approved_at),
+    check(
+      'delivery_approvals_package_manifest_sha256_check',
+      sql`${table.package_manifest_sha256} IS NULL OR length(${table.package_manifest_sha256}) = 64`,
+    ),
   ],
 );
 
@@ -1668,6 +1806,9 @@ export const deliveryGates = pgTable(
     waiver_reason: text('waiver_reason'),
     warning_accepted: boolean('warning_accepted').notNull().default(false),
     report_artifact_id: text('report_artifact_id').references(() => deliveryArtifacts.id, {
+      onDelete: 'set null',
+    }),
+    review_package_id: text('review_package_id').references(() => deliveryReviewPackages.id, {
       onDelete: 'set null',
     }),
     idempotency_key: text('idempotency_key'),
@@ -2131,6 +2272,8 @@ export type ProjectManifestStateRow = typeof projectManifestStates.$inferSelect;
 export type ArtifactBlobRow = typeof artifactBlobs.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 export type DeliveryArtifactRow = typeof deliveryArtifacts.$inferSelect;
+export type DeliveryReviewPackageRow = typeof deliveryReviewPackages.$inferSelect;
+export type DeliveryReviewPackageItemRow = typeof deliveryReviewPackageItems.$inferSelect;
 export type DeliveryExternalRefRow = typeof deliveryExternalRefs.$inferSelect;
 export type DeliveryFeedbackSourceRow = typeof deliveryFeedbackSources.$inferSelect;
 export type DeliveryWorkItemRow = typeof deliveryWorkItems.$inferSelect;
@@ -2217,6 +2360,8 @@ export const drizzleSchema = {
   projectDeliverySettings,
   deliveries,
   deliveryArtifacts,
+  deliveryReviewPackages,
+  deliveryReviewPackageItems,
   deliveryExternalRefs,
   deliveryFeedbackSources,
   deliveryWorkItems,

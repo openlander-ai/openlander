@@ -41,6 +41,7 @@ import { SettingsRepo } from './repos/settings.repo.js';
 import { PatTokenRepo } from './repos/pat-token.repo.js';
 import { GitCredentialRepo } from './repos/git-credential.repo.js';
 import { DeliveryRepo } from './repos/delivery.repo.js';
+import { DeliveryReviewPackageRepo } from './repos/delivery-review-package.repo.js';
 import { EngagementRepo } from './repos/engagement.repo.js';
 import { ApplicationOperationRepo } from './repos/application-operation.repo.js';
 import { DeliveryAgentRunRepo } from './repos/delivery-agent-run.repo.js';
@@ -96,6 +97,8 @@ export type {
   DeliveryWorkItemRow,
   DeliveryApprovalRow,
   DeliveryGateRow,
+  DeliveryReviewPackageRow,
+  DeliveryReviewPackageItemRow,
   DeliveryDeployLinkRow,
   DeliveryReceiptRow,
   EngagementRow,
@@ -322,6 +325,7 @@ export class Database implements AuthDatabase {
   private readonly patTokenRepo: PatTokenRepo;
   private readonly gitCredentialRepo: GitCredentialRepo;
   private readonly deliveryRepo: DeliveryRepo;
+  private readonly deliveryReviewPackageRepo: DeliveryReviewPackageRepo;
   private readonly engagementRepo: EngagementRepo;
   private readonly applicationOperationRepo: ApplicationOperationRepo;
   private readonly deliveryAgentRunRepo: DeliveryAgentRunRepo;
@@ -367,6 +371,7 @@ export class Database implements AuthDatabase {
     this.patTokenRepo = new PatTokenRepo(this.db, this.client);
     this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
     this.deliveryRepo = new DeliveryRepo(this.db, this.client);
+    this.deliveryReviewPackageRepo = new DeliveryReviewPackageRepo(this.db, this.client);
     this.engagementRepo = new EngagementRepo(this.db, this.client);
     this.applicationOperationRepo = new ApplicationOperationRepo(this.db, this.client);
     this.deliveryAgentRunRepo = new DeliveryAgentRunRepo(this.db, this.client);
@@ -792,6 +797,15 @@ export class Database implements AuthDatabase {
   resetDeliveryGatesForType(deliveryId: string, deliveryType: Parameters<DeliveryRepo['resetGatesForType']>[1]) { return this.deliveryRepo.resetGatesForType(deliveryId, deliveryType); }
   recordDeliveryGateResult(input: Parameters<DeliveryRepo['recordGateResult']>[0]) { return this.deliveryRepo.recordGateResult(input); }
   acceptDeliveryReviewCheckpoint(input: Parameters<DeliveryRepo['acceptReviewCheckpoint']>[0]) { return this.deliveryRepo.acceptReviewCheckpoint(input); }
+  createDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['create']>[0]) { return this.deliveryReviewPackageRepo.create(input); }
+  getDeliveryReviewPackage(id: string) { return this.deliveryReviewPackageRepo.get(id); }
+  listDeliveryReviewPackages(deliveryId: string) { return this.deliveryReviewPackageRepo.listForDelivery(deliveryId); }
+  getDeliveryReviewPackageItem(id: string) { return this.deliveryReviewPackageRepo.getItem(id); }
+  recordDeliveryReviewPackageUploadSuccess(input: Parameters<DeliveryReviewPackageRepo['recordUploadSuccess']>[0]) { return this.deliveryReviewPackageRepo.recordUploadSuccess(input); }
+  recordDeliveryReviewPackageUploadFailure(input: Parameters<DeliveryReviewPackageRepo['recordUploadFailure']>[0]) { return this.deliveryReviewPackageRepo.recordUploadFailure(input); }
+  publishDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['publish']>[0]) { return this.deliveryReviewPackageRepo.publish(input); }
+  acceptDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['accept']>[0]) { return this.deliveryReviewPackageRepo.accept(input); }
+  cleanupDeliveryReviewPackageStaging(input: Parameters<DeliveryReviewPackageRepo['cleanupStagedBlobs']>[0] = {}) { return this.deliveryReviewPackageRepo.cleanupStagedBlobs(input); }
   linkDeliveryDeploy(input: Parameters<DeliveryRepo['linkDeploy']>[0]) { return this.deliveryRepo.linkDeploy(input); }
   unlinkDeliveryDeploy(deliveryId: string, deployId: string) { return this.deliveryRepo.unlinkDeploy(deliveryId, deployId); }
   listDeliveryDeployEvidence(deliveryId: string) { return this.deliveryRepo.listDeployEvidence(deliveryId); }

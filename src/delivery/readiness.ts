@@ -12,7 +12,29 @@ export function evaluateDeliveryReadiness(
 ): DeliveryReadiness {
   const approvedArtifacts = detail.artifacts.filter((artifact) => artifact.status === 'approved');
   const activeApprovals = detail.approvals.filter((approval) => !approval.invalidated_at);
-  const reviewRequired = detail.gates.some((gate) => gate.gate_type === 'review' && gate.required);
+  const requiredReviewGates = detail.gates.filter(
+    (gate) => gate.gate_type === 'review' && gate.required,
+  );
+  const reviewRequired = requiredReviewGates.length > 0;
+  const activeCurrentApprovals = requiredReviewGates.some((gate) => gate.review_package_id)
+    ? activeApprovals.filter((approval) =>
+        requiredReviewGates.some(
+          (gate) =>
+            gate.review_package_id !== null &&
+            approval.review_package_id === gate.review_package_id &&
+            Boolean(approval.package_manifest_sha256),
+        ),
+      )
+    : activeApprovals;
+  const customerApprovalSatisfied =
+    !reviewRequired ||
+    requiredReviewGates.every((gate) =>
+      gate.review_package_id
+        ? activeCurrentApprovals.some(
+            (approval) => approval.review_package_id === gate.review_package_id,
+          )
+        : activeApprovals.length > 0,
+    );
   const unresolved = detail.work_items.filter(
     (item) =>
       (item.kind === 'change_request' || item.kind === 'question') && item.status === 'confirmed',
@@ -72,12 +94,12 @@ export function evaluateDeliveryReadiness(
     },
     {
       key: 'customer_approval',
-      passed: !reviewRequired || activeApprovals.length > 0,
-      params: { count: activeApprovals.length, required: reviewRequired ? 1 : 0 },
+      passed: customerApprovalSatisfied,
+      params: { count: activeCurrentApprovals.length, required: reviewRequired ? 1 : 0 },
       message: !reviewRequired
         ? 'Customer approval evidence is not required by the manifest.'
-        : activeApprovals.length > 0
-          ? `${String(activeApprovals.length)} active customer approval record(s)`
+        : customerApprovalSatisfied
+          ? `${String(activeCurrentApprovals.length)} active customer approval record(s)`
           : 'Customer approval evidence is required.',
     },
     {

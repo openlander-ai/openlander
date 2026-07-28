@@ -34,6 +34,7 @@ export function groupDeliveryArtifacts(
     .filter(
       (artifact) =>
         reviewTargetIds.has(artifact.id) ||
+        artifact.review_package_role != null ||
         artifact.kind === 'review_html' ||
         artifact.kind === 'companion_pdf',
     )

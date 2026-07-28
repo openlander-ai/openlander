@@ -66,7 +66,11 @@ describe('Delivery artifact groups', () => {
       logical_key: 'offline-review',
     });
     const qa = artifact('qa', { kind: 'qa_report', logical_key: 'qa-evidence' });
-    const image = artifact('image', { kind: 'image', logical_key: 'scenario-capture' });
+    const image = artifact('image', {
+      kind: 'image',
+      logical_key: 'scenario-capture',
+      review_package_role: 'representative_image',
+    });
     const oldHtml = artifact('old-html', {
       kind: 'review_html',
       logical_key: 'offline-review',
@@ -78,8 +82,12 @@ describe('Delivery artifact groups', () => {
       [reviewGate(reviewPdf.id)],
     );
 
-    expect(groups.customerShareables.map((item) => item.id)).toEqual(['review-pdf', 'review-html']);
-    expect(groups.internalEvidence.map((item) => item.id)).toEqual(['qa', 'image']);
+    expect(groups.customerShareables.map((item) => item.id)).toEqual([
+      'review-pdf',
+      'review-html',
+      'image',
+    ]);
+    expect(groups.internalEvidence.map((item) => item.id)).toEqual(['qa']);
     expect(groups.history.map((item) => item.id)).toEqual(['old-html', 'duplicate-pdf']);
     expect(groups.currentCount).toBe(4);
   });

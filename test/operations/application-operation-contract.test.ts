@@ -294,6 +294,120 @@ function createAgentDeliveryHarness() {
   const deliveryQualityGateService = {
     start: vi.fn(async () => undefined),
   };
+  const packageRow = {
+    id: 'package-review-1',
+    delivery_id: delivery.id,
+    revision: 4,
+    status: 'draft' as const,
+    manifest_sha256: 'd'.repeat(64),
+    base_evidence_version: 7,
+    source_run_id: null,
+    review_gate_key: 'change-review',
+    review_note: 'Review together',
+    overview_mode: 'keep' as const,
+    overview_patch: null,
+    overview_keep_reason: 'Still current',
+    overview_before_sha256: 'e'.repeat(64),
+    overview_after_sha256: 'e'.repeat(64),
+    expires_at: '2026-08-04T00:00:00.000Z',
+    published_at: null,
+    created_by: 'project-agent',
+    created_at: '2026-07-28T00:00:00.000Z',
+    updated_at: '2026-07-28T00:00:00.000Z',
+  };
+  const packageItem = {
+    id: 'package-item-pdf',
+    package_id: packageRow.id,
+    role: 'review_document' as const,
+    filename: 'review.pdf',
+    expected_sha256: 'f'.repeat(64),
+    expected_size_bytes: 1024,
+    expected_mime_type: 'application/pdf',
+    required: true,
+    blob_id: 'blob-review-pdf',
+    artifact_id: 'artifact-review',
+    status: 'uploaded' as const,
+    attempt_count: 1,
+    actual_sha256: 'f'.repeat(64),
+    actual_size_bytes: 1024,
+    actual_mime_type: 'application/pdf',
+    last_error_code: null,
+    last_error_details: null,
+    uploaded_at: '2026-07-28T00:01:00.000Z',
+    created_at: '2026-07-28T00:00:00.000Z',
+    updated_at: '2026-07-28T00:01:00.000Z',
+  };
+  const packageBlob = {
+    id: 'blob-review-pdf',
+    sha256: packageItem.expected_sha256,
+    mime_type: 'application/pdf',
+    size_bytes: 1024,
+    storage_key: `sha256/ff/${packageItem.expected_sha256}`,
+    created_at: '2026-07-28T00:01:00.000Z',
+  };
+  const packageArtifact = {
+    id: 'artifact-review',
+    delivery_id: delivery.id,
+    blob_id: packageBlob.id,
+    logical_key: 'customer-review-package',
+    revision: 4,
+    kind: 'companion_pdf' as const,
+    original_filename: 'review.pdf',
+    status: 'draft' as const,
+    companion_pdf_artifact_id: null,
+    include_in_receipt: true,
+    receipt_order: 10,
+    idempotency_key: `review-package:${packageRow.id}:review_document`,
+    created_at: '2026-07-28T00:01:00.000Z',
+    updated_at: '2026-07-28T00:01:00.000Z',
+  };
+  const packageDetail = {
+    package: packageRow,
+    delivery: { ...delivery, evidence_version: 7 },
+    items: [{ item: packageItem, blob: packageBlob, artifact: packageArtifact }],
+    gate: {
+      id: 'gate-review',
+      delivery_id: delivery.id,
+      gate_key: 'change-review',
+      source: 'manual' as const,
+      definition_sha256: null,
+      gate_type: 'review' as const,
+      label: 'Review',
+      required: true,
+      status: 'pending' as const,
+      summary: null,
+      waiver_reason: null,
+      warning_accepted: false,
+      report_artifact_id: 'artifact-review',
+      review_package_id: packageRow.id,
+      idempotency_key: null,
+      recorded_by: 'project-agent',
+      recorded_at: null,
+      created_at: '2026-07-28T00:00:00.000Z',
+      updated_at: '2026-07-28T00:00:00.000Z',
+    },
+  };
+  const deliveryReviewPackageService = {
+    prepare: vi.fn(async () => packageDetail),
+    getStatus: vi.fn(async () => ({
+      selected: packageDetail,
+      draft: packageRow,
+      current: null,
+      previous: null,
+      blockers: [],
+      missing_roles: [],
+      upload_capabilities: [],
+    })),
+    publish: vi.fn(async () => ({
+      ...packageDetail,
+      package: { ...packageRow, status: 'published' as const },
+      primaryArtifact: packageArtifact,
+      artifacts: [packageArtifact],
+    })),
+  };
+  Object.assign(db, {
+    getDeliveryReviewPackage: vi.fn(async () => packageDetail),
+  });
   const operations = createApplicationOperationRegistry();
   const ctx = {
     config: { mcp: { instanceId: 'olinst_test' } },
@@ -301,6 +415,7 @@ function createAgentDeliveryHarness() {
     deliveryService,
     deliveryAgentRunService,
     deliveryQualityGateService,
+    deliveryReviewPackageService,
     operations,
   } as unknown as AppContext;
   const actor = {
@@ -318,6 +433,7 @@ function createAgentDeliveryHarness() {
     deliveryService,
     deliveryAgentRunService,
     deliveryQualityGateService,
+    deliveryReviewPackageService,
     reviewStatus,
     acceptedReviewStatus,
     db,
@@ -843,5 +959,104 @@ describe('Application Operation contract', () => {
       },
       operation_id: 'operation-1',
     });
+  });
+
+  it('prepares, inspects, and publishes a customer review package through one operation contract', async () => {
+    const harness = createAgentDeliveryHarness();
+    const prepared = await harness.operations.execute(
+      harness.ctx,
+      'prepare_delivery_review_package',
+      {
+        delivery_id: harness.delivery.id,
+        gate_key: 'change-review',
+        review_note: 'Review together',
+        files: [
+          {
+            role: 'review_document',
+            filename: 'review.pdf',
+            expected_sha256: 'f'.repeat(64),
+            expected_size_bytes: 1024,
+            mime_type: 'application/pdf',
+          },
+        ],
+        overview: { mode: 'keep', reason: 'Still current' },
+      },
+      { actor: harness.actor, idempotencyKey: 'prepare-package-1' },
+    );
+    expect(prepared.result).toMatchObject({
+      status: 'prepared',
+      package_id: 'package-review-1',
+      revision: 4,
+      manifest_sha256: 'd'.repeat(64),
+    });
+    expect(JSON.stringify(prepared.result)).not.toContain('upload_url');
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'prepare_delivery_review_package',
+        {
+          delivery_id: harness.delivery.id,
+          gate_key: 'change-review',
+          review_note: 'Review together',
+          files: [
+            {
+              role: 'review_document',
+              filename: 'review.pdf',
+              expected_sha256: 'f'.repeat(64),
+              expected_size_bytes: 1024,
+              mime_type: 'application/pdf',
+            },
+          ],
+          overview: { mode: 'keep', reason: 'Still current' },
+        },
+        { actor: harness.actor, idempotencyKey: 'prepare-package-1' },
+      ),
+    ).resolves.toMatchObject({ replayed: true, result: prepared.result });
+    expect(harness.deliveryReviewPackageService.prepare).toHaveBeenCalledOnce();
+
+    const status = await harness.operations.execute(
+      harness.ctx,
+      'get_delivery_review_package_status',
+      { delivery_id: harness.delivery.id, package_id: 'package-review-1' },
+      { actor: harness.actor },
+    );
+    expect(status).toMatchObject({
+      operation_id: null,
+      result: {
+        status: 'ok',
+        files: [{ role: 'review_document', status: 'uploaded' }],
+        suggested_call: { operation: 'publish_delivery_review_package' },
+      },
+    });
+
+    const published = await harness.operations.execute(
+      harness.ctx,
+      'publish_delivery_review_package',
+      {
+        package_id: 'package-review-1',
+        expected_manifest_sha256: 'd'.repeat(64),
+        expected_delivery_evidence_version: 7,
+      },
+      { actor: harness.actor, idempotencyKey: 'publish-package-1' },
+    );
+    expect(published.result).toMatchObject({
+      status: 'pending_review',
+      package_id: 'package-review-1',
+      review_document_artifact_id: 'artifact-review',
+      review_document_sha256: 'f'.repeat(64),
+    });
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'publish_delivery_review_package',
+        {
+          package_id: 'package-review-1',
+          expected_manifest_sha256: 'd'.repeat(64),
+          expected_delivery_evidence_version: 7,
+        },
+        { actor: harness.actor, idempotencyKey: 'publish-package-1' },
+      ),
+    ).resolves.toMatchObject({ replayed: true, result: published.result });
+    expect(harness.deliveryReviewPackageService.publish).toHaveBeenCalledOnce();
   });
 });

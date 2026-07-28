@@ -112,6 +112,28 @@ not execute the external change. A passed checkpoint and customer approval
 evidence are reported separately, so an Agent cannot mistake review for proof
 that an import or rollout completed.
 
+For a normal customer review handoff, prefer the package operations:
+
+1. `prepare_delivery_review_package` declares one primary PDF and optional HTML
+   and representative image, plus an explicit Delivery overview update or keep
+   reason.
+2. `get_delivery_review_package_status` reports completed and missing files. Set
+   `include_upload_capabilities=true` only when ready to upload the missing
+   bytes.
+3. `publish_delivery_review_package` verifies the package manifest and Delivery
+   evidence version, then publishes all staged files and updates the Review Gate
+   atomically.
+
+Staged files do not appear in the Delivery or affect its current approval. A
+published package reuses its primary PDF as both the HTML companion and the
+Review Gate target. Human approval fixes the package manifest and all customer
+files together. The lower-level Artifact review flow remains available for
+compatibility and non-package evidence.
+
+Drafts can be resumed for seven days. After expiry, the daily package cleanup
+keeps the package metadata and upload errors but releases unreferenced staged
+blob records; published Artifacts are never cleanup candidates.
+
 The Delivery Gates tab shows the bound filename, revision, and SHA-256 as one
 review checkpoint. Its **Accept this version** action calls the Web-session-only
 `accept_delivery_review` Application Operation, which atomically approves the

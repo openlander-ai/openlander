@@ -7,6 +7,7 @@ import {
   createOpenLanderMonitorCompositeTool,
   createOpenLanderProjectCompositeTool,
 } from '../../src/mcp/composite-tools.js';
+import { agentDeliveryToolDefs } from '../../src/tools/defs/agent-delivery.js';
 import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
@@ -99,6 +100,13 @@ function createScopedContext(identity: RequestIdentity) {
     getDeliveryProjectIdByArtifactId: vi.fn(async (artifactId: string) =>
       artifactId === 'artifact-1' ? 'project-1' : artifactId === 'artifact-2' ? 'project-2' : null,
     ),
+    getDeliveryReviewPackage: vi.fn(async (packageId: string) =>
+      packageId === 'package-1'
+        ? { delivery: { id: 'delivery-1', project_id: 'project-1' } }
+        : packageId === 'package-2'
+          ? { delivery: { id: 'delivery-2', project_id: 'project-2' } }
+          : null,
+    ),
     getAiOpsBriefing: vi.fn(async () => null),
     getActionRun: vi.fn(async () => null),
     listDomainMappings: vi.fn(async () => []),
@@ -107,6 +115,14 @@ function createScopedContext(identity: RequestIdentity) {
   const appCtx = {
     db,
     docker: { inspectContainer: vi.fn() },
+    operations: {
+      execute: vi.fn(async () => ({
+        result: { status: 'ok' },
+        operationId: 'operation-1',
+        version: 1,
+        replayed: false,
+      })),
+    },
   } as unknown as AppContext;
   return {
     context: { target: 'mcp' as const, appCtx, identity },
@@ -718,6 +734,66 @@ describe('MCP scoped token enforcement', () => {
     expect(artifactResult).toMatchObject({
       error: 'SCOPE_VIOLATION',
       details: { targetProjectId: 'project-2', resolvedFrom: 'artifact_id' },
+    });
+  });
+
+  it('resolves review package ids for project scope and rejects other projects', async () => {
+    const tool = createOpenLanderProjectCompositeTool(agentDeliveryToolDefs);
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'publish_delivery_review_package',
+        params: {
+          package_id: 'package-2',
+          expected_manifest_sha256: 'a'.repeat(64),
+          expected_delivery_evidence_version: 1,
+          idempotency_key: 'publish-package-2',
+        },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeProjectId: 'project-1',
+        targetProjectId: 'project-2',
+        resolvedFrom: 'package_id',
+        reason: 'project_mismatch',
+      },
+    });
+  });
+
+  it('rejects project-level review package operations for service-scoped tokens', async () => {
+    const tool = createOpenLanderProjectCompositeTool(agentDeliveryToolDefs);
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: null,
+      mcpScopeServiceId: 'service-1',
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'get_delivery_review_package_status',
+        params: { delivery_id: 'delivery-1', package_id: 'package-1' },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeServiceId: 'service-1',
+        targetProjectId: 'project-1',
+        reason: 'service_mismatch',
+      },
     });
   });
 });

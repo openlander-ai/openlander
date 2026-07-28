@@ -52,6 +52,14 @@ describe('Delivery Workspace UI contract', () => {
     expect(detailSource).toContain('pendingReviewGateCount + pendingReviewItemCount');
   });
 
+  it('shows one package-level review card without adding a browser upload form', () => {
+    expect(detailSource).toContain('getDeliveryReviewPackageStatus');
+    expect(detailSource).toContain("t('delivery.reviewPackage.versionTitle'");
+    expect(detailSource).toContain('expected_manifest_sha256');
+    expect(detailSource).toContain('artifact.review_package_role');
+    expect(detailSource).not.toContain('type="file"');
+  });
+
   it('prioritizes customer shareables while keeping internal evidence and history collapsed', () => {
     expect(detailSource).toContain('groupDeliveryArtifacts(detail.artifacts, detail.gates)');
     expect(detailSource).toContain("t('delivery.artifacts.customerTitle')");

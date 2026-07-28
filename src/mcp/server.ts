@@ -97,7 +97,7 @@ All actions: action="help"
 
 ## openlander_project
 Projects, shared config, Agent Delivery Runs, Delivery Workspace metadata, and Engagement portfolio summaries. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
-Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, create_evidence_upload, request_delivery_review, get_delivery_review_status, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
+Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, prepare_delivery_review_package, get_delivery_review_package_status, publish_delivery_review_package, create_evidence_upload, request_delivery_review, get_delivery_review_status, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
 All actions: action="help"
 
 ## openlander_service
@@ -144,6 +144,7 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 
 ## Delivery Workspace
 - MCP can create and inspect Deliveries, attach evidence URLs, record raw feedback, submit proposed work-item drafts, record Gate results, link a successful Production deployment, inspect readiness, and generate a Receipt preview.
+- For a customer review handoff, prefer prepare_delivery_review_package → get_delivery_review_package_status → upload only missing files → publish_delivery_review_package. These actions derive Artifact metadata, keep partial uploads hidden, and bind one package manifest to the Review Gate.
 - For a local file, call create_evidence_upload first. Then PUT the raw bytes to its short-lived bearer upload_url and use the returned Artifact ID. Do not authenticate that PUT with the MCP token, and do not send MCP tokens to the general REST API.
 - Use the multipart web/API route only for human web sessions or CI clients that already use its supported authentication. It is not the default MCP path.
 - AI-created work items remain proposed until an administrator confirms them in the web UI.

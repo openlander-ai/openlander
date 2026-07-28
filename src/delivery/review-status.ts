@@ -134,6 +134,7 @@ export function deriveDeliveryReviewStatus(
       waiver_reason: gate.waiver_reason,
     },
     approval_evidence_id: approval?.id ?? null,
+    review_package: null,
     blockers,
   };
 }
