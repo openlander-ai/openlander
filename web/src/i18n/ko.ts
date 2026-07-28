@@ -2855,7 +2855,7 @@ export const translations = {
       noSummary: '구조화된 범위가 아직 기록되지 않았습니다.',
       noLimitations: '제한 사항이 아직 기록되지 않았습니다.',
       artifactsDescription:
-        '산출물은 애플리케이션 인터페이스를 통해 업로드하고 버전을 남깁니다. 검토자는 대기 중인 버전을 여기에서 승인할 수 있습니다.',
+        '고객에게 보낼 현재 파일을 먼저 보여줍니다. 내부 증빙과 이전 버전은 아래에서 필요할 때만 펼쳐볼 수 있습니다.',
       reviewDescription:
         '고객의 원문과 출처 링크를 증거로 보존하고, 구조화한 결정 사항이 어디에서 나왔는지 추적합니다.',
       approvalsTitle: '승인 증거',
@@ -2995,7 +2995,7 @@ export const translations = {
       save: '저장',
       upload: '산출물 업로드',
       download: '다운로드',
-      approveArtifact: '산출물 승인',
+      approveArtifact: '파일 승인',
       startReview: '검토 시작',
       requestRevision: '수정 요청',
       resumeReview: '검토 재개',
@@ -3140,8 +3140,18 @@ export const translations = {
       order: '확인서 표시 순서',
       companionFor: '연결할 HTML 산출물',
       noCompanion: '연결할 HTML 선택 (선택 사항)',
-      listTitle: '산출물 버전 목록',
+      listTitle: '공유 자료와 증빙',
       empty: '업로드된 산출물이 없습니다.',
+      customerTitle: '고객 공유본',
+      customerDescription:
+        '고객에게 전달할 현재 파일만 먼저 보여줍니다. 같은 파일을 가리키는 중복 기록은 한 번만 표시합니다.',
+      noCustomer: '아직 고객에게 공유할 파일이 없습니다.',
+      internalTitle: '내부 증빙 {count}건',
+      internalDescription:
+        'QA 결과, 데이터 점검표, 화면 캡처입니다. 고객에게 보낼 파일은 아닙니다.',
+      historyTitle: '이전 버전·중복 기록 {count}건',
+      historyDescription: '감사와 이력 확인을 위해 그대로 보관합니다.',
+      fileInfo: '파일 정보',
       kindValue: {
         review_html: '검토용 HTML',
         companion_pdf: '첨부 PDF',

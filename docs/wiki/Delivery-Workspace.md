@@ -74,6 +74,14 @@ immutable snapshot. Finalization is blocked above 250 pages.
 
 ## Files and security
 
+- The web UI shows current customer review files first. Active `review_html`,
+  `companion_pdf`, and the exact Artifact bound to a Review Gate are treated as
+  customer shareables. QA/Data reports, Markdown, images, and other supporting
+  files stay under internal evidence unless selected by a Review Gate.
+- Customer records that point to the same immutable blob are displayed once.
+  Superseded versions and duplicate records remain preserved and are available
+  in the collapsed history section. This changes presentation only; it does not
+  delete evidence or alter Receipt snapshots.
 - Maximum file size: 100 MiB
 - Accepted formats: HTML, PDF, Markdown, JSON, XML/JUnit, PNG, JPEG, and WebP
 - HTML is always downloaded as an attachment and never rendered on the
