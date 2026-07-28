@@ -87,6 +87,8 @@ export const PROJECT_ACTIONS = [
   'unarchive_engagement',
   'plan_delivery',
   'create_evidence_upload',
+  'request_delivery_review',
+  'get_delivery_review_status',
   'start_delivery_run',
   'get_delivery_run',
   'run_quality_gates',

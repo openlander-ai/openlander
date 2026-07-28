@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **130 unique default operations** surfaced through those composites
+- **132 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -510,6 +510,8 @@ resume the same execution record without relying on chat history.
 | Action                         | Required parameters                                                                                | Purpose                                                |
 | ------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `plan_delivery`                | `idempotency_key`, `project_id`, `title`, `objective`, `definition_of_done`, `gates`               | Store the Delivery objective, manifest path, and Gates |
+| `request_delivery_review`      | `idempotency_key`, `delivery_id`, `gate_key`, `artifact_id`, `expected_sha256`                     | Bind one exact latest Artifact to a Review Gate        |
+| `get_delivery_review_status`   | `delivery_id`, `gate_key`                                                                          | Read the compact exact-Artifact review checkpoint      |
 | `start_delivery_run`           | `idempotency_key`, `delivery_id`, `commit_sha`, `manifest_path`, `manifest_sha256`, `runner_image` | Start one active Run pinned to exact inputs            |
 | `get_delivery_run`             | `run_id`                                                                                           | Read the Run and its ordered progress/handoff events   |
 | `run_quality_gates`            | `idempotency_key`, `run_id`                                                                        | Run manifest commands in disposable containers         |
@@ -530,6 +532,19 @@ optional JUnit/Playwright/JSON report artifact. A Delivery can have only one `ru
 `resume_delivery_run` before continuing. Commands require a stable
 `idempotency_key`; exact retries replay the stored result and changed payloads
 return `OPERATION_IDEMPOTENCY_CONFLICT`.
+
+`request_delivery_review` verifies that `artifact_id` belongs to the Delivery,
+is the latest non-superseded revision for its logical key and kind, and has the
+exact `expected_sha256`. It then binds that Artifact to the selected `review`
+Gate as `pending`. `get_delivery_review_status` returns only the bound Artifact
+identity, revision, SHA-256, Gate state, active approval-evidence ID, and
+machine-readable blockers.
+
+`ready_for_next_step=true` means the exact Artifact revision passed or was
+explicitly waived at this review checkpoint. It is permission to continue the
+domain-specific workflow, not evidence that an external import, deployment, or
+other side effect already ran. Delivery-level customer approval and Receipt
+Readiness remain separate checks.
 
 ## Project Manifest
 

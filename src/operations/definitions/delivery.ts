@@ -27,6 +27,42 @@ const artifactKind = z.enum([
   'image',
   'other',
 ]);
+const reviewState = z.enum([
+  'not_requested',
+  'pending',
+  'changes_requested',
+  'accepted',
+  'waived',
+  'stale',
+]);
+const reviewBlocker = z.enum([
+  'review_not_requested',
+  'artifact_not_found',
+  'artifact_not_latest',
+  'artifact_not_approved',
+  'gate_pending',
+  'gate_failed',
+  'gate_warning',
+]);
+const reviewArtifact = z
+  .object({
+    id: z.string(),
+    logical_key: z.string(),
+    revision: z.number().int().positive(),
+    sha256,
+    status: z.enum(['draft', 'approved', 'superseded']),
+    is_latest_revision: z.boolean(),
+  })
+  .strict();
+const reviewGate = z
+  .object({
+    status: z.enum(['pending', 'passed', 'warning', 'failed', 'waived']),
+    required: z.boolean(),
+    recorded_by: z.string(),
+    recorded_at: z.string().nullable(),
+    waiver_reason: z.string().nullable(),
+  })
+  .strict();
 
 function definitionSha256(value: Record<string, unknown>): string {
   const ordered = Object.fromEntries(
@@ -154,6 +190,159 @@ export const planDeliveryOperation: ApplicationOperationDefinition = {
           'Commit the manifest and implementation changes.',
           'Call start_delivery_run with the exact commit, manifest hash, and runner image.',
         ],
+      },
+    };
+  },
+};
+
+export const requestDeliveryReviewOperation: ApplicationOperationDefinition = {
+  name: 'request_delivery_review',
+  version: 1,
+  description:
+    'Bind one exact latest Artifact SHA-256 to a Delivery review Gate and request review.',
+  kind: 'command',
+  execution: 'sync',
+  idempotency: 'required',
+  allowedScopes: ['instance', 'org', 'project'],
+  resolveScopeTarget: projectForDelivery,
+  inputSchema: z
+    .object({
+      delivery_id: z.string().min(1),
+      gate_key: z.string().trim().min(1).max(100),
+      artifact_id: z.string().min(1),
+      expected_sha256: sha256,
+      summary: z.string().trim().min(1).max(20_000).nullable().optional(),
+    })
+    .strict(),
+  outputSchema: z
+    .object({
+      status: z.literal('pending_review'),
+      project_id: z.string(),
+      delivery_id: z.string(),
+      gate_key: z.string(),
+      artifact_id: z.string(),
+      revision: z.number().int().positive(),
+      sha256,
+      status_call: z.object({
+        operation: z.literal('get_delivery_review_status'),
+        input: z.object({ delivery_id: z.string(), gate_key: z.string() }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: true, recordsEvidence: true },
+  execute: async (input, context) => {
+    const operationId = requireCommandOperationId('request_delivery_review', context.operationId);
+    const review = await context.appCtx.deliveryService.requestReview({
+      deliveryId: String(input['delivery_id']),
+      gateKey: String(input['gate_key']),
+      artifactId: String(input['artifact_id']),
+      expectedSha256: String(input['expected_sha256']),
+      summary: typeof input['summary'] === 'string' ? input['summary'] : null,
+      idempotencyKey: `review-request:${operationId}`,
+      actor: context.actor.label,
+    });
+    if (!review.artifact) {
+      throw new ApplicationOperationContractError('request_delivery_review', {
+        reason: 'requested_artifact_missing_from_review_status',
+      });
+    }
+    return {
+      status: 'pending_review',
+      project_id: review.project_id,
+      delivery_id: review.delivery_id,
+      gate_key: review.gate_key,
+      artifact_id: review.artifact.id,
+      revision: review.artifact.revision,
+      sha256: review.artifact.sha256,
+      status_call: {
+        operation: 'get_delivery_review_status',
+        input: { delivery_id: review.delivery_id, gate_key: review.gate_key },
+      },
+      _agent_guidance: {
+        message:
+          'The exact Artifact revision is waiting for review. Do not apply the external change yet.',
+        next_steps: [
+          'Ask the reviewer to inspect the Artifact and resolve the Review Gate in OpenLander.',
+          'Poll get_delivery_review_status and continue only when ready_for_next_step is true.',
+        ],
+      },
+    };
+  },
+};
+
+export const getDeliveryReviewStatusOperation: ApplicationOperationDefinition = {
+  name: 'get_delivery_review_status',
+  version: 1,
+  description: 'Read the compact exact-Artifact review checkpoint for one Delivery review Gate.',
+  kind: 'query',
+  execution: 'sync',
+  idempotency: 'none',
+  allowedScopes: ['instance', 'org', 'project'],
+  resolveScopeTarget: projectForDelivery,
+  inputSchema: z
+    .object({
+      delivery_id: z.string().min(1),
+      gate_key: z.string().trim().min(1).max(100),
+    })
+    .strict(),
+  outputSchema: z
+    .object({
+      status: reviewState,
+      project_id: z.string(),
+      delivery_id: z.string(),
+      gate_key: z.string(),
+      ready_for_next_step: z.boolean(),
+      artifact: reviewArtifact.nullable(),
+      gate: reviewGate,
+      approval_evidence_id: z.string().nullable(),
+      blockers: z.array(reviewBlocker),
+      status_call: z.object({
+        operation: z.literal('get_delivery_review_status'),
+        input: z.object({ delivery_id: z.string(), gate_key: z.string() }),
+      }),
+      _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
+    })
+    .strict(),
+  activity: { recordsActivity: false, recordsEvidence: false },
+  execute: async (input, context) => {
+    const review = await context.appCtx.deliveryService.getReviewStatus(
+      String(input['delivery_id']),
+      String(input['gate_key']),
+    );
+    const nextSteps = review.ready_for_next_step
+      ? [
+          'Continue with the domain-specific next command using this exact Artifact revision.',
+          'Record the external apply result as new evidence; accepted is not proof that apply ran.',
+        ]
+      : review.state === 'changes_requested' || review.state === 'stale'
+        ? [
+            'Create a newer Artifact revision that addresses the review result.',
+            'Call request_delivery_review again with the new Artifact id and SHA-256.',
+          ]
+        : [
+            'Keep the external change unapplied while review is pending.',
+            'Poll this status after the reviewer resolves the Review Gate.',
+          ];
+    return {
+      status: review.state,
+      project_id: review.project_id,
+      delivery_id: review.delivery_id,
+      gate_key: review.gate_key,
+      ready_for_next_step: review.ready_for_next_step,
+      artifact: review.artifact,
+      gate: review.gate,
+      approval_evidence_id: review.approval_evidence_id,
+      blockers: review.blockers,
+      status_call: {
+        operation: 'get_delivery_review_status',
+        input: { delivery_id: review.delivery_id, gate_key: review.gate_key },
+      },
+      _agent_guidance: {
+        message: review.ready_for_next_step
+          ? 'The exact Artifact revision cleared this review checkpoint.'
+          : 'This review checkpoint is not ready for the next external action.',
+        next_steps: nextSteps,
       },
     };
   },
@@ -586,6 +775,8 @@ export const createEvidenceUploadOperation: ApplicationOperationDefinition = {
 export const agentDeliveryOperations = [
   planDeliveryOperation,
   createEvidenceUploadOperation,
+  requestDeliveryReviewOperation,
+  getDeliveryReviewStatusOperation,
   startDeliveryRunOperation,
   getDeliveryRunOperation,
   runQualityGatesOperation,

@@ -232,7 +232,7 @@ the same database.
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **130 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **132 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                            |
 | ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
@@ -244,29 +244,30 @@ Once connected, AI agents see **5 composite MCP tools** covering **130 unique de
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task      | Composite → action                                    | Description                                         |
-| --------- | ----------------------------------------------------- | --------------------------------------------------- |
-| Deploy    | `openlander_deploy` → `deploy_app`                    | App deploy front door                               |
-| Status    | `openlander_deploy` → `get_deploy_status`             | Check deployment status                             |
-| List      | `openlander_project` → `list_projects`                | Show all projects                                   |
-| Logs      | `openlander_monitor` → `get_logs`                     | Container logs                                      |
-| Env Vars  | `openlander_service` → `set_env_vars`                 | Save Application environment variables              |
-| Update    | `openlander_service` → `update_app`                   | Ship latest stored source/config                    |
-| Rollback  | `openlander_deploy` → `rollback_service`              | Revert to previous Docker image only                |
-| Share     | `openlander_project` → `expose_public`                | Generate temporary share URL                        |
-| Resource  | `openlander_managed_service` → `create_service`       | Create Database/Cache resource                      |
-| Inspect   | `openlander_managed_service` → `list_data_sources`    | Discover Project data sources                       |
-| Delivery  | `openlander_project` → `create_delivery`              | Start an FDE delivery evidence record               |
-| Portfolio | `openlander_project` → `list_engagements`             | Read internal cross-Project FDE status              |
-| Bootstrap | `openlander_project` → `bootstrap_engagement`         | Create an Engagement and initial Project atomically |
-| Register  | `openlander_project` → `register_project_repository`  | Attach a Git source without deploying               |
-| Feedback  | `openlander_project` → `record_delivery_feedback`     | Preserve pasted customer feedback                   |
-| Receipt   | `openlander_project` → `get_delivery_readiness`       | Check deterministic finalization gates              |
-| Plan run  | `openlander_project` → `plan_delivery`                | Store objective, DoD, manifest, and Gates           |
-| Handoff   | `openlander_project` → `record_delivery_run_progress` | Record progress or pause with a handoff             |
-| Quality   | `openlander_project` → `run_quality_gates`            | Run manifest checks in disposable containers        |
-| Evidence  | `openlander_project` → `create_evidence_upload`       | Issue a short-lived upload URL for one artifact     |
-| Update    | `openlander_project` → `record_project_update`        | Record source-linked decisions, actions, and risks  |
+| Task      | Composite → action                                                              | Description                                         |
+| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Deploy    | `openlander_deploy` → `deploy_app`                                              | App deploy front door                               |
+| Status    | `openlander_deploy` → `get_deploy_status`                                       | Check deployment status                             |
+| List      | `openlander_project` → `list_projects`                                          | Show all projects                                   |
+| Logs      | `openlander_monitor` → `get_logs`                                               | Container logs                                      |
+| Env Vars  | `openlander_service` → `set_env_vars`                                           | Save Application environment variables              |
+| Update    | `openlander_service` → `update_app`                                             | Ship latest stored source/config                    |
+| Rollback  | `openlander_deploy` → `rollback_service`                                        | Revert to previous Docker image only                |
+| Share     | `openlander_project` → `expose_public`                                          | Generate temporary share URL                        |
+| Resource  | `openlander_managed_service` → `create_service`                                 | Create Database/Cache resource                      |
+| Inspect   | `openlander_managed_service` → `list_data_sources`                              | Discover Project data sources                       |
+| Delivery  | `openlander_project` → `create_delivery`                                        | Start an FDE delivery evidence record               |
+| Portfolio | `openlander_project` → `list_engagements`                                       | Read internal cross-Project FDE status              |
+| Bootstrap | `openlander_project` → `bootstrap_engagement`                                   | Create an Engagement and initial Project atomically |
+| Register  | `openlander_project` → `register_project_repository`                            | Attach a Git source without deploying               |
+| Feedback  | `openlander_project` → `record_delivery_feedback`                               | Preserve pasted customer feedback                   |
+| Receipt   | `openlander_project` → `get_delivery_readiness`                                 | Check deterministic finalization gates              |
+| Plan run  | `openlander_project` → `plan_delivery`                                          | Store objective, DoD, manifest, and Gates           |
+| Handoff   | `openlander_project` → `record_delivery_run_progress`                           | Record progress or pause with a handoff             |
+| Quality   | `openlander_project` → `run_quality_gates`                                      | Run manifest checks in disposable containers        |
+| Evidence  | `openlander_project` → `create_evidence_upload`                                 | Issue a short-lived upload URL for one artifact     |
+| Review    | `openlander_project` → `request_delivery_review` / `get_delivery_review_status` | Bind and poll an exact Artifact revision            |
+| Update    | `openlander_project` → `record_project_update`                                  | Record source-linked decisions, actions, and risks  |
 
 `bootstrap_engagement`, `update_engagement_from_brief`, `archive_engagement`,
 `unarchive_engagement`, `list_engagements`, and `get_engagement` require an

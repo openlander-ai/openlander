@@ -24,6 +24,7 @@ import { assertProjectMutable } from '../pipeline/mutation-policy.js';
 import { ulid } from '../db/repos/activity-log.repo.js';
 import type { ArtifactStore, StoreArtifactOptions } from './artifact-store.js';
 import { evaluateDeliveryReadiness } from './readiness.js';
+import { deriveDeliveryReviewStatus, requireDeliveryReviewTarget } from './review-status.js';
 import { parseJUnitReport } from './report-normalizer.js';
 import { ReceiptBuilder, type ReceiptBuildResult } from './receipt-builder.js';
 import {
@@ -35,6 +36,7 @@ import {
   type DeliveryExternalProvider,
   type DeliveryMaturity,
   type DeliveryReadiness,
+  type DeliveryReviewStatus,
   type DeliveryStatus,
   type DeliveryType,
   type FeedbackSourceType,
@@ -802,6 +804,39 @@ export class DeliveryService {
       { gate_key: gate.gate_key, status: gate.status },
     );
     return gate;
+  }
+
+  async requestReview(input: {
+    deliveryId: string;
+    gateKey: string;
+    artifactId: string;
+    expectedSha256: string;
+    summary?: string | null;
+    idempotencyKey: string;
+    actor: string;
+  }): Promise<DeliveryReviewStatus> {
+    const delivery = await this.requireMutableDelivery(input.deliveryId);
+    const detail = await this.getDeliveryDetail(delivery.id);
+    const artifact = requireDeliveryReviewTarget(detail, input);
+    await this.recordGateResult({
+      deliveryId: delivery.id,
+      gateKey: input.gateKey,
+      status: 'pending',
+      summary:
+        input.summary?.trim() ||
+        `Review requested for ${artifact.logical_key} revision ${String(artifact.revision)}.`,
+      reportArtifactId: artifact.id,
+      idempotencyKey: input.idempotencyKey,
+      actor: input.actor,
+    });
+    if (delivery.status === 'draft' || delivery.status === 'revision_requested') {
+      await this.transition(delivery.id, 'in_review');
+    }
+    return await this.getReviewStatus(delivery.id, input.gateKey);
+  }
+
+  async getReviewStatus(deliveryId: string, gateKey: string): Promise<DeliveryReviewStatus> {
+    return deriveDeliveryReviewStatus(await this.getDeliveryDetail(deliveryId), gateKey);
   }
 
   async linkDeploy(input: {
