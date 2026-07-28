@@ -121,12 +121,10 @@ export function formatReadinessCheck(
   return t(`delivery.receipt.check.${check.key}.${result}`, check.params);
 }
 
-export function countDeliveryReviewAttention(detail: DeliveryDetail): number {
-  const proposedItems = detail.work_items.filter((item) => item.status === 'proposed').length;
-  const unresolvedReviewGates = detail.gates.filter(
+export function countPendingReviewGates(detail: DeliveryDetail): number {
+  return detail.gates.filter(
     (gate) => gate.gate_type === 'review' && gate.status !== 'passed' && gate.status !== 'waived',
   ).length;
-  return proposedItems + unresolvedReviewGates;
 }
 
 function SectionCard({
@@ -251,7 +249,9 @@ export function DeliveryDetailPage() {
     }
   };
 
-  const reviewAttentionCount = detail ? countDeliveryReviewAttention(detail) : 0;
+  const proposedReviewItemCount =
+    detail?.work_items.filter((item) => item.status === 'proposed').length ?? 0;
+  const pendingReviewGateCount = detail ? countPendingReviewGates(detail) : 0;
   const tabs: TabDef<DeliveryDetailTab>[] = [
     { id: 'overview', label: t('delivery.tabs.overview'), icon: FileCheck2 },
     {
@@ -264,9 +264,14 @@ export function DeliveryDetailPage() {
       id: 'review',
       label: t('delivery.tabs.review'),
       icon: MessageSquareText,
-      count: reviewAttentionCount > 0 ? reviewAttentionCount : undefined,
+      count: proposedReviewItemCount > 0 ? proposedReviewItemCount : undefined,
     },
-    { id: 'gates', label: t('delivery.tabs.gates'), icon: ShieldCheck },
+    {
+      id: 'gates',
+      label: t('delivery.tabs.gates'),
+      icon: ShieldCheck,
+      count: pendingReviewGateCount > 0 ? pendingReviewGateCount : undefined,
+    },
     { id: 'deployments', label: t('delivery.tabs.deployments'), icon: Rocket },
     { id: 'receipt', label: t('delivery.tabs.receipt'), icon: PackageCheck },
   ];

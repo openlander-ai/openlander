@@ -40,6 +40,9 @@ describe('Delivery Workspace UI contract', () => {
     expect(detailSource).toContain('acceptDeliveryReview(deliveryId');
     expect(detailSource).toContain('expected_sha256: artifact.blob.sha256');
     expect(detailSource).toContain("artifact.status === 'draft' && !reviewTarget");
-    expect(detailSource).toContain('countDeliveryReviewAttention(detail)');
+    expect(detailSource).toContain('countPendingReviewGates(detail)');
+    expect(detailSource).toContain(
+      'count: pendingReviewGateCount > 0 ? pendingReviewGateCount : undefined',
+    );
   });
 });
