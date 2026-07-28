@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.1] - 2026-07-28
+
+### Added
+
+- Add an exact customer-review checkpoint that binds approval or revision
+  requests to one immutable Artifact revision and SHA-256 through the shared
+  Application Operation, REST, and MCP interfaces.
+- Allow an Agent to register an existing Project repository without starting a
+  deployment, so Delivery planning can begin from the repository already in
+  use.
+
+### Changed
+
+- Keep Review Gates that have no automated checks pending until their required
+  human evidence is recorded, and direct the Delivery workspace to the one
+  review action that currently needs attention.
+- Show current customer shareables before internal QA evidence, collapse prior
+  and duplicate Artifact records by default, and keep the full immutable history
+  available for audit.
+
+### Fixed
+
+- Keep weekly Engagement reports aligned with unresolved Project updates and
+  route customer-review attention to the exact Review Gate instead of a generic
+  Artifact action.
+
 ## [0.2.12] - 2026-07-27
 
 ### Added
