@@ -295,6 +295,10 @@ export class DeliveryQualityGateService {
       }
       for (const gate of gates.filter((candidate) => candidate.source === 'manifest')) {
         const gateChecks = manifest.checks.filter((check) => check.gate === gate.gate_key);
+        // A manifest-defined review/custom Gate may intentionally have no executable check.
+        // Array#every([]) is true, so evaluating it would incorrectly turn a pending human
+        // review into a passing 0/0 Gate. Leave check-less Gates unchanged.
+        if (gateChecks.length === 0) continue;
         const latest = gateChecks.map((check) => latestByKey.get(check.key));
         const status = latest.some((check) => check?.status === 'failed')
           ? 'failed'
