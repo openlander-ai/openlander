@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.3] - 2026-07-29
+
+### Changed
+
+- Keep default MCP composite help compact, while allowing Agents to request one
+  action contract or all verbose schemas only when needed.
+- Present one current customer-review package separately from its included file
+  count, internal evidence, and earlier customer files in the Delivery workspace.
+
+### Fixed
+
+- Return an executable review-package publish recommendation with its stable
+  idempotency key and issue upload capabilities for the active MCP transport
+  origin.
+- Report declared and detected PNG, JPEG, or WebP MIME types when an upload is
+  rejected so Agents can correct and resume the failed file directly.
+- Mark published package files as awaiting review instead of draft, and keep
+  legacy customer files in history while a package-bound Review Gate is current.
+
 ## [0.2.13-rc.2] - 2026-07-29
 
 ### Added
