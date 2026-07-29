@@ -1128,7 +1128,7 @@ export const translations = {
       tryAfterConnect: '연결 후 이렇게 말해보세요:',
       tryPrompt: '{name}에 이 앱을 배포해 줘',
       // Content.
-      subtitle: 'Claude Code, Cursor 등 MCP를 지원하는 클라이언트에서 배포하세요.',
+      subtitle: 'Codex, Claude Code, Cursor 등 MCP를 지원하는 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
       noTokenYet: '아직 발급된 MCP 토큰이 없습니다. 생성하면 연동 설정을 확인할 수 있습니다.',
       tokenAlreadyIssued:

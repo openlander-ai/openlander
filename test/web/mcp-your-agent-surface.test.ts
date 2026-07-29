@@ -93,6 +93,8 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/revealed && newTokenPlain \? newTokenPlain : ['"]<your-token>['"]/);
     // The shared module is the only place that owns per-client config
     // shape — keep that contract pinned.
+    expect(snippetSource).toMatch(/buildCodexConfig/);
+    expect(snippetSource).toContain("filename: '~/.codex/config.toml'");
     expect(snippetSource).toMatch(/buildClaudeCodeCmd/);
     expect(snippetSource).toMatch(/buildClaudeDesktopConfig/);
     expect(snippetSource).toMatch(/buildCursorConfig/);
