@@ -300,6 +300,26 @@ describe('switchToExternalMode', () => {
     await switchToExternalMode(docker, 'external-network');
     expect(mockSafeRemoveContainer).toHaveBeenCalledWith('traefik-ol');
   });
+
+  it('does not remove another instance Traefik when switching modes', async () => {
+    docker = {
+      getInstanceId: vi.fn(() => 'instance-b'),
+      listAllContainers: vi.fn(async () => [
+        createMockContainer('traefik-ol', {
+          labels: {
+            'openlander.managed': 'true',
+            'openlander.role': 'traefik',
+            'openlander.instance': 'instance-a',
+          },
+        }),
+      ]),
+      safeRemoveContainer: mockSafeRemoveContainer,
+    } as unknown as Docker;
+
+    await switchToExternalMode(docker, 'external-network');
+
+    expect(mockSafeRemoveContainer).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -476,7 +496,7 @@ describe('TraefikManager', () => {
     expect(manager).toBeDefined();
   });
 
-  it('does not attach a foreign or unlabeled Traefik during a Project deploy', async () => {
+  it('fails the Project deploy preflight for a foreign or unlabeled Traefik', async () => {
     const foreign = createMockContainer('traefik-ol', {
       labels: {
         'openlander.managed': 'true',
@@ -490,7 +510,11 @@ describe('TraefikManager', () => {
       connectContainerToNetwork: vi.fn(async () => undefined),
     } as unknown as Docker;
 
-    await ensureManagedTraefikNetwork(runtime, 'ol-instance-b-project');
+    await expect(
+      ensureManagedTraefikNetwork(runtime, 'ol-instance-b-project'),
+    ).rejects.toMatchObject({
+      code: 'MANAGED_TRAEFIK_OWNERSHIP_MISMATCH',
+    });
 
     expect(runtime.connectContainerToNetwork).not.toHaveBeenCalled();
   });
@@ -607,6 +631,7 @@ describe('TraefikManager', () => {
   it('recreates containerized Traefik when its HTTP provider still points at host.docker.internal', async () => {
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const legacy = createMockContainer('traefik-ol', {
+      image: 'traefik:v3.6',
       labels: {
         'openlander.managed': 'true',
         'openlander.role': 'traefik',
@@ -835,15 +860,65 @@ describe('TraefikManager', () => {
     expect(runtime.runInfraContainer).not.toHaveBeenCalled();
   });
 
-  it('does not mutate another instance or an unlabeled legacy Traefik', async () => {
-    const foreign = createMockContainer('traefik-ol', {
+  it('recreates an exact legacy OpenLander Traefik with the current instance label', async () => {
+    const legacy = createMockContainer('traefik-ol', {
+      image: 'traefik:v3.6',
       labels: {
         'openlander.managed': 'true',
         'openlander.role': 'traefik',
       },
       state: 'running',
     });
-    const otherInstance = createMockContainer('traefik-other', {
+    const owned = createMockContainer('traefik-ol', {
+      image: 'traefik:v3.6',
+      labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'traefik',
+        'openlander.instance': 'olinst_candidate',
+      },
+      state: 'running',
+    });
+    let containers = [legacy];
+    const runtime = {
+      listAllContainers: vi.fn(async () => containers),
+      inspectContainer: vi.fn(async () => ({ Config: { Cmd: [] } })),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => {
+        containers = [];
+      }),
+      safeRemoveContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => {
+        containers = [owned];
+        return 'new-traefik';
+      }),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10115, {
+      networkName: 'openlander',
+      instanceId: 'olinst_candidate',
+    });
+
+    await manager.start();
+
+    expect(runtime.removeContainer).toHaveBeenCalledWith(legacy.id);
+    expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Labels: expect.objectContaining({
+          'openlander.managed': 'true',
+          'openlander.role': 'traefik',
+          'openlander.instance': 'olinst_candidate',
+        }),
+      }),
+    );
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('traefik-ol', 'openlander');
+  });
+
+  it('does not mutate a Traefik owned by another instance', async () => {
+    const foreign = createMockContainer('traefik-ol', {
       labels: {
         'openlander.managed': 'true',
         'openlander.role': 'traefik',
@@ -852,7 +927,7 @@ describe('TraefikManager', () => {
       state: 'running',
     });
     const runtime = {
-      listAllContainers: vi.fn(async () => [foreign, otherInstance]),
+      listAllContainers: vi.fn(async () => [foreign]),
       inspectContainer: vi.fn(async () => ({ Config: { Cmd: [] } })),
       getNetworkInfo: vi.fn(async () => ({})),
       ensureNetwork: vi.fn(async () => undefined),
@@ -869,13 +944,11 @@ describe('TraefikManager', () => {
       instanceId: 'olinst_candidate',
     });
 
-    await manager.start();
-    await manager.connectToNetwork('ol-candidate-project');
-    await manager.stop();
+    await expect(manager.start()).rejects.toMatchObject({
+      code: 'MANAGED_TRAEFIK_OWNERSHIP_MISMATCH',
+    });
 
-    expect(runtime.inspectContainer).not.toHaveBeenCalled();
     expect(runtime.removeContainer).not.toHaveBeenCalled();
-    expect(runtime.safeRemoveContainer).not.toHaveBeenCalled();
     expect(runtime.renameContainer).not.toHaveBeenCalled();
     expect(runtime.connectContainerToNetwork).not.toHaveBeenCalled();
     expect(runtime.pullImage).not.toHaveBeenCalled();

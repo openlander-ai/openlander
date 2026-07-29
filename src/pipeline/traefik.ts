@@ -7,7 +7,11 @@ import type { RuntimeBackend } from './runtime/index.js';
 import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
-import { isDockerNotFoundError } from '../errors.js';
+import {
+  isDockerNotFoundError,
+  ManagedTraefikNetworkError,
+  ManagedTraefikOwnershipError,
+} from '../errors.js';
 import { deployableServiceIdToProjectId } from '../db/service-ids.js';
 import type { ServiceRow } from '../db/types.js';
 
@@ -59,6 +63,20 @@ export class TraefikManager {
 
   private ownsContainer(container: { labels: Record<string, string> }): boolean {
     return !this.instanceId || container.labels[DOCKER_LABELS.INSTANCE] === this.instanceId;
+  }
+
+  private isLegacyManagedContainer(container: {
+    name: string;
+    image: string;
+    labels: Record<string, string>;
+  }): boolean {
+    return (
+      container.name === this.containerName &&
+      /(^|\/)traefik(?::|@|$)/i.test(container.image) &&
+      container.labels[DOCKER_LABELS.MANAGED] === 'true' &&
+      container.labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+      !container.labels[DOCKER_LABELS.INSTANCE]
+    );
   }
 
   private async ownsContainerName(containerName: string): Promise<boolean> {
@@ -131,21 +149,27 @@ export class TraefikManager {
   private async connectContainerToNetworkByName(
     containerName: string,
     networkName: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     try {
       if (!(await this.ownsContainerName(containerName))) {
-        log.warn(
-          { containerName, networkName, instanceId: this.instanceId },
-          'Refusing to connect a Traefik container owned by another OpenLander instance',
+        const container = (await this.runtime.listAllContainers()).find(
+          (candidate) => candidate.name === containerName || candidate.id === containerName,
         );
-        return false;
+        throw new ManagedTraefikOwnershipError(
+          containerName,
+          this.instanceId ?? 'unconfigured',
+          container?.labels[DOCKER_LABELS.INSTANCE] ?? null,
+        );
       }
       await this.runtime.connectContainerToNetwork(containerName, networkName);
       log.info({ containerName, networkName }, 'Traefik connected to network');
-      return true;
     } catch (err) {
-      log.warn({ err, containerName, networkName }, 'Failed to connect Traefik to network');
-      return false;
+      if (err instanceof ManagedTraefikOwnershipError) throw err;
+      throw new ManagedTraefikNetworkError(
+        containerName,
+        networkName,
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
@@ -230,16 +254,18 @@ export class TraefikManager {
       (container) => container.name === this.containerName,
     );
     if (existingAtManagedName && !this.ownsContainer(existingAtManagedName)) {
-      log.warn(
-        {
-          containerName: this.containerName,
-          ownerInstanceId:
-            existingAtManagedName.labels[DOCKER_LABELS.INSTANCE] ?? 'legacy-unlabeled',
-          instanceId: this.instanceId,
-        },
-        'Managed Traefik name is owned by another OpenLander instance; leaving it untouched',
-      );
-      return;
+      if (this.isLegacyManagedContainer(existingAtManagedName)) {
+        log.info(
+          { containerName: this.containerName, instanceId: this.instanceId },
+          'Recreating legacy unlabeled OpenLander Traefik for the current instance',
+        );
+      } else {
+        throw new ManagedTraefikOwnershipError(
+          this.containerName,
+          this.instanceId ?? 'unconfigured',
+          existingAtManagedName.labels[DOCKER_LABELS.INSTANCE] ?? null,
+        );
+      }
     }
 
     await this.ensureAllNetworks();
@@ -251,7 +277,9 @@ export class TraefikManager {
     try {
       const existing = await this.runtime.listAllContainers();
       const traefikContainers = existing.filter(
-        (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && this.ownsContainer(c),
+        (c) =>
+          c.labels[DOCKER_LABELS.ROLE] === 'traefik' &&
+          (this.ownsContainer(c) || this.isLegacyManagedContainer(c)),
       );
       for (const c of traefikContainers) {
         await this.runtime.removeContainer(c.id);
@@ -300,6 +328,7 @@ export class TraefikManager {
       Labels: {
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.ROLE]: 'traefik',
+        ...(this.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.instanceId } : {}),
       },
     });
 
@@ -678,29 +707,25 @@ export async function ensureManagedTraefikNetwork(
         (container) => container.name === 'traefik-ol' || container.id === 'traefik-ol',
       );
       if (!traefik || traefik.labels[DOCKER_LABELS.INSTANCE] !== instanceId) {
-        log.warn(
-          {
-            networkName,
-            instanceId,
-            ownerInstanceId:
-              traefik?.labels[DOCKER_LABELS.INSTANCE] ?? (traefik ? 'legacy-unlabeled' : 'missing'),
-          },
-          'Refusing to connect a Traefik container owned by another OpenLander instance',
+        throw new ManagedTraefikOwnershipError(
+          'traefik-ol',
+          instanceId,
+          traefik?.labels[DOCKER_LABELS.INSTANCE] ?? null,
         );
-        return;
       }
     }
     await runtime.connectContainerToNetwork('traefik-ol', networkName);
   } catch (error) {
+    if (error instanceof ManagedTraefikOwnershipError) throw error;
+    if (error instanceof ManagedTraefikNetworkError) throw error;
     if (isDockerNotFoundError(error)) {
-      log.warn(
-        { error, networkName },
-        'Managed Traefik container not found while connecting project network',
-      );
-      return;
+      throw new ManagedTraefikNetworkError('traefik-ol', networkName, 'container not found');
     }
-    log.warn({ error, networkName }, 'Failed to connect managed Traefik to project network');
-    throw error;
+    throw new ManagedTraefikNetworkError(
+      'traefik-ol',
+      networkName,
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
@@ -878,7 +903,9 @@ export async function switchToExternalMode(
   log.info({ externalNetwork }, 'Switching to external Traefik mode');
 
   // Stop managed Traefik if running
-  const manager = new TraefikManager(runtime);
+  const manager = new TraefikManager(runtime, 3000, {
+    instanceId: runtime.getInstanceId?.(),
+  });
   await manager.stop();
 
   log.info('Managed Traefik stopped (if it was running)');
