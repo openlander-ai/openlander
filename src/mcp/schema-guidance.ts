@@ -35,6 +35,17 @@ function stringList(value: unknown): string[] {
 
 export function toolSchemaToJson(schema: z.ZodType): JsonObject {
   const jsonSchema = z.toJSONSchema(schema) as JsonObject;
+  // Defaults are required in Zod's output view but optional for callers. Preserve the
+  // existing output schema shape and strictness while taking top-level required fields
+  // from the input view used by MCP clients.
+  const inputJsonSchema = z.toJSONSchema(schema, { io: 'input' }) as JsonObject;
+  const inputRequired = stringList(inputJsonSchema['required']);
+
+  if (inputRequired.length > 0) {
+    jsonSchema['required'] = inputRequired;
+  } else {
+    delete jsonSchema['required'];
+  }
   delete jsonSchema['$schema'];
   return jsonSchema;
 }
