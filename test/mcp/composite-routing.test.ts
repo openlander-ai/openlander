@@ -292,6 +292,27 @@ describe('Composite Action Routing', () => {
       expect(actions.map((action) => action.name)).toContain('create_project');
     });
 
+    it('reports defaulted Project context limits as optional input parameters', async () => {
+      const result = (await tool.execute(
+        { action: 'help', params: { action_name: 'get_project_context' } },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      const action = result['action'] as Record<string, unknown>;
+      expect(action).toMatchObject({
+        name: 'get_project_context',
+        required_params: ['project_id'],
+        optional_params: expect.arrayContaining(['current_item_limit', 'recent_update_limit']),
+      });
+
+      const inputSchema = action['input_schema'] as Record<string, unknown>;
+      expect(inputSchema['required']).toEqual(['project_id']);
+      expect(inputSchema['properties']).toMatchObject({
+        current_item_limit: { default: 50 },
+        recent_update_limit: { default: 10 },
+      });
+    });
+
     it('returns UNKNOWN_ACTION for unknown action', async () => {
       const result = (await tool.execute({ action: 'does_not_exist' }, mockContext)) as Record<
         string,
