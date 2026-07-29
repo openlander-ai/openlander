@@ -6,24 +6,25 @@ import {
 } from '../e2e/quality-gate/fixtures/docker-cleanup.js';
 
 describe('quality-gate Docker cleanup', () => {
-  it('matches only E2E-owned OpenLander container prefixes', () => {
+  it('matches only E2E prefixes owned by the current OpenLander instance', () => {
     const ids = listContainerIdsByNamePrefixFromLines(
       [
-        'aaa111 ol-test-single-dockerfile',
-        'bbb222 openlander-qg-db-codex-10115',
-        'ccc333 ol-demo-stack-postgres',
-        'ddd444 ol-mcp-single-dockerfile',
-        'eee555 qa-helper',
-        'fff666 ol-svc-qg-pg-smoke',
-        'ggg777 ol-svc-test-single-dockerfile',
-        'hhh888 ol-svc-golden-roll',
-        'iii999 ol-svc-qa-helper',
+        'aaa111 ol-test-single-dockerfile olinst_current',
+        'bbb222 openlander-qg-db-codex-10115 olinst_current',
+        'ccc333 ol-demo-stack-postgres olinst_current',
+        'ddd444 ol-mcp-single-dockerfile olinst_other',
+        'eee555 qa-helper olinst_current',
+        'fff666 ol-svc-qg-pg-smoke olinst_current',
+        'ggg777 ol-svc-test-single-dockerfile olinst_current',
+        'hhh888 ol-svc-golden-roll olinst_current',
+        'iii999 ol-svc-qa-helper olinst_current',
         'jjj000 ol-svc-mcp-single-dockerfile',
-        'kkk111 ol-svc-shared-pg',
+        'kkk111 ol-svc-shared-pg olinst_current',
       ].join('\n'),
       E2E_CONTAINER_NAME_PREFIXES,
+      'olinst_current',
     );
 
-    expect(ids).toEqual(['aaa111', 'ddd444', 'fff666', 'ggg777', 'hhh888', 'iii999', 'jjj000']);
+    expect(ids).toEqual(['aaa111', 'fff666', 'ggg777', 'hhh888', 'iii999']);
   });
 });

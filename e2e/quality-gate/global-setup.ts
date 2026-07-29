@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 
+import { mcpCall } from './fixtures/api.js';
 import { authHeaders, OPENLANDER_URL } from './fixtures/config.js';
 
 const TEST_REPOS = [
@@ -79,6 +80,24 @@ export default async function globalSetup() {
   if (!projectsRes.ok) {
     throw new Error(`OpenLander API not accessible (${projectsRes.status})`);
   }
+
+  await mcpCall('initialize', {
+    protocolVersion: '2024-11-05',
+    capabilities: {},
+    clientInfo: { name: 'quality-gate-setup', version: '1.0.0' },
+  });
+  const instanceEnvelope = (await mcpCall('tools/call', {
+    name: 'openlander_monitor',
+    arguments: { action: 'get_instance_info', params: {} },
+  })) as { content?: Array<{ type?: string; text?: string }> };
+  const instanceText = instanceEnvelope.content?.find((item) => item.type === 'text')?.text;
+  const instanceInfo = instanceText
+    ? (JSON.parse(instanceText) as { id?: unknown })
+    : ({} as { id?: unknown });
+  if (typeof instanceInfo.id !== 'string' || !instanceInfo.id.startsWith('olinst_')) {
+    throw new Error('OpenLander MCP did not return a valid instance id for safe Docker cleanup');
+  }
+  process.env.OPENLANDER_E2E_INSTANCE_ID = instanceInfo.id;
 
   // Check 2: Docker daemon is accessible
   console.log('  ✓ Checking Docker daemon');
