@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.7] - 2026-07-30
+
+### Fixed
+
+- Recreate the exact legacy OpenLander-managed Traefik container with the
+  current instance label while preserving isolation from foreign instances.
+- Fail deployment when managed Traefik cannot join the Project network or its
+  public route remains on a 5xx response after the workload becomes healthy.
+
 ## [0.2.13-rc.6] - 2026-07-29
 
 ### Added
