@@ -1539,6 +1539,57 @@ export class DeliveryIdempotencyConflictError extends OpenLanderError {
   }
 }
 
+// --- Project update / durable project context errors ---
+
+export class ProjectUpdateNotFoundError extends OpenLanderError {
+  constructor(updateId: string) {
+    super(`Project update "${updateId}" was not found.`, 'PROJECT_UPDATE_NOT_FOUND', 404, {
+      updateId,
+    });
+    this.name = 'ProjectUpdateNotFoundError';
+  }
+}
+
+export class ProjectUpdateItemNotFoundError extends OpenLanderError {
+  constructor(itemId: string) {
+    super(`Project update item "${itemId}" was not found.`, 'PROJECT_UPDATE_ITEM_NOT_FOUND', 404, {
+      itemId,
+    });
+    this.name = 'ProjectUpdateItemNotFoundError';
+  }
+}
+
+export class ProjectUpdateSourceInvalidError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'PROJECT_UPDATE_SOURCE_INVALID', 400, details);
+    this.name = 'ProjectUpdateSourceInvalidError';
+  }
+}
+
+export class ProjectUpdateItemStatusConflictError extends OpenLanderError {
+  constructor(itemId: string, expectedStatus: string, actualStatus: string) {
+    super(
+      'The Project Update item changed before this transition was recorded.',
+      'PROJECT_UPDATE_ITEM_STATUS_CONFLICT',
+      409,
+      { itemId, expectedStatus, actualStatus },
+    );
+    this.name = 'ProjectUpdateItemStatusConflictError';
+  }
+}
+
+export class ProjectUpdateProjectMismatchError extends OpenLanderError {
+  constructor(projectId: string, resourceId: string, resourceType: string) {
+    super(
+      'The Project Update resource belongs to a different Project.',
+      'PROJECT_UPDATE_PROJECT_MISMATCH',
+      409,
+      { projectId, resourceId, resourceType },
+    );
+    this.name = 'ProjectUpdateProjectMismatchError';
+  }
+}
+
 // --- Engagement portfolio errors ---
 
 export class EngagementNotFoundError extends OpenLanderError {

@@ -183,6 +183,61 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
       },
     });
 
+    const meetingUpdate = await callProjectAction('record_project_update', {
+      idempotency_key: `${projectName}-meeting-update`,
+      project_id: projectId,
+      summary: 'Customer meeting established the implementation direction and SI dependency.',
+      occurred_at: '2026-07-22T09:00:00.000Z',
+      sources: [{ source_type: 'meeting', label: '7/22 synthetic customer meeting' }],
+      entries: [
+        {
+          kind: 'decision',
+          title: 'Use the operation registry as the product contract',
+          detail: 'MCP and REST remain adapters over one application operation.',
+        },
+        {
+          kind: 'dependency',
+          title: 'Confirm the SI API contract',
+          detail:
+            'Implementation uses a mock until the external payload and authentication are fixed.',
+        },
+      ],
+    });
+    expect(meetingUpdate).toMatchObject({
+      status: 'recorded',
+      delivery_id: null,
+      source_count: 1,
+      entry_count: 2,
+    });
+
+    const initialContext = await callProjectAction('get_project_context', {
+      project_id: projectId,
+    });
+    expect(initialContext).toMatchObject({
+      status: 'ok',
+      counts: {
+        current_by_kind: expect.objectContaining({ decision: 1, dependency: 1 }),
+      },
+    });
+    const contextItems = initialContext['current_items'];
+    if (!Array.isArray(contextItems)) {
+      throw new Error('Project context omitted current_items.');
+    }
+    const decisionItem = contextItems.find(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        (item as Record<string, unknown>)['kind'] === 'decision',
+    ) as Record<string, unknown> | undefined;
+    const dependencyItem = contextItems.find(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        (item as Record<string, unknown>)['kind'] === 'dependency',
+    ) as Record<string, unknown> | undefined;
+    const decisionItemId = requiredString(decisionItem?.['item_id'], 'decision item_id');
+    const dependencyItemId = requiredString(dependencyItem?.['item_id'], 'dependency item_id');
+
     const deliveryPlan = await callProjectAction('plan_delivery', {
       idempotency_key: `${projectName}-delivery`,
       project_id: projectId,
@@ -198,9 +253,14 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
       maturity: 'release_candidate',
       auto_finalize: true,
       gates: [{ gate_key: 'qa', gate_type: 'qa', label: 'Scenario QA', required: true }],
+      source_project_update_item_ids: [decisionItemId, dependencyItemId],
     });
     const deliveryId = requiredString(deliveryPlan['delivery_id'], 'delivery_id');
-    expect(deliveryPlan).toMatchObject({ status: 'planned', gate_count: 1 });
+    expect(deliveryPlan).toMatchObject({
+      status: 'planned',
+      gate_count: 1,
+      source_context_item_count: 2,
+    });
 
     const uploadTicket = await callProjectAction('create_evidence_upload', {
       idempotency_key: `${projectName}-evidence-ticket`,
@@ -232,14 +292,61 @@ test.describe('Quality Gate — Interface-first Agent workflow', () => {
       source_artifact_ids: [artifactId],
       entries: [
         {
-          kind: 'decision',
-          title: 'Use the operation registry as the product contract',
-          detail: 'MCP and REST remain adapters over one application operation.',
-          status: 'accepted',
+          kind: 'progress',
+          title: 'Recorded the Agent handoff evidence',
+          detail: 'The exact handoff artifact is attached to this Delivery update.',
         },
       ],
     });
     expect(update).toMatchObject({ status: 'recorded', evidence_count: 1, entry_count: 1 });
+
+    const dependencyResolution = await callProjectAction('record_project_update', {
+      idempotency_key: `${projectName}-dependency-resolution`,
+      project_id: projectId,
+      summary: 'The synthetic SI contract was confirmed after Delivery planning.',
+      occurred_at: '2026-07-24T09:00:00.000Z',
+      sources: [{ source_type: 'meeting', label: '7/24 synthetic SI contract review' }],
+      transitions: [
+        {
+          item_id: dependencyItemId,
+          expected_status: 'open',
+          status: 'resolved',
+          note: 'Payload and authentication contract confirmed.',
+        },
+      ],
+    });
+    expect(dependencyResolution).toMatchObject({
+      status: 'recorded',
+      transitioned_item_count: 1,
+      affected_delivery_ids: [deliveryId],
+    });
+
+    const changedContext = await callProjectAction('get_project_context', {
+      project_id: projectId,
+    });
+    expect(changedContext['changed_delivery_context']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          delivery_id: deliveryId,
+          item_id: dependencyItemId,
+          linked_status: 'open',
+          current_status: 'resolved',
+        }),
+      ]),
+    );
+    const deliveryWithContext = await callProjectAction('get_delivery', {
+      delivery_id: deliveryId,
+    });
+    const deliveryDetail = deliveryWithContext['detail'];
+    expect(deliveryDetail).toMatchObject({
+      project_context_items: expect.arrayContaining([
+        expect.objectContaining({
+          item: expect.objectContaining({ id: dependencyItemId, status: 'resolved' }),
+          linked_status: 'open',
+          context_changed: true,
+        }),
+      ]),
+    });
 
     const deliveryManifestSha = '2'.repeat(64);
     const runStart = await callProjectAction('start_delivery_run', {

@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **135 unique default operations** surfaced through those composites
+- **137 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -694,19 +694,37 @@ feedback, Gate evidence, and Receipt metadata.
 
 ## Evidence intake and structured project updates
 
-| Action                   | Required parameters                                                            | Purpose                                                        |
-| ------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `create_evidence_upload` | `idempotency_key`, Project/Delivery IDs, filename, logical key, revision, kind | Issue a 15-minute upload capability and reserve an artifact ID |
-| `record_project_update`  | `idempotency_key`, Project/Delivery IDs, source artifact IDs, entries          | Record decisions, actions, risks, questions, and facts         |
+| Action                   | Required parameters                                                            | Purpose                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `create_evidence_upload` | `idempotency_key`, Project/Delivery IDs, filename, logical key, revision, kind | Issue a 15-minute upload capability and reserve an artifact ID                                                      |
+| `record_project_update`  | `idempotency_key`, Project ID, summary, source, entries or transitions         | Record durable decisions, actions, risks, questions, dependencies, progress, and facts without requiring a Delivery |
+| `get_project_context`    | Project ID                                                                     | Read current decisions, open items, changed Delivery context, and the 10 most recent updates                        |
+| `get_project_update`     | Project ID, update ID                                                          | Read one immutable update with full sources, items, transitions, and Delivery links                                 |
 
 `create_evidence_upload` returns an absolute HTTP `upload_url`, `PUT` method,
 expiry, size limit, and the reserved `artifact_id`. The URL is a bearer
 capability: do not log or share it. Send the file bytes to that URL without an
 MCP Authorization header. Uploading validates type, size, hash, Project
 ownership, Delivery mutability, and artifact revision. Replaying the same upload
-is idempotent. `record_project_update` accepts only artifacts from the specified
-Delivery and stores the structured update in Activity history for weekly report
-snapshots.
+is idempotent.
+
+`record_project_update` also accepts meeting labels, HTTP(S) URLs, and
+repository/WBS-relative paths, so agents can record collaboration context before
+a Delivery exists. Update bodies are immutable. Correct earlier information by
+recording a new Update and resolving, dismissing, or superseding the earlier
+item with its expected status. `get_project_context` is the compact handoff read;
+use scoped help for its bounded response schema, then call `get_project_update`
+only when full source details are needed. These durable records, rather than the
+30-day Activity log, feed internal weekly reports. Customer reports expose only
+the count of open confirmation items and do not include repository paths, WBS
+paths, actor identity, or internal detail.
+
+When an implementation slice is ready, pass the relevant current item IDs as
+`plan_delivery.source_project_update_item_ids`. OpenLander snapshots each item's
+status and update timestamp with the Delivery. If that Project context later
+changes, Delivery reads return `context_changed=true` and the Project context
+query lists the affected Delivery IDs. This is a review warning only; it does
+not fail Gates or change Delivery status automatically.
 
 ### `update_app` / `redeploy_app` / `restart_service`
 

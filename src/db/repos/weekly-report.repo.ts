@@ -1,4 +1,4 @@
-import { and, between, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, between, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 
 import { RepoPersistenceError } from '../../errors.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
@@ -7,10 +7,13 @@ import {
   deliveries,
   deliveryAgentRuns,
   deliveryGates,
+  deliveryProjectUpdateItems,
   deliveryRunChecks,
   engagementProjects,
   engagementWeeklyReports,
   projectEnvironments,
+  projectUpdateItems,
+  projectUpdates,
   releaseArtifacts,
   releasePromotions,
   releases,
@@ -85,6 +88,12 @@ export class WeeklyReportRepo {
         promotions: [],
         activity: [],
         environments: [],
+        projectUpdates: [],
+        projectUpdateItems: [],
+        transitionedProjectUpdateItems: [],
+        currentProjectUpdateItems: [],
+        deliveryProjectUpdateItems: [],
+        changedDeliveryProjectUpdateItems: [],
       };
     }
     const deliveryRows = await this.db
@@ -92,7 +101,15 @@ export class WeeklyReportRepo {
       .from(deliveries)
       .where(inArray(deliveries.project_id, projectIds));
     const deliveryIds = deliveryRows.map((row) => row.id);
-    const [gateRows, runRows, activityRows, environmentRows] = await Promise.all([
+    const [
+      gateRows,
+      runRows,
+      activityRows,
+      environmentRows,
+      projectUpdateRows,
+      currentProjectUpdateItemRows,
+      changedDeliveryProjectUpdateItemRows,
+    ] = await Promise.all([
       deliveryIds.length > 0
         ? this.db
             .select()
@@ -111,6 +128,7 @@ export class WeeklyReportRepo {
         .where(
           and(
             between(activityLog.created_at, periodStart, periodEnd),
+            ne(activityLog.event_type, 'project.update_recorded'),
             or(
               inArray(activityLog.project_id, projectIds),
               eq(activityLog.correlation_id, engagementId),
@@ -122,7 +140,85 @@ export class WeeklyReportRepo {
         .select()
         .from(projectEnvironments)
         .where(inArray(projectEnvironments.project_id, projectIds)),
+      this.db
+        .select()
+        .from(projectUpdates)
+        .where(
+          and(
+            inArray(projectUpdates.project_id, projectIds),
+            between(projectUpdates.occurred_at, periodStart, periodEnd),
+          ),
+        )
+        .orderBy(projectUpdates.occurred_at, projectUpdates.id),
+      this.db
+        .select({ item: projectUpdateItems, update: projectUpdates })
+        .from(projectUpdateItems)
+        .innerJoin(projectUpdates, eq(projectUpdates.id, projectUpdateItems.project_update_id))
+        .where(
+          and(
+            inArray(projectUpdates.project_id, projectIds),
+            or(
+              and(
+                eq(projectUpdateItems.kind, 'decision'),
+                eq(projectUpdateItems.status, 'accepted'),
+              ),
+              and(
+                inArray(projectUpdateItems.kind, ['action', 'risk', 'question', 'dependency']),
+                eq(projectUpdateItems.status, 'open'),
+              ),
+            ),
+          ),
+        )
+        .orderBy(projectUpdateItems.updated_at, projectUpdateItems.id),
+      this.db
+        .select({ item: projectUpdateItems, link: deliveryProjectUpdateItems })
+        .from(deliveryProjectUpdateItems)
+        .innerJoin(
+          projectUpdateItems,
+          eq(projectUpdateItems.id, deliveryProjectUpdateItems.project_update_item_id),
+        )
+        .innerJoin(projectUpdates, eq(projectUpdates.id, projectUpdateItems.project_update_id))
+        .where(
+          and(
+            inArray(projectUpdates.project_id, projectIds),
+            or(
+              ne(projectUpdateItems.status, deliveryProjectUpdateItems.item_status),
+              ne(projectUpdateItems.updated_at, deliveryProjectUpdateItems.item_updated_at),
+            ),
+          ),
+        )
+        .orderBy(projectUpdateItems.updated_at, projectUpdateItems.id),
     ]);
+    const projectUpdateIds = projectUpdateRows.map((row) => row.id);
+    const [projectUpdateItemRows, transitionedProjectUpdateItemRows] =
+      projectUpdateIds.length > 0
+        ? await Promise.all([
+            this.db
+              .select()
+              .from(projectUpdateItems)
+              .where(inArray(projectUpdateItems.project_update_id, projectUpdateIds))
+              .orderBy(projectUpdateItems.created_at, projectUpdateItems.id),
+            this.db
+              .select()
+              .from(projectUpdateItems)
+              .where(inArray(projectUpdateItems.resolution_update_id, projectUpdateIds))
+              .orderBy(projectUpdateItems.updated_at, projectUpdateItems.id),
+          ])
+        : [[], []];
+    const contextItemIds = [
+      ...new Set([
+        ...projectUpdateItemRows.map((row) => row.id),
+        ...transitionedProjectUpdateItemRows.map((row) => row.id),
+        ...currentProjectUpdateItemRows.map((row) => row.item.id),
+      ]),
+    ];
+    const projectUpdateLinkRows =
+      contextItemIds.length > 0
+        ? await this.db
+            .select()
+            .from(deliveryProjectUpdateItems)
+            .where(inArray(deliveryProjectUpdateItems.project_update_item_id, contextItemIds))
+        : [];
     const runIds = runRows.map((row) => row.id);
     const [checkRows, releaseRows] = await Promise.all([
       runIds.length > 0
@@ -157,6 +253,12 @@ export class WeeklyReportRepo {
       promotions: promotionRows,
       activity: activityRows,
       environments: environmentRows,
+      projectUpdates: projectUpdateRows,
+      projectUpdateItems: projectUpdateItemRows,
+      transitionedProjectUpdateItems: transitionedProjectUpdateItemRows,
+      currentProjectUpdateItems: currentProjectUpdateItemRows,
+      deliveryProjectUpdateItems: projectUpdateLinkRows,
+      changedDeliveryProjectUpdateItems: changedDeliveryProjectUpdateItemRows,
     };
   }
 

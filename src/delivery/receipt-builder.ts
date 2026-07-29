@@ -290,8 +290,10 @@ function makeTheme(detail: DeliveryDetail): ReceiptTheme {
 }
 
 function snapshotDetail(detail: DeliveryDetail): ReceiptSnapshot['detail'] {
+  const { project_context_items: _projectContextItems, ...receiptDetail } = detail;
+  void _projectContextItems;
   return {
-    ...detail,
+    ...receiptDetail,
     deploy_links: detail.deploy_links.map(({ link, deploy, service, environment }) => ({
       link,
       deploy: {

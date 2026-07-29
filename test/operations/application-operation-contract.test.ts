@@ -142,6 +142,29 @@ function createAgentDeliveryHarness() {
     repo_url: string;
     branch: string;
   }> = [];
+  const projectUpdate = {
+    id: 'pupd_operation-1',
+    project_id: delivery.project_id,
+    delivery_id: null,
+    summary: 'Customer meeting clarified the SI dependency.',
+    occurred_at: now,
+    sources: [{ source_type: 'meeting', label: '7/29 customer meeting' }],
+    created_by: 'project-agent',
+    created_at: now,
+  };
+  const projectUpdateItem = {
+    id: 'pui-question',
+    project_update_id: projectUpdate.id,
+    kind: 'question',
+    title: 'Confirm the SI API contract',
+    detail: 'The payload and authentication method are not fixed.',
+    status: 'open',
+    resolution_update_id: null,
+    resolution_note: null,
+    resolved_at: null,
+    created_at: now,
+    updated_at: now,
+  };
   const reviewStatus = {
     project_id: delivery.project_id,
     delivery_id: delivery.id,
@@ -245,6 +268,42 @@ function createAgentDeliveryHarness() {
       if (id !== delivery.id) throw new Error('missing delivery');
       return delivery;
     }),
+    getProject: vi.fn(async (id: string) =>
+      id === delivery.project_id ? { id, archived_at: null } : null,
+    ),
+    getArtifactProjectRowsByIds: vi.fn(async () => []),
+    recordProjectUpdate: vi.fn(async () => ({
+      update: projectUpdate,
+      items: [projectUpdateItem],
+      transitionedItemIds: [],
+      affectedDeliveryIds: [],
+    })),
+    getProjectUpdateContext: vi.fn(async () => ({
+      counts: { 'question:open': 1 },
+      currentItems: [
+        {
+          item: projectUpdateItem,
+          update: {
+            id: projectUpdate.id,
+            summary: projectUpdate.summary,
+            occurred_at: projectUpdate.occurred_at,
+            created_by: projectUpdate.created_by,
+          },
+          deliveryIds: [],
+        },
+      ],
+      currentItemsTruncated: false,
+      recentUpdates: [{ ...projectUpdate, itemCount: 1 }],
+      recentUpdatesTruncated: false,
+      changedDeliveryContext: [],
+      changedDeliveryContextTruncated: false,
+    })),
+    getProjectUpdateDetail: vi.fn(async () => ({
+      update: projectUpdate,
+      items: [projectUpdateItem],
+      transitionedItems: [],
+      deliveryIdsByItem: new Map<string, string[]>(),
+    })),
     getDeployablesByGroup: vi.fn(async () => registeredServices),
     ensureDeployableServiceForProject: vi.fn(
       async (projectId: string, input: { source: 'git'; repoUrl: string; branch: string }) => {
@@ -436,6 +495,8 @@ function createAgentDeliveryHarness() {
     deliveryReviewPackageService,
     reviewStatus,
     acceptedReviewStatus,
+    projectUpdate,
+    projectUpdateItem,
     db,
   };
 }
@@ -717,6 +778,355 @@ describe('Application Operation contract', () => {
         { actor: harness.actor, idempotencyKey: 'cancel-1' },
       ),
     ).resolves.toMatchObject({ result: { status: 'cancelled' } });
+  });
+
+  it('records and reads Project context without requiring a Delivery', async () => {
+    const harness = createAgentDeliveryHarness();
+    const recorded = await harness.operations.execute(
+      harness.ctx,
+      'record_project_update',
+      {
+        project_id: harness.delivery.project_id,
+        summary: 'Customer meeting clarified the SI dependency.',
+        occurred_at: '2026-07-26T00:00:00.000Z',
+        sources: [{ source_type: 'meeting', label: '7/29 customer meeting' }],
+        entries: [
+          {
+            kind: 'question',
+            title: 'Confirm the SI API contract',
+            detail: 'The payload and authentication method are not fixed.',
+          },
+        ],
+      },
+      { actor: harness.actor, idempotencyKey: 'project-update-1' },
+    );
+    expect(recorded.result).toMatchObject({
+      status: 'recorded',
+      project_id: harness.delivery.project_id,
+      delivery_id: null,
+      update_id: 'pupd_operation-1',
+      entry_count: 1,
+      suggested_call: {
+        operation: 'get_project_context',
+        input: { project_id: harness.delivery.project_id },
+      },
+    });
+    expect(harness.db.recordProjectUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: harness.delivery.project_id,
+        deliveryId: null,
+        sources: [{ source_type: 'meeting', label: '7/29 customer meeting' }],
+        entries: [expect.objectContaining({ kind: 'question', status: 'open' })],
+      }),
+    );
+
+    const context = await harness.operations.execute(
+      harness.ctx,
+      'get_project_context',
+      { project_id: harness.delivery.project_id },
+      { actor: harness.actor },
+    );
+    expect(context.result).toMatchObject({
+      status: 'ok',
+      counts: {
+        total_by_kind: { question: 1 },
+        current_by_kind: { question: 1 },
+      },
+      current_items: [
+        {
+          item_id: 'pui-question',
+          kind: 'question',
+          detail_excerpt: 'The payload and authentication method are not fixed.',
+        },
+      ],
+    });
+
+    const detail = await harness.operations.execute(
+      harness.ctx,
+      'get_project_update',
+      { project_id: harness.delivery.project_id, update_id: harness.projectUpdate.id },
+      { actor: harness.actor },
+    );
+    expect(detail.result).toMatchObject({
+      update: {
+        update_id: harness.projectUpdate.id,
+        sources: harness.projectUpdate.sources,
+      },
+      entries: [{ item_id: harness.projectUpdateItem.id, status: 'open' }],
+    });
+  });
+
+  it('reuses the operation timestamp when a committed Project Update is retried', async () => {
+    const harness = createAgentDeliveryHarness();
+    harness.db.succeedApplicationOperation.mockRejectedValueOnce(
+      new Error('simulated invocation persistence failure'),
+    );
+    const input = {
+      project_id: harness.delivery.project_id,
+      summary: 'Meeting update without an explicit occurrence timestamp.',
+      sources: [{ source_type: 'meeting', label: 'Customer meeting' }],
+      entries: [{ kind: 'fact', title: 'Prototype received', detail: 'Ready for review.' }],
+    };
+
+    await expect(
+      harness.operations.execute(harness.ctx, 'record_project_update', input, {
+        actor: harness.actor,
+        idempotencyKey: 'project-update-recovery-1',
+      }),
+    ).rejects.toThrow('simulated invocation persistence failure');
+    await expect(
+      harness.operations.execute(harness.ctx, 'record_project_update', input, {
+        actor: harness.actor,
+        idempotencyKey: 'project-update-recovery-1',
+      }),
+    ).resolves.toMatchObject({ result: { status: 'recorded' } });
+
+    expect(harness.db.recordProjectUpdate).toHaveBeenCalledTimes(2);
+    expect(harness.db.recordProjectUpdate.mock.calls[0]?.[0]).toMatchObject({
+      occurredAt: '2026-07-26T00:00:00.000Z',
+    });
+    expect(harness.db.recordProjectUpdate.mock.calls[1]?.[0]).toMatchObject({
+      occurredAt: '2026-07-26T00:00:00.000Z',
+    });
+  });
+
+  it('bounds Project context source labels and Delivery links', async () => {
+    const harness = createAgentDeliveryHarness();
+    harness.db.getProjectUpdateContext.mockResolvedValueOnce({
+      counts: { 'question:open': 1 },
+      currentItems: [
+        {
+          item: harness.projectUpdateItem,
+          update: {
+            id: harness.projectUpdate.id,
+            summary: harness.projectUpdate.summary,
+            occurred_at: harness.projectUpdate.occurred_at,
+            created_by: harness.projectUpdate.created_by,
+          },
+          deliveryIds: Array.from({ length: 21 }, (_, index) => `delivery-${String(index + 1)}`),
+        },
+      ],
+      currentItemsTruncated: false,
+      recentUpdates: [
+        {
+          ...harness.projectUpdate,
+          sources: Array.from({ length: 6 }, (_, index) => ({
+            source_type: 'meeting' as const,
+            label: `Source ${String(index + 1)}`,
+          })),
+          itemCount: 1,
+        },
+      ],
+      recentUpdatesTruncated: false,
+      changedDeliveryContext: [],
+      changedDeliveryContextTruncated: false,
+    });
+
+    const context = await harness.operations.execute(
+      harness.ctx,
+      'get_project_context',
+      { project_id: harness.delivery.project_id },
+      { actor: harness.actor },
+    );
+
+    expect(context.result['current_items']).toEqual([
+      expect.objectContaining({
+        related_delivery_ids: expect.any(Array),
+        related_delivery_count: 21,
+        related_delivery_ids_truncated: true,
+      }),
+    ]);
+    const currentItem = (context.result['current_items'] as Array<Record<string, unknown>>)[0];
+    expect(currentItem?.['related_delivery_ids']).toHaveLength(20);
+    expect(context.result['recent_updates']).toEqual([
+      expect.objectContaining({ source_count: 6, sources_truncated: true }),
+    ]);
+    const recentUpdate = (context.result['recent_updates'] as Array<Record<string, unknown>>)[0];
+    expect(recentUpdate?.['source_labels']).toHaveLength(5);
+  });
+
+  it('links selected Project context items while planning a Delivery', async () => {
+    const harness = createAgentDeliveryHarness();
+    const planned = await harness.operations.execute(
+      harness.ctx,
+      'plan_delivery',
+      {
+        project_id: harness.delivery.project_id,
+        title: 'SI interface slice',
+        objective: 'Implement against a stable mock contract.',
+        definition_of_done: ['Contract tests pass'],
+        gates: [{ gate_key: 'qa', gate_type: 'qa', label: 'Quality', required: true }],
+        source_project_update_item_ids: ['pui-question'],
+      },
+      { actor: harness.actor, idempotencyKey: 'plan-with-context-1' },
+    );
+    expect(planned.result).toMatchObject({ source_context_item_count: 1 });
+    expect(harness.deliveryService.createDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceProjectUpdateItemIds: ['pui-question'] }),
+    );
+  });
+
+  it('rejects unsafe Project Update sources and service-scoped access', async () => {
+    const harness = createAgentDeliveryHarness();
+    const input = {
+      project_id: harness.delivery.project_id,
+      summary: 'WBS comparison',
+      sources: [{ source_type: 'wbs', label: 'Weekly WBS', locator: '../customer.xlsx' }],
+      entries: [{ kind: 'progress', title: 'Compared schedule', detail: 'No material change.' }],
+    };
+    await expect(
+      harness.operations.execute(harness.ctx, 'record_project_update', input, {
+        actor: harness.actor,
+        idempotencyKey: 'unsafe-source-1',
+      }),
+    ).rejects.toMatchObject({ code: 'PROJECT_UPDATE_SOURCE_INVALID' });
+    expect(harness.db.recordProjectUpdate).not.toHaveBeenCalled();
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'record_project_update',
+        {
+          ...input,
+          sources: [
+            {
+              source_type: 'repository',
+              label: 'Windows path',
+              locator: 'C:\\customer\\requirements.md',
+            },
+          ],
+        },
+        { actor: harness.actor, idempotencyKey: 'unsafe-source-windows-path-1' },
+      ),
+    ).rejects.toMatchObject({ code: 'PROJECT_UPDATE_SOURCE_INVALID' });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'record_project_update',
+        {
+          ...input,
+          sources: [
+            {
+              source_type: 'repository',
+              label: 'Local requirements URI',
+              locator: 'file:docs/requirements.md',
+            },
+          ],
+        },
+        { actor: harness.actor, idempotencyKey: 'unsafe-source-uri-1' },
+      ),
+    ).rejects.toMatchObject({ code: 'PROJECT_UPDATE_SOURCE_INVALID' });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'record_project_update',
+        {
+          ...input,
+          sources: [
+            {
+              source_type: 'url',
+              label: 'Credential-bearing URL',
+              locator: 'https://user:secret@example.com/meeting',
+            },
+          ],
+        },
+        { actor: harness.actor, idempotencyKey: 'unsafe-source-url-credentials-1' },
+      ),
+    ).rejects.toMatchObject({ code: 'PROJECT_UPDATE_SOURCE_INVALID' });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'record_project_update',
+        {
+          ...input,
+          sources: [
+            {
+              source_type: 'repository',
+              label: 'Requirements',
+              locator: 'docs/requirements.md',
+              sha256: 'NOT-A-SHA256',
+            },
+          ],
+        },
+        { actor: harness.actor, idempotencyKey: 'unsafe-source-sha-1' },
+      ),
+    ).rejects.toMatchObject({ code: 'PROJECT_UPDATE_SOURCE_INVALID' });
+
+    await expect(
+      harness.operations.execute(
+        harness.ctx,
+        'get_project_context',
+        { project_id: harness.delivery.project_id },
+        {
+          actor: {
+            source: 'mcp',
+            scope: 'service',
+            instanceId: 'olinst_test',
+            projectId: harness.delivery.project_id,
+            serviceId: 'service-1',
+            label: 'service-agent',
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'SCOPE_VIOLATION' });
+  });
+
+  it('keeps Project context query results aligned across in-process, REST, and MCP', async () => {
+    const directHarness = createAgentDeliveryHarness();
+    const direct = await directHarness.operations.execute(
+      directHarness.ctx,
+      'get_project_context',
+      { project_id: directHarness.delivery.project_id },
+      { actor: directHarness.actor },
+    );
+
+    const restHarness = createAgentDeliveryHarness();
+    const app = new Hono<{ Variables: { authKind: 'session' | 'api_token' } }>();
+    app.use('*', async (c, next) => {
+      c.set('authKind', 'session');
+      await next();
+    });
+    app.route('/', createOperationRoutes(restHarness.ctx));
+    const restResponse = await app.request('/v1/operations/get_project_context', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ project_id: restHarness.delivery.project_id }),
+    });
+    expect(restResponse.status).toBe(200);
+    const rest = (await restResponse.json()) as { result: Record<string, unknown> };
+
+    const mcpHarness = createAgentDeliveryHarness();
+    const tool = projectManifestToolDefs.find(
+      (definition) => definition.name === 'get_project_context',
+    );
+    const mcp = await tool?.execute(
+      { project_id: mcpHarness.delivery.project_id },
+      {
+        target: 'mcp',
+        appCtx: mcpHarness.ctx,
+        identity: {
+          source: 'mcp',
+          mcpScopeKind: 'project',
+          mcpScopeProjectId: mcpHarness.delivery.project_id,
+        },
+      },
+    );
+
+    for (const result of [direct.result, rest.result, mcp]) {
+      expect(result).toMatchObject({
+        status: 'ok',
+        project_id: directHarness.delivery.project_id,
+        current_items: [{ item_id: 'pui-question', kind: 'question', status: 'open' }],
+        truncated: {
+          current_items: false,
+          recent_updates: false,
+          changed_delivery_context: false,
+        },
+      });
+    }
   });
 
   it('binds and polls an exact Artifact review through the common operation contract', async () => {

@@ -868,6 +868,16 @@ export const translations = {
             '프로젝트 {projectName}의 진행 중인 에이전트 실행과 납품 작업을 확인하고, 안전하게 이어갈 수 있는 최신 인수인계부터 재개한 뒤 다음 작업을 알려주세요.',
         },
       },
+      recordProjectUpdate: {
+        heading: '프로젝트 현황을 에이전트에게 정리해 달라고 요청하세요',
+        lead: '납품 작업을 만들지 않고도 회의 내용, 문서, WBS 변경, 결정, 질문, 위험, 의존사항과 할 일을 기록할 수 있습니다.',
+        prompt: {
+          meeting:
+            '프로젝트 {projectName}의 이 회의 내용을 결정, 할 일, 위험, 확인할 질문, 의존사항, 진행 내용, 확인된 사실로 정리해 주세요. 출처를 함께 기록하고, 이전 내용이 바뀌었다면 해당 항목을 해결하거나 대체 처리하세요. 아직 납품 작업은 만들지 마세요.',
+          refresh:
+            '프로젝트 {projectName}의 현재 상황을 읽고 이 새 문서나 WBS와 비교해 주세요. 의미 있는 변경만 출처와 함께 기록하고, 추가로 확인할 항목을 알려주세요.',
+        },
+      },
       manageDelivery: {
         heading: '다음 작업을 에이전트에게 알려주세요',
         lead: '납품 작업 설정과 증거는 버전이 남는 작업 명령으로 반영합니다. 이 화면에서는 범위, 검증 결과, 승인, 배포 근거와 완료 증빙을 확인하세요.',
@@ -1313,6 +1323,63 @@ export const translations = {
       inputPlaceholder: '프로젝트 이름 입력',
     },
   },
+  projectContext: {
+    title: '프로젝트 현황',
+    description:
+      '구현할 범위가 정해지기 전에도 현재 결정, 미해결 사항, 의존사항과 새로 확인된 내용을 출처와 함께 기록합니다.',
+    askAgent: '에이전트에게 현황 정리 요청',
+    more: '외 {count}건',
+    loading: '프로젝트 현황 불러오는 중',
+    loadError: '프로젝트 현황을 불러오지 못했습니다.',
+    errors: {
+      codes: {
+        PROJECT_NOT_FOUND: '프로젝트를 찾을 수 없습니다.',
+        SCOPE_VIOLATION: '현재 권한으로는 이 프로젝트를 볼 수 없습니다.',
+        PROJECT_UPDATE_NOT_FOUND: '진행 기록을 찾을 수 없습니다.',
+        PROJECT_UPDATE_PROJECT_MISMATCH: '다른 프로젝트에 속한 진행 기록입니다.',
+      },
+    },
+    truncated:
+      '최근 항목만 표시하고 있습니다. 더 자세한 내용이 필요하면 에이전트에게 해당 진행 기록을 조회해 달라고 요청하세요.',
+    kind: {
+      decision: '결정',
+      action: '할 일',
+      risk: '위험',
+      question: '확인할 질문',
+      dependency: '의존사항',
+      progress: '진행 내용',
+      fact: '확인된 사실',
+    },
+    status: {
+      open: '확인 필요',
+      accepted: '확정',
+      noted: '기록됨',
+      resolved: '해결됨',
+      dismissed: '기각됨',
+      superseded: '새 내용으로 대체됨',
+    },
+    open: {
+      title: '확인이 필요한 항목',
+      description: '아직 확인하거나 조율해야 할 질문, 의존사항, 위험과 할 일입니다.',
+      empty: '지금 확인하거나 조율할 항목은 없습니다.',
+    },
+    decisions: {
+      title: '현재 유효한 결정',
+      description: '이 프로젝트에서 지금도 기준으로 삼는 결정입니다.',
+      empty: '아직 기록된 결정이 없습니다.',
+    },
+    recent: {
+      title: '최근 진행 기록',
+      description: '회의나 문서, 저장소, WBS에서 새로 확인되거나 달라진 내용을 기록한 내역입니다.',
+      empty: '아직 진행 기록이 없습니다. 에이전트에게 최신 자료를 정리해 달라고 요청하세요.',
+      itemCount: '{count}개 항목',
+    },
+    changedDelivery: {
+      title: '납품 작업의 기준 정보가 바뀌었습니다',
+      description:
+        '납품 작업을 계획할 때 연결한 항목 중 {count}개가 바뀌었습니다. 작업이 자동으로 중단되지는 않으므로 연결된 납품 작업을 다시 확인하세요.',
+    },
+  },
   projectDetail: {
     // Content — descriptive copy.
     notFound: '프로젝트를 찾을 수 없습니다',
@@ -1327,6 +1394,7 @@ export const translations = {
     tabs: {
       // Chrome — nav tabs.
       services: '리소스',
+      context: '현황',
       deliveries: '납품 건',
       aiOps: 'AI Ops',
       settings: '설정',
@@ -3024,6 +3092,17 @@ export const translations = {
     overview: {
       title: '납품 개요',
       description: '납품 유형에 따라 운영 환경에 성공적으로 배포한 근거가 필요한지 결정됩니다.',
+    },
+    projectContext: {
+      title: '기준이 된 프로젝트 정보',
+      description:
+        '이 납품 작업을 계획할 때 연결한 결정과 확인 항목입니다. 이후 내용이 바뀌면 경고만 표시하며 작업을 자동으로 막지는 않습니다.',
+      empty: '이 납품 작업을 계획할 때 연결한 프로젝트 정보가 없습니다.',
+      changed:
+        '연결한 항목 중 {count}개가 계획 이후 바뀌었습니다. 필요하면 범위, 완료 조건과 통과 기준을 다시 확인하세요.',
+      statusChanged: '상태 변경: {previous} → {current}',
+      statusUnchanged: '상태 유지: {status}',
+      openSource: '원본 진행 기록 보기',
     },
     execution: {
       title: '에이전트 실행 기록',

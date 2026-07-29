@@ -190,6 +190,26 @@ export interface DeliveryDetail {
   approvals: DeliveryApproval[];
   gates: DeliveryGate[];
   deploy_links: DeliveryDeployEvidence[];
+  project_context_items?: Array<{
+    item: {
+      id: string;
+      project_update_id: string;
+      kind: 'decision' | 'action' | 'risk' | 'question' | 'dependency' | 'progress' | 'fact';
+      title: string;
+      detail: string;
+      status: 'open' | 'accepted' | 'noted' | 'resolved' | 'dismissed' | 'superseded';
+      updated_at: string;
+    };
+    update: {
+      id: string;
+      summary: string;
+      occurred_at: string;
+    };
+    linked_status: string;
+    linked_item_updated_at: string;
+    linked_at: string;
+    context_changed: boolean;
+  }>;
   receipt: DeliveryReceipt | null;
 }
 

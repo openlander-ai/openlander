@@ -276,6 +276,7 @@ describe('Postgres migration sanity gate', () => {
       '0021_project-manifest-state',
       '0022_receipt-hard-delete-cascade',
       '0023_delivery_review_packages',
+      '0024_project_updates',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -302,6 +303,7 @@ describe('Postgres migration sanity gate', () => {
       '0021_project-manifest-state.sql',
       '0022_receipt-hard-delete-cascade.sql',
       '0023_delivery_review_packages.sql',
+      '0024_project_updates.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
@@ -324,6 +326,9 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('CREATE TABLE "delivery_run_checks"');
     expect(sql).toContain('CREATE TABLE "delivery_review_packages"');
     expect(sql).toContain('CREATE TABLE "delivery_review_package_items"');
+    expect(sql).toContain('CREATE TABLE "project_updates"');
+    expect(sql).toContain('CREATE TABLE "project_update_items"');
+    expect(sql).toContain('CREATE TABLE "delivery_project_update_items"');
     expect(sql).toContain('ADD COLUMN "review_package_id" text');
     expect(sql).toContain('ADD COLUMN "health_timeout_seconds" integer DEFAULT 30 NOT NULL');
     expect(sql).toContain('ADD COLUMN "smoke_path" text');
@@ -545,6 +550,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 25 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -565,7 +577,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 25 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 26 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
@@ -591,6 +603,197 @@ describeWithDatabase('Postgres baseline guard integration', () => {
         )) as ReadonlyArray<{ count: number }>;
         expect(rows[0]?.count).toBe(readMigrationJournal().entries.length);
         await expect(sql.unsafe('SELECT 1 FROM domain_mappings LIMIT 1')).resolves.toBeDefined();
+        await expect(sql.unsafe('SELECT 1 FROM project_updates LIMIT 1')).resolves.toBeDefined();
+        await expect(
+          sql.unsafe('SELECT 1 FROM project_update_items LIMIT 1'),
+        ).resolves.toBeDefined();
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
+    });
+  });
+
+  it('upgrades 0023 data and keeps migrated Project Updates after Activity cleanup', async () => {
+    await withIsolatedPostgresDatabase('project_updates_upgrade', async (url) => {
+      const sql = postgres(url, { max: 1, prepare: false });
+      try {
+        for (const fileName of activeMigrationSqlFiles().filter(
+          (file) => file !== '0024_project_updates.sql',
+        )) {
+          const migrationSql = readFileSync(
+            migrationSqlPath(fileName.replace(/\.sql$/, '')),
+            'utf8',
+          );
+          for (const statement of splitMigrationStatements(migrationSql)) {
+            await sql.unsafe(statement);
+          }
+        }
+
+        await sql.unsafe(`
+          INSERT INTO projects (id, name, display_name)
+          VALUES ('project-update-upgrade', 'project-update-upgrade', 'Project Update Upgrade')
+        `);
+        await sql.unsafe(`
+          INSERT INTO deliveries (id, project_id, title, created_by)
+          VALUES ('delivery-update-upgrade', 'project-update-upgrade', 'Upgrade Delivery', 'agent-a')
+        `);
+        await sql.unsafe(`
+          INSERT INTO activity_log (
+            id, event_type, activity_type, severity, project_id, correlation_id,
+            title, description, status, metadata, created_at
+          ) VALUES (
+            'activity-update-upgrade',
+            'project.update_recorded',
+            'project_update',
+            'warning',
+            'project-update-upgrade',
+            'delivery-update-upgrade',
+            'Project update recorded',
+            'Customer meeting identified an SI dependency.',
+            'completed',
+            '{"delivery_id":"delivery-update-upgrade","source_artifact_ids":["artifact-legacy"],"entries":[{"kind":"dependency","title":"SI API contract","detail":"Waiting for payload and auth details","status":"open"}],"actor":"agent-a"}',
+            '2026-07-29T01:00:00.000Z'
+          )
+        `);
+        await sql.unsafe(`
+          INSERT INTO activity_log (
+            id, event_type, activity_type, severity, project_id, correlation_id,
+            title, description, status, metadata, created_at
+          ) VALUES
+          (
+            'activity-update-invalid-metadata',
+            'project.update_recorded',
+            'project_update',
+            'info',
+            'project-update-upgrade',
+            NULL,
+            'Legacy project note',
+            '',
+            'completed',
+            'not-json',
+            '2026-07-29T02:00:00.000Z'
+          ),
+          (
+            'activity-update-orphan',
+            'project.update_recorded',
+            'project_update',
+            'info',
+            'deleted-project',
+            NULL,
+            'Orphaned project note',
+            'This Project was already deleted.',
+            'completed',
+            '{}',
+            '2026-07-29T03:00:00.000Z'
+          )
+        `);
+        const excessiveLegacySources = Array.from(
+          { length: 21 },
+          (_, index) => `artifact-legacy-${String(index + 1)}`,
+        );
+        await sql.unsafe(
+          `
+            INSERT INTO activity_log (
+              id, event_type, activity_type, severity, project_id, correlation_id,
+              title, description, status, metadata, created_at
+            ) VALUES (
+              'activity-update-excessive-sources',
+              'project.update_recorded',
+              'project_update',
+              'info',
+              'project-update-upgrade',
+              NULL,
+              'Legacy update with excessive sources',
+              'The migration must stay within the new source limit.',
+              'completed',
+              $1,
+              '2026-07-29T02:30:00.000Z'
+            )
+          `,
+          [JSON.stringify({ source_artifact_ids: excessiveLegacySources })],
+        );
+
+        const migrationSql = readFileSync(migrationSqlPath('0024_project_updates'), 'utf8');
+        for (const statement of splitMigrationStatements(migrationSql)) {
+          await sql.unsafe(statement);
+        }
+
+        const updates = (await sql.unsafe(`
+          SELECT id, project_id, delivery_id, summary, sources, created_by, occurred_at
+          FROM project_updates
+        `)) as ReadonlyArray<Record<string, unknown>>;
+        expect(updates).toHaveLength(3);
+        expect(updates).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: 'pupd_legacy_activity-update-upgrade',
+              project_id: 'project-update-upgrade',
+              delivery_id: 'delivery-update-upgrade',
+              created_by: 'agent-a',
+              occurred_at: '2026-07-29T01:00:00.000Z',
+            }),
+            expect.objectContaining({
+              id: 'pupd_legacy_activity-update-invalid-metadata',
+              project_id: 'project-update-upgrade',
+              summary: 'Legacy project note',
+              delivery_id: null,
+              created_by: 'legacy-activity',
+            }),
+          ]),
+        );
+        const migratedUpdate = updates.find(
+          (update) => update['id'] === 'pupd_legacy_activity-update-upgrade',
+        );
+        expect(migratedUpdate?.['sources']).toEqual([
+          {
+            source_type: 'other',
+            label: 'Legacy Delivery artifact',
+            artifact_id: 'artifact-legacy',
+          },
+        ]);
+        const excessiveSourceUpdate = updates.find(
+          (update) => update['id'] === 'pupd_legacy_activity-update-excessive-sources',
+        );
+        expect(excessiveSourceUpdate?.['sources']).toHaveLength(20);
+        expect(updates.some((update) => update['project_id'] === 'deleted-project')).toBe(false);
+        const items = (await sql.unsafe(`
+          SELECT id, kind, title, detail, status
+          FROM project_update_items
+        `)) as ReadonlyArray<Record<string, unknown>>;
+        expect(items).toEqual([
+          expect.objectContaining({
+            kind: 'dependency',
+            title: 'SI API contract',
+            status: 'open',
+          }),
+        ]);
+
+        await sql.unsafe(`DELETE FROM activity_log WHERE id = 'activity-update-upgrade'`);
+        const retained = (await sql.unsafe(
+          `SELECT COUNT(*)::integer AS count FROM project_updates`,
+        )) as ReadonlyArray<{ count: number }>;
+        expect(retained[0]?.count).toBe(3);
+
+        await sql.unsafe(`
+          INSERT INTO delivery_project_update_items (
+            delivery_id, project_update_item_id, item_status, item_updated_at, linked_by
+          )
+          SELECT 'delivery-update-upgrade', id, status, updated_at, 'agent-a'
+          FROM project_update_items
+        `);
+        await sql.unsafe(`DELETE FROM deliveries WHERE id = 'delivery-update-upgrade'`);
+        const deliveryCleanup = (await sql.unsafe(`
+          SELECT
+            (SELECT delivery_id FROM project_updates WHERE id = 'pupd_legacy_activity-update-upgrade') AS delivery_id,
+            (SELECT COUNT(*)::integer FROM delivery_project_update_items) AS link_count
+        `)) as ReadonlyArray<{ delivery_id: string | null; link_count: number }>;
+        expect(deliveryCleanup[0]).toEqual({ delivery_id: null, link_count: 0 });
+
+        await sql.unsafe(`DELETE FROM projects WHERE id = 'project-update-upgrade'`);
+        const projectCleanup = (await sql.unsafe(
+          `SELECT COUNT(*)::integer AS count FROM project_updates`,
+        )) as ReadonlyArray<{ count: number }>;
+        expect(projectCleanup[0]?.count).toBe(0);
       } finally {
         await sql.end({ timeout: 5 });
       }

@@ -598,8 +598,84 @@ function OverviewPanel({
           </div>
         )}
       </SectionCard>
+      <ProjectContextPanel detail={detail} projectId={projectId} />
       <ExecutionPanel execution={execution} />
     </div>
+  );
+}
+
+function ProjectContextPanel({ detail, projectId }: { detail: DeliveryDetail; projectId: string }) {
+  const { t, language } = useLanguage();
+  const navigate = useNavigate();
+  const items = detail.project_context_items ?? [];
+  const changedCount = items.filter((entry) => entry.context_changed).length;
+  return (
+    <SectionCard
+      title={t('delivery.projectContext.title')}
+      description={t('delivery.projectContext.description')}
+    >
+      {items.length === 0 ? (
+        <EmptyEvidence>{t('delivery.projectContext.empty')}</EmptyEvidence>
+      ) : (
+        <div className="space-y-3">
+          {changedCount > 0 && (
+            <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs">
+              <CircleAlert className="h-4 w-4 shrink-0 text-warning" />
+              <p>{t('delivery.projectContext.changed', { count: changedCount })}</p>
+            </div>
+          )}
+          <ul className="space-y-2">
+            {items.map((entry) => (
+              <li
+                key={entry.item.id}
+                className={cn(
+                  'rounded-md border p-3',
+                  entry.context_changed
+                    ? 'border-warning/30 bg-warning/5'
+                    : 'border-[color:var(--ol-border-subtle)]',
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+                      {t(`projectContext.kind.${entry.item.kind}`)}
+                    </span>
+                    <p className="mt-1 text-sm font-medium">{entry.item.title}</p>
+                  </div>
+                  <span className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                    {entry.context_changed
+                      ? t('delivery.projectContext.statusChanged', {
+                          previous: t(`projectContext.status.${entry.linked_status}`),
+                          current: t(`projectContext.status.${entry.item.status}`),
+                        })
+                      : t('delivery.projectContext.statusUnchanged', {
+                          status: t(`projectContext.status.${entry.item.status}`),
+                        })}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                  {entry.item.detail}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                  <time dateTime={entry.update.occurred_at}>
+                    {new Date(entry.update.occurred_at).toLocaleString(language)}
+                  </time>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/projects/${projectId}?tab=context#update-${entry.update.id}`)
+                    }
+                    className="text-[color:var(--ol-primary)] hover:underline"
+                  >
+                    {t('delivery.projectContext.openSource')}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 

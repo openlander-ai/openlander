@@ -27,6 +27,7 @@ type ReportPdfRenderer = (title: string, lines: string[]) => Promise<Uint8Array>
 
 const KOREAN_STATUS: Readonly<Record<string, string>> = {
   approved: '승인됨',
+  accepted: '확정',
   building: '빌드 중',
   cancelled: '취소됨',
   completed: '완료',
@@ -38,6 +39,8 @@ const KOREAN_STATUS: Readonly<Record<string, string>> = {
   failed: '실패',
   healthy: '정상',
   in_review: '검토 중',
+  noted: '기록됨',
+  open: '열림',
   paused: '일시 중지',
   passed: '통과',
   pending: '대기 중',
@@ -45,11 +48,14 @@ const KOREAN_STATUS: Readonly<Record<string, string>> = {
   ready: '준비됨',
   recalled: '승격 중단',
   revision_requested: '수정 요청',
+  resolved: '해결됨',
   rolled_back: '롤백됨',
   running: '실행 중',
   scenario_qa: '시나리오 QA',
   stopped: '중지됨',
   succeeded: '성공',
+  superseded: '대체됨',
+  dismissed: '기각됨',
   unknown: '확인 필요',
 };
 
@@ -162,6 +168,26 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function recordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(recordValue) : [];
+}
+
+function projectUpdateKindLabel(kind: unknown, locale: ReportLocale): string {
+  const raw = display(kind);
+  if (locale !== 'ko') return raw;
+  return (
+    {
+      action: '할 일',
+      decision: '결정',
+      dependency: '의존사항',
+      fact: '확인된 사실',
+      progress: '진행 내용',
+      question: '확인할 질문',
+      risk: '위험',
+    }[raw] ?? raw
+  );
 }
 
 function activityMetadata(entry: Record<string, unknown>): Record<string, unknown> {
@@ -288,7 +314,30 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   const checks = evidence['checks'] as Array<Record<string, unknown>>;
   const releases = evidence['releases'] as Array<Record<string, unknown>>;
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
-  const activity = evidence['activity'] as Array<Record<string, unknown>>;
+  const activity = recordArray(evidence['activity']).filter(
+    (entry) => entry['event_type'] !== 'project.update_recorded',
+  );
+  const projectUpdates = recordArray(evidence['projectUpdates']);
+  const projectUpdateItems = recordArray(evidence['projectUpdateItems']);
+  const transitionedProjectUpdateItems = recordArray(evidence['transitionedProjectUpdateItems']);
+  const currentProjectUpdateItems = recordArray(evidence['currentProjectUpdateItems']);
+  const changedDeliveryProjectUpdateItems = recordArray(
+    evidence['changedDeliveryProjectUpdateItems'],
+  );
+  const itemsByUpdate = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of projectUpdateItems) {
+    const updateId = display(item['project_update_id']);
+    const values = itemsByUpdate.get(updateId) ?? [];
+    values.push(item);
+    itemsByUpdate.set(updateId, values);
+  }
+  const transitionedItemsByUpdate = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of transitionedProjectUpdateItems) {
+    const updateId = display(item['resolution_update_id']);
+    const values = transitionedItemsByUpdate.get(updateId) ?? [];
+    values.push(item);
+    transitionedItemsByUpdate.set(updateId, values);
+  }
   if (locale === 'ko') {
     return [
       `고객: ${String(detail['customer_name'])}`,
@@ -296,6 +345,26 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
       `기간: ${String(snapshot['period_start'])} – ${String(snapshot['period_end'])}`,
       `실행 상태: ${statusLabel(detail['runtime_health'], locale)} · 진행을 막는 항목 ${String(detail['blocker_count'])}건`,
       `프로젝트 ${String(projects.length)}개 · 납품 ${String(deliveries.length)}건`,
+      ...projectUpdates.flatMap((update) => [
+        `진행 기록 ${display(update['occurred_at'])}: ${display(update['summary'])}`,
+        ...(itemsByUpdate.get(display(update['id'])) ?? []).map(
+          (item) =>
+            `${projectUpdateKindLabel(item['kind'], locale)}: ${display(item['title'])} · ${statusLabel(item['status'], locale)}`,
+        ),
+        ...(transitionedItemsByUpdate.get(display(update['id'])) ?? []).map(
+          (item) =>
+            `${projectUpdateKindLabel(item['kind'], locale)} 처리: ${display(item['title'])} · ${statusLabel(item['status'], locale)}`,
+        ),
+      ]),
+      ...currentProjectUpdateItems.map((row) => {
+        const item = recordValue(row['item']);
+        return `현재 ${projectUpdateKindLabel(item['kind'], locale)}: ${display(item['title'])}`;
+      }),
+      ...(changedDeliveryProjectUpdateItems.length > 0
+        ? [
+            `Delivery 기준 정보 변경: ${String(changedDeliveryProjectUpdateItems.length)}건 재검토 필요`,
+          ]
+        : []),
       ...runs.map((run) => {
         const runStatus = statusLabel(run['status'], locale);
         const runPhase = statusLabel(run['current_phase'], locale);
@@ -324,6 +393,26 @@ function internalLines(snapshot: Record<string, unknown>, locale: ReportLocale):
     `Period: ${String(snapshot['period_start'])} – ${String(snapshot['period_end'])}`,
     `Runtime: ${String(detail['runtime_health'])}; blockers: ${String(detail['blocker_count'])}`,
     `Projects: ${String(projects.length)}; Deliveries: ${String(deliveries.length)}`,
+    ...projectUpdates.flatMap((update) => [
+      `Project update ${display(update['occurred_at'])}: ${display(update['summary'])}`,
+      ...(itemsByUpdate.get(display(update['id'])) ?? []).map(
+        (item) =>
+          `${projectUpdateKindLabel(item['kind'], locale)}: ${display(item['title'])} · ${display(item['status'])}`,
+      ),
+      ...(transitionedItemsByUpdate.get(display(update['id'])) ?? []).map(
+        (item) =>
+          `${projectUpdateKindLabel(item['kind'], locale)} transitioned: ${display(item['title'])} · ${display(item['status'])}`,
+      ),
+    ]),
+    ...currentProjectUpdateItems.map((row) => {
+      const item = recordValue(row['item']);
+      return `Current ${projectUpdateKindLabel(item['kind'], locale)}: ${display(item['title'])}`;
+    }),
+    ...(changedDeliveryProjectUpdateItems.length > 0
+      ? [
+          `Delivery context changed: ${String(changedDeliveryProjectUpdateItems.length)} item(s) require review`,
+        ]
+      : []),
     ...runs.map(
       (run) =>
         `Agent Run ${String(run['id'])}: ${String(run['status'])} · ${String(run['current_phase'])}`,
@@ -387,23 +476,14 @@ function latestPromotionsByEnvironment(
   });
 }
 
-function openProjectUpdateItemCount(activity: Array<Record<string, unknown>>): number {
-  const items = new Set<string>();
-  for (const entry of activity) {
-    if (entry['event_type'] !== 'project.update_recorded') continue;
-    const metadata = activityMetadata(entry);
-    const entries = Array.isArray(metadata['entries']) ? metadata['entries'] : [];
-    for (const rawEntry of entries) {
-      const update = recordValue(rawEntry);
-      const kind = display(update['kind']);
-      const status = display(update['status']);
-      const title = display(update['title']).trim();
-      if ((kind === 'risk' || kind === 'question') && status === 'open' && title) {
-        items.add(`${kind}:${title}`);
-      }
-    }
-  }
-  return items.size;
+function openProjectUpdateItemCount(evidence: Record<string, unknown>): number {
+  return recordArray(evidence['currentProjectUpdateItems']).filter((row) => {
+    const item = recordValue(row['item']);
+    return (
+      ['dependency', 'question', 'risk'].includes(display(item['kind'])) &&
+      item['status'] === 'open'
+    );
+  }).length;
 }
 
 function projectsWithRelease(evidence: Record<string, unknown>): Set<string> {
@@ -434,11 +514,10 @@ function customerLines(snapshot: Record<string, unknown>, locale: ReportLocale):
   );
   const promotions = evidence['promotions'] as Array<Record<string, unknown>>;
   const environments = evidence['environments'] as Array<Record<string, unknown>>;
-  const activity = evidence['activity'] as Array<Record<string, unknown>>;
   const environmentById = new Map(environments.map((entry) => [entry['id'], entry]));
   const latestPromotions = latestPromotionsByEnvironment(promotions, environments);
   const releasedProjects = projectsWithRelease(evidence);
-  const openUpdateItems = openProjectUpdateItemCount(activity);
+  const openUpdateItems = openProjectUpdateItemCount(evidence);
   const issueLines = [
     ...blockers.map((blocker) =>
       locale === 'ko'

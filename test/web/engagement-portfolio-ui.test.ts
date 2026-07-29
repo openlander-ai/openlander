@@ -26,6 +26,7 @@ describe('Engagement Portfolio UI contract', () => {
   const listSource = readRepoFile('web/src/pages/Engagements.tsx');
   const detailSource = readRepoFile('web/src/pages/EngagementDetail.tsx');
   const projectSource = readRepoFile('web/src/pages/ProjectView.tsx');
+  const projectContextSource = readRepoFile('web/src/components/project/ProjectContextTab.tsx');
   const deliverySource = readRepoFile('web/src/pages/DeliveryDetail.tsx');
   const deliveriesTabSource = readRepoFile('web/src/components/delivery/DeliveriesTab.tsx');
 
@@ -130,7 +131,13 @@ describe('Engagement Portfolio UI contract', () => {
     expect(listSource).toContain('window.setInterval');
     expect(listSource).toContain('void load(false)');
     expect(detailSource).toContain('window.setInterval');
-    for (const source of [listSource, detailSource, deliveriesTabSource, deliverySource]) {
+    for (const source of [
+      listSource,
+      detailSource,
+      deliveriesTabSource,
+      deliverySource,
+      projectContextSource,
+    ]) {
       expect(source).not.toContain('<form');
       expect(source).not.toContain('<textarea');
       expect(source).not.toContain('type="file"');
@@ -139,6 +146,18 @@ describe('Engagement Portfolio UI contract', () => {
     expect(detailSource).toContain('kind="manage-engagement"');
     expect(deliveriesTabSource).toContain('kind="plan-delivery"');
     expect(deliverySource).toContain('kind="manage-delivery"');
+    expect(projectContextSource).toContain('kind="record-project-update"');
+  });
+
+  it('adds a read-only Project context tab and Delivery source-context warning', () => {
+    expect(projectSource).toContain("type ProjectTabId = 'services' | 'context'");
+    expect(projectSource).toContain('<ProjectContextTab projectId={projectId} />');
+    expect(projectContextSource).toContain('getProjectContext(projectId)');
+    expect(projectContextSource).toContain('changed_delivery_context');
+    expect(deliverySource).toContain(
+      '<ProjectContextPanel detail={detail} projectId={projectId} />',
+    );
+    expect(deliverySource).toContain('entry.context_changed');
   });
 
   it('shows Agent execution evidence and the immutable Release Promotion path', () => {
@@ -162,5 +181,9 @@ describe('Engagement Portfolio UI contract', () => {
 
   it('keeps every Delivery translation key in English and Korean', () => {
     expect(keys(en.delivery).sort()).toEqual(keys(ko.delivery).sort());
+  });
+
+  it('keeps every Project context translation key in English and Korean', () => {
+    expect(keys(en.projectContext).sort()).toEqual(keys(ko.projectContext).sort());
   });
 });
