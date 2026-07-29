@@ -93,6 +93,10 @@ export interface DeliveryGate {
   warning_accepted: boolean;
   report_artifact_id: string | null;
   review_package_id?: string | null;
+  source?: 'manual' | 'manifest';
+  definition_sha256?: string | null;
+  recorded_by?: string;
+  recorded_at?: string | null;
 }
 
 export interface DeliveryReviewPackageStatus {

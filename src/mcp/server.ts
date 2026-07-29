@@ -40,7 +40,12 @@ import type { ToolDef } from '../tools/defs/types.js';
 import type { RequestIdentity } from '../types/identity.js';
 import { buildIncidentBriefing } from '../llm/prompts.js';
 import { createCompositeTools, type CompositeTool } from './composite-tools.js';
-import { getMcpInstanceContext } from './instance-identity.js';
+import {
+  getMcpEndpointFromRequestUrl,
+  getMcpInstanceContext,
+  getMcpInstancePublicInfo,
+  type McpInstanceContext,
+} from './instance-identity.js';
 
 const log = createModuleLogger('mcp');
 
@@ -85,7 +90,7 @@ function getCompositeTools(allToolDefs: ToolDef[]): CompositeTool[] {
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted deployment platform.
 
 CRITICAL: Use ONLY the 5 composite tools below. Each tool takes an { action, params } input.
-Use action="help" on any tool to list available operations and machine-readable input schemas.
+Use action="help" on any tool for a compact operation catalog. Then call action="help" with params.action_name for one machine-readable schema. Use params.verbose=true only when every schema is required.
 NEVER call docker CLI, general localhost REST APIs, or docker compose directly — use OpenLander tools instead.
 The only HTTP exception is uploading bytes with a short-lived bearer URL returned by an OpenLander upload action.
 Docker may run on a remote host. Always use tools, not local commands.
@@ -165,8 +170,11 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 ## Human UI-only operations
 Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;
 
-function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
-  const instance = getMcpInstanceContext(ctx.config);
+function buildServerInstructions(
+  ctx: AppContext,
+  incidentBriefing: string,
+  instance = getMcpInstanceContext(ctx.config),
+): string {
   const instancePrefix = `You are connected to OpenLander instance "${instance.name}" at "${instance.endpoint}". Use this instance identity when the user has multiple OpenLander MCP servers connected.`;
   const base = `${instancePrefix}\n\n${SERVER_INSTRUCTIONS}`;
   return incidentBriefing ? `${base}\n\n${incidentBriefing}` : base;
@@ -224,10 +232,11 @@ async function authenticateMcpRequest(
 async function createMcpServerInstance(
   ctx: AppContext,
   identity?: RequestIdentity,
+  instanceOverride?: McpInstanceContext,
 ): Promise<Server> {
   const unresolvedIncidents = await ctx.db.listUnresolvedRuntimeIncidents();
   const incidentBriefing = await buildIncidentBriefing(unresolvedIncidents, ctx.db);
-  const instructions = buildServerInstructions(ctx, incidentBriefing);
+  const instructions = buildServerInstructions(ctx, incidentBriefing, instanceOverride);
 
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
@@ -240,10 +249,16 @@ async function createMcpServerInstance(
   const compositeTools = getCompositeTools(toolDefs);
   const platformDefs = platformToolsEnabled ? getPlatformToolDefs() : [];
 
-  registerCompositeMcpTools(server, compositeTools, platformDefs, ctx, identity);
+  registerCompositeMcpTools(server, compositeTools, platformDefs, ctx, identity, instanceOverride);
   registerMcpPrompts(server);
 
   return server;
+}
+
+function getRequestMcpInstanceContext(ctx: AppContext, requestUrl: string): McpInstanceContext {
+  const requestEndpoint = getMcpEndpointFromRequestUrl(requestUrl);
+  const info = getMcpInstancePublicInfo(ctx.config, requestEndpoint);
+  return { id: info.id, name: info.name, endpoint: info.endpoint };
 }
 
 interface StdioMcpServer {
@@ -536,7 +551,11 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       return session.transport.handleRequest(c.req.raw);
     }
 
-    const server = await createMcpServerInstance(ctx, auth.identity);
+    const server = await createMcpServerInstance(
+      ctx,
+      auth.identity,
+      getRequestMcpInstanceContext(ctx, c.req.url),
+    );
     let httpSessionId: string | null = null;
     let httpClientCaptured = false;
     server.oninitialized = () => {
@@ -648,7 +667,11 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     const { outgoing } = c.env as HttpBindings;
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- backward compat
     const transport = new SSEServerTransport('/mcp/messages', outgoing);
-    const server = await createMcpServerInstance(ctx, auth.identity);
+    const server = await createMcpServerInstance(
+      ctx,
+      auth.identity,
+      getRequestMcpInstanceContext(ctx, c.req.url),
+    );
 
     sseSessions.set(transport.sessionId, {
       server,

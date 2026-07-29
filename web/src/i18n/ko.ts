@@ -2932,8 +2932,8 @@ export const translations = {
     humanAction: {
       review_version: {
         eyebrow: '확인 필요',
-        title: '검토할 파일 {count}건이 있습니다',
-        description: '에이전트가 지정한 파일을 확인한 뒤 이 버전을 승인하거나 수정을 요청하세요.',
+        title: '고객 검토본 {count}개가 검토를 기다리고 있습니다',
+        description: '포함된 파일 {fileCount}개를 확인한 뒤 검토본을 승인하거나 수정을 요청하세요.',
         action: '검토 열기',
       },
       review_items: {
@@ -3208,6 +3208,12 @@ export const translations = {
         uploaded: '업로드됨',
         failed: '업로드 실패',
       },
+      artifactStatus: {
+        publishedPending: '발행됨 · 검토 대기',
+        changesRequested: '발행됨 · 수정 필요',
+        approved: '승인됨',
+        waived: '예외 승인',
+      },
     },
     review: {
       feedbackTitle: '고객 피드백 원문',
@@ -3266,6 +3272,18 @@ export const translations = {
       title: '납품 통과 기준',
       description:
         'OpenLander는 외부 CI와 에이전트가 수행한 결과를 기록합니다. QA를 직접 실행하지는 않습니다.',
+      currentReviewTitle: '이번 고객 검토본',
+      currentReviewDescription: '지금 고객에게 공유하고 승인을 받을 파일 묶음입니다.',
+      qualityHistoryTitle: '개발·검증 기록',
+      qualityHistoryDescription:
+        '아래 결과는 고객 검토본의 파일 수가 아니라, 이 납품 작업 전체에서 수행한 검사 기록입니다.',
+      deliveryWideBadge: '전체 작업',
+      recordedAt: '{time} 기록',
+      recordedBy: '{actor} 기록',
+      source: {
+        manual: '수동 기록',
+        manifest: 'manifest 기준',
+      },
       required: '필수',
       optional: '선택',
       summaryPlaceholder: '결과 요약',

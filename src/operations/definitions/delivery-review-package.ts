@@ -290,7 +290,11 @@ export const getDeliveryReviewPackageStatusOperation: ApplicationOperationDefini
         after_sha256: sha256,
       }),
       upload_capabilities: z.array(uploadCapability).max(3),
-      suggested_call: z.object({ operation: z.string(), input: z.record(z.string(), z.unknown()) }),
+      suggested_call: z.object({
+        operation: z.string(),
+        input: z.record(z.string(), z.unknown()),
+        idempotency_key: z.string().min(1).max(200).optional(),
+      }),
       _agent_guidance: z.object({ message: z.string(), next_steps: z.array(z.string()).max(3) }),
     })
     .strict(),
@@ -306,6 +310,7 @@ export const getDeliveryReviewPackageStatusOperation: ApplicationOperationDefini
     const suggestedCall = readyToPublish
       ? {
           operation: 'publish_delivery_review_package',
+          idempotency_key: `review-package:${selected.package.id}:publish:${selected.package.manifest_sha256}`,
           input: {
             package_id: selected.package.id,
             expected_manifest_sha256: selected.package.manifest_sha256,

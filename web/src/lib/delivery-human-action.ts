@@ -18,6 +18,7 @@ export type DeliveryHumanState =
 export interface DeliveryHumanAction {
   state: DeliveryHumanState;
   count: number;
+  fileCount?: number;
   targetTab: 'gates' | 'receipt' | null;
   asksAgent: boolean;
 }
@@ -39,9 +40,13 @@ export function deriveDeliveryHumanAction(
       gate.gate_type === 'review' && gate.status === 'pending' && Boolean(gate.report_artifact_id),
   ).length;
   if (pendingReviewVersions > 0 && detail.delivery.status === 'in_review') {
+    const currentPackageFiles = detail.artifacts.filter(
+      (artifact) => artifact.review_package_role && artifact.status !== 'superseded',
+    ).length;
     return {
       state: 'review_version',
       count: pendingReviewVersions,
+      fileCount: currentPackageFiles || pendingReviewVersions,
       targetTab: 'gates',
       asksAgent: false,
     };

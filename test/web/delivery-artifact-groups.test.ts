@@ -103,4 +103,45 @@ describe('Delivery artifact groups', () => {
     expect(groups.customerShareables).toEqual([report]);
     expect(groups.internalEvidence).toEqual([]);
   });
+
+  it('moves legacy customer files to history when a package-bound review is current', () => {
+    const reviewPdf = artifact('package-pdf', {
+      kind: 'companion_pdf',
+      logical_key: 'customer-review-package',
+      review_package_role: 'review_document',
+    });
+    const reviewHtml = artifact('package-html', {
+      kind: 'review_html',
+      logical_key: 'customer-review-package',
+      review_package_role: 'interactive_preview',
+    });
+    const reviewImage = artifact('package-image', {
+      kind: 'image',
+      logical_key: 'customer-review-package',
+      review_package_role: 'representative_image',
+    });
+    const legacyHtml = artifact('legacy-html', {
+      kind: 'review_html',
+      logical_key: 'legacy-customer-review',
+    });
+    const legacyPdf = artifact('legacy-pdf', {
+      kind: 'companion_pdf',
+      logical_key: 'legacy-customer-review',
+    });
+    const gate = { ...reviewGate(reviewPdf.id), review_package_id: 'package-1' };
+
+    const groups = groupDeliveryArtifacts(
+      [legacyHtml, reviewHtml, legacyPdf, reviewImage, reviewPdf],
+      [gate],
+    );
+
+    expect(groups.customerShareables.map((item) => item.id)).toEqual([
+      'package-pdf',
+      'package-html',
+      'package-image',
+    ]);
+    expect(groups.internalEvidence).toEqual([]);
+    expect(groups.history.map((item) => item.id)).toEqual(['legacy-html', 'legacy-pdf']);
+    expect(groups.currentCount).toBe(3);
+  });
 });

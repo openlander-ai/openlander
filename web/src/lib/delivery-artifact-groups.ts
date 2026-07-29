@@ -30,13 +30,28 @@ export function groupDeliveryArtifacts(
       .map((gate) => gate.report_artifact_id as string),
   );
   const current = artifacts.filter((artifact) => artifact.status !== 'superseded');
+  const hasPublishedReviewPackage = gates.some(
+    (gate) =>
+      gate.gate_type === 'review' &&
+      Boolean(gate.review_package_id) &&
+      Boolean(gate.report_artifact_id),
+  );
+  const displacedLegacyCustomerRecords = hasPublishedReviewPackage
+    ? current.filter(
+        (artifact) =>
+          artifact.review_package_role == null &&
+          !reviewTargetIds.has(artifact.id) &&
+          (artifact.kind === 'review_html' || artifact.kind === 'companion_pdf'),
+      )
+    : [];
+  const displacedLegacyIds = new Set(displacedLegacyCustomerRecords.map((artifact) => artifact.id));
   const customerCandidates = current
     .filter(
       (artifact) =>
         reviewTargetIds.has(artifact.id) ||
         artifact.review_package_role != null ||
-        artifact.kind === 'review_html' ||
-        artifact.kind === 'companion_pdf',
+        (!hasPublishedReviewPackage &&
+          (artifact.kind === 'review_html' || artifact.kind === 'companion_pdf')),
     )
     .sort((a, b) => {
       const reviewPriority = Number(reviewTargetIds.has(b.id)) - Number(reviewTargetIds.has(a.id));
@@ -56,11 +71,14 @@ export function groupDeliveryArtifacts(
   const customerCandidateIds = new Set(customerCandidates.map((artifact) => artifact.id));
   const customerShareables = [...customerByBlob.values()].sort(compareArtifacts);
   const internalEvidence = current
-    .filter((artifact) => !customerCandidateIds.has(artifact.id))
+    .filter(
+      (artifact) => !customerCandidateIds.has(artifact.id) && !displacedLegacyIds.has(artifact.id),
+    )
     .sort(compareArtifacts);
   const history = [
     ...artifacts.filter((artifact) => artifact.status === 'superseded'),
     ...duplicateCustomerRecords,
+    ...displacedLegacyCustomerRecords,
   ].sort(compareArtifacts);
 
   return {

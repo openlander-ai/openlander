@@ -522,6 +522,7 @@ function createCompositeTool(
       if (action === 'help') {
         const requestedAction =
           params && typeof params['action_name'] === 'string' ? params['action_name'] : undefined;
+        const verbose = params?.['verbose'] === true;
         if (requestedAction) {
           const requestedDef = toolDefs.find((def) => def.name === requestedAction);
           if (!requestedDef) {
@@ -566,9 +567,16 @@ function createCompositeTool(
         return {
           composite: toolName,
           description,
-          actions: toolDefs.map(buildActionContract),
+          actions: verbose
+            ? toolDefs.map(buildActionContract)
+            : toolDefs.map((def) => ({
+                name: def.name,
+                description: def.mcpDescription ?? def.description,
+              })),
           _agent_guidance: {
-            message: `Pick an action and call with params that match input_schema. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }. For one action only, call { action: "help", params: { action_name: "..." } }.`,
+            message: verbose
+              ? `Pick an action and call with params that match input_schema. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }.`
+              : 'Pick an action, then request only that action contract with { action: "help", params: { action_name: "..." } }. Use params.verbose=true only when you need every schema.',
           },
         };
       }

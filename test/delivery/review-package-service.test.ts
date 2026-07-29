@@ -237,7 +237,7 @@ describe('DeliveryReviewPackageService', () => {
   });
 
   it('records magic-byte failures without creating a visible artifact', async () => {
-    const bytes = Buffer.from('not a png');
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
     const detail = detailFor({
       sha256: createHash('sha256').update(bytes).digest('hex'),
       sizeBytes: bytes.length,
@@ -263,9 +263,20 @@ describe('DeliveryReviewPackageService', () => {
           yield bytes;
         })(),
       }),
-    ).rejects.toMatchObject({ code: 'REVIEW_PACKAGE_FILE_MISMATCH' });
+    ).rejects.toMatchObject({
+      code: 'REVIEW_PACKAGE_FILE_MISMATCH',
+      details: {
+        reason: 'content_validation_failed',
+        expectedMimeType: 'image/png',
+        actualMimeType: 'image/jpeg',
+      },
+    });
     expect(test.recordedFailures).toMatchObject([
-      { itemId: imageItem.id, code: 'REVIEW_PACKAGE_FILE_MISMATCH' },
+      {
+        itemId: imageItem.id,
+        code: 'REVIEW_PACKAGE_FILE_MISMATCH',
+        details: { expectedMimeType: 'image/png', actualMimeType: 'image/jpeg' },
+      },
     ]);
     expect(test.recordedSuccess()).toBeNull();
 

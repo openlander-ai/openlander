@@ -109,6 +109,13 @@ function isWebp(bytes: Buffer): boolean {
   );
 }
 
+function detectImageMimeType(bytes: Buffer): string | null {
+  if (isPng(bytes)) return 'image/png';
+  if (isJpeg(bytes)) return 'image/jpeg';
+  if (isWebp(bytes)) return 'image/webp';
+  return null;
+}
+
 function assertText(bytes: Buffer, mimeType: string): void {
   if (bytes.includes(0)) {
     throw new ArtifactValidationError('Text artifact contains binary null bytes.', { mimeType });
@@ -132,13 +139,22 @@ async function validateStoredFile(path: string, mimeType: string, sample: Buffer
   }
 
   if (mimeType === 'image/png' && !isPng(sample)) {
-    throw new ArtifactValidationError('Uploaded PNG does not have a valid PNG signature.');
+    throw new ArtifactValidationError('Uploaded PNG does not have a valid PNG signature.', {
+      expectedMimeType: mimeType,
+      actualMimeType: detectImageMimeType(sample),
+    });
   }
   if (mimeType === 'image/jpeg' && !isJpeg(sample)) {
-    throw new ArtifactValidationError('Uploaded JPEG does not have a valid JPEG signature.');
+    throw new ArtifactValidationError('Uploaded JPEG does not have a valid JPEG signature.', {
+      expectedMimeType: mimeType,
+      actualMimeType: detectImageMimeType(sample),
+    });
   }
   if (mimeType === 'image/webp' && !isWebp(sample)) {
-    throw new ArtifactValidationError('Uploaded WebP does not have a valid WebP signature.');
+    throw new ArtifactValidationError('Uploaded WebP does not have a valid WebP signature.', {
+      expectedMimeType: mimeType,
+      actualMimeType: detectImageMimeType(sample),
+    });
   }
 
   if (mimeType.startsWith('text/') || mimeType.includes('json') || mimeType.includes('xml')) {
