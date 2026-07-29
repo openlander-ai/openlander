@@ -1087,7 +1087,7 @@ export const translations = {
     },
     mcp: {
       title: 'Connect AI Coding Tools',
-      subtitle: 'Let Claude Code, Cursor, or any MCP client deploy for you.',
+      subtitle: 'Let Codex, Claude Code, Cursor, or any MCP client deploy for you.',
       copyPrompt: 'Copy this to your AI coding tool:',
       manualSetup: 'Manual setup instructions',
       skipForNow: 'Skip for now',

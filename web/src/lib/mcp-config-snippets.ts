@@ -7,12 +7,7 @@
  */
 
 export type McpClientId =
-  | 'claude-code'
-  | 'cursor'
-  | 'windsurf'
-  | 'claude-desktop'
-  | 'vscode'
-  | 'stdio';
+  'codex' | 'claude-code' | 'cursor' | 'windsurf' | 'claude-desktop' | 'vscode' | 'stdio';
 
 export interface McpClientConfig {
   id: McpClientId;
@@ -48,6 +43,14 @@ function mcpRemoteArgs(endpoint: string): string[] {
 
 export function buildClaudeCodeCmd({ endpoint, token, serverName }: BuildOptions): string {
   return `claude mcp add --transport http --header "Authorization: Bearer ${token}" ${serverKey(serverName)} ${endpoint}`;
+}
+
+export function buildCodexConfig({ endpoint, token, serverName }: BuildOptions): string {
+  return [
+    `[mcp_servers.${JSON.stringify(serverKey(serverName))}]`,
+    `url = ${JSON.stringify(endpoint)}`,
+    `http_headers = { Authorization = ${JSON.stringify(`Bearer ${token}`)} }`,
+  ].join('\n');
 }
 
 export function buildAgentInstruction({ serverName }: Pick<BuildOptions, 'serverName'>): string {
@@ -135,6 +138,12 @@ export const STDIO_CMD = 'openlander mcp';
  */
 export function buildAllClientConfigs(opts: BuildOptions): McpClientConfig[] {
   return [
+    {
+      id: 'codex',
+      label: 'Codex',
+      filename: '~/.codex/config.toml',
+      snippet: buildCodexConfig(opts),
+    },
     {
       id: 'claude-code',
       label: 'Claude Code',

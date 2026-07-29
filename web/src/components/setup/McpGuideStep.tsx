@@ -1,6 +1,6 @@
 /**
  * McpGuideStep — final step of the setup wizard. Hands the user a working
- * Claude Desktop / Claude Code / Cursor / Windsurf / VS Code config block
+ * Codex / Claude Desktop / Claude Code / Cursor / Windsurf / VS Code config block
  * with their MCP token already substituted.
  *
  * v0.1 PAT migration: previously this step pulled the legacy `ol_` API

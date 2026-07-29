@@ -14,6 +14,7 @@ import {
   buildAgentInstruction,
   buildAllClientConfigs,
   buildClaudeDesktopConfig,
+  buildCodexConfig,
 } from '../../web/src/lib/mcp-config-snippets.js';
 
 function appCtx(overrides?: { instanceName?: string }) {
@@ -79,6 +80,20 @@ describe('MCP instance identity', () => {
     });
 
     const snippetById = new Map(configs.map((item) => [item.id, item.snippet]));
+    expect(configs[0]).toMatchObject({
+      id: 'codex',
+      label: 'Codex',
+      filename: '~/.codex/config.toml',
+    });
+
+    expect(snippetById.get('codex')).toBe(
+      [
+        '[mcp_servers."openlander-ais-prod"]',
+        'url = "http://www.aqainc.biz/mcp"',
+        'http_headers = { Authorization = "Bearer olp_token" }',
+      ].join('\n'),
+    );
+
     const claudeCode = snippetById.get('claude-code');
     expect(claudeCode).toContain('claude mcp add --transport http');
     expect(claudeCode).toContain('--header "Authorization: Bearer olp_token"');
@@ -116,6 +131,22 @@ describe('MCP instance identity', () => {
       url: 'http://www.aqainc.biz/mcp',
       headers: { Authorization: 'Bearer olp_token' },
     });
+  });
+
+  it('escapes Codex TOML values and server keys', () => {
+    expect(
+      buildCodexConfig({
+        endpoint: 'https://openlander.example.com/"team"/mcp',
+        token: 'olp_token\\quoted"',
+        serverName: 'OpenLander "QA"',
+      }),
+    ).toBe(
+      [
+        '[mcp_servers."OpenLander \\"QA\\""]',
+        'url = "https://openlander.example.com/\\"team\\"/mcp"',
+        'http_headers = { Authorization = "Bearer olp_token\\\\quoted\\"" }',
+      ].join('\n'),
+    );
   });
 
   it('only adds the mcp-remote HTTP escape hatch for non-TLS Claude Desktop endpoints', () => {

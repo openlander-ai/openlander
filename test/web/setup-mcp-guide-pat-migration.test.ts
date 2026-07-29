@@ -37,9 +37,7 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
     // must guard on plaintext, surface the suffix on reuse, and
     // never pretend a placeholder is a copyable token.
     expect(source).toMatch(/if \(issued\.plaintext\) \{[\s\S]*?setToken\(issued\.plaintext\)/);
-    expect(source).toMatch(
-      /} else \{[\s\S]*?setExistingSuffix\(issued\.token\.suffix\)/,
-    );
+    expect(source).toMatch(/} else \{[\s\S]*?setExistingSuffix\(issued\.token\.suffix\)/);
   });
 
   it('updates the snippet placeholder from ol_ to olp_', () => {
@@ -61,6 +59,15 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
     expect(source).toContain("t('setup.mcp.instanceName')");
     expect(source).toContain("t('setup.mcp.tryPrompt', { name: mcpInstance.serverName })");
     expect(source).toContain("t('setup.mcp.tryAfterConnect')");
+  });
+
+  it('offers Codex in the shared onboarding config list', () => {
+    const snippetSource = readRepoFile('web/src/lib/mcp-config-snippets.ts');
+
+    expect(snippetSource).toContain("id: 'codex'");
+    expect(snippetSource).toContain("filename: '~/.codex/config.toml'");
+    expect(enSource).toMatch(/subtitle: ['"]Let Codex, Claude Code, Cursor/);
+    expect(koSource).toMatch(/subtitle: ['"]Codex, Claude Code, Cursor/);
   });
 
   it('surfaces the legacy ol_ rotation banner when the backend retired one during setup', () => {
@@ -128,9 +135,7 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
       // enclosing block is the mount useEffect — by far the easiest
       // check is "between `setIsFetching(true)` (mount probe init) and
       // the closing `}, [t])` we never see ensureOrgMcpToken".
-      const mountBlockMatch = source.match(
-        /useEffect\(\(\) => \{[\s\S]*?\}, \[t\]\)/,
-      );
+      const mountBlockMatch = source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[t\]\)/);
       expect(mountBlockMatch?.[0]).toBeDefined();
       expect(mountBlockMatch?.[0]).not.toContain('ensureOrgMcpToken');
     });
