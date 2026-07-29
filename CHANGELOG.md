@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.4] - 2026-07-29
+
+### Added
+
+- Add durable Project Updates for meeting notes, decisions, questions,
+  dependencies, risks, progress, and source references before a Delivery is
+  planned.
+- Expose compact Project context and update detail operations to external
+  Agents, and let Deliveries preserve the exact Project items used for
+  planning.
+
+### Changed
+
+- Add form-free Project context and Delivery source-context views, and include
+  durable Project Updates in internal weekly reports without exposing internal
+  paths or details to customer reports.
+
+### Fixed
+
+- Restrict release QA Docker cleanup to containers carrying the exact connected
+  OpenLander instance label so sibling and legacy instances remain untouched.
+
 ## [0.2.13-rc.3] - 2026-07-29
 
 ### Changed
