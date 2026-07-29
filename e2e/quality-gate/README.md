@@ -70,7 +70,7 @@ clean QA host or remove stale smoke-test residue before rerunning it.
 ```
 e2e/quality-gate/
   global-setup.ts      Auth setup + precondition checks (server, Docker, repos, cloudflared)
-  global-teardown.ts   Project + container cleanup
+  global-teardown.ts   Project + instance-owned container cleanup
   fixtures/
     api.ts             apiFetch() with auth header injection, deploy/CRUD/lifecycle helpers
     stream-consumer.ts NDJSON stream consumer with waitForEvent()

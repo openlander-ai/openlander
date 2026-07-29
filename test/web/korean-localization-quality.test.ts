@@ -282,6 +282,7 @@ describe('Korean localization quality gate', () => {
       'delete-env-var',
       'wire-managed-db',
       'plan-delivery',
+      'record-project-update',
       'manage-delivery',
     ];
 

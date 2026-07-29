@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   Box,
+  ClipboardList,
   Database,
   ExternalLink,
   FileCheck2,
@@ -33,6 +34,7 @@ import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTa
 import { SettingsTab, type SettingsSection } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
 import { ProjectAiOpsTab } from '@/components/project/ProjectAiOpsTab';
+import { ProjectContextTab } from '@/components/project/ProjectContextTab';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
@@ -55,7 +57,7 @@ import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
 import { localizeApiError } from '@/lib/localized-api-error';
 
-type ProjectTabId = 'services' | 'deliveries' | 'ai' | 'settings';
+type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings';
 
 function hasRuntimeMetricValue(value: string): boolean {
   const normalized = value.trim();
@@ -175,11 +177,13 @@ export function ProjectView() {
   const initialTab: ProjectTabId =
     tabParam === 'settings'
       ? 'settings'
-      : tabParam === 'deliveries'
-        ? 'deliveries'
-        : tabParam === 'ai'
-          ? 'ai'
-          : 'services';
+      : tabParam === 'context'
+        ? 'context'
+        : tabParam === 'deliveries'
+          ? 'deliveries'
+          : tabParam === 'ai'
+            ? 'ai'
+            : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('general');
 
@@ -494,6 +498,11 @@ export function ProjectView() {
       count: projectServiceRows.length,
     },
     {
+      id: 'context',
+      label: t('projectDetail.tabs.context'),
+      icon: ClipboardList,
+    },
+    {
       id: 'deliveries',
       label: t('projectDetail.tabs.deliveries'),
       icon: FileCheck2,
@@ -636,6 +645,14 @@ export function ProjectView() {
             dataAccessByServiceId={dataAccessByServiceId}
             composeAggregateStatus={composeAggregateStatus}
           />
+        </TabPanel>
+        <TabPanel
+          active={activeTab === 'context'}
+          panelId="projectpanel-context"
+          labelledBy="project-context"
+          className="p-0"
+        >
+          {projectId && <ProjectContextTab projectId={projectId} />}
         </TabPanel>
         <TabPanel
           active={activeTab === 'deliveries'}

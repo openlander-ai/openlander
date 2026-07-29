@@ -133,6 +133,14 @@ export const planDeliveryOperation: ApplicationOperationDefinition = {
         )
         .min(1)
         .max(100),
+      source_project_update_item_ids: z
+        .array(z.string().min(1))
+        .max(100)
+        .refine(
+          (ids) => new Set(ids).size === ids.length,
+          'Project Update item IDs must be unique.',
+        )
+        .optional(),
     })
     .strict(),
   outputSchema: z
@@ -144,6 +152,7 @@ export const planDeliveryOperation: ApplicationOperationDefinition = {
       manifest_path: z.string(),
       gate_count: z.number().int().positive(),
       auto_finalize: z.boolean(),
+      source_context_item_count: z.number().int().nonnegative(),
       suggested_call: z.object({
         operation: z.literal('start_delivery_run'),
         input: z.object({ delivery_id: z.string() }),
@@ -178,6 +187,8 @@ export const planDeliveryOperation: ApplicationOperationDefinition = {
       maturity: input['maturity'] as z.infer<typeof deliveryMaturity>,
       actor: context.actor.label,
       gates,
+      sourceProjectUpdateItemIds:
+        (input['source_project_update_item_ids'] as string[] | undefined) ?? [],
     });
     return {
       status: 'planned',
@@ -187,6 +198,9 @@ export const planDeliveryOperation: ApplicationOperationDefinition = {
       manifest_path: delivery.manifest_path ?? '.openlander/delivery.yml',
       gate_count: gates.length,
       auto_finalize: delivery.auto_finalize,
+      source_context_item_count: (
+        (input['source_project_update_item_ids'] as string[] | undefined) ?? []
+      ).length,
       suggested_call: {
         operation: 'start_delivery_run',
         input: { delivery_id: delivery.id },

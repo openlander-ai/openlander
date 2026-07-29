@@ -73,6 +73,12 @@ async function createHarness(initialLocale: 'en' | 'ko' = 'en') {
         metadata: '{}',
       },
     ],
+    projectUpdates: [] as Array<Record<string, unknown>>,
+    projectUpdateItems: [] as Array<Record<string, unknown>>,
+    transitionedProjectUpdateItems: [] as Array<Record<string, unknown>>,
+    currentProjectUpdateItems: [] as Array<Record<string, unknown>>,
+    deliveryProjectUpdateItems: [] as Array<Record<string, unknown>>,
+    changedDeliveryProjectUpdateItems: [] as Array<Record<string, unknown>>,
   };
   let report: Record<string, unknown> | null = null;
   const stored = new Map<string, StoredArtifact>();
@@ -262,6 +268,51 @@ describe('WeeklyReportService', () => {
         ],
       }),
     });
+    harness.evidence.projectUpdates.push({
+      id: 'update-1',
+      summary: 'Internal source-linked update',
+      occurred_at: '2026-07-24T12:00:00.000Z',
+      created_by: 'internal-agent@example.com',
+      sources: [
+        {
+          source_type: 'wbs',
+          label: 'Customer WBS',
+          locator: 'docs/private/customer-wbs.xlsx',
+        },
+      ],
+    });
+    harness.evidence.currentProjectUpdateItems.push(
+      {
+        item: {
+          id: 'item-risk',
+          kind: 'risk',
+          status: 'open',
+          title: 'Missing source value',
+          detail: 'internal-row-detail-must-not-leak',
+        },
+        update: { id: 'update-1' },
+      },
+      {
+        item: {
+          id: 'item-question',
+          kind: 'question',
+          status: 'open',
+          title: 'Placeholder semantics',
+          detail: 'internal-question-detail-must-not-leak',
+        },
+        update: { id: 'update-1' },
+      },
+      {
+        item: {
+          id: 'item-action',
+          kind: 'action',
+          status: 'open',
+          title: 'Internal implementation action',
+          detail: 'internal-action-detail-must-not-leak',
+        },
+        update: { id: 'update-1' },
+      },
+    );
     const draft = await harness.service.generate({
       engagementId: 'engagement-1',
       periodStart: '2026-07-20',
@@ -282,6 +333,8 @@ describe('WeeklyReportService', () => {
     expect(customerHtml).not.toContain('internal-row-detail-must-not-leak');
     expect(customerHtml).not.toContain('internal-question-detail-must-not-leak');
     expect(customerHtml).not.toContain('internal-action-detail-must-not-leak');
+    expect(customerHtml).not.toContain('docs/private/customer-wbs.xlsx');
+    expect(customerHtml).not.toContain('internal-agent@example.com');
   }, 120_000);
 
   it('pins Korean report copy to the locale in the immutable evidence snapshot', async () => {

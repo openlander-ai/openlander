@@ -862,6 +862,16 @@ export const translations = {
             'Inspect active Agent Runs and Deliveries in {projectName}; resume the most recent safe handoff and tell me the next required operation.',
         },
       },
+      recordProjectUpdate: {
+        heading: 'Ask your agent to update the project context',
+        lead: 'Record meeting notes, documents, WBS changes, decisions, questions, risks, dependencies, and actions without creating a Delivery.',
+        prompt: {
+          meeting:
+            'For Project {projectName}, summarize these meeting notes as decisions, actions, risks, questions, dependencies, progress, and facts. Record the source and resolve or supersede any earlier items that changed. Do not create a Delivery yet.',
+          refresh:
+            'Read the current context for Project {projectName}, compare it with this new document or WBS, record only meaningful changes with their source, and tell me which open items need follow-up.',
+        },
+      },
       manageDelivery: {
         heading: 'Tell your agent what to do next',
         lead: 'Delivery configuration and evidence enter through versioned operations. Use this page to inspect the resulting scope, checks, approvals, deployment evidence, and completion evidence.',
@@ -1263,6 +1273,63 @@ export const translations = {
       confirm: 'Delete permanently',
     },
   },
+  projectContext: {
+    title: 'Project context',
+    description:
+      'A source-linked record of what is decided, unresolved, blocked, or newly learned before work becomes a Delivery.',
+    askAgent: 'Ask agent for an update',
+    more: '+{count} more',
+    loading: 'Loading Project context',
+    loadError: 'Could not load the Project context.',
+    errors: {
+      codes: {
+        PROJECT_NOT_FOUND: 'Project not found.',
+        SCOPE_VIOLATION: 'This agent or session cannot access this Project.',
+        PROJECT_UPDATE_NOT_FOUND: 'Project update not found.',
+        PROJECT_UPDATE_PROJECT_MISMATCH: 'The requested update belongs to another Project.',
+      },
+    },
+    truncated:
+      'Only the most recent items are shown. Ask the agent for a specific update when more detail is needed.',
+    kind: {
+      decision: 'Decision',
+      action: 'Action',
+      risk: 'Risk',
+      question: 'Question',
+      dependency: 'Dependency',
+      progress: 'Progress',
+      fact: 'Fact',
+    },
+    status: {
+      open: 'Open',
+      accepted: 'Accepted',
+      noted: 'Noted',
+      resolved: 'Resolved',
+      dismissed: 'Dismissed',
+      superseded: 'Superseded',
+    },
+    open: {
+      title: 'Needs attention',
+      description: 'Open questions, dependencies, risks, and actions that still need follow-up.',
+      empty: 'There are no open items that need follow-up.',
+    },
+    decisions: {
+      title: 'Current decisions',
+      description: 'Accepted decisions that remain in effect for this Project.',
+      empty: 'No current decisions have been recorded yet.',
+    },
+    recent: {
+      title: 'Recent updates',
+      description: 'Meeting, document, repository, and WBS changes recorded by agents.',
+      empty: 'No Project updates have been recorded yet. Ask an agent to record the latest source.',
+      itemCount: '{count} item(s)',
+    },
+    changedDelivery: {
+      title: 'A Delivery was planned from context that has changed',
+      description:
+        '{count} linked item(s) changed after planning. Review the affected Delivery; this warning does not block it automatically.',
+    },
+  },
   projectDetail: {
     notFound: 'Project not found',
     notFoundSubtitle: 'No project with id "{id}"',
@@ -1275,6 +1342,7 @@ export const translations = {
     confirmDelete: 'Are you sure you want to delete this project?',
     tabs: {
       services: 'Resources',
+      context: 'Context',
       deliveries: 'Deliveries',
       aiOps: 'AI Ops',
       settings: 'Settings',
@@ -2819,6 +2887,17 @@ export const translations = {
       title: 'Delivery overview',
       description:
         'The type controls whether a successful Production deployment is required for finalization.',
+    },
+    projectContext: {
+      title: 'Project context used for this Delivery',
+      description:
+        'These decisions and open items were linked when the Delivery was planned. Later changes are shown as a warning, not an automatic blocker.',
+      empty: 'This Delivery was not linked to any Project context items when it was planned.',
+      changed:
+        '{count} linked item(s) changed after this Delivery was planned. Review the scope, Definition of Done, and Gates if needed.',
+      statusChanged: '{previous} → {current}',
+      statusUnchanged: 'Linked as {status}',
+      openSource: 'Open original update',
     },
     execution: {
       title: 'Agent execution',

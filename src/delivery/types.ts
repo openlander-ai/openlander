@@ -16,6 +16,7 @@ import type {
   EnvironmentTableRow,
   ProjectDeliverySettingsRow,
   ProjectEnvironmentRow,
+  ProjectUpdateItemRow,
   ReleaseArtifactRow,
   ReleasePromotionRow,
   ReleaseRow,
@@ -57,6 +58,14 @@ export interface DeliveryDetail {
   gates: DeliveryGateRow[];
   deploy_links: DeliveryDeployEvidence[];
   receipt: DeliveryReceiptRow | null;
+  project_context_items?: Array<{
+    item: ProjectUpdateItemRow;
+    update: { id: string; summary: string; occurred_at: string };
+    linked_status: string;
+    linked_item_updated_at: string;
+    linked_at: string;
+    context_changed: boolean;
+  }>;
 }
 
 export interface DeliveryExecutionView {
@@ -145,7 +154,7 @@ export interface ReceiptSnapshot {
     name: string;
     display_name: string;
   };
-  detail: Omit<DeliveryDetail, 'deploy_links'> & {
+  detail: Omit<DeliveryDetail, 'deploy_links' | 'project_context_items'> & {
     deploy_links: Array<{
       link: DeliveryDeployLinkRow;
       deploy: Pick<

@@ -5,6 +5,8 @@ import {
   DeliveryIdempotencyConflictError,
   DeliveryNotFoundError,
   DeliveryStateError,
+  ProjectUpdateItemNotFoundError,
+  ProjectUpdateProjectMismatchError,
   RepoPersistenceError,
 } from '../../errors.js';
 import type {
@@ -35,9 +37,12 @@ import {
   deliveryReceipts,
   deliveryReviewPackageItems,
   deliveryWorkItems,
+  deliveryProjectUpdateItems,
   deployLogs,
   environments,
   projectDeliverySettings,
+  projectUpdateItems,
+  projectUpdates,
   services,
   type ArtifactBlobRow,
   type DeliveryApprovalRow,
@@ -74,6 +79,8 @@ export interface CreateDeliveryInput {
     source: 'manual' | 'manifest';
     definition_sha256?: string | null;
   }>;
+  sourceProjectUpdateItemIds?: string[];
+  contextLinkedBy?: string;
 }
 
 export interface CreateDeliveryArtifactInput {
@@ -167,6 +174,39 @@ export class DeliveryRepo {
       }
     }
     return await this.db.transaction(async (tx) => {
+      const sourceItemIds = [...new Set(input.sourceProjectUpdateItemIds ?? [])];
+      const sourceItems =
+        sourceItemIds.length > 0
+          ? await tx
+              .select({ item: projectUpdateItems, project_id: projectUpdates.project_id })
+              .from(projectUpdateItems)
+              .innerJoin(
+                projectUpdates,
+                eq(projectUpdates.id, projectUpdateItems.project_update_id),
+              )
+              .where(inArray(projectUpdateItems.id, sourceItemIds))
+              .for('share')
+          : [];
+      if (sourceItems.length !== sourceItemIds.length) {
+        const found = new Set(sourceItems.map((row) => row.item.id));
+        const missing = sourceItemIds.find((itemId) => !found.has(itemId));
+        throw new ProjectUpdateItemNotFoundError(missing ?? sourceItemIds[0] ?? 'unknown');
+      }
+      for (const source of sourceItems) {
+        if (source.project_id !== input.projectId) {
+          throw new ProjectUpdateProjectMismatchError(
+            input.projectId,
+            source.item.id,
+            'project_update_item',
+          );
+        }
+        if (source.item.status === 'dismissed' || source.item.status === 'superseded') {
+          throw new DeliveryStateError(
+            id,
+            'Dismissed or superseded Project Update items cannot be used as Delivery context.',
+          );
+        }
+      }
       const [created] = await tx
         .insert(deliveries)
         .values({
@@ -205,6 +245,17 @@ export class DeliveryRepo {
             id: ulid(),
             delivery_id: id,
             ...gate,
+          })),
+        );
+      }
+      if (sourceItems.length > 0) {
+        await tx.insert(deliveryProjectUpdateItems).values(
+          sourceItems.map(({ item }) => ({
+            delivery_id: id,
+            project_update_item_id: item.id,
+            item_status: item.status,
+            item_updated_at: item.updated_at,
+            linked_by: input.contextLinkedBy ?? input.createdBy ?? 'admin',
           })),
         );
       }

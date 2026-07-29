@@ -1743,6 +1743,119 @@ export const deliveryWorkItems = pgTable(
   ],
 );
 
+export const projectUpdates = pgTable(
+  'project_updates',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    delivery_id: text('delivery_id').references(() => deliveries.id, { onDelete: 'set null' }),
+    summary: text('summary').notNull(),
+    occurred_at: text('occurred_at').notNull(),
+    sources: jsonb('sources')
+      .$type<
+        Array<{
+          source_type: 'repository' | 'url' | 'meeting' | 'wbs' | 'other';
+          label: string;
+          locator?: string;
+          revision?: string;
+          sha256?: string;
+          artifact_id?: string;
+        }>
+      >()
+      .notNull(),
+    created_by: text('created_by').notNull(),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    index('idx_project_updates_project_occurred').on(table.project_id, table.occurred_at),
+    index('idx_project_updates_delivery').on(table.delivery_id),
+    check('project_updates_summary_check', sql`length(trim(${table.summary})) > 0`),
+    check(
+      'project_updates_sources_check',
+      sql`CASE WHEN jsonb_typeof(${table.sources}) = 'array' THEN jsonb_array_length(${table.sources}) BETWEEN 1 AND 20 ELSE false END`,
+    ),
+  ],
+);
+
+export const projectUpdateItems = pgTable(
+  'project_update_items',
+  {
+    id: text('id').primaryKey(),
+    project_update_id: text('project_update_id')
+      .notNull()
+      .references(() => projectUpdates.id, { onDelete: 'cascade' }),
+    kind: text('kind', {
+      enum: ['decision', 'action', 'risk', 'question', 'dependency', 'progress', 'fact'],
+    }).notNull(),
+    title: text('title').notNull(),
+    detail: text('detail').notNull(),
+    status: text('status', {
+      enum: ['open', 'accepted', 'noted', 'resolved', 'dismissed', 'superseded'],
+    }).notNull(),
+    resolution_update_id: text('resolution_update_id').references(
+      (): AnyPgColumn => projectUpdates.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    resolution_note: text('resolution_note'),
+    resolved_at: text('resolved_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    index('idx_project_update_items_update').on(table.project_update_id),
+    index('idx_project_update_items_status_kind').on(table.status, table.kind, table.updated_at),
+    index('idx_project_update_items_resolution').on(table.resolution_update_id),
+    check(
+      'project_update_items_kind_check',
+      sql`${table.kind} IN ('decision', 'action', 'risk', 'question', 'dependency', 'progress', 'fact')`,
+    ),
+    check(
+      'project_update_items_status_check',
+      sql`${table.status} IN ('open', 'accepted', 'noted', 'resolved', 'dismissed', 'superseded')`,
+    ),
+  ],
+);
+
+export const deliveryProjectUpdateItems = pgTable(
+  'delivery_project_update_items',
+  {
+    delivery_id: text('delivery_id')
+      .notNull()
+      .references(() => deliveries.id, { onDelete: 'cascade' }),
+    project_update_item_id: text('project_update_item_id')
+      .notNull()
+      .references(() => projectUpdateItems.id, { onDelete: 'cascade' }),
+    item_status: text('item_status').notNull(),
+    item_updated_at: text('item_updated_at').notNull(),
+    linked_by: text('linked_by').notNull(),
+    linked_at: text('linked_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    uniqueIndex('delivery_project_update_items_unique').on(
+      table.delivery_id,
+      table.project_update_item_id,
+    ),
+    index('idx_delivery_project_update_items_item').on(table.project_update_item_id),
+    index('idx_delivery_project_update_items_delivery').on(table.delivery_id),
+    check(
+      'delivery_project_update_items_status_check',
+      sql`${table.item_status} IN ('open', 'accepted', 'noted', 'resolved', 'dismissed', 'superseded')`,
+    ),
+  ],
+);
+
 export const deliveryApprovals = pgTable(
   'delivery_approvals',
   {
@@ -2277,6 +2390,9 @@ export type DeliveryReviewPackageItemRow = typeof deliveryReviewPackageItems.$in
 export type DeliveryExternalRefRow = typeof deliveryExternalRefs.$inferSelect;
 export type DeliveryFeedbackSourceRow = typeof deliveryFeedbackSources.$inferSelect;
 export type DeliveryWorkItemRow = typeof deliveryWorkItems.$inferSelect;
+export type ProjectUpdateRow = typeof projectUpdates.$inferSelect;
+export type ProjectUpdateItemRow = typeof projectUpdateItems.$inferSelect;
+export type DeliveryProjectUpdateItemRow = typeof deliveryProjectUpdateItems.$inferSelect;
 export type DeliveryApprovalRow = typeof deliveryApprovals.$inferSelect;
 export type DeliveryGateRow = typeof deliveryGates.$inferSelect;
 export type ApplicationOperationInvocationRow = typeof applicationOperationInvocations.$inferSelect;
@@ -2365,6 +2481,9 @@ export const drizzleSchema = {
   deliveryExternalRefs,
   deliveryFeedbackSources,
   deliveryWorkItems,
+  projectUpdates,
+  projectUpdateItems,
+  deliveryProjectUpdateItems,
   deliveryApprovals,
   deliveryGates,
   applicationOperationInvocations,

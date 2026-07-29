@@ -48,6 +48,7 @@ import { DeliveryAgentRunRepo } from './repos/delivery-agent-run.repo.js';
 import { ProjectEnvironmentRepo } from './repos/project-environment.repo.js';
 import { ReleaseRepo } from './repos/release.repo.js';
 import { WeeklyReportRepo } from './repos/weekly-report.repo.js';
+import { ProjectUpdateRepo } from './repos/project-update.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -95,6 +96,9 @@ export type {
   DeliveryExternalRefRow,
   DeliveryFeedbackSourceRow,
   DeliveryWorkItemRow,
+  ProjectUpdateRow,
+  ProjectUpdateItemRow,
+  DeliveryProjectUpdateItemRow,
   DeliveryApprovalRow,
   DeliveryGateRow,
   DeliveryReviewPackageRow,
@@ -332,6 +336,7 @@ export class Database implements AuthDatabase {
   private readonly projectEnvironmentRepo: ProjectEnvironmentRepo;
   private readonly releaseRepo: ReleaseRepo;
   private readonly weeklyReportRepo: WeeklyReportRepo;
+  private readonly projectUpdateRepo: ProjectUpdateRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -378,6 +383,7 @@ export class Database implements AuthDatabase {
     this.projectEnvironmentRepo = new ProjectEnvironmentRepo(this.db, this.client);
     this.releaseRepo = new ReleaseRepo(this.db, this.client);
     this.weeklyReportRepo = new WeeklyReportRepo(this.db, this.client);
+    this.projectUpdateRepo = new ProjectUpdateRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -517,6 +523,13 @@ export class Database implements AuthDatabase {
   getWeeklyReport(id: string) { return this.weeklyReportRepo.get(id); }
   listWeeklyReports(engagementId: string) { return this.weeklyReportRepo.list(engagementId); }
   publishWeeklyReport(input: Parameters<WeeklyReportRepo['publish']>[0]) { return this.weeklyReportRepo.publish(input); }
+  recordProjectUpdate(input: Parameters<ProjectUpdateRepo['record']>[0]) { return this.projectUpdateRepo.record(input); }
+  getProjectUpdate(id: string) { return this.projectUpdateRepo.get(id); }
+  requireProjectUpdate(id: string) { return this.projectUpdateRepo.require(id); }
+  listProjectUpdateItemsByIds(ids: readonly string[]) { return this.projectUpdateRepo.listItemsByIds(ids); }
+  getProjectUpdateContext(projectId: string, currentItemLimit: number, recentUpdateLimit: number) { return this.projectUpdateRepo.getContext(projectId, currentItemLimit, recentUpdateLimit); }
+  getProjectUpdateDetail(projectId: string, updateId: string) { return this.projectUpdateRepo.getDetail(projectId, updateId); }
+  listDeliveryProjectContext(deliveryId: string) { return this.projectUpdateRepo.listDeliveryContext(deliveryId); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
   getEnvVarsForService(projectId: string, serviceId: string, environmentId?: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId, environmentId); }
   setEnvVar(projectId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVar(projectId, key, value, environmentId); }

@@ -14,6 +14,7 @@ export type AgentGuideKind =
   | 'bootstrap-engagement'
   | 'manage-engagement'
   | 'plan-delivery'
+  | 'record-project-update'
   | 'manage-delivery';
 
 export interface AgentGuidePrompt {
@@ -242,6 +243,15 @@ export function getAgentGuideContent(
         prompts: [
           { text: t('agentGuide.content.planDelivery.prompt.plan', { projectName }) },
           { text: t('agentGuide.content.planDelivery.prompt.continue', { projectName }) },
+        ],
+      };
+    case 'record-project-update':
+      return {
+        heading: t('agentGuide.content.recordProjectUpdate.heading'),
+        lead: t('agentGuide.content.recordProjectUpdate.lead'),
+        prompts: [
+          { text: t('agentGuide.content.recordProjectUpdate.prompt.meeting', { projectName }) },
+          { text: t('agentGuide.content.recordProjectUpdate.prompt.refresh', { projectName }) },
         ],
       };
     case 'manage-delivery': {

@@ -157,6 +157,7 @@ export class DeliveryService {
       source: 'manual' | 'manifest';
       definition_sha256?: string | null;
     }>;
+    sourceProjectUpdateItemIds?: string[];
   }): Promise<DeliveryRow> {
     await this.requireMutableProject(input.projectId);
     if (!input.title.trim()) {
@@ -186,6 +187,8 @@ export class DeliveryService {
       predecessorDeliveryId: input.predecessorDeliveryId,
       createdBy: input.actor ?? 'admin',
       gates: input.gates,
+      sourceProjectUpdateItemIds: input.sourceProjectUpdateItemIds,
+      contextLinkedBy: input.actor ?? 'admin',
     });
     await this.audit(
       delivery,
@@ -215,6 +218,7 @@ export class DeliveryService {
       gates,
       deployLinks,
       receipt,
+      projectContextItems,
     ] = await Promise.all([
       this.db.getProjectDeliverySettings(delivery.project_id),
       this.db.listDeliveryArtifacts(deliveryId),
@@ -225,6 +229,7 @@ export class DeliveryService {
       this.db.listDeliveryGates(deliveryId),
       this.db.listDeliveryDeployEvidence(deliveryId),
       this.db.getDeliveryReceipt(deliveryId),
+      this.db.listDeliveryProjectContext(deliveryId),
     ]);
     return {
       delivery,
@@ -241,6 +246,14 @@ export class DeliveryService {
       gates,
       deploy_links: deployLinks,
       receipt,
+      project_context_items: projectContextItems.map((context) => ({
+        item: context.item,
+        update: context.update,
+        linked_status: context.linkedStatus,
+        linked_item_updated_at: context.linkedItemUpdatedAt,
+        linked_at: context.linkedAt,
+        context_changed: context.contextChanged,
+      })),
     };
   }
 

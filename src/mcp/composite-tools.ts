@@ -106,6 +106,8 @@ export const PROJECT_ACTIONS = [
   'apply_project_manifest',
   'get_project_manifest',
   'record_project_update',
+  'get_project_context',
+  'get_project_update',
   'create_project',
   'list_projects',
   'archive_project',
@@ -270,7 +272,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 47 tools
+ * - PROJECT_ACTIONS: 49 tools
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 15 tools
