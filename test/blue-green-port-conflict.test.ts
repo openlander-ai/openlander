@@ -212,8 +212,11 @@ function createMockDb(state: {
     }),
     createEnvironment: vi.fn(async () => state.environment),
     createDeployLog: vi.fn(async () => undefined),
+    getLastDeployLog: vi.fn(async () => null),
+    consumePendingFix: vi.fn(async () => null),
     loadDeployConfigForService: vi.fn(async () => null),
     loadDeployConfig: vi.fn(async () => null),
+    saveDeployConfig: vi.fn(async () => undefined),
     acquireDeployLock: vi.fn(async () => true),
     releaseDeployLock: vi.fn(async () => undefined),
   } as unknown as Database;
@@ -455,9 +458,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       route_switched: true,
     });
-    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'hotdeal',
-    );
+    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('hotdeal');
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         name: expect.stringMatching(/^ol-demo-app-green-/),
@@ -526,6 +527,88 @@ describe('blue-green route target flip', () => {
       error: expect.stringContaining('HTTP 502'),
       attempts: 1,
     });
+  });
+
+  it('accepts a non-5xx root response when no explicit health path is configured', async () => {
+    mockRouteProbe(404);
+
+    const result = await pipeline.verifyManagedTraefikRoute({
+      projectName: 'demo-app',
+      path: '/',
+      probeTimeoutMs: 5,
+      maxWaitMs: 0,
+      intervalMs: 1,
+      minimumSuccessAgeMs: 0,
+      statusPolicy: 'non-5xx',
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 404, attempts: 1 });
+  });
+
+  it('still rejects a gateway 502 under the non-5xx root policy', async () => {
+    mockRouteProbe(502);
+
+    const result = await pipeline.verifyManagedTraefikRoute({
+      projectName: 'demo-app',
+      path: '/',
+      probeTimeoutMs: 5,
+      maxWaitMs: 0,
+      intervalMs: 1,
+      minimumSuccessAgeMs: 0,
+      statusPolicy: 'non-5xx',
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 502,
+      error: expect.stringContaining('HTTP 502'),
+    });
+  });
+
+  it('fails a managed web deploy when the external Traefik route returns 502', async () => {
+    state.service.status = 'stopped';
+    state.service.container_id = null;
+    state.service.container_name = null;
+    state.service.assigned_port = null;
+    state.service.image_tag = null;
+    state.environment.status = 'stopped';
+    state.environment.container_id = null;
+    state.environment.assigned_port = null;
+    state.environment.image_tag = null;
+    (db.getEnvironment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...state.environment,
+      project_id: 'p1',
+    });
+
+    const routeProbe = vi.spyOn(pipeline, 'verifyManagedTraefikRoute').mockResolvedValue({
+      ok: false,
+      status: 502,
+      error: 'Route probe returned HTTP 502',
+      attempts: 2,
+      elapsedMs: 5_000,
+    });
+
+    const result = await pipeline.deployEnvironment('p1', 'p1-production', {
+      repoUrl: 'https://github.com/openlander/demo-app',
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringContaining('Route probe returned HTTP 502'),
+    });
+    expect(routeProbe).toHaveBeenCalledWith({
+      projectName: 'demo-app',
+      path: '/',
+      statusPolicy: '2xx',
+    });
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'ol-demo-app',
+    );
+    expect(state.service.status).toBe('error');
+    expect(state.environment.status).toBe('error');
+    expect(db.createDeployLog as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' }),
+    );
   });
 
   it('recreates runtime env from the same image before removing the previous container', async () => {
@@ -613,9 +696,7 @@ describe('blue-green route target flip', () => {
       applyMode: 'same-image-recreate',
       readiness: 'healthy',
     });
-    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'hotdeal',
-    );
+    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('hotdeal');
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         name: expect.stringMatching(/^ol-demo-app-env-/),
@@ -698,7 +779,9 @@ describe('blue-green route target flip', () => {
       previous_version_still_serving: true,
       route_switched: false,
     });
-    expect(result.error).toContain('Route did not remain reachable after previous container stopped');
+    expect(result.error).toContain(
+      'Route did not remain reachable after previous container stopped',
+    );
     expect(state.service.container_id).toBe('container-blue');
     expect(state.service.container_name).toBe('ol-demo-app');
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-blue');

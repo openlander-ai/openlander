@@ -32,6 +32,7 @@ import {
   ContainerNotFoundError,
   ImagePullError,
   InvalidProjectNameError,
+  ManagedTraefikRouteError,
   MissingImageUrlError,
   PreflightCheckError,
   ProjectNotFoundError,
@@ -1134,6 +1135,7 @@ export class DeployPipeline {
     host?: string;
     path: string;
     timeoutMs: number;
+    statusPolicy?: '2xx' | 'non-5xx';
   }): Promise<{ ok: true; status: number } | { ok: false; error: string; status?: number }> {
     const host = params.host ?? getEnvironmentProjectHostname(params.projectName, 'production');
     const url = new URL(`${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`);
@@ -1161,7 +1163,11 @@ export class DeployPipeline {
         (response) => {
           const status = response.statusCode ?? 0;
           response.resume();
-          if (status >= 200 && status < 300) {
+          const accepted =
+            params.statusPolicy === 'non-5xx'
+              ? status >= 200 && status < 500
+              : status >= 200 && status < 300;
+          if (accepted) {
             settle({ ok: true, status });
             return;
           }
@@ -1189,6 +1195,7 @@ export class DeployPipeline {
     maxWaitMs: number;
     intervalMs: number;
     minimumSuccessAgeMs?: number;
+    statusPolicy?: '2xx' | 'non-5xx';
   }): Promise<ManagedRouteVerificationResult> {
     const startedAt = Date.now();
     const deadline = startedAt + Math.max(0, params.maxWaitMs);
@@ -1204,6 +1211,7 @@ export class DeployPipeline {
         host: params.host,
         path: params.path,
         timeoutMs: params.probeTimeoutMs,
+        statusPolicy: params.statusPolicy,
       });
       const elapsedMs = Date.now() - startedAt;
       if (probe.ok) {
@@ -1236,6 +1244,7 @@ export class DeployPipeline {
     maxWaitMs?: number;
     intervalMs?: number;
     minimumSuccessAgeMs?: number;
+    statusPolicy?: '2xx' | 'non-5xx';
   }): Promise<ManagedRouteVerificationResult> {
     const maxWaitMs = params.maxWaitMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
     return await this.waitForManagedTraefikRoute({
@@ -1245,6 +1254,7 @@ export class DeployPipeline {
       probeTimeoutMs: params.probeTimeoutMs ?? 5_000,
       maxWaitMs,
       intervalMs: params.intervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS,
+      statusPolicy: params.statusPolicy,
       minimumSuccessAgeMs:
         params.minimumSuccessAgeMs ?? Math.min(TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS, maxWaitMs),
     });
@@ -1892,6 +1902,30 @@ export class DeployPipeline {
         buildLog,
       });
       buildLog = runResult.buildLog;
+
+      const configuredTraefik = (this.config as Partial<OpenLanderConfig>).traefik;
+      const monitoringProfile = resolveMonitoringProfile(project, deployService);
+      if (configuredTraefik?.mode === 'managed' && monitoringProfile.exposeViaTraefik) {
+        const explicitRoutePath = explicitHealthCheckPath(deployView, deployConfig.healthCheckPath);
+        const routePath = explicitRoutePath ?? monitoringProfile.health.path ?? '/';
+        buildLog += `[route] Verifying managed Traefik ingress at ${routePath}\n`;
+        const routeProbe = await this.verifyManagedTraefikRoute({
+          projectName,
+          path: routePath,
+          statusPolicy: explicitRoutePath ? '2xx' : 'non-5xx',
+        });
+        if (!routeProbe.ok) {
+          buildLog += `[route] Failed: ${routeProbe.error}\n`;
+          throw new ManagedTraefikRouteError(
+            projectName,
+            routePath,
+            routeProbe.error,
+            routeProbe.status,
+          );
+        }
+        buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
+      }
+
       const postDeploy = await handlePostDeploy(orchestrationDeps, {
         projectId,
         environmentId,

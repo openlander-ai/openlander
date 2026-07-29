@@ -411,6 +411,51 @@ export class NetworkCleanupBlockedError extends OpenLanderError {
   }
 }
 
+export class ManagedTraefikOwnershipError extends OpenLanderError {
+  constructor(containerName: string, expectedInstanceId: string, ownerInstanceId: string | null) {
+    super(
+      `Managed Traefik ownership check failed for ${containerName}`,
+      'MANAGED_TRAEFIK_OWNERSHIP_MISMATCH',
+      409,
+      {
+        containerName,
+        expectedInstanceId,
+        ownerInstanceId,
+      },
+    );
+    this.name = 'ManagedTraefikOwnershipError';
+  }
+}
+
+export class ManagedTraefikNetworkError extends OpenLanderError {
+  constructor(containerName: string, networkName: string, cause: string) {
+    super(
+      `Managed Traefik could not attach to Docker network ${networkName}: ${cause}`,
+      'MANAGED_TRAEFIK_NETWORK_FAILED',
+      503,
+      { containerName, networkName, cause },
+    );
+    this.name = 'ManagedTraefikNetworkError';
+  }
+}
+
+export class ManagedTraefikRouteError extends OpenLanderError {
+  constructor(projectName: string, path: string, cause: string, statusCode?: number) {
+    super(
+      `Managed Traefik route verification failed for ${projectName}: ${cause}`,
+      'MANAGED_TRAEFIK_ROUTE_UNHEALTHY',
+      502,
+      {
+        projectName,
+        path,
+        cause,
+        ...(statusCode !== undefined ? { routeStatusCode: statusCode } : {}),
+      },
+    );
+    this.name = 'ManagedTraefikRouteError';
+  }
+}
+
 export class VolumeNotFoundError extends OpenLanderError {
   constructor(identifier: string) {
     super(`Docker volume not found: ${identifier}`, 'VOLUME_NOT_FOUND', 404, { identifier });
