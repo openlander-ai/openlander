@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13-rc.6] - 2026-07-29
+
+### Added
+
+- Add a ready-to-paste Codex MCP configuration to onboarding and the shared
+  Agent setup surface, with the active instance name, endpoint, and token.
+
 ## [0.2.13-rc.5] - 2026-07-29
 
 ### Fixed
