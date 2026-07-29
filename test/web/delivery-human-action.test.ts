@@ -7,6 +7,7 @@ function deliveryDetail(
     status?: DeliveryDetail['delivery']['status'];
     gates?: DeliveryDetail['gates'];
     workItems?: DeliveryDetail['work_items'];
+    artifacts?: DeliveryDetail['artifacts'];
   } = {},
 ): DeliveryDetail {
   return {
@@ -36,7 +37,7 @@ function deliveryDetail(
       locale: 'ko',
       default_gates_json: {},
     },
-    artifacts: [],
+    artifacts: input.artifacts ?? [],
     external_refs: [],
     feedback_sources: [],
     work_items: input.workItems ?? [],
@@ -48,8 +49,42 @@ function deliveryDetail(
 }
 
 describe('Delivery human action summary', () => {
-  it('prioritizes an exact file review over the internal workflow', () => {
+  it('counts the customer package separately from its included files', () => {
+    const artifact = (
+      id: string,
+      role: NonNullable<DeliveryDetail['artifacts'][number]['review_package_role']>,
+    ): DeliveryDetail['artifacts'][number] => ({
+      id,
+      delivery_id: 'delivery-human-action',
+      blob_id: `blob-${id}`,
+      logical_key: 'customer-review-package',
+      revision: 1,
+      kind:
+        role === 'interactive_preview'
+          ? 'review_html'
+          : role === 'representative_image'
+            ? 'image'
+            : 'companion_pdf',
+      original_filename: `${id}.pdf`,
+      status: 'draft',
+      companion_pdf_artifact_id: null,
+      include_in_receipt: true,
+      receipt_order: 10,
+      review_package_role: role,
+      blob: {
+        id: `blob-${id}`,
+        sha256: 'a'.repeat(64),
+        mime_type: 'application/pdf',
+        size_bytes: 100,
+        storage_key: `sha256/${id}`,
+      },
+    });
     const detail = deliveryDetail({
+      artifacts: [
+        artifact('review-document', 'review_document'),
+        artifact('preview', 'interactive_preview'),
+        artifact('screen', 'representative_image'),
+      ],
       gates: [
         {
           id: 'gate-review',
@@ -62,6 +97,7 @@ describe('Delivery human action summary', () => {
           waiver_reason: null,
           warning_accepted: false,
           report_artifact_id: 'artifact-review',
+          review_package_id: 'package-review',
         },
       ],
     });
@@ -69,6 +105,7 @@ describe('Delivery human action summary', () => {
     expect(deriveDeliveryHumanAction(detail, null, null)).toEqual({
       state: 'review_version',
       count: 1,
+      fileCount: 3,
       targetTab: 'gates',
       asksAgent: false,
     });

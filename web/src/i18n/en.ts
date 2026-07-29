@@ -2725,9 +2725,9 @@ export const translations = {
     humanAction: {
       review_version: {
         eyebrow: 'Needs your review',
-        title: '{count} file needs review',
+        title: '{count} customer review package needs review',
         description:
-          'Check the file selected by the agent, then accept this version or request changes.',
+          'Review its {fileCount} included files, then accept the package or request changes.',
         action: 'Open review',
       },
       review_items: {
@@ -3003,6 +3003,12 @@ export const translations = {
         uploaded: 'Uploaded',
         failed: 'Upload failed',
       },
+      artifactStatus: {
+        publishedPending: 'Published · Waiting for review',
+        changesRequested: 'Published · Changes needed',
+        approved: 'Approved',
+        waived: 'Waived',
+      },
     },
     review: {
       feedbackTitle: 'Preserve original feedback',
@@ -3062,6 +3068,18 @@ export const translations = {
       title: 'Delivery Gates',
       description:
         'OpenLander records results from external CI and agents; it does not run QA itself.',
+      currentReviewTitle: 'Current customer review package',
+      currentReviewDescription: 'These are the files currently shared for customer review.',
+      qualityHistoryTitle: 'Development and verification history',
+      qualityHistoryDescription:
+        'These results cover the whole Delivery; they are not additional files in the customer review package.',
+      deliveryWideBadge: 'Whole Delivery',
+      recordedAt: 'Recorded {time}',
+      recordedBy: 'Recorded by {actor}',
+      source: {
+        manual: 'Manual record',
+        manifest: 'Manifest-defined',
+      },
       required: 'Required',
       optional: 'Optional',
       summaryPlaceholder: 'Result summary',

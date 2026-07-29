@@ -20,11 +20,15 @@ function operationCallToMcp(value: unknown, composite: string): unknown {
     call['input'] && typeof call['input'] === 'object' && !Array.isArray(call['input'])
       ? (call['input'] as Record<string, unknown>)
       : {};
+  const params =
+    typeof call['idempotency_key'] === 'string'
+      ? { ...input, idempotency_key: call['idempotency_key'] }
+      : input;
   return {
     tool: composite,
     arguments: {
       action: call['operation'],
-      params: input,
+      params,
     },
   };
 }

@@ -30,10 +30,28 @@ function toInputSchema(schema: z.ZodType): Record<string, unknown> {
 }
 
 function attachInstance(result: unknown, instance: McpInstanceContext): unknown {
+  const normalizedResult = absolutizeUploadUrls(result, instance);
   if (result && typeof result === 'object' && !Array.isArray(result)) {
-    return { ...(result as Record<string, unknown>), _instance: instance };
+    return { ...(normalizedResult as Record<string, unknown>), _instance: instance };
   }
-  return { result, _instance: instance };
+  return { result: normalizedResult, _instance: instance };
+}
+
+function absolutizeUploadUrls(value: unknown, instance: McpInstanceContext): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => absolutizeUploadUrls(item, instance));
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  const origin = new URL(instance.endpoint).origin;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      key === 'upload_url' && typeof item === 'string' && item.startsWith('/')
+        ? new URL(item, origin).toString()
+        : absolutizeUploadUrls(item, instance),
+    ]),
+  );
 }
 
 function successResponse(
@@ -186,6 +204,7 @@ export function registerCompositeMcpTools(
   platformDefs: ToolDef[],
   appCtx: AppContext,
   identity?: RequestIdentity,
+  instanceOverride?: McpInstanceContext,
 ): void {
   const mcpPlatformDefs = platformDefs.filter(isMcpTargeted);
 
@@ -207,7 +226,7 @@ export function registerCompositeMcpTools(
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const instance = getMcpInstanceContext(appCtx.config);
+    const instance = instanceOverride ?? getMcpInstanceContext(appCtx.config);
     try {
       const toolName = request.params.name;
       const rawArgs = request.params.arguments ?? {};

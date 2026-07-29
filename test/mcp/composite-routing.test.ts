@@ -78,11 +78,23 @@ describe('Composite Action Routing', () => {
       for (const action of actions) {
         expect(action).toHaveProperty('name');
         expect(action).toHaveProperty('description');
-        expect(action).toHaveProperty('input_schema');
-        expect(action).toHaveProperty('allowed_params');
-        expect(action).toHaveProperty('required_params');
-        expect(action).toHaveProperty('optional_params');
+        expect(action).not.toHaveProperty('input_schema');
+        expect(action).not.toHaveProperty('allowed_params');
       }
+    });
+
+    it('returns all action contracts only when verbose help is requested', async () => {
+      const result = (await tool.execute(
+        { action: 'help', params: { verbose: true } },
+        mockContext,
+      )) as Record<string, unknown>;
+      const actions = result['actions'] as Array<Record<string, unknown>>;
+
+      expect(actions.length).toBeGreaterThan(0);
+      expect(actions[0]).toHaveProperty('input_schema');
+      expect(actions[0]).toHaveProperty('allowed_params');
+      expect(actions[0]).toHaveProperty('required_params');
+      expect(actions[0]).toHaveProperty('optional_params');
     });
 
     it('returns one action contract when help is scoped by action_name', async () => {

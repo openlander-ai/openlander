@@ -88,6 +88,18 @@ function formatDefaultGateLabel(gate: DeliveryGate, t: Translate): string {
   return gate.label;
 }
 
+function reviewPackageArtifactStatusKey(
+  gate: DeliveryGate | undefined,
+  deliveryStatus: DeliveryStatus,
+): 'publishedPending' | 'changesRequested' | 'approved' | 'waived' {
+  if (gate?.status === 'passed') return 'approved';
+  if (gate?.status === 'waived') return 'waived';
+  if (gate?.status === 'failed' || deliveryStatus === 'revision_requested') {
+    return 'changesRequested';
+  }
+  return 'publishedPending';
+}
+
 function hasReadinessParam(check: DeliveryReadinessCheck, key: string): boolean {
   return typeof check.params?.[key] === 'number';
 }
@@ -813,6 +825,9 @@ function ExecutionPanel({ execution }: { execution: DeliveryExecutionView | null
 
 function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
   const { t } = useLanguage();
+  const currentPackageGate = detail.gates.find(
+    (gate) => gate.gate_type === 'review' && Boolean(gate.review_package_id),
+  );
   const reviewArtifactIds = new Set(
     detail.gates
       .filter((gate) => gate.gate_type === 'review' && gate.report_artifact_id)
@@ -821,6 +836,10 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
   const groups = groupDeliveryArtifacts(detail.artifacts, detail.gates);
   const renderArtifact = (artifact: DeliveryDetail['artifacts'][number], allowActions = true) => {
     const reviewTarget = reviewArtifactIds.has(artifact.id);
+    const packageStatusKey =
+      artifact.review_package_role && artifact.status !== 'superseded'
+        ? reviewPackageArtifactStatusKey(currentPackageGate, detail.delivery.status)
+        : null;
     return (
       <article key={artifact.id} className="flex flex-col gap-2 py-3 first:pt-0 sm:flex-row">
         <div className="min-w-0 flex-1">
@@ -840,7 +859,9 @@ function ArtifactsPanel({ detail, immutable, busy, onRun, projectId, deliveryId 
           <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
             {formatArtifactRevision(artifact.revision, t)} ·{' '}
             {t(`delivery.artifacts.kindValue.${artifact.kind}`)} ·{' '}
-            {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+            {packageStatusKey
+              ? t(`delivery.reviewPackage.artifactStatus.${packageStatusKey}`)
+              : t(`delivery.artifacts.statusValue.${artifact.status}`)}
           </p>
           <details className="mt-1 text-[9px] text-[color:var(--ol-fg-subtle)]">
             <summary className="w-fit cursor-pointer select-none">
@@ -1205,6 +1226,7 @@ function ReviewCheckpointCard({
   const canRequestChanges = Boolean(
     !immutable && gate.status === 'pending' && detail.delivery.status === 'in_review',
   );
+  const packageArtifactStatusKey = reviewPackageArtifactStatusKey(gate, detail.delivery.status);
 
   return (
     <article className="rounded-lg border border-[color:var(--ol-primary)]/30 bg-[color:var(--ol-primary-soft)] p-4">
@@ -1274,7 +1296,9 @@ function ReviewCheckpointCard({
               <p className="truncate text-xs font-semibold">{artifact.original_filename}</p>
               <p className="mt-1 text-[10px] text-[color:var(--ol-fg-muted)]">
                 {artifact.logical_key} · {formatArtifactRevision(artifact.revision, t)} ·{' '}
-                {t(`delivery.artifacts.statusValue.${artifact.status}`)}
+                {artifact.review_package_role
+                  ? t(`delivery.reviewPackage.artifactStatus.${packageArtifactStatusKey}`)
+                  : t(`delivery.artifacts.statusValue.${artifact.status}`)}
               </p>
             </div>
             {!isLatest && (
@@ -1391,7 +1415,7 @@ function ReviewCheckpointCard({
 }
 
 function GatesPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: PanelProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const reviewGates = detail.gates.filter((gate) => gate.gate_type === 'review');
   const automatedGates = detail.gates.filter((gate) => gate.gate_type !== 'review');
   return (
@@ -1399,87 +1423,136 @@ function GatesPanel({ detail, immutable, busy, onRun, projectId, deliveryId }: P
       title={t('delivery.gates.title')}
       description={t('delivery.formless.gatesDescription')}
     >
-      <div className="space-y-3">
-        {reviewGates.map((gate) => (
-          <ReviewCheckpointCard
-            key={gate.id}
-            detail={detail}
-            gate={gate}
-            immutable={immutable}
-            busy={busy}
-            onRun={onRun}
-            projectId={projectId}
-            deliveryId={deliveryId}
-          />
-        ))}
-        {automatedGates.map((gate) => (
-          <article
-            key={gate.id}
-            className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-xs font-semibold">{formatDefaultGateLabel(gate, t)}</h4>
-                  <span className="text-[10px] text-[color:var(--ol-fg-muted)]">
-                    {gate.required ? t('delivery.gates.required') : t('delivery.gates.optional')}
-                  </span>
-                </div>
-                <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
-                  {t(`delivery.gates.type.${gate.gate_type}`)} · {gate.gate_key}
-                </p>
-              </div>
-              <span
-                className={cn(
-                  'rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                  gate.status === 'passed'
-                    ? 'border-success/30 bg-success/10 text-success'
-                    : gate.status === 'failed'
-                      ? 'border-error/30 bg-error/10 text-error'
-                      : gate.status === 'warning'
-                        ? 'border-warning/30 bg-warning/10 text-warning'
-                        : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)]',
-                )}
-              >
-                {t(`delivery.gates.status.${gate.status}`)}
-              </span>
+      <div className="space-y-6">
+        {reviewGates.length > 0 && (
+          <section aria-labelledby="delivery-current-review-title">
+            <h4 id="delivery-current-review-title" className="text-xs font-semibold">
+              {t('delivery.gates.currentReviewTitle')}
+            </h4>
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--ol-fg-muted)]">
+              {t('delivery.gates.currentReviewDescription')}
+            </p>
+            <div className="mt-3 space-y-3">
+              {reviewGates.map((gate) => (
+                <ReviewCheckpointCard
+                  key={gate.id}
+                  detail={detail}
+                  gate={gate}
+                  immutable={immutable}
+                  busy={busy}
+                  onRun={onRun}
+                  projectId={projectId}
+                  deliveryId={deliveryId}
+                />
+              ))}
             </div>
-            {gate.summary && (
-              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--ol-fg-muted)]">
-                {gate.summary}
-              </p>
-            )}
-            {gate.waiver_reason && (
-              <p className="mt-2 rounded bg-warning/10 px-2 py-1.5 text-xs text-warning">
-                {gate.waiver_reason}
-              </p>
-            )}
-            {!immutable && gate.status === 'warning' && !gate.warning_accepted && (
-              <div className="mt-3 flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    void onRun(
-                      `gate:${gate.id}:warning`,
-                      () =>
-                        recordDeliveryGate(projectId, deliveryId, gate.gate_key, {
-                          status: gate.status,
-                          summary: gate.summary,
-                          warning_accepted: true,
-                          report_artifact_id: gate.report_artifact_id,
-                        }),
-                      t('delivery.messages.gateRecorded'),
-                    )
-                  }
+          </section>
+        )}
+        {automatedGates.length > 0 && (
+          <section aria-labelledby="delivery-quality-history-title">
+            <h4 id="delivery-quality-history-title" className="text-xs font-semibold">
+              {t('delivery.gates.qualityHistoryTitle')}
+            </h4>
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--ol-fg-muted)]">
+              {t('delivery.gates.qualityHistoryDescription')}
+            </p>
+            <div className="mt-3 space-y-3">
+              {automatedGates.map((gate) => (
+                <article
+                  key={gate.id}
+                  className="rounded-md border border-[color:var(--ol-border-subtle)] p-3"
                 >
-                  <Check className="h-3.5 w-3.5" /> {t('delivery.gates.acceptWarning')}
-                </Button>
-              </div>
-            )}
-          </article>
-        ))}
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-xs font-semibold">{formatDefaultGateLabel(gate, t)}</h4>
+                        <span className="text-[10px] text-[color:var(--ol-fg-muted)]">
+                          {gate.required
+                            ? t('delivery.gates.required')
+                            : t('delivery.gates.optional')}
+                        </span>
+                        <span className="rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2 py-0.5 text-[9px] text-[color:var(--ol-fg-muted)]">
+                          {t('delivery.gates.deliveryWideBadge')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                        {t(`delivery.gates.type.${gate.gate_type}`)} · {gate.gate_key}
+                      </p>
+                      {(gate.recorded_at || gate.recorded_by || gate.source) && (
+                        <p className="mt-1 text-[10px] text-[color:var(--ol-fg-subtle)]">
+                          {[
+                            gate.recorded_at
+                              ? t('delivery.gates.recordedAt', {
+                                  time: new Intl.DateTimeFormat(
+                                    language === 'ko' ? 'ko-KR' : 'en-US',
+                                    { dateStyle: 'medium', timeStyle: 'short' },
+                                  ).format(new Date(gate.recorded_at)),
+                                })
+                              : null,
+                            gate.recorded_by
+                              ? t('delivery.gates.recordedBy', { actor: gate.recorded_by })
+                              : null,
+                            gate.source ? t(`delivery.gates.source.${gate.source}`) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                        gate.status === 'passed'
+                          ? 'border-success/30 bg-success/10 text-success'
+                          : gate.status === 'failed'
+                            ? 'border-error/30 bg-error/10 text-error'
+                            : gate.status === 'warning'
+                              ? 'border-warning/30 bg-warning/10 text-warning'
+                              : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)]',
+                      )}
+                    >
+                      {t(`delivery.gates.status.${gate.status}`)}
+                    </span>
+                  </div>
+                  {gate.summary && (
+                    <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--ol-fg-muted)]">
+                      {gate.summary}
+                    </p>
+                  )}
+                  {gate.waiver_reason && (
+                    <p className="mt-2 rounded bg-warning/10 px-2 py-1.5 text-xs text-warning">
+                      {gate.waiver_reason}
+                    </p>
+                  )}
+                  {!immutable && gate.status === 'warning' && !gate.warning_accepted && (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          void onRun(
+                            `gate:${gate.id}:warning`,
+                            () =>
+                              recordDeliveryGate(projectId, deliveryId, gate.gate_key, {
+                                status: gate.status,
+                                summary: gate.summary,
+                                warning_accepted: true,
+                                report_artifact_id: gate.report_artifact_id,
+                              }),
+                            t('delivery.messages.gateRecorded'),
+                          )
+                        }
+                      >
+                        <Check className="h-3.5 w-3.5" /> {t('delivery.gates.acceptWarning')}
+                      </Button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </SectionCard>
   );

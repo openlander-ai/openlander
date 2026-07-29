@@ -66,10 +66,16 @@ export function DeliveryHumanActionCard({
               {t(`delivery.humanAction.${action.state}.eyebrow`)}
             </p>
             <h2 id="delivery-human-action-title" className="mt-1 text-sm font-semibold">
-              {t(`delivery.humanAction.${action.state}.title`, { count: action.count })}
+              {t(`delivery.humanAction.${action.state}.title`, {
+                count: action.count,
+                fileCount: action.fileCount ?? action.count,
+              })}
             </h2>
             <p className="mt-1 text-xs leading-5 text-[color:var(--ol-fg-muted)]">
-              {t(`delivery.humanAction.${action.state}.description`)}
+              {t(`delivery.humanAction.${action.state}.description`, {
+                count: action.count,
+                fileCount: action.fileCount ?? action.count,
+              })}
             </p>
           </div>
         </div>

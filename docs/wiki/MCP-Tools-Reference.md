@@ -8,9 +8,10 @@ OpenLander exposes its functionality to AI coding agents through a **composite-t
 
 Each composite takes `{ action, params }` — e.g.
 `openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "my-app" } })`.
-Run `{ action: "help" }` on any composite to list its action catalog with machine-readable
-`input_schema`, `required_params`, and `optional_params`. Run
-`{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch one action contract.
+Run `{ action: "help" }` on any composite to get a compact action catalog. Then run
+`{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch that action's
+machine-readable `input_schema`, `required_params`, and `optional_params`. Use
+`{ action: "help", params: { verbose: true } }` only when a client needs every action schema at once.
 
 Model note: **Project = workspace**. **Application**, **Compose**, **Database**, **Cache**, and **Storage** are resources inside a Project. Wire fields and MCP action names such as `service_id` and `openlander_service` remain compatible in v0.1.x.
 
@@ -494,6 +495,8 @@ order, and HTML companion links. The prepare response contains no bearer URL.
 Call `get_delivery_review_package_status` with
 `include_upload_capabilities=true` only when ready to upload. Its 15-minute PUT
 URLs are returned for missing files and are not stored in operation history.
+MCP responses resolve these URLs against the active MCP transport origin, so
+agents should use the returned absolute URL rather than a configured default port.
 Partial uploads remain staged and do not appear as Delivery Artifacts or change
 the active Review Gate. The draft can be resumed for seven days.
 
@@ -505,6 +508,11 @@ Artifact-only review remains supported during the compatibility period.
 Instance, organization, and matching Project tokens may use the three package
 actions. Service-scoped tokens receive `SCOPE_VIOLATION` because a review
 package is a Project-level object.
+
+When every declared file is ready, the status response's `suggested_call`
+includes the required stable `idempotency_key` for `publish_delivery_review_package`.
+Image signature failures report both `expectedMimeType` and `actualMimeType` when
+the uploaded bytes are a supported PNG, JPEG, or WebP with the wrong declaration.
 
 | Action                              | Required parameters                       | Purpose                                                        |
 | ----------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
@@ -691,7 +699,7 @@ feedback, Gate evidence, and Receipt metadata.
 | `create_evidence_upload` | `idempotency_key`, Project/Delivery IDs, filename, logical key, revision, kind | Issue a 15-minute upload capability and reserve an artifact ID |
 | `record_project_update`  | `idempotency_key`, Project/Delivery IDs, source artifact IDs, entries          | Record decisions, actions, risks, questions, and facts         |
 
-`create_evidence_upload` returns a relative HTTP `upload_url`, `PUT` method,
+`create_evidence_upload` returns an absolute HTTP `upload_url`, `PUT` method,
 expiry, size limit, and the reserved `artifact_id`. The URL is a bearer
 capability: do not log or share it. Send the file bytes to that URL without an
 MCP Authorization header. Uploading validates type, size, hash, Project

@@ -1025,7 +1025,40 @@ describe('Application Operation contract', () => {
       result: {
         status: 'ok',
         files: [{ role: 'review_document', status: 'uploaded' }],
-        suggested_call: { operation: 'publish_delivery_review_package' },
+        suggested_call: {
+          operation: 'publish_delivery_review_package',
+          idempotency_key: `review-package:package-review-1:publish:${'d'.repeat(64)}`,
+        },
+      },
+    });
+
+    const statusTool = agentDeliveryToolDefs.find(
+      (definition) => definition.name === 'get_delivery_review_package_status',
+    );
+    expect(statusTool).toBeDefined();
+    await expect(
+      statusTool?.execute(
+        { delivery_id: harness.delivery.id, package_id: 'package-review-1' },
+        {
+          target: 'mcp',
+          appCtx: harness.ctx,
+          identity: {
+            source: 'mcp',
+            mcpScopeKind: 'project',
+            mcpScopeProjectId: harness.delivery.project_id,
+          },
+        },
+      ),
+    ).resolves.toMatchObject({
+      suggested_call: {
+        tool: 'openlander_project',
+        arguments: {
+          action: 'publish_delivery_review_package',
+          params: {
+            package_id: 'package-review-1',
+            idempotency_key: `review-package:package-review-1:publish:${'d'.repeat(64)}`,
+          },
+        },
       },
     });
 

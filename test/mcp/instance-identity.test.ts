@@ -1,4 +1,5 @@
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import { createCompositeTools } from '../../src/mcp/composite-tools.js';
@@ -37,7 +38,9 @@ function appCtx(overrides?: { instanceName?: string }) {
 
 describe('MCP instance identity', () => {
   it('derives endpoint and a suggested name from the current request host', () => {
-    const { endpoint, host } = getMcpEndpointFromRequestUrl('http://www.aqainc.biz/api/mcp/instance');
+    const { endpoint, host } = getMcpEndpointFromRequestUrl(
+      'http://www.aqainc.biz/api/mcp/instance',
+    );
     const info = getMcpInstancePublicInfo(appCtx({ instanceName: '' }).config, {
       endpoint,
       host,
@@ -128,7 +131,10 @@ describe('MCP instance identity', () => {
   });
 
   it('adds _instance to composite MCP success and error responses', async () => {
-    const handlers = new Map<unknown, (request: { params: { name: string; arguments?: unknown } }) => unknown>();
+    const handlers = new Map<
+      unknown,
+      (request: { params: { name: string; arguments?: unknown } }) => unknown
+    >();
     registerCompositeMcpTools(
       {
         setRequestHandler(schema, handler) {
@@ -172,6 +178,52 @@ describe('MCP instance identity', () => {
         name: 'openlander-ais-prod',
         endpoint: 'http://control.example.com/mcp',
       },
+    });
+  });
+
+  it('returns upload capabilities on the active MCP transport origin', async () => {
+    const handlers = new Map<
+      unknown,
+      (request: { params: { name: string; arguments?: unknown } }) => unknown
+    >();
+    registerCompositeMcpTools(
+      {
+        setRequestHandler(schema, handler) {
+          handlers.set(schema, handler);
+        },
+      },
+      [
+        {
+          name: 'openlander_project',
+          description: 'Project operations',
+          inputSchema: z.object({ action: z.string() }),
+          execute: async () => ({
+            upload_capabilities: [
+              { item_id: 'item-1', upload_url: '/api/review-package-uploads/item-1?token=x' },
+            ],
+          }),
+        },
+      ],
+      [],
+      appCtx(),
+      undefined,
+      {
+        id: 'olinst_test',
+        name: 'openlander-ais-prod',
+        endpoint: 'http://127.0.0.1:10116/mcp',
+      },
+    );
+
+    const response = (await handlers.get(CallToolRequestSchema)?.({
+      params: { name: 'openlander_project', arguments: { action: 'status' } },
+    })) as { content: Array<{ text: string }> };
+    expect(JSON.parse(response.content[0]?.text ?? '{}')).toMatchObject({
+      upload_capabilities: [
+        {
+          upload_url: 'http://127.0.0.1:10116/api/review-package-uploads/item-1?token=x',
+        },
+      ],
+      _instance: { endpoint: 'http://127.0.0.1:10116/mcp' },
     });
   });
 });

@@ -87,7 +87,9 @@ describe('Korean localization quality gate', () => {
     );
     expect(ko.delivery.humanAction.review_version.eyebrow).toBe('확인 필요');
     expect(ko.delivery.humanAction.review_version.action).toBe('검토 열기');
-    expect(ko.delivery.humanAction.review_version.title).toBe('검토할 파일 {count}건이 있습니다');
+    expect(ko.delivery.humanAction.review_version.title).toBe(
+      '고객 검토본 {count}개가 검토를 기다리고 있습니다',
+    );
     expect(ko.delivery.workflow.detailsTitle).toBe('상세 진행 기록');
     expect(ko.services.managedDetail.field.type).toBe('유형');
     expect(ko.notifications.type['container-crash']).toBe('컨테이너 비정상 종료');
