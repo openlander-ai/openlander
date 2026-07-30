@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.10] - 2026-07-31
+
+### Fixed
+
+- Preserve older Compose child archive markers during parent/group archive so
+  restoring a parent cannot reactivate independently archived services.
+
 ## [0.2.14-rc.9] - 2026-07-31
 
 ### Fixed
