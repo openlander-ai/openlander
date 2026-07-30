@@ -821,7 +821,7 @@ function archivedServiceSummary(
 function archiveLifecycleGuidance(serviceId: string) {
   return {
     message:
-      'Service archived. Archive is reversible cleanup, not permanent deletion: OpenLander stops/removes runtime containers, hides the service from default active lists, and preserves configuration/history.',
+      'Service archived. Archive is reversible cleanup, not permanent deletion: OpenLander retains Stateful Compose containers and volumes, stops/removes other runtime containers, hides the service from default active lists, and preserves configuration/history.',
     next_steps: [
       `Use list_archived_services with this project to inspect archived cleanup targets, including service_id="${serviceId}".`,
       `Use unarchive_service with service_id="${serviceId}" if the service should be restored later.`,

@@ -134,6 +134,7 @@ export default defineConfig({
       'test/pipeline/docker-facade-port-cache.test.ts',
       'test/pipeline/deploy-cancellation.test.ts',
       'test/pipeline/deploy-entry-lock.test.ts',
+      'test/pipeline/deploy/lifecycle-stateful-archive.test.ts',
       'test/pipeline/git-credential-persistence.test.ts',
       'test/pipeline/deploy-lock-session-propagation.test.ts',
       'test/pipeline/db-first-identity-contract-postgres.test.ts',
