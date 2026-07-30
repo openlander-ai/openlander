@@ -1,5 +1,12 @@
 import { apiGet, apiPost } from './client';
 
+export const ACTION_RUN_RESOLVED_EVENT = 'openlander:action-run-resolved';
+
+export interface ActionRunResolvedDetail {
+  actionRunId: string;
+  approved: boolean;
+}
+
 export interface PendingApprovalMetadata {
   actionRunId: string;
   projectId: string | null;

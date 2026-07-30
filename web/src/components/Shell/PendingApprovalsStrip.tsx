@@ -4,7 +4,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { usePendingApprovals } from '@/hooks/use-pending-approvals';
 import { useLanguage } from '@/i18n/context';
-import { approveActionRun, rejectActionRun, type PendingApproval } from '@/lib/api';
+import {
+  ACTION_RUN_RESOLVED_EVENT,
+  approveActionRun,
+  rejectActionRun,
+  type ActionRunResolvedDetail,
+  type PendingApproval,
+} from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { localizeApiError } from '@/lib/localized-api-error';
@@ -119,6 +125,11 @@ export function PendingApprovalsStrip() {
     try {
       if (approved) await approveActionRun(actionRunId);
       else await rejectActionRun(actionRunId);
+      window.dispatchEvent(
+        new CustomEvent<ActionRunResolvedDetail>(ACTION_RUN_RESOLVED_EVENT, {
+          detail: { actionRunId, approved },
+        }),
+      );
       toast.success(
         approved ? t('approval.pendingStrip.approved') : t('approval.pendingStrip.rejected'),
       );

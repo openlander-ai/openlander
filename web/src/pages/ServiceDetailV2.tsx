@@ -77,6 +77,7 @@ import {
 import { listGitCredentials, type GitCredential } from '@/lib/api/git-credentials';
 import { GitCredentialWizard } from '@/components/git-credentials/GitCredentialWizard';
 import {
+  ACTION_RUN_RESOLVED_EVENT,
   buildDomainUrl,
   createServiceDomain,
   deleteServiceDomain,
@@ -87,6 +88,7 @@ import {
   getWebServerSummary,
   redeployService,
   updateServiceEnvVars,
+  type ActionRunResolvedDetail,
   type CreateDomainBody,
   type DomainMapping,
 } from '@/lib/api';
@@ -113,6 +115,7 @@ import { localizeApiError } from '@/lib/localized-api-error';
 type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
 type ManagedServiceTabId = 'overview' | 'logs' | 'connections';
 type Translate = (key: string, params?: Record<string, string | number>) => string;
+type DeployUiState = 'idle' | 'pending' | 'building' | 'approval' | 'error';
 
 const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'overview',
@@ -330,19 +333,37 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // source of truth for same-service concurrency (409 / DEPLOY_LOCKED),
   // while the accepted path immediately navigates to the in-flight log
   // surface keyed by the service id.
-  const [deploying, setDeploying] = useState(false);
+  const [deployState, setDeployState] = useState<DeployUiState>('idle');
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [pendingActionRunId, setPendingActionRunId] = useState<string | null>(null);
+  const deployBusy =
+    deployState === 'pending' || deployState === 'building' || deployState === 'approval';
+  const deployButtonLabel =
+    deployState === 'pending'
+      ? t('serviceDetail.deploy.pending')
+      : deployState === 'building'
+        ? t('serviceDetail.deploy.building')
+        : deployState === 'approval'
+          ? t('serviceDetail.deploy.approval')
+          : t('serviceDetail.deployAction');
 
   const handleDeploy = async () => {
-    if (!projectId || !id || deploying) return;
+    if (!projectId || !id || deployBusy) return;
     setDeployError(null);
-    setDeploying(true);
+    setDeployState('pending');
     try {
       const result = await redeployService(projectId, id, { async: true });
       refetchDeployments();
+      if (result.status === 'pending_approval') {
+        setPendingActionRunId(result.action_run_id ?? null);
+        setDeployState('approval');
+        return;
+      }
+      setDeployState('building');
       const deploymentId = result.deploymentId ?? result.serviceId ?? id;
       navigate(`/projects/${projectId}/deployments/${deploymentId}`);
     } catch (err) {
+      setDeployState('error');
       if (err instanceof ApiError && err.code === 'DEPLOY_LOCKED') {
         setDeployError(t('serviceDetail.deploy.locked'));
       } else {
@@ -350,10 +371,26 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           localizeApiError(err, t, 'serviceDetail.deploy.fallbackError', 'common.apiError.codes'),
         );
       }
-    } finally {
-      setDeploying(false);
     }
   };
+
+  useEffect(() => {
+    if (!pendingActionRunId || !projectId || !id) return;
+    const handleApprovalResolution = (event: Event) => {
+      const detail = (event as CustomEvent<ActionRunResolvedDetail>).detail;
+      if (detail.actionRunId !== pendingActionRunId) return;
+      setPendingActionRunId(null);
+      if (detail.approved) {
+        setDeployState('building');
+        refetchDeployments();
+        navigate(`/projects/${projectId}/deployments/${id}`);
+      } else {
+        setDeployState('idle');
+      }
+    };
+    window.addEventListener(ACTION_RUN_RESOLVED_EVENT, handleApprovalResolution);
+    return () => window.removeEventListener(ACTION_RUN_RESOLVED_EVENT, handleApprovalResolution);
+  }, [id, navigate, pendingActionRunId, projectId, refetchDeployments]);
 
   // v0.1 spec mandates an observability-first order:
   //   Overview · Logs · Deployments · Monitoring · Environment · Domains.
@@ -482,17 +519,21 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
               <button
                 type="button"
                 onClick={handleDeploy}
-                disabled={deploying}
+                disabled={deployBusy}
                 className={cn(
                   'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                  deploying
+                  deployBusy
                     ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
                     : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
                 )}
-                aria-disabled={deploying}
+                aria-disabled={deployBusy}
               >
-                <Rocket className="h-3.5 w-3.5" />
-                {deploying ? t('project.header.action.deploying') : t('serviceDetail.deployAction')}
+                {deployState === 'pending' || deployState === 'building' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Rocket className="h-3.5 w-3.5" />
+                )}
+                {deployButtonLabel}
               </button>
             )}
           </>
@@ -529,6 +570,16 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             >
               {t('serviceDetail.deploy.dismiss')}
             </button>
+          </div>
+        )}
+
+        {deployState === 'approval' && (
+          <div
+            role="status"
+            className="mx-5 mt-4 rounded-md border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-warning)]"
+          >
+            <span className="font-medium">{t('serviceDetail.deploy.approvalReady')}</span>{' '}
+            {t('serviceDetail.deploy.approvalEffect')}
           </div>
         )}
 

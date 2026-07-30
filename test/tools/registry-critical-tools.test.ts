@@ -305,6 +305,39 @@ describe('registry critical tool behaviors', () => {
     });
   });
 
+  it('get_build_log returns recent output and a status call while a deploy is active', async () => {
+    const { ctx, jobManager } = createMockContext();
+    const buildLogTool = getTool(ctx, 'get_build_log');
+    jobManager.getStatus.mockReturnValue({
+      projectId: 'p1',
+      projectName: 'critical-app',
+      phase: 'building',
+      startedAt: new Date(),
+      buildLogTail: '#4 [2/5] RUN npm ci\ninstalling dependencies',
+      buildStep: 2,
+      buildStepTotal: 5,
+      buildStepDesc: 'RUN npm ci',
+    });
+
+    const result = await buildLogTool.execute({ service_id: 'p1__svc' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLogsForService).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'in_progress',
+      phase: 'building',
+      complete: false,
+      full_log: false,
+      build_log: '#4 [2/5] RUN npm ci\ninstalling dependencies',
+      build_step: 2,
+      build_step_total: 5,
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { service_id: 'p1__svc' },
+      },
+    });
+  });
+
   it('get_deploy_status formats single project status for agent and mcp targets', async () => {
     const { ctx, jobManager } = createMockContext();
     const tool = getTool(ctx, 'get_deploy_status');
@@ -360,6 +393,10 @@ describe('registry critical tool behaviors', () => {
       phase: 'building',
       startedAt: now,
       errorSummary: null,
+      buildLogTail: '#4 [2/5] RUN npm ci\ninstalling dependencies',
+      buildStep: 2,
+      buildStepTotal: 5,
+      buildStepDesc: 'RUN npm ci',
     });
 
     const result = await tool.execute({ service_id: 'p1__svc' }, { target: 'mcp' });
@@ -371,6 +408,10 @@ describe('registry critical tool behaviors', () => {
         {
           service_id: 'p1__svc',
           phase: 'building',
+          build_log_tail: '#4 [2/5] RUN npm ci\ninstalling dependencies',
+          build_step: 2,
+          build_step_total: 5,
+          build_step_desc: 'RUN npm ci',
           status_call: {
             tool: 'openlander_deploy',
             action: 'get_deploy_status',

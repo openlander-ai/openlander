@@ -32,7 +32,7 @@ export const debugToolDefs: ToolDef[] = [
     name: 'get_build_log',
     riskLevel: 'low',
     description:
-      'Get the raw build log for an Application/Compose service, deploy_id, or compatibility Project target. Returns the full unprocessed build output and, when captured, the deployment runtime log so an external MCP agent can analyze failures. Returns { status, build_log, runtime_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
+      'Get the raw build log for an Application/Compose service, deploy_id, or compatibility Project target. An active target returns complete:false, its current build step, the most recent 30 lines, and status_call. A completed target returns the full persisted Docker/Compose build output and, when captured, deploy-time runtime logs. Returns { status, complete, build_log, runtime_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
     mcpDescription:
       'Get raw Docker build output and captured runtime logs for debugging deploy failures.',
     inputSchema: getBuildLogSchema,
@@ -66,6 +66,39 @@ export const debugToolDefs: ToolDef[] = [
       const projectTargetService =
         projectDeployables.length === 1 ? projectDeployables[0] : undefined;
       const targetServiceId = resolved?.service.id ?? projectTargetService?.id;
+      const activeRuntimeProject = resolved?.runtimeProject ?? project;
+      const activeJob = activeRuntimeProject
+        ? appCtx.jobManager.getStatus(activeRuntimeProject.id)
+        : undefined;
+      if (activeJob && activeJob.phase !== 'done' && activeJob.phase !== 'failed') {
+        const tail = args['tail'] as number | undefined;
+        const activeBuild = formatLog(activeJob.buildLogTail ?? '', tail);
+        const statusParams = targetServiceId
+          ? { service_id: targetServiceId }
+          : { project_id: activeRuntimeProject?.id };
+        return {
+          status: 'in_progress',
+          phase: activeJob.phase,
+          complete: false,
+          build_log: activeBuild.log,
+          full_log: false,
+          returned_chars: activeBuild.returnedChars,
+          total_chars: activeBuild.totalChars,
+          truncated: activeBuild.truncated,
+          ...(activeJob.buildStep !== undefined && activeJob.buildStepTotal !== undefined
+            ? {
+                build_step: activeJob.buildStep,
+                build_step_total: activeJob.buildStepTotal,
+                ...(activeJob.buildStepDesc ? { build_step_desc: activeJob.buildStepDesc } : {}),
+              }
+            : {}),
+          status_call: {
+            tool: 'openlander_deploy',
+            action: 'get_deploy_status',
+            params: statusParams,
+          },
+        };
+      }
 
       const log = deployId
         ? await appCtx.db.getDeployLog(deployId)
@@ -95,6 +128,7 @@ export const debugToolDefs: ToolDef[] = [
       return Promise.resolve({
         id: log.id,
         status: log.status,
+        complete: true,
         build_log: build.log,
         full_log: build.fullLog,
         returned_chars: build.returnedChars,

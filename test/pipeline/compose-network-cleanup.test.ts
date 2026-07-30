@@ -136,6 +136,7 @@ function createFakeDocker(overrides: Partial<Docker> = {}): Docker {
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
     seedVolumeFromDirectory: vi.fn().mockResolvedValue(undefined),
+    getLogs: vi.fn().mockResolvedValue('migration stdout\nmigration stderr'),
     getNetworkName: vi.fn().mockReturnValue(SHARED_NETWORK_NAME),
     ...overrides,
   } as unknown as Docker;
@@ -577,7 +578,7 @@ describe('compose network cleanup', () => {
     let runSequence = 0;
     let failMigration = false;
     let failBuild = false;
-    const buildComposeService = vi.fn().mockImplementation(async () => {
+    const buildComposeService = vi.fn().mockImplementation(async (options) => {
       actions.push('build:api');
       if (failBuild) {
         throw new DockerBuildError(
@@ -585,6 +586,7 @@ describe('compose network cleanup', () => {
           'failed to download package: operation timed out',
         );
       }
+      options.onProgress?.({ stream: '#6 [3/5] RUN npm ci\n#6 DONE 8.1s\n' });
     });
     const pullImage = vi.fn().mockImplementation(async (image: string) => {
       actions.push(`pull:${image}`);
@@ -622,6 +624,12 @@ describe('compose network cleanup', () => {
     expect(first.success).toBe(true);
     const apiBefore = [...db._projects.values()].find((project) => project.name === 'stack/api');
     expect(apiBefore?.container_id).toBeTruthy();
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({
+        serviceId: `${apiBefore?.id ?? ''}__svc`,
+        buildLog: expect.stringContaining('#6 [3/5] RUN npm ci\n#6 DONE 8.1s'),
+      }),
+    );
     const apiContainerBefore = apiBefore?.container_id;
     actions.length = 0;
     failMigration = true;
@@ -655,6 +663,9 @@ describe('compose network cleanup', () => {
         serviceId: `${migrationAfter?.id ?? ''}__svc`,
         status: 'failed',
         buildLog: expect.stringContaining('exit_code=1'),
+        runtimeLog: expect.stringContaining(
+          'exit_code=1\n--- stdout/stderr ---\nmigration stdout\nmigration stderr',
+        ),
       }),
     );
 

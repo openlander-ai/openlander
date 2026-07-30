@@ -121,6 +121,9 @@ export interface DeployResult {
   statusUrl?: string;
   logUrl?: string;
   error?: string;
+  action_run_id?: string;
+  backup_required?: boolean;
+  data_effect?: string;
 }
 
 export interface DeployLogSummary {

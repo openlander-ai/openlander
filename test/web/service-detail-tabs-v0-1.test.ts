@@ -189,6 +189,18 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).toMatch(
       /navigate\(`\/projects\/\$\{projectId\}\/deployments\/\$\{deploymentId\}`\)/,
     );
+    expect(source).toContain(
+      "type DeployUiState = 'idle' | 'pending' | 'building' | 'approval' | 'error'",
+    );
+    expect(source).toContain("result.status === 'pending_approval'");
+    expect(source).toContain("setDeployState('approval')");
+    expect(source).toContain('ACTION_RUN_RESOLVED_EVENT');
+    expect(source).toContain("setDeployState('building')");
+    expect(source).toContain("setDeployState('idle')");
+    expect(source).toContain('disabled={deployBusy}');
+    expect(source).toContain("t('serviceDetail.deploy.approvalEffect')");
+    expect(readRepoFile('web/src/i18n/en.ts')).toContain("approval: 'Approval required'");
+    expect(readRepoFile('web/src/i18n/ko.ts')).toContain("approval: '승인 필요'");
   });
 
   it('surfaces service archive before hard delete and keeps deletion typed-confirm', () => {

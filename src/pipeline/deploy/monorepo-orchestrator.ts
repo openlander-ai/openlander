@@ -157,6 +157,7 @@ export async function deployMonorepoService(
       },
       (line) => {
         dockerBuildOutput += line + '\n';
+        deps.jobManager?.appendBuildOutput(childId, line);
         const stepInfo = JobManagerClass.parseDockerBuildStep(line);
         if (stepInfo) {
           deps.jobManager?.updateBuildStep(childId, stepInfo.step, stepInfo.total, stepInfo.desc);
@@ -231,7 +232,7 @@ export async function deployMonorepoService(
       trigger,
       commitSha: config.commitSha,
       commitMessage,
-      buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
+      buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n--- Docker build output ---\n${dockerBuildOutput}`,
       durationMs: Date.now() - childStartTime,
     });
 

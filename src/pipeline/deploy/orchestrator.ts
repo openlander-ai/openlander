@@ -548,6 +548,7 @@ export async function buildProject(
       },
       (line) => {
         dockerBuildOutput += line + '\n';
+        deps.jobManager?.appendBuildOutput(projectId, line);
         const stepInfo = JobManagerClass.parseDockerBuildStep(line);
         if (stepInfo) {
           deps.jobManager?.updateBuildStep(projectId, stepInfo.step, stepInfo.total, stepInfo.desc);
@@ -572,6 +573,9 @@ export async function buildProject(
   }
 
   const buildDuration = Date.now() - buildStart;
+  if (dockerBuildOutput) {
+    buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+  }
   const latestAlias = `openlander/${routeName}:latest`;
   const dockerWithTag = deps.runtime as unknown as {
     tagImage?: (sourceTag: string, repo: string, newTag: string) => Promise<void>;

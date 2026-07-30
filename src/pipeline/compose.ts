@@ -1083,6 +1083,8 @@ export class ComposePipeline {
     const parentProjectId = config._parentId ?? nanoid(12);
     const envType: OpenLanderEnv = config.environmentType ?? 'production';
     let buildLog = '';
+    const buildLogsByService = new Map<string, string>();
+    const runtimeLogsByService = new Map<string, string>();
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFiles(config.composePaths ?? [config.composePath]);
@@ -1505,6 +1507,20 @@ export class ComposePipeline {
       const completedServiceNames = new Set<string>();
       const jobFailures = new Map<string, ComposeJobFailedError>();
       const prerequisiteFailures = new Map<string, ComposePrerequisiteUnhealthyError>();
+      const appendComposeBuildOutput = (
+        serviceName: string,
+        output: { stream?: string; error?: string },
+      ): void => {
+        const chunk = [output.stream, output.error ? `ERROR: ${output.error}\n` : undefined]
+          .filter((value): value is string => Boolean(value))
+          .join('');
+        if (!chunk) return;
+        buildLog += chunk;
+        buildLogsByService.set(serviceName, `${buildLogsByService.get(serviceName) ?? ''}${chunk}`);
+        this.jobManager?.appendBuildOutput(parentProjectId, chunk);
+        const childId = childrenByService.get(serviceName);
+        if (childId) this.jobManager?.appendBuildOutput(childId, chunk);
+      };
       for (const service of topology.services) {
         for (const dependency of service.dependsOn) {
           if (
@@ -1528,15 +1544,23 @@ export class ComposePipeline {
             composeService,
           );
           buildLog += `[compose build ${serviceName}] ${contextPath}\n`;
+          buildLogsByService.set(
+            serviceName,
+            `${buildLogsByService.get(serviceName) ?? ''}[compose build ${serviceName}] ${contextPath}\n`,
+          );
           await this.docker.buildComposeService({
             contextPath,
             dockerfile,
             tag: imageTag,
             cacheFrom: [imageTag],
             noCache: config.noCache === true,
+            onProgress: (output) => {
+              appendComposeBuildOutput(serviceName, output);
+            },
           });
         } else {
           buildLog += `[compose pull ${serviceName}] ${imageTag}\n`;
+          buildLogsByService.set(serviceName, `[compose pull ${serviceName}] ${imageTag}\n`);
           await this.docker.pullImage(imageTag);
         }
         preparedImageTags.set(serviceName, imageTag);
@@ -1649,15 +1673,26 @@ export class ComposePipeline {
                   composeService,
                 );
                 buildLog += `[compose build ${service.name}] ${contextPath}\n`;
+                buildLogsByService.set(
+                  service.name,
+                  `${buildLogsByService.get(service.name) ?? ''}[compose build ${service.name}] ${contextPath}\n`,
+                );
                 await this.docker.buildComposeService({
                   contextPath,
                   dockerfile,
                   tag: imageTag,
                   cacheFrom: [imageTag],
                   noCache: config.noCache === true,
+                  onProgress: (output) => {
+                    appendComposeBuildOutput(service.name, output);
+                  },
                 });
               } else {
                 buildLog += `[compose pull ${service.name}] ${imageTag}\n`;
+                buildLogsByService.set(
+                  service.name,
+                  `[compose pull ${service.name}] ${imageTag}\n`,
+                );
                 await this.docker.pullImage(imageTag);
               }
             }
@@ -1888,6 +1923,20 @@ export class ComposePipeline {
             servicesRequiringSuccessfulCompletion.has(service.name)
           ) {
             const completion = await this.waitForComposeJob(deployment.containerId, 120_000);
+            const runtimeOutput = await this.docker
+              .getLogs(deployment.containerId, 'all')
+              .catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : String(error);
+                log.warn(
+                  { err: error, serviceName: service.name, containerId: deployment.containerId },
+                  'Failed to capture Compose job output',
+                );
+                return `[log capture failed] ${message}`;
+              });
+            runtimeLogsByService.set(
+              service.name,
+              `[compose job ${service.name}] exit_code=${String(completion.exitCode ?? 'unknown')}\n--- stdout/stderr ---\n${runtimeOutput}`,
+            );
             if (completion.healthy) {
               completedServiceNames.add(service.name);
             } else {
@@ -2220,11 +2269,14 @@ export class ComposePipeline {
           trigger,
           commitSha: config.commitSha,
           commitMessage,
-          buildLog: jobFailure
-            ? `[compose job ${status.name}] exit_code=${String(exitCode)} ${jobFailure.message}\n`
-            : completedJob
-              ? `[compose job ${status.name}] exit_code=0 completed\n`
-              : `[compose service ${status.name}] status=${status.status}\n`,
+          buildLog: `${buildLogsByService.get(status.name) ?? ''}${
+            jobFailure
+              ? `[compose job ${status.name}] exit_code=${String(exitCode)} ${jobFailure.message}\n`
+              : completedJob
+                ? `[compose job ${status.name}] exit_code=0 completed\n`
+                : `[compose service ${status.name}] status=${status.status}\n`
+          }`,
+          runtimeLog: runtimeLogsByService.get(status.name),
           durationMs: Date.now() - startTime,
         });
       }
