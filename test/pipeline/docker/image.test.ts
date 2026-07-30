@@ -134,6 +134,37 @@ describe('removeImage', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: buildImage
+// ---------------------------------------------------------------------------
+
+describe('buildImage', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('uses BuildKit for standalone Dockerfiles', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => done(null),
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'incar-api:dev', {
+      dockerfile: 'infra/Dockerfile.api',
+    });
+
+    expect(mockBuildImage).toHaveBeenCalledWith(
+      { context: '/tmp/app', src: ['.'] },
+      expect.objectContaining({
+        t: 'incar-api:dev',
+        dockerfile: 'infra/Dockerfile.api',
+        version: '2',
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: buildComposeService
 // ---------------------------------------------------------------------------
 

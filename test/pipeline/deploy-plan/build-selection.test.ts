@@ -84,6 +84,40 @@ describe('PlanEngine repository build selection', () => {
     expect(db['createDeployPlan']).toHaveBeenCalledTimes(1);
   });
 
+  it('uses an explicit repository-root build_context for a nested Dockerfile', async () => {
+    mkdirSync(join(clonePath, 'infra'));
+    mkdirSync(join(clonePath, 'packages'));
+    writeFileSync(join(clonePath, 'infra', 'Dockerfile.api'), 'FROM scratch\n');
+    writeFileSync(join(clonePath, 'packages', 'core.txt'), 'shared\n');
+
+    const plan = await createEngine().createPlan({
+      repoUrl: 'https://example.test/monorepo.git',
+      name: 'api',
+      dockerfilePath: 'infra/Dockerfile.api',
+      buildContext: '.',
+    });
+
+    expect(plan.build).toMatchObject({
+      method: 'dockerfile',
+      dockerfile: 'infra/Dockerfile.api',
+      context: '.',
+    });
+  });
+
+  it('rejects build_context values that escape the repository', async () => {
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM scratch\n');
+
+    await expect(
+      createEngine().createPlan({
+        repoUrl: 'https://example.test/app.git',
+        name: 'app',
+        dockerfilePath: 'Dockerfile',
+        buildContext: '../outside',
+      }),
+    ).rejects.toMatchObject({ code: 'SERVICE_CONFIG_INVALID' });
+    expect(db['createDeployPlan']).not.toHaveBeenCalled();
+  });
+
   it('prefers valid Compose and permits attaching it to an existing Project', async () => {
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM scratch\n');
     writeFileSync(join(clonePath, 'compose.yml'), 'services: {}\n');

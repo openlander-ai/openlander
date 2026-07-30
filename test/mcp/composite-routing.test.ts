@@ -108,8 +108,14 @@ describe('Composite Action Routing', () => {
       const action = result['action'] as Record<string, unknown>;
       expect(action).toMatchObject({
         name: 'create_deploy_plan',
-        allowed_params: expect.arrayContaining(['name', 'repo_url', 'source', 'image']),
-        optional_params: expect.arrayContaining(['name']),
+        allowed_params: expect.arrayContaining([
+          'name',
+          'repo_url',
+          'source',
+          'image',
+          'build_context',
+        ]),
+        optional_params: expect.arrayContaining(['name', 'build_context']),
         required_one_of: [['repo_url'], ['source', 'image']],
       });
       expect(action['allowed_params']).not.toEqual(expect.arrayContaining(['project_name']));

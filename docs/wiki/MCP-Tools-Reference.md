@@ -182,6 +182,7 @@ Analyze a repository and create a deployment plan.
 | `env_vars`          | object   | No       | Environment variables                                              |
 | `prefer_dockerfile` | boolean  | No       | Prefer existing Dockerfile                                         |
 | `dockerfile_path`   | string   | No       | Relative Dockerfile path                                           |
+| `build_context`     | string   | No       | Build context relative to repository root                          |
 | `docker_target`     | string   | No       | Docker build target stage                                          |
 | `compose_file`      | string   | No       | Repository-relative Compose file                                   |
 | `compose_files`     | string[] | No       | Ordered Compose files, from base to overlays                       |
@@ -284,6 +285,9 @@ Compose, multiple Dockerfiles return `status: "needs_selection"`, code
 `DOCKERFILE_SELECTION_REQUIRED`, and `candidate_dockerfiles`. Choose one
 `dockerfile_path` per plan. “One Application per plan” does not mean one
 Application per Project: repeat with the same `target_project_id` for siblings.
+For monorepos, pass `build_context: "."` when a nested Dockerfile copies shared
+files from the repository root. Without an explicit value, the Dockerfile's
+directory remains the default context for backward compatibility.
 
 | Parameter           | Type    | Required | Description                                                       |
 | ------------------- | ------- | -------- | ----------------------------------------------------------------- |
@@ -299,6 +303,9 @@ Application per Project: repeat with the same `target_project_id` for siblings.
 | `port`              | number  | No       | Container port                                                    |
 | `env_vars`          | object  | No       | Environment variables                                             |
 | `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes   |
+| `dockerfile_path`   | string  | No       | Dockerfile path for a new Git Application                         |
+| `build_context`     | string  | No       | Build context for a new Git Application                           |
+| `docker_target`     | string  | No       | Multi-stage target for a new Git Application                      |
 | `target_project_id` | string  | No       | Attach a new Application or Compose workload to an existing group |
 | `strategy`          | string  | No       | Redeploy strategy for existing services                           |
 | `health_check_path` | string  | No       | Health check path                                                 |
