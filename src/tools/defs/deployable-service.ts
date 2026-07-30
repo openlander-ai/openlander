@@ -1581,7 +1581,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     description:
       'Update Application/Compose build and resource config, including saved Compose selection, traffic target, environment, and memory profile. Takes effect on next update_app.',
     mcpDescription:
-      'Update Application/Compose build, Compose selection, or memory profile. Save-only; call update_app to apply.',
+      'Update Application/Compose build config, Compose selection, or memory profile. Save-only; call update_app to apply.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(
