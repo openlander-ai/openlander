@@ -136,6 +136,34 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
     expect((await db.getService(serviceId))?.build_context).toBe('.');
   });
 
+  it('marks only never-successful failed deployments as initial deploy attempts', async () => {
+    const project = await createTestProject('failed-attempt');
+    const serviceId = `${project}__svc`;
+
+    await db.updateService(serviceId, { status: 'error', containerId: null });
+    await db.createDeployLog({
+      id: uniqueId('failed-log'),
+      projectId: project,
+      status: 'failed',
+      trigger: 'api',
+      buildLog: 'build failed',
+    });
+
+    let listed = await db.listProjectsWithMetadata();
+    expect(listed.find((entry) => entry.project.id === project)?.failedInitialDeploy).toBe(true);
+
+    await db.createDeployLog({
+      id: uniqueId('success-log'),
+      projectId: project,
+      status: 'success',
+      trigger: 'api',
+      buildLog: 'build succeeded',
+    });
+
+    listed = await db.listProjectsWithMetadata();
+    expect(listed.find((entry) => entry.project.id === project)?.failedInitialDeploy).toBe(false);
+  });
+
   it('attaches two selected Dockerfile Applications to the same Project sequentially', async () => {
     const target = await createTestProject('target');
     const api = await createTestProject('api');

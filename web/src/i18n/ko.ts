@@ -1357,6 +1357,9 @@ export const translations = {
       // Chrome — card field labels + badges.
       archivedBadge: '보관됨',
       partiallyArchivedBadge: '일부 보관됨',
+      failedInitialDeployBadge: '설정 실패',
+      failedInitialDeployHint:
+        '첫 배포가 완료되지 않았습니다. 열어서 확인하거나 승인 기반 정리를 요청하세요.',
       lastDeploy: '최근 배포',
       branch: '브랜치',
       endpoint: '접속 주소',

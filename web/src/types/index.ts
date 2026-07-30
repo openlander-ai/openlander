@@ -57,6 +57,9 @@ export interface Project {
   archived_at?: string | null;
   partiallyArchived?: boolean;
   partially_archived?: boolean;
+  /** Failed deploy evidence exists, but this Project has never completed a successful deploy. */
+  failedInitialDeploy?: boolean;
+  failed_initial_deploy?: boolean;
 }
 
 export interface ProjectWithEnvironments extends Project {

@@ -36,6 +36,7 @@ function createContext(params: {
   deployables: Record<string, ReturnType<typeof makeService> | undefined>;
   groups?: Record<string, Array<ReturnType<typeof makeService>>>;
   domainMappings?: Array<Record<string, unknown>>;
+  failedInitialProjects?: string[];
 }) {
   const services = Object.values(params.deployables).filter(
     (service): service is ReturnType<typeof makeService> => service !== undefined,
@@ -47,6 +48,8 @@ function createContext(params: {
         params.projects.map((project) => ({
           project,
           runtimeStatus: params.runtimeStatuses?.[String(project['id'])],
+          failedInitialDeploy:
+            params.failedInitialProjects?.includes(String(project['id'])) ?? false,
         })),
       ),
       getServices: vi.fn(async (query?: { ids?: string[] }) =>
@@ -75,6 +78,34 @@ async function runWire(ctx: AppContext, target: 'mcp' | 'agent' = 'mcp') {
 }
 
 describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
+  it('labels a retained failed first deployment without hiding it', async () => {
+    const failedService = makeService({ id: 'failed__svc', project_id: 'failed', status: 'error' });
+    const ctx = createContext({
+      projects: [
+        {
+          id: 'failed',
+          name: 'failed',
+          status: 'error',
+          visibility: 'internal',
+          created_at: NOW,
+          updated_at: NOW,
+        },
+      ],
+      deployables: { failed: failedService },
+      groups: { failed: [failedService] },
+      failedInitialProjects: ['failed'],
+    });
+
+    const wire = await runWire(ctx);
+
+    expect(wire.projects).toHaveLength(1);
+    expect(wire.projects[0]).toMatchObject({
+      id: 'failed',
+      status: 'error',
+      failed_initial_deploy: true,
+    });
+  });
+
   it('uses the Compose child aggregate status for the Project and parent workload', async () => {
     const rawParent = {
       id: 'incar',
