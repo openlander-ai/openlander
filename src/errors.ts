@@ -1178,6 +1178,30 @@ export class ComposePrerequisiteUnhealthyError extends OpenLanderError {
   }
 }
 
+export class ComposeEnvDeclarationRequiredError extends OpenLanderError {
+  constructor(serviceNames: string[], availableKeys: string[]) {
+    super(
+      'Existing Compose services must explicitly declare which stored environment variables they consume.',
+      'COMPOSE_ENV_DECLARATION_REQUIRED',
+      409,
+      { serviceNames, availableKeys },
+    );
+    this.name = 'ComposeEnvDeclarationRequiredError';
+  }
+}
+
+export class ManagedPostgresVolumeContractUnsupportedError extends OpenLanderError {
+  constructor(image: string, details?: { declaredVolumes?: string[]; pgdata?: string }) {
+    super(
+      `PostgreSQL image '${image}' does not expose a supported persistent-volume contract.`,
+      'MANAGED_POSTGRES_VOLUME_CONTRACT_UNSUPPORTED',
+      400,
+      { image, ...details },
+    );
+    this.name = 'ManagedPostgresVolumeContractUnsupportedError';
+  }
+}
+
 export class StatefulServiceChangeBlockedError extends OpenLanderError {
   constructor(serviceName: string) {
     super(

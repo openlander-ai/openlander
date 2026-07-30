@@ -32,6 +32,7 @@ import { allocatePort, clearPortScanCache, releasePortReservation } from './port
 import {
   isDockerContainerNameConflictError,
   isDockerNotFoundError,
+  ManagedPostgresVolumeContractUnsupportedError,
   ManagedServiceNameConflictError,
   ManagedServicePersistenceCleanedError,
   RepoPersistenceError,
@@ -97,9 +98,9 @@ function mergeNetworkAliases(existingAliases: string[], requiredAliases: string[
 }
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
-  postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
+  postgresql: ['17-alpine', '18-alpine', '16-alpine', '15-alpine', '14-alpine'],
   // Canonical alias so version resolution works when service.kind='postgres'
-  postgres: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
+  postgres: ['17-alpine', '18-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
@@ -108,6 +109,50 @@ export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
   rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
+
+type ImageInspection = Awaited<ReturnType<RuntimeBackend['inspectImage']>>;
+
+export function resolvePostgresVolumeMount(image: string, inspection: ImageInspection): string {
+  const volumesValue: unknown = Reflect.get(inspection.Config, 'Volumes');
+  const envValue: unknown = Reflect.get(inspection.Config, 'Env');
+  const declaredVolumes =
+    volumesValue && typeof volumesValue === 'object' && !Array.isArray(volumesValue)
+      ? Object.keys(volumesValue).sort()
+      : [];
+  const imageEnv = Array.isArray(envValue)
+    ? envValue.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const pgdata = imageEnv
+    .map((entry) => {
+      const separator = entry.indexOf('=');
+      return separator === -1
+        ? undefined
+        : ([entry.slice(0, separator), entry.slice(separator + 1)] as const);
+    })
+    .find((entry) => entry?.[0] === 'PGDATA')?.[1];
+
+  if (
+    declaredVolumes.includes('/var/lib/postgresql') &&
+    !declaredVolumes.includes('/var/lib/postgresql/data') &&
+    pgdata?.startsWith('/var/lib/postgresql/') === true &&
+    pgdata !== '/var/lib/postgresql/data'
+  ) {
+    return '/var/lib/postgresql';
+  }
+
+  if (
+    declaredVolumes.includes('/var/lib/postgresql/data') &&
+    !declaredVolumes.includes('/var/lib/postgresql') &&
+    pgdata === '/var/lib/postgresql/data'
+  ) {
+    return '/var/lib/postgresql/data';
+  }
+
+  throw new ManagedPostgresVolumeContractUnsupportedError(image, {
+    declaredVolumes,
+    ...(pgdata ? { pgdata } : {}),
+  });
+}
 
 export interface ServiceTemplate {
   type: string;
@@ -582,6 +627,10 @@ export class ServiceManager {
     let rollbackClean = true;
     try {
       await this.runtime.pullImage(image);
+
+      if (type === 'postgresql') {
+        dataMountPath = resolvePostgresVolumeMount(image, await this.runtime.inspectImage(image));
+      }
 
       await this.runtime.createVolume({
         name: volumeName,

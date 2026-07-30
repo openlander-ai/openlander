@@ -23,8 +23,6 @@ import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/po
 import type { EventBus } from '../../src/events/index.js';
 import type { Database, ProjectRow } from '../../src/db/index.js';
 
-const REQUIRED_ENV_VARS = { API_KEY: 'test-api-key' };
-
 type ProjectInput = {
   id: string;
   name: string;
@@ -154,7 +152,7 @@ describe('compose network cleanup', () => {
   async function deployWithEnv(pipeline: ComposePipeline, config: ComposeDeployConfig) {
     return pipeline.deployCompose({
       ...config,
-      envVars: { ...REQUIRED_ENV_VARS, ...(config.envVars ?? {}) },
+      envVars: { ...(config.envVars ?? {}) },
     });
   }
 
@@ -988,7 +986,7 @@ describe('compose network cleanup', () => {
     }
   });
 
-  it('loads optional env_file values below explicit deployment variables', async () => {
+  it('injects only env_file and service-declared variables into each container', async () => {
     writeFileSync(join(tmpDir, '.env'), 'FROM_FILE=file-value\nOVERRIDE=file-value\n', 'utf8');
     writeFileSync(
       composePath,
@@ -1014,7 +1012,7 @@ describe('compose network cleanup', () => {
       clonePath: tmpDir,
       composePath,
       name: 'stack',
-      envVars: { OVERRIDE: 'deployment-value' },
+      envVars: { API_KEY: 'test-api-key', OVERRIDE: 'deployment-value' },
     });
 
     expect(result.success).toBe(true);
@@ -1022,11 +1020,79 @@ describe('compose network cleanup', () => {
       expect.objectContaining({
         envVars: expect.objectContaining({
           FROM_FILE: 'file-value',
-          OVERRIDE: 'deployment-value',
+          OVERRIDE: 'file-value',
           SERVICE_VALUE: 'service-value',
         }),
       }),
     );
+    const call = runComposeService.mock.calls[0]?.[0] as
+      { envVars?: Record<string, string> } | undefined;
+    expect(call?.envVars).not.toHaveProperty('API_KEY');
+  });
+
+  it('blocks an existing stack with stored env when a service has no env declaration', async () => {
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    await expect(
+      deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+        _parentId: first.parentProjectId,
+        envVars: { DATABASE_URL: 'postgres://stored.example/app' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'COMPOSE_ENV_DECLARATION_REQUIRED',
+      details: {
+        serviceNames: ['web'],
+        availableKeys: ['DATABASE_URL'],
+      },
+    });
+
+    expect(docker.pullImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts environment: {} as an explicit no-injection declaration', async () => {
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx
+    environment: {}
+`,
+      'utf8',
+    );
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      _parentId: first.parentProjectId,
+      envVars: { DATABASE_URL: 'postgres://stored.example/app' },
+    });
+
+    expect(second.success).toBe(true);
+    const calls = (docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.at(-1)?.[0]).toEqual(expect.objectContaining({ envVars: {} }));
   });
 
   it('publishes every Compose container port and applies mem_limit', async () => {
