@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 import { PassThrough } from 'node:stream';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { Docker } from '../../../src/pipeline/docker.js';
 
@@ -215,6 +218,41 @@ describe('execSimple', () => {
     expect(execStart).toHaveBeenCalledWith({ hijack: true, stdin: true });
     expect(writeSpy).toHaveBeenCalledWith('SELECT 1');
     expect(endSpy).toHaveBeenCalled();
+  });
+});
+
+describe('execToFile', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('writes binary stdout and finishes when the Docker exec stream ends', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'openlander-exec-to-file-'));
+    const outputPath = join(root, 'backup.pgdump');
+    try {
+      const execStream = new PassThrough();
+      const execInspect = vi.fn().mockResolvedValueOnce({ ExitCode: 0 });
+      const containerExec = vi.fn().mockResolvedValueOnce({
+        start: vi.fn().mockResolvedValueOnce(execStream),
+        inspect: execInspect,
+      });
+      mockGetContainer.mockReturnValueOnce({ exec: containerExec });
+      const dump = Buffer.from([0, 1, 2, 255, 10]);
+      mockDemuxStream.mockImplementationOnce(
+        (stream: NodeJS.ReadableStream, stdout: PassThrough) => {
+          stream.resume();
+          stdout.write(dump);
+        },
+      );
+      setTimeout(() => execStream.end(), 5);
+
+      const docker = new Docker();
+      await docker.execToFile('database-id', ['pg_dump'], outputPath);
+
+      expect(await readFile(outputPath)).toEqual(dump);
+      expect(execInspect).toHaveBeenCalledOnce();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

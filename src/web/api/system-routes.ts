@@ -147,6 +147,22 @@ function parseCredentialPayload(raw: string | null): Record<string, unknown> | n
 export function createSystemRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
+  api.get('/system/update', async (c) => {
+    return c.json(await ctx.platformUpdater.getStatus());
+  });
+
+  api.post('/system/update', async (c) => {
+    const body: unknown = await c.req.json().catch(() => null);
+    const targetVersion =
+      body && typeof body === 'object' && !Array.isArray(body)
+        ? (body as Record<string, unknown>).targetVersion
+        : null;
+    const operation = await ctx.platformUpdater.startUpdate(
+      typeof targetVersion === 'string' ? targetVersion : '',
+    );
+    return c.json({ updateId: operation.id, operation }, 202);
+  });
+
   api.get('/repos', async (c) => {
     const ghConfig = ctx.config.gitProviders.github;
     if (!ghConfig.token) {

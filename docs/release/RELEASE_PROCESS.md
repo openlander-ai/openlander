@@ -214,6 +214,11 @@ gh workflow run release-gate.yml \
   -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
 ```
 
+For every updater-enabled RC after `v0.2.14-rc.1`, add `-f one_click_update=true` and use the
+previous updater-enabled RC as `rc_upgrade_from_image`. This makes the release gate call the same
+authenticated update API used by the sidebar, survive the container restart, and require a
+`completed` operation before the normal state-preservation checks run.
+
 To verify an in-place upgrade on the same database and data volumes, provide the
 previous published image as well. The gate seeds a password, API token, and
 database marker on the previous image, recreates only the OpenLander container
@@ -229,6 +234,13 @@ gh workflow run release-gate.yml \
 ```
 
 ## Post-Release Verification
+
+Every release must include `openlander-update.json`. The publish workflow derives its Compose
+checksum and multi-architecture GHCR digest from the exact tagged build, validates the release
+policy in `docs/release/update-policy.json`, and uploads the manifest with the GitHub Release.
+`v0.2.14-rc.1` is the first release that contains the updater itself. Starting with the next
+updater-enabled RC, the Release Gate must also exercise the user-confirmed one-click path from the
+previous updater-enabled RC instead of only recreating the container directly.
 
 ```bash
 docker pull ghcr.io/openlander-ai/openlander:0.1.0

@@ -1,0 +1,92 @@
+import { useCallback, useState } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
+import {
+  getPlatformUpdateStatus,
+  startPlatformUpdate,
+  type PlatformUpdateOperation,
+  type PlatformUpdateStatus,
+} from '@/lib/api/system';
+
+const IDLE_POLL_MS = 6 * 60 * 60 * 1000;
+const ACTIVE_POLL_MS = 2_000;
+const ACTIVE_PHASES = new Set([
+  'preparing',
+  'backing_up',
+  'pulling',
+  'restarting',
+  'verifying',
+  'rolling_back',
+]);
+
+export function isPlatformUpdateActive(operation: PlatformUpdateOperation | null): boolean {
+  return Boolean(operation && ACTIVE_PHASES.has(operation.phase));
+}
+
+export interface UsePlatformUpdateReturn {
+  status: PlatformUpdateStatus | null;
+  loading: boolean;
+  submitting: boolean;
+  disconnected: boolean;
+  reconnecting: boolean;
+  refresh: () => Promise<void>;
+  startUpdate: (targetVersion: string) => Promise<void>;
+}
+
+export function usePlatformUpdate(): UsePlatformUpdateReturn {
+  const [status, setStatus] = useState<PlatformUpdateStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [disconnected, setDisconnected] = useState(false);
+  const [reconnectPending, setReconnectPending] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const nextStatus = await getPlatformUpdateStatus();
+      setStatus(nextStatus);
+      setDisconnected(false);
+      setReconnectPending(false);
+    } catch {
+      // Keep the last successful status visible while the OpenLander container restarts.
+      setDisconnected(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const active =
+    submitting || reconnectPending || isPlatformUpdateActive(status?.operation ?? null);
+  usePollingTask(refresh, { intervalMs: active ? ACTIVE_POLL_MS : IDLE_POLL_MS });
+
+  const startUpdate = useCallback(
+    async (targetVersion: string) => {
+      setSubmitting(true);
+      setReconnectPending(true);
+      try {
+        const result = await startPlatformUpdate(targetVersion);
+        setStatus((current) =>
+          current ? { ...current, canUpdate: false, operation: result.operation } : current,
+        );
+        setDisconnected(false);
+        setReconnectPending(false);
+        await refresh();
+      } catch (error) {
+        setReconnectPending(true);
+        await refresh();
+        throw error;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [refresh],
+  );
+
+  return {
+    status,
+    loading,
+    submitting,
+    disconnected,
+    reconnecting: reconnectPending,
+    refresh,
+    startUpdate,
+  };
+}

@@ -26,6 +26,7 @@ import { useLanguage } from '@/i18n/context';
 import { PendingApprovalsStrip } from './PendingApprovalsStrip';
 import { Sidebar } from './Sidebar';
 import { TopBar, type Crumb } from './TopBar';
+import { PlatformUpdateDialog } from './PlatformUpdateDialog';
 
 const STORAGE_KEY = 'ol-shell-sidebar-collapsed';
 
@@ -147,6 +148,7 @@ export function AppShell() {
         </div>
 
         <CommandPalette />
+        <PlatformUpdateDialog />
       </div>
     </AppDataProvider>
   );

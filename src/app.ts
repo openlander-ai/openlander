@@ -47,7 +47,7 @@ import { RecoveryCoordinator } from './_ai-ops/recovery-coordinator.js';
 import { handleDestructiveMcpApproval } from './mcp/destructive-executor.js';
 import { eventBus } from './events/index.js';
 import type { EventBus } from './events/index.js';
-import { normalizeLlmConfig, type OpenLanderConfig } from './config/index.js';
+import { getDataDir, normalizeLlmConfig, type OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { createModuleLogger } from './lib/logger.js';
 import type { AgentPool } from './_ai-ops/agent-pool.js';
@@ -71,6 +71,8 @@ import {
   createApplicationOperationRegistry,
   type ApplicationOperationRegistry,
 } from './operations/index.js';
+import { PlatformUpdater } from './update/platform-updater.js';
+import { VERSION } from './version.js';
 
 const log = createModuleLogger('app');
 
@@ -196,6 +198,7 @@ export interface AppContext {
   llmCircuitBreaker: LlmCircuitBreaker;
   model: LanguageModel | null;
   deployQueue: DeployQueue;
+  platformUpdater: PlatformUpdater;
   // v0.2 modules
   projectHealthMonitor: ProjectHealthMonitor;
   containerStateReconciler: ContainerStateReconciler;
@@ -430,6 +433,14 @@ export async function createAppContext(
   questionBridge.setEventBus(eventBus);
 
   const deployQueue = new DeployQueue();
+  const platformUpdater = new PlatformUpdater({
+    docker,
+    db,
+    deployQueue,
+    jobManager,
+    currentVersion: VERSION,
+    dataDir: getDataDir(),
+  });
 
   // Track active project for question events
   eventBus.on('deploy:start', (payload) => {
@@ -592,6 +603,7 @@ export async function createAppContext(
     providerHealth,
     model,
     deployQueue,
+    platformUpdater,
     projectHealthMonitor,
     containerStateReconciler,
     serviceHealthMonitor,

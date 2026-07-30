@@ -1,7 +1,10 @@
 import { PassThrough } from 'node:stream';
+import { createWriteStream } from 'node:fs';
+import { finished, pipeline } from 'node:stream/promises';
 import type { DockerContext } from './context.js';
 import { withTimeout } from './helpers.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { ServiceConfigError } from '../../errors.js';
 
 const log = createModuleLogger('docker:exec');
 
@@ -72,6 +75,44 @@ export class ExecOps {
       Tty: opts?.tty ?? true,
     });
     return await exec.start({ hijack: true, stdin: true });
+  }
+
+  async execToFile(containerId: string, cmd: string[], outputPath: string): Promise<void> {
+    const container = this.ctx.client.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+    const stream = await exec.start({ hijack: true, stdin: false });
+    const stdoutStream = new PassThrough();
+    const stderrStream = new PassThrough();
+    const stderrChunks: Buffer[] = [];
+    let stderrBytes = 0;
+    stderrStream.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= 64 * 1024) return;
+      const retained = chunk.subarray(0, 64 * 1024 - stderrBytes);
+      stderrChunks.push(retained);
+      stderrBytes += retained.length;
+    });
+    this.ctx.client.modem.demuxStream(stream, stdoutStream, stderrStream);
+    const outputPipeline = pipeline(stdoutStream, createWriteStream(outputPath, { mode: 0o600 }));
+    const streamCompletion = finished(stream, { readable: true, writable: false }).finally(() => {
+      if (!stdoutStream.destroyed) {
+        stdoutStream.end();
+      }
+      if (!stderrStream.destroyed) {
+        stderrStream.end();
+      }
+    });
+    await Promise.all([streamCompletion, outputPipeline]);
+    const info = await withTimeout(exec.inspect(), 10_000, 'exec-to-file inspect');
+    if ((info.ExitCode ?? 1) !== 0) {
+      const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+      throw new ServiceConfigError(
+        stderr || `Container command exited with code ${String(info.ExitCode)}`,
+      );
+    }
   }
 
   /** Open an interactive terminal exec with resize support. Returns stream and resize function. */

@@ -2,15 +2,17 @@
 
 import { chmod, readFile, rm, writeFile } from 'node:fs/promises';
 
-const [mode, statePath] = process.argv.slice(2);
+const [mode, statePath, targetVersion] = process.argv.slice(2);
 const baseUrl = (process.env.OPENLANDER_E2E_BASE_URL ?? 'http://localhost:10114').replace(
   /\/$/,
   '',
 );
 const password = process.env.OPENLANDER_UPGRADE_SMOKE_PASSWORD ?? 'e2e-quality-gate';
 
-if (!['seed', 'verify'].includes(mode) || !statePath) {
-  throw new Error('Usage: rc-upgrade-state-smoke.mjs <seed|verify> <state-file>');
+if (!['seed', 'update', 'verify'].includes(mode) || !statePath) {
+  throw new Error(
+    'Usage: rc-upgrade-state-smoke.mjs <seed|update|verify> <state-file> [target-version]',
+  );
 }
 
 async function expectOk(response, operation) {
@@ -131,5 +133,65 @@ async function verify() {
   console.log('Verified password, API token, and database state across upgrade');
 }
 
+async function update() {
+  if (!targetVersion) throw new Error('One-click update requires the target version');
+  const state = JSON.parse(await readFile(statePath, 'utf8'));
+  if (typeof state.token !== 'string') throw new Error('Upgrade state file has no API token');
+  const headers = {
+    Authorization: `Bearer ${state.token}`,
+    'Content-Type': 'application/json',
+  };
+  const offered = await expectOk(
+    await fetch(`${baseUrl}/api/system/update`, { headers }),
+    'One-click update status',
+  ).then((response) => response.json());
+  if (offered.release?.version !== targetVersion || offered.canUpdate !== true) {
+    throw new Error(
+      `Target ${targetVersion} was not eligible for one-click update: ${JSON.stringify({
+        release: offered.release?.version,
+        canUpdate: offered.canUpdate,
+        support: offered.support?.mode,
+      })}`,
+    );
+  }
+  await expectOk(
+    await fetch(`${baseUrl}/api/system/update`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ targetVersion }),
+    }),
+    'One-click update start',
+  );
+
+  const deadline = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < deadline) {
+    try {
+      const statusResponse = await fetch(`${baseUrl}/api/system/update`, { headers });
+      if (statusResponse.ok) {
+        const status = await statusResponse.json();
+        const phase = status.operation?.phase;
+        if (phase === 'completed') {
+          const health = await expectOk(await fetch(`${baseUrl}/health`), 'Updated health').then(
+            (response) => response.json(),
+          );
+          if (health.version !== targetVersion) {
+            throw new Error(`Updated health returned version ${health.version}`);
+          }
+          console.log(`One-click update completed at ${targetVersion}`);
+          return;
+        }
+        if (phase === 'rolled_back' || phase === 'failed') {
+          throw new Error(`One-click update ended in ${phase}`);
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && /ended in|health returned/.test(error.message)) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error(`One-click update did not complete within five minutes`);
+}
+
 if (mode === 'seed') await seed();
+else if (mode === 'update') await update();
 else await verify();

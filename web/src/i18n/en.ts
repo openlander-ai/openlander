@@ -683,6 +683,73 @@ export const translations = {
       aiProviders: 'AI Providers',
     },
   },
+  platformUpdate: {
+    button: {
+      available: 'New version v{version}',
+      progress: 'Updating OpenLander',
+      rolledBack: 'Update restored',
+      failed: 'Update needs attention',
+    },
+    dialog: {
+      title: 'Update OpenLander',
+      description: 'Review the release and safety checks before updating this server.',
+      currentVersion: 'Current',
+      targetVersion: 'Target',
+      changes: 'What changed',
+      preflight: 'Preflight checks',
+      progress: 'Update progress',
+      reconnectNotice:
+        'OpenLander will restart once. This page reconnects automatically without scheduling future updates.',
+      reconnecting: 'OpenLander is restarting. Reconnecting every 2 seconds…',
+      updateNow: 'Update now',
+      starting: 'Starting…',
+      retry: 'Retry update',
+      manualUpdate: 'View manual update guide',
+      rolledBackHelp:
+        'The previous version is running again. Your database backup was kept for inspection; review the error before retrying.',
+      failedHelp:
+        'OpenLander could not complete the update or automatic rollback. Follow the manual recovery guide.',
+    },
+    phase: {
+      preparing: 'Preparing update',
+      backing_up: 'Backing up configuration and database',
+      pulling: 'Pulling verified image',
+      restarting: 'Restarting OpenLander',
+      verifying: 'Verifying health and routing',
+      completed: 'Update completed',
+      rolling_back: 'Restoring previous version',
+      rolled_back: 'Previous version restored',
+      failed: 'Update failed',
+    },
+    checks: {
+      official_compose: {
+        pass: 'Official Docker Compose installation detected.',
+        fail: 'One-click update is unavailable for this installation method.',
+      },
+      release_manifest: {
+        pass: 'Official release metadata and rollback policy passed validation.',
+        fail: 'This release is missing safe one-click update metadata.',
+      },
+      active_operations: {
+        pass: 'No deployment or project lock is active.',
+        fail: 'Wait for active deployments and project operations to finish.',
+      },
+      database: {
+        pass: 'The OpenLander database container is running.',
+        fail: 'The OpenLander database container is not running.',
+      },
+      disk_space: {
+        pass: 'At least 2 GiB is available for backup and image data.',
+        fail: 'At least 2 GiB of free space is required.',
+      },
+    },
+    toast: {
+      completed: 'OpenLander was updated successfully.',
+      rolledBack: 'The update failed, so OpenLander restored the previous version.',
+      failed: 'The update and automatic rollback failed.',
+      startFailed: 'The update could not be started. Review the preflight checks and try again.',
+    },
+  },
   topBar: {
     sidebarToggleLabel: 'Toggle sidebar',
     breadcrumbAria: 'Breadcrumb',

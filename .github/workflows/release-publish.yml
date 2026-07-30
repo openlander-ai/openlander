@@ -118,6 +118,7 @@ jobs:
         run: docker buildx create --use --name openlander-release-builder
 
       - name: Build and push runtime image
+        id: runtime_image
         run: |
           set -euo pipefail
           tags=(
@@ -135,8 +136,37 @@ jobs:
             --file Dockerfile.runtime \
             --platform linux/amd64,linux/arm64 \
             "${tags[@]}" \
+            --metadata-file /tmp/openlander-build-metadata.json \
             --push \
             .
+          digest="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/openlander-build-metadata.json', 'utf8'))['containerimage.digest']")"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Buildx returned an invalid image digest: $digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Verify multi-architecture image index
+        run: |
+          set -euo pipefail
+          inspect="$(docker buildx imagetools inspect "${IMAGE_NAME}@${{ steps.runtime_image.outputs.digest }}")"
+          grep -q 'linux/amd64' <<<"$inspect"
+          grep -q 'linux/arm64' <<<"$inspect"
+
+      - name: Create and verify one-click update manifest
+        run: |
+          set -euo pipefail
+          node scripts/create-update-manifest.mjs \
+            --version "${{ steps.version.outputs.version }}" \
+            --image-digest "${{ steps.runtime_image.outputs.digest }}" \
+            --compose docker-compose.runtime.yml \
+            --policy docs/release/update-policy.json \
+            --output /tmp/openlander-update.json
+          node scripts/create-update-manifest.mjs --verify /tmp/openlander-update.json
+          npx vitest run --config vitest.release.config.ts test/update/runner.test.ts
+
+      - name: Smoke Compose self-replacement
+        run: bash scripts/compose-self-update-smoke.sh
 
       - name: Extract release notes
         run: |
@@ -172,4 +202,5 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --notes-file /tmp/openlander-release-notes.md \
             --verify-tag \
-            "${args[@]}"
+            "${args[@]}" \
+            /tmp/openlander-update.json

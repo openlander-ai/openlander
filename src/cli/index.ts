@@ -16,6 +16,18 @@ const log = createModuleLogger('cli');
 const program = new Command().enablePositionalOptions();
 const DEFAULT_MCP_TOKEN_EXPIRY_DAYS = 90;
 
+async function recordUpdateStartupResult(ok: boolean, message: string): Promise<void> {
+  try {
+    const [{ getDataDir }, { recordPlatformUpdateStartupValidation }] = await Promise.all([
+      import('../config/index.js'),
+      import('../update/state-store.js'),
+    ]);
+    await recordPlatformUpdateStartupValidation(getDataDir(), VERSION, ok, message);
+  } catch (error) {
+    log.warn({ error }, 'Could not persist platform update startup validation');
+  }
+}
+
 interface McpTokenCommandOptions {
   name?: string;
   expiresInDays?: string;
@@ -207,8 +219,16 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      await recordUpdateStartupResult(
+        true,
+        'Database migration, health startup, and Traefik network synchronization completed.',
+      );
     } catch (err) {
       log.debug({ err }, 'Traefik start failed');
+      await recordUpdateStartupResult(
+        false,
+        'Traefik startup or project network synchronization failed.',
+      );
       console.log(pc.yellow('  ⚠ Traefik could not start'));
     }
 
@@ -314,8 +334,16 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      await recordUpdateStartupResult(
+        true,
+        'Database migration, health startup, and Traefik network synchronization completed.',
+      );
     } catch (err) {
       log.debug({ err }, 'Traefik start failed');
+      await recordUpdateStartupResult(
+        false,
+        'Traefik startup or project network synchronization failed.',
+      );
       console.log(pc.yellow('  ⚠ Traefik could not start'));
     }
 
@@ -796,5 +824,21 @@ mcpTokenCommand
   .option('--json', 'Print machine-readable JSON')
   .option('--yes', 'Confirm revoking existing instance-wide MCP tokens')
   .action(runMcpTokenRotate);
+
+program
+  .command('platform-update-runner', { hidden: true })
+  .requiredOption('--operation-id <id>')
+  .action(async (options: { operationId: string }) => {
+    try {
+      const [{ getDataDir }, { runPlatformUpdate }] = await Promise.all([
+        import('../config/index.js'),
+        import('../update/runner.js'),
+      ]);
+      await runPlatformUpdate(options.operationId, getDataDir());
+    } catch (error) {
+      log.error({ error }, 'Platform update runner terminated unexpectedly');
+      process.exitCode = 1;
+    }
+  });
 
 program.parse();
