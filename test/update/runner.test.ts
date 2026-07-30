@@ -11,6 +11,12 @@ import type { PlatformUpdateOperation, PlatformUpdateRunnerInput } from '../../s
 const tempDirectories: string[] = [];
 const targetDigest = `sha256:${'c'.repeat(64)}`;
 const targetCompose = 'services:\n  openlander:\n    image: ${OPENLANDER_IMAGE}\n';
+const runnerEnvironment = {
+  OPENLANDER_POSTGRES_PASSWORD: 'preserved-password',
+  OPENLANDER_PORT: '10114',
+  OPENLANDER_PUBLIC_HOST: 'openlander.example.com',
+  OPENLANDER_DATA_VOLUME: 'openlander-data',
+};
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -19,7 +25,7 @@ afterEach(async () => {
   );
 });
 
-async function fixture() {
+async function fixture(options: { environmentExists?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'openlander-update-runner-'));
   tempDirectories.push(root);
   const dataDir = join(root, 'data');
@@ -28,7 +34,9 @@ async function fixture() {
   const environmentPath = join(workingDirectory, '.env');
   await mkdir(workingDirectory, { recursive: true });
   await writeFile(composePath, 'services:\n  openlander:\n    image: old\n');
-  await writeFile(environmentPath, 'OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\n');
+  if (options.environmentExists !== false) {
+    await writeFile(environmentPath, 'OPENLANDER_PORT=9999\nCUSTOM_VALUE=kept\n');
+  }
   const store = new PlatformUpdateStateStore(dataDir);
   const input: PlatformUpdateRunnerInput = {
     operationId: 'update-test',
@@ -111,11 +119,12 @@ describe('platform update runner', () => {
       commandRunner,
       fetchImpl,
       healthTimeoutMs: 500,
+      environment: runnerEnvironment,
     });
 
     await expect(context.store.readOperation()).resolves.toMatchObject({ phase: 'completed' });
     expect(await readFile(context.environmentPath, 'utf8')).toBe(
-      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\n`,
+      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
     expect(await readFile(context.composePath, 'utf8')).toBe(targetCompose);
     expect(observedPhases).toContain('backing_up');
@@ -134,7 +143,6 @@ describe('platform update runner', () => {
   it('restores the original Compose and env files when verification fails', async () => {
     const context = await fixture();
     const originalCompose = await readFile(context.composePath, 'utf8');
-    const originalEnvironment = await readFile(context.environmentPath, 'utf8');
     let upCount = 0;
     const docker = {
       execToFile: vi.fn(async (_containerId: string, _command: string[], outputPath: string) => {
@@ -173,13 +181,16 @@ describe('platform update runner', () => {
       commandRunner,
       fetchImpl,
       healthTimeoutMs: 500,
+      environment: runnerEnvironment,
     });
 
     await expect(context.store.readOperation()).resolves.toMatchObject({
       phase: 'rolled_back',
       errorCode: 'UPDATE_VERIFICATION_FAILED',
     });
-    expect(await readFile(context.environmentPath, 'utf8')).toBe(originalEnvironment);
+    expect(await readFile(context.environmentPath, 'utf8')).toBe(
+      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.sourceImage}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
+    );
     expect(await readFile(context.composePath, 'utf8')).toBe(originalCompose);
     expect(
       await readFile(
@@ -223,12 +234,67 @@ describe('platform update runner', () => {
       commandRunner,
       fetchImpl,
       healthTimeoutMs: 500,
+      environment: runnerEnvironment,
     });
 
     await expect(context.store.readOperation()).resolves.toMatchObject({
       phase: 'failed',
       errorCode: 'UPDATE_ROLLBACK_FAILED',
     });
+  });
+
+  it('fails before backup when the isolated runner cannot preserve Compose settings', async () => {
+    const context = await fixture();
+    const docker = {
+      execToFile: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      inspectImage: vi.fn(async () => imageInspect()),
+    };
+
+    await runPlatformUpdate(context.input.operationId, context.dataDir, {
+      docker,
+      environment: {},
+    });
+
+    await expect(context.store.readOperation()).resolves.toMatchObject({
+      phase: 'failed',
+      errorCode: 'UPDATE_VERIFICATION_FAILED',
+    });
+    expect(docker.execToFile).not.toHaveBeenCalled();
+  });
+
+  it('creates a durable Compose environment when the original install had no .env file', async () => {
+    const context = await fixture({ environmentExists: false });
+    const docker = {
+      execToFile: vi.fn(async (_containerId: string, _command: string[], outputPath: string) => {
+        await writeFile(outputPath, 'custom-format-dump');
+      }),
+      pullImage: vi.fn(async () => undefined),
+      inspectImage: vi.fn(async () => imageInspect()),
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes('raw.githubusercontent.com')) return new Response(targetCompose);
+      await context.store.writeStartupValidation(context.input.operationId, {
+        version: context.input.targetVersion,
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        message: 'ok',
+      });
+      return Response.json({ status: 'ok', version: context.input.targetVersion });
+    });
+
+    await runPlatformUpdate(context.input.operationId, context.dataDir, {
+      docker,
+      commandRunner: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      fetchImpl,
+      healthTimeoutMs: 500,
+      environment: runnerEnvironment,
+    });
+
+    await expect(context.store.readOperation()).resolves.toMatchObject({ phase: 'completed' });
+    expect(await readFile(context.environmentPath, 'utf8')).toBe(
+      `OPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PORT=10114\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
+    );
   });
 });
 

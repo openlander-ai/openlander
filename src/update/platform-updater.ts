@@ -60,6 +60,44 @@ interface PreflightResult {
   deployActive: boolean;
   projectLocked: boolean;
   diskSpaceOk: boolean;
+  composeEnvironmentReady: boolean;
+}
+
+const SAFE_COMPOSE_ENVIRONMENT_VALUE = /^[A-Za-z0-9_./:@%+=,-]*$/;
+
+interface RunnerComposeEnvironment {
+  OPENLANDER_POSTGRES_PASSWORD: string;
+  OPENLANDER_PORT: string;
+  OPENLANDER_PUBLIC_HOST: string;
+  OPENLANDER_DATA_VOLUME: string;
+}
+
+const RUNNER_COMPOSE_ENVIRONMENT_KEYS = [
+  'OPENLANDER_POSTGRES_PASSWORD',
+  'OPENLANDER_PORT',
+  'OPENLANDER_PUBLIC_HOST',
+  'OPENLANDER_DATA_VOLUME',
+] as const satisfies readonly (keyof RunnerComposeEnvironment)[];
+
+function containerEnvironmentValue(
+  inspection: Awaited<ReturnType<UpdaterDocker['inspectContainer']>>,
+  key: string,
+): string | null {
+  const prefix = `${key}=`;
+  const entry = inspection.Config.Env.find((value) => value.startsWith(prefix));
+  return entry?.slice(prefix.length) ?? null;
+}
+
+function assertSafeComposeEnvironment(environment: RunnerComposeEnvironment): void {
+  for (const key of RUNNER_COMPOSE_ENVIRONMENT_KEYS) {
+    const value = environment[key];
+    if (!SAFE_COMPOSE_ENVIRONMENT_VALUE.test(value)) {
+      throw new PlatformUpdateValidationError(
+        'The current Compose environment cannot be persisted safely for the platform update.',
+        { key },
+      );
+    }
+  }
 }
 
 function isActiveOperation(
@@ -130,6 +168,7 @@ export class PlatformUpdater {
       !preflight.deployActive &&
       !preflight.projectLocked &&
       preflight.diskSpaceOk &&
+      preflight.composeEnvironmentReady &&
       preflight.databaseContainerId,
     );
     return {
@@ -189,6 +228,10 @@ export class PlatformUpdater {
           'The OpenLander database container is not running.',
         );
       }
+      const composeEnvironment = await this.resolveRunnerComposeEnvironment(
+        installation,
+        databaseContainerId,
+      );
       const input = this.createRunnerInput(installation, databaseContainerId, manifest);
       const timestamp = this.now().toISOString();
       let operation: PlatformUpdateOperation = {
@@ -215,7 +258,10 @@ export class PlatformUpdater {
             '--operation-id',
             operation.id,
           ],
-          envVars: { OPENLANDER_DATA_DIR: '/root/.openlander' },
+          envVars: {
+            OPENLANDER_DATA_DIR: '/root/.openlander',
+            ...composeEnvironment,
+          },
           binds: [
             `${input.dataVolumeName}:/root/.openlander`,
             `${installation.dockerSocketPath ?? '/var/run/docker.sock'}:/var/run/docker.sock`,
@@ -296,6 +342,15 @@ export class PlatformUpdater {
     const deployActive = this.deployQueue.isRunning() || this.jobManager.getActiveJobs().length > 0;
     const projectLocked = projects.some((project) => Boolean(project.deploy_lock_session));
     const databaseContainerId = await this.findDatabaseContainer(installation);
+    let composeEnvironmentReady = false;
+    if (databaseContainerId) {
+      try {
+        await this.resolveRunnerComposeEnvironment(installation, databaseContainerId);
+        composeEnvironmentReady = true;
+      } catch {
+        composeEnvironmentReady = false;
+      }
+    }
     let diskSpaceOk = false;
     try {
       diskSpaceOk = await this.checkDiskSpace();
@@ -308,6 +363,7 @@ export class PlatformUpdater {
       projectLocked,
       databaseContainerId,
       diskSpaceOk,
+      composeEnvironmentReady,
       checks: [
         {
           id: 'official_compose',
@@ -331,6 +387,13 @@ export class PlatformUpdater {
             !deployActive && !projectLocked
               ? 'No deployment or project lock is active.'
               : 'Wait for active deployments and project operations to finish.',
+        },
+        {
+          id: 'compose_environment',
+          ok: composeEnvironmentReady,
+          message: composeEnvironmentReady
+            ? 'The current Compose environment can be preserved safely.'
+            : 'One-click update cannot safely preserve the current Compose environment. Use the manual update guide.',
         },
         {
           id: 'database',
@@ -361,6 +424,36 @@ export class PlatformUpdater {
           container.labels['com.docker.compose.service'] === 'openlander-db',
       )?.id ?? null
     );
+  }
+
+  private async resolveRunnerComposeEnvironment(
+    installation: ComposeInstallation,
+    databaseContainerId: string,
+  ): Promise<RunnerComposeEnvironment> {
+    if (!installation.containerId || !installation.dataVolumeName) {
+      throw new PlatformUpdateUnsupportedError('compose_metadata_incomplete');
+    }
+    const [application, database] = await Promise.all([
+      this.docker.inspectContainer(installation.containerId),
+      this.docker.inspectContainer(databaseContainerId),
+    ]);
+    const password = containerEnvironmentValue(database, 'POSTGRES_PASSWORD');
+    const hostBindings = application.NetworkSettings.Ports['10114/tcp'];
+    const port = hostBindings?.find((binding) => Boolean(binding.HostPort))?.HostPort ?? null;
+    if (!password || !port) {
+      throw new PlatformUpdateValidationError(
+        'The current Compose environment cannot be reconstructed from the running containers.',
+      );
+    }
+    const environment: RunnerComposeEnvironment = {
+      OPENLANDER_POSTGRES_PASSWORD: password,
+      OPENLANDER_PORT: port,
+      OPENLANDER_PUBLIC_HOST:
+        containerEnvironmentValue(application, 'OPENLANDER_PUBLIC_HOST') ?? '',
+      OPENLANDER_DATA_VOLUME: installation.dataVolumeName,
+    };
+    assertSafeComposeEnvironment(environment);
+    return environment;
   }
 
   private async reconcileOperation(
