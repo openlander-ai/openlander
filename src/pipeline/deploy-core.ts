@@ -3669,6 +3669,15 @@ export class DeployPipeline {
       }
       buildLog += `[stability] Passed after ${String(stability.elapsedMs)}ms (${String(stability.checks)} check(s))\n`;
 
+      const canonicalContainerName = projectContainerName(projectName);
+      buildLog += `[network] Assigning stable internal aliases to ${greenName}\n`;
+      await this.runtime.disconnectContainerFromNetwork(greenContainerId, networkName);
+      await this.runtime.connectContainerToNetwork(greenContainerId, networkName, [
+        canonicalContainerName,
+        projectName,
+        `${projectName}-green`,
+      ]);
+
       buildLog += `[route] Switching active Traefik target to ${greenName}\n`;
       await this.transitionProjectState(projectId, 'running', 'deploy-success', {
         containerId: greenContainerId,
