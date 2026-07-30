@@ -219,6 +219,7 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      await ctx.platformUpdater.repairActiveUpdateFileOwnership();
       await recordUpdateStartupResult(
         true,
         'Database migration, health startup, and Traefik network synchronization completed.',
@@ -334,6 +335,7 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      await ctx.platformUpdater.repairActiveUpdateFileOwnership();
       await recordUpdateStartupResult(
         true,
         'Database migration, health startup, and Traefik network synchronization completed.',
