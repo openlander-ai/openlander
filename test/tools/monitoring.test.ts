@@ -2422,6 +2422,30 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('diagnose_service does not mistake a Uvicorn process id for a listening port', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('INFO: Started server process [72]');
+    vi.mocked(ctx.docker.execSimple).mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'connection refused',
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result['diagnosis']).not.toMatchObject({
+      code: 'PORT_MISMATCH',
+      evidence: { detected_listening_port: 72 },
+    });
+    expect(result['suggested_call']).not.toMatchObject({
+      action: 'apply_route_config',
+      params: { container_port: 72 },
+    });
+  });
+
   it('diagnose_service keeps internalHttpCheck for Docker DNS route failures', async () => {
     const { ctx } = createServiceTargetContext();
     vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('service logs');
