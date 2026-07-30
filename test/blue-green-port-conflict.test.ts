@@ -283,6 +283,7 @@ function createMockDocker(options?: {
     restartContainer: blueRestartMock,
     ensureProjectNetwork: vi.fn(async (projectName: string) => `ol-${projectName}`),
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
+    disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
     listManagedContainers: vi.fn().mockResolvedValue(options?.managedContainers ?? []),
   } as unknown as Docker;
 
@@ -381,6 +382,15 @@ describe('blue-green route target flip', () => {
         }),
       }),
     );
+    expect(docker.disconnectContainerFromNetwork).toHaveBeenCalledWith(
+      'container-green',
+      'ol-demo-app',
+    );
+    expect(docker.connectContainerToNetwork).toHaveBeenCalledWith(
+      'container-green',
+      'ol-demo-app',
+      ['ol-demo-app', 'demo-app', 'demo-app-green'],
+    );
     expect(mockRunProbe).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ containerId: 'container-green', assignedPort: 12001 }),
@@ -470,6 +480,15 @@ describe('blue-green route target flip', () => {
           'openlander.blue_green.service_id': 'p1__svc',
         }),
       }),
+    );
+    expect(docker.disconnectContainerFromNetwork).toHaveBeenCalledWith(
+      'container-green',
+      'ol-hotdeal',
+    );
+    expect(docker.connectContainerToNetwork).toHaveBeenCalledWith(
+      'container-green',
+      'ol-hotdeal',
+      ['ol-demo-app', 'demo-app', 'demo-app-green'],
     );
   });
 
@@ -934,6 +953,39 @@ describe('blue-green route target flip', () => {
       'p1',
       expect.objectContaining({ containerId: 'container-green' }),
     );
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'container-blue',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-green',
+    );
+  });
+
+  it('keeps blue serving when the stable internal alias cannot be assigned', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    vi.mocked(docker.connectContainerToNetwork).mockImplementation(async (containerId: string) => {
+      if (containerId === 'container-green') {
+        throw new Error('network reconnect failed');
+      }
+    });
+    const previousRouteProbeCalls = mockHttpRequest.mock.calls.length;
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      postSwitchStabilityMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      strategy: 'blue-green',
+      previous_version_still_serving: true,
+      route_switched: false,
+    });
+    expect(result.error).toContain('network reconnect failed');
+    expect(state.service.container_id).toBe('container-blue');
+    expect(mockHttpRequest.mock.calls.length).toBe(previousRouteProbeCalls);
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
       'container-blue',
     );
