@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.8] - 2026-07-30
+
+### Fixed
+
+- Retry GitHub Deploy Key clones and verification over SSH port 443 instead of
+  returning to a known-unreachable port 22 after a transient fallback failure.
+
 ## [0.2.14-rc.7] - 2026-07-30
 
 ### Fixed
