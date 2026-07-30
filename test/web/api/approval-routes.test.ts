@@ -120,5 +120,53 @@ describe('Approval Routes', () => {
         },
       });
     });
+
+    it('shows secret-free Stateful Compose diff and backup effects', async () => {
+      const appWithStateful = createTestApp({
+        getProject: vi.fn(async () => ({ id: 'proj-1', name: 'demo' })),
+        getActionRunsByApprovalStatus: vi.fn(async () => [
+          {
+            id: 'run-stateful-1',
+            project_id: 'proj-1',
+            approval_tool: 'destructive_mcp',
+            approval_requested_at: '2026-07-30T00:00:00.000Z',
+            created_at: '2026-07-30T00:00:00.000Z',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'update_app',
+              args: { service_id: 'compose__svc', strategy: 'force' },
+              statefulCompose: {
+                changes: [
+                  {
+                    serviceName: 'db',
+                    change: 'update',
+                    changedFields: ['environment', 'healthcheck'],
+                    backupVolumes: [{ name: 'demo-db', destination: '/var/lib/postgresql/data' }],
+                  },
+                ],
+              },
+            }),
+          },
+        ]),
+      });
+
+      const res = await appWithStateful.request('/api/approvals/pending');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.approvals[0]).toMatchObject({
+        metadata: {
+          toolName: 'update_app',
+          details: {
+            services: ['db'],
+            changed_fields: ['environment', 'healthcheck'],
+            backup: 'required before replacement',
+            data_effect: 'previous containers and named volumes are retained for rollback',
+          },
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain('demo-db');
+      expect(JSON.stringify(body)).not.toContain('/var/lib/postgresql/data');
+    });
   });
 });

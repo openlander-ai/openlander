@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import { nanoid } from 'nanoid';
 
@@ -21,7 +22,7 @@ import { scanForSecrets } from '../secret-scan.js';
 import { persistDeployConfig, validateStoredConfig } from '../config-snapshot.js';
 import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
-import { DockerfileNotFoundError } from '../../errors.js';
+import { DockerfileNotFoundError, StatefulApprovalStaleError } from '../../errors.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { resolveComposeFilePath, resolveComposeFilePaths } from '../compose-spec.js';
 import { resolveDockerfilePath } from './helpers.js';
@@ -107,6 +108,7 @@ export async function cloneAndAnalyze(
     sshKeyPath?: string;
     gitCredentialId?: string;
     serviceId?: string;
+    expectedCommitSha?: string;
   },
 ): Promise<{
   clonePath: string;
@@ -126,6 +128,7 @@ export async function cloneAndAnalyze(
     sshKeyPath,
     gitCredentialId,
     serviceId,
+    expectedCommitSha,
   } = params;
   let buildLog = '';
   let diffContext: string | undefined;
@@ -137,6 +140,13 @@ export async function cloneAndAnalyze(
     gitCredentialId,
     serviceId,
   });
+  if (expectedCommitSha && cloneResult.commitSha !== expectedCommitSha) {
+    await rm(cloneResult.path, { recursive: true, force: true }).catch(() => undefined);
+    throw new StatefulApprovalStaleError({
+      expectedCommitSha,
+      actualCommitSha: cloneResult.commitSha,
+    });
+  }
   const commitMessage = await getCommitSubject(cloneResult.path, cloneResult.commitSha);
 
   await eventBus.emit('deploy:clone', {
@@ -360,6 +370,7 @@ export async function buildProject(
       previousServiceFingerprints,
       noCache: config._noCacheBuild === true,
       sourceRevisionChanged,
+      statefulApproval: config._statefulComposeApproval,
     });
 
     if (result.success) {

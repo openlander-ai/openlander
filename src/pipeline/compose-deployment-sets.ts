@@ -15,6 +15,7 @@ export interface ComposeDeploymentSetOptions {
   previousFingerprints?: Readonly<Record<string, string>>;
   currentFingerprints?: Readonly<Record<string, string>>;
   forceReplaceApplications?: boolean;
+  statefulReplaceTargets?: ReadonlySet<string>;
 }
 
 /**
@@ -35,6 +36,10 @@ export function planComposeDeploymentSets(
 
   for (const service of options.services) {
     const role = options.runtimeRoles.get(service.name) ?? 'application';
+    if (role === 'resource' && options.statefulReplaceTargets?.has(service.name)) {
+      replaceTargets.add(service.name);
+      continue;
+    }
     if (role !== 'application') continue;
 
     if (isSelective) {
@@ -92,7 +97,7 @@ export function planComposeDeploymentSets(
   if (!isSelective) {
     for (const service of options.services) {
       const role = options.runtimeRoles.get(service.name) ?? 'application';
-      if (role === 'resource') prerequisites.add(service.name);
+      if (role === 'resource' && !replaceTargets.has(service.name)) prerequisites.add(service.name);
       if (role === 'job' && existing.size === 0) runOnceHooks.add(service.name);
     }
   }

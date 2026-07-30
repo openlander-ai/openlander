@@ -31,6 +31,112 @@ function createApprovalContext() {
 }
 
 describe('destructive MCP approval executor', () => {
+  it('executes an approved Stateful Compose update through the bound approval plan', async () => {
+    const statefulCompose = {
+      version: 1,
+      serviceId: 'compose-parent__svc',
+      projectId: 'project-1',
+      commitSha: 'abc123',
+      composeFingerprint: 'compose-fingerprint',
+      changes: [
+        {
+          serviceName: 'db',
+          serviceId: 'compose-child__svc',
+          change: 'update',
+          changedFields: ['environment'],
+          containerId: 'container-1',
+          backupRequired: true,
+          backupVolumes: [{ name: 'db-data', destination: '/var/lib/postgresql/data' }],
+        },
+      ],
+    };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-stateful',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'update_app',
+          args: { service_id: 'compose-parent__svc', no_cache: true, strategy: 'force' },
+          targetProjectId: 'project-1',
+          targetServiceId: 'compose-parent__svc',
+          requestedAt: '2026-07-30T00:00:00.000Z',
+          statefulCompose,
+        }),
+      }),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = {
+      executeApprovedStatefulComposeUpdate: vi.fn().mockResolvedValue({ success: true }),
+    };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-stateful',
+      approved: true,
+      projectId: 'project-1',
+    });
+
+    expect(pipeline.executeApprovedStatefulComposeUpdate).toHaveBeenCalledWith(
+      { ...statefulCompose, actionRunId: 'action-run-stateful' },
+      { noCache: true, actionRunId: 'action-run-stateful' },
+    );
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(1, 'action-run-stateful', 'running');
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith('action-run-stateful', 'succeeded');
+  });
+
+  it('marks an approved Stateful Compose action failed when deployment rolls back', async () => {
+    const statefulCompose = {
+      version: 1,
+      serviceId: 'compose-parent__svc',
+      projectId: 'project-1',
+      commitSha: 'abc123',
+      composeFingerprint: 'compose-fingerprint',
+      changes: [],
+    };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-stateful-failed',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'update_app',
+          args: { no_cache: false },
+          targetProjectId: 'project-1',
+          targetServiceId: 'compose-parent__svc',
+          statefulCompose,
+        }),
+      }),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = {
+      executeApprovedStatefulComposeUpdate: vi.fn().mockResolvedValue({
+        success: false,
+        error: 'replacement failed; previous container restored',
+      }),
+    };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-stateful-failed',
+      approved: true,
+      projectId: 'project-1',
+    });
+
+    expect(db.updateActionRunPlan).toHaveBeenCalledOnce();
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-stateful-failed',
+      'failed',
+      'replacement failed; previous container restored',
+    );
+    expect(db.updateActionRunStatus).not.toHaveBeenCalledWith(
+      'action-run-stateful-failed',
+      'succeeded',
+    );
+  });
+
   it('fails before execution when the project-scoped MCP token does not match the target', async () => {
     const { ctx, db } = createApprovalContext();
 

@@ -29,6 +29,7 @@ import { resolveEnvVars } from './resolve-env.js';
 
 import {
   BlueGreenStabilityError,
+  ComposeEnvDeclarationRequiredError,
   ContainerNotFoundError,
   ImagePullError,
   InvalidProjectNameError,
@@ -42,13 +43,21 @@ import {
   ServiceOperationUnsupportedError,
   ServiceSelectionRequiredError,
   ServiceSourceMissingError,
+  StatefulApprovalStaleError,
   isDockerNotFoundError,
   isDockerBuildCancelledError,
 } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { buildDeployConfig } from './build-deploy-config.js';
 import type { JobManager } from './job-manager.js';
-import type { ComposePipeline } from './compose.js';
+import {
+  filterServicesByProfiles,
+  fingerprintComposeServices,
+  inferComposeRuntimeRoles,
+  sanitizeComposeProjectName,
+  validateComposeProfiles,
+  type ComposePipeline,
+} from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
@@ -77,7 +86,7 @@ import type { HealthCheckConfig, ProbeContext, ProbeResult } from '../health/typ
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
-import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
+import { loadResourceLimitsForDeployTarget, validateStoredConfig } from './config-snapshot.js';
 import { createDependencyCacheKey } from './build-cache.js';
 import {
   loadServiceViewRecord,
@@ -86,7 +95,15 @@ import {
 } from '../db/views/service-view.js';
 import { deployableServiceIdToProjectId } from '../db/service-ids.js';
 import { NON_DEPLOYABLE_SERVICE_KINDS } from '../db/repos/service.repo.js';
-import { resolveComposeRedeployTarget } from './compose-redeploy-target.js';
+import {
+  composeChildServiceName,
+  resolveComposeRedeployTarget,
+} from './compose-redeploy-target.js';
+import {
+  classifyStatefulComposeChanges,
+  fingerprintComposeProject,
+  type StatefulComposeApproval,
+} from './compose-stateful-update.js';
 
 import {
   buildProject,
@@ -227,6 +244,10 @@ export interface ProjectConfig {
   >;
   /** @internal Deploy lock session for event-based session-scoped release. */
   _lockSessionId?: string;
+  /** @internal Commit bound to an approved Stateful Compose plan. */
+  _expectedCommitSha?: string;
+  /** @internal Human-approved Stateful Compose replacement/removal contract. */
+  _statefulComposeApproval?: StatefulComposeApproval;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
   /** Repository-relative Compose file path. */
@@ -336,6 +357,10 @@ export interface RedeployOptions {
   composeServices?: string[];
   lockSessionId?: string;
   trigger?: 'chat' | 'webhook' | 'api';
+  /** @internal Commit bound to a previously approved Stateful Compose plan. */
+  expectedCommitSha?: string;
+  /** @internal Human-approved Stateful Compose replacement/removal contract. */
+  statefulComposeApproval?: StatefulComposeApproval;
 }
 
 export interface BlueGreenEligibility {
@@ -1836,6 +1861,7 @@ export class DeployPipeline {
           sshKeyPath: deployConfig.sshKeyPath,
           gitCredentialId: deployConfig.gitCredentialId,
           serviceId: deployConfig._serviceId,
+          expectedCommitSha: deployConfig._expectedCommitSha,
         });
         deployConfig.gitCredentialId = cloneResult.gitCredentialId;
         clonePath = cloneResult.clonePath;
@@ -2595,6 +2621,198 @@ export class DeployPipeline {
     });
   }
 
+  async prepareStatefulComposeUpdate(
+    serviceId: string,
+    options?: { envVars?: Record<string, string> },
+  ): Promise<StatefulComposeApproval | null> {
+    const composePipeline = this.composePipeline;
+    if (!composePipeline) return null;
+    const requestedService = await this.db.getService(serviceId);
+    if (!requestedService) throw new ServiceNotFoundError(serviceId);
+    const target = await resolveComposeRedeployTarget(this.db, requestedService);
+    const service = target.service;
+    if (service.kind !== 'compose') return null;
+
+    const { ownerProject, runtimeProject } = await this.resolveRuntimeProjectForService(service);
+    const config = await buildDeployConfig({
+      projectId: runtimeProject.id,
+      serviceId: service.id,
+      service,
+      runtimeOverrides: {
+        _projectId: runtimeProject.id,
+        _serviceId: service.id,
+      },
+      db: this.db,
+    });
+    if (config.source === 'image') return null;
+
+    const cloneResult = await cloneRepo({
+      repoUrl: config.repoUrl,
+      branch: config.branch,
+      sshKeyPath: config.sshKeyPath,
+      gitCredentialId: config.gitCredentialId,
+      serviceId: service.id,
+    });
+    try {
+      const composePaths = config.composeFiles
+        ? resolveComposeFilePaths(cloneResult.path, config.composeFiles)
+        : config.composeFile
+          ? [resolveComposeFilePath(cloneResult.path, config.composeFile)]
+          : (() => {
+              const detected = composePipeline.detectComposeFile(cloneResult.path);
+              return detected ? [detected] : [];
+            })();
+      if (composePaths.length === 0) return null;
+
+      const parsed = composePipeline.parseComposeFiles(composePaths);
+      validateComposeProfiles(parsed.services, config.composeProfiles);
+      const activeServices = filterServicesByProfiles(parsed.services, config.composeProfiles);
+      const runtimeRoles = inferComposeRuntimeRoles(activeServices);
+      const currentFingerprints = fingerprintComposeServices(activeServices);
+      const storedConfig = await this.db.loadDeployConfigForService(service.id);
+      const previousFingerprints = validateStoredConfig(storedConfig?.config_json ?? '')?.snapshot
+        .composeServiceFingerprints;
+      const productionEnvironment = (
+        await this.db.getEnvironmentsByProject(runtimeProject.id)
+      ).find((environment) => environment.type === 'production');
+      const baseEnv = await resolveEnvVars(
+        {
+          projectId: runtimeProject.id,
+          serviceId: service.id,
+          environmentId: productionEnvironment?.id,
+          inlineEnvVars: options?.envVars,
+        },
+        { env: this.env },
+      );
+      const childServices = (await this.db.getComposeChildren(service.id)).filter(
+        (child) => !child.archived_at,
+      );
+      if (childServices.length > 0 && Object.keys(baseEnv).length > 0) {
+        const servicesWithoutEnvDeclaration = activeServices
+          .filter(
+            (composeService) =>
+              composeService.environment === undefined &&
+              (composeService.envFile?.length ?? 0) === 0,
+          )
+          .map((composeService) => composeService.name);
+        if (servicesWithoutEnvDeclaration.length > 0) {
+          throw new ComposeEnvDeclarationRequiredError(
+            servicesWithoutEnvDeclaration,
+            Object.keys(baseEnv).sort(),
+          );
+        }
+      }
+      const projectName = sanitizeComposeProjectName(runtimeProject.name);
+      const resolvedServices = activeServices.map((composeService) => ({
+        ...composeService,
+        ...(composeService.image
+          ? {
+              image: composePipeline.resolveComposeServiceImageTag(
+                composeService,
+                projectName,
+                baseEnv,
+              ),
+            }
+          : {}),
+      }));
+      const desiredEnvByService = new Map(
+        resolvedServices.map((composeService) => [
+          composeService.name,
+          composePipeline.resolveComposeServiceRuntimeEnv(
+            composeService,
+            baseEnv,
+            parsed.projectPath,
+          ),
+        ]),
+      );
+      const existingServices = await Promise.all(
+        childServices.map(async (child) => {
+          const serviceName = composeChildServiceName(child);
+          const containerId = child.container_id;
+          return {
+            serviceName,
+            serviceId: child.id,
+            runtimeRole: child.runtime_role,
+            containerId,
+            previousFingerprint: previousFingerprints?.[serviceName],
+            ...(containerId
+              ? { inspection: await this.runtime.inspectContainer(containerId) }
+              : {}),
+          };
+        }),
+      );
+      const changes = classifyStatefulComposeChanges({
+        projectName,
+        projectPath: parsed.projectPath,
+        services: resolvedServices,
+        runtimeRoles,
+        existingServices,
+        currentFingerprints,
+        desiredEnvByService,
+      });
+      if (changes.length === 0) return null;
+      return {
+        version: 1,
+        serviceId: service.id,
+        projectId: ownerProject.id,
+        commitSha: cloneResult.commitSha,
+        composeFingerprint: fingerprintComposeProject(currentFingerprints),
+        changes,
+      };
+    } finally {
+      await rm(cloneResult.path, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  async executeApprovedStatefulComposeUpdate(
+    approval: StatefulComposeApproval,
+    options?: { noCache?: boolean; actionRunId?: string },
+  ): Promise<DeployResult> {
+    const current = await this.prepareStatefulComposeUpdate(approval.serviceId);
+    const expectedBindings = approval.changes
+      .map((change) => ({
+        serviceName: change.serviceName,
+        serviceId: change.serviceId,
+        change: change.change,
+        containerId: change.containerId,
+        previousFingerprint: change.previousFingerprint,
+        currentFingerprint: change.currentFingerprint,
+      }))
+      .sort((left, right) => left.serviceName.localeCompare(right.serviceName));
+    const currentBindings = current?.changes
+      .map((change) => ({
+        serviceName: change.serviceName,
+        serviceId: change.serviceId,
+        change: change.change,
+        containerId: change.containerId,
+        previousFingerprint: change.previousFingerprint,
+        currentFingerprint: change.currentFingerprint,
+      }))
+      .sort((left, right) => left.serviceName.localeCompare(right.serviceName));
+    if (
+      !current ||
+      current.commitSha !== approval.commitSha ||
+      current.composeFingerprint !== approval.composeFingerprint ||
+      JSON.stringify(currentBindings) !== JSON.stringify(expectedBindings)
+    ) {
+      throw new StatefulApprovalStaleError({
+        serviceId: approval.serviceId,
+        expectedCommitSha: approval.commitSha,
+        actualCommitSha: current?.commitSha,
+      });
+    }
+    return await this.redeployService(approval.serviceId, {
+      noCache: options?.noCache,
+      strategy: 'force',
+      expectedCommitSha: approval.commitSha,
+      statefulComposeApproval: {
+        ...approval,
+        ...(options?.actionRunId ? { actionRunId: options.actionRunId } : {}),
+      },
+      trigger: 'api',
+    });
+  }
+
   /** Restart an existing long-running container without clone, build, or replacement. */
   async restartServiceRuntime(serviceId: string): Promise<RuntimeRestartResult> {
     const service = await this.db.getService(serviceId);
@@ -3079,6 +3297,10 @@ export class DeployPipeline {
             ? { composeServices: options.composeServices }
             : {}),
           ...(networkProjectName ? { _networkProjectName: networkProjectName } : {}),
+          ...(options?.expectedCommitSha ? { _expectedCommitSha: options.expectedCommitSha } : {}),
+          ...(options?.statefulComposeApproval
+            ? { _statefulComposeApproval: options.statefulComposeApproval }
+            : {}),
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
         db: this.db,

@@ -1,6 +1,8 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
+import { composeContainerName } from '../helpers.js';
+import { sanitizeComposeProjectName } from '../compose.js';
 
 import type { Database } from '../../db/index.js';
 import type { ServiceRow } from '../../db/types.js';
@@ -11,7 +13,12 @@ import {
   type ServiceViewRecord,
 } from '../../db/views/service-view.js';
 import { eventBus } from '../../events/index.js';
-import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
+import {
+  ContainerNotFoundError,
+  OpenLanderError,
+  ServiceOperationError,
+  isDockerNotFoundError,
+} from '../../errors.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 import type { RuntimeBackend } from '../runtime/index.js';
 import { allocatePort, clearPortScanCache } from '../port.js';
@@ -374,6 +381,70 @@ export class ContainerLifecycle {
 
     const record = await loadServiceViewRecord(this.db, project);
     if (!project.archived_at && !record.service?.archived_at) return;
+
+    if (
+      record.service?.kind === 'compose-child' &&
+      record.service.container_id &&
+      record.service.container_name
+    ) {
+      const separator = project.name.lastIndexOf('/');
+      const parentName = separator > 0 ? project.name.slice(0, separator) : project.name;
+      const serviceName = separator > 0 ? project.name.slice(separator + 1) : project.name;
+      const canonicalName = composeContainerName(parentName, serviceName);
+      const preservedName = record.service.container_name;
+      const containerId = record.service.container_id;
+      let renamed = false;
+      let connected = false;
+
+      try {
+        try {
+          const conflicting = await this.runtime.inspectContainer(canonicalName);
+          if (conflicting.Id !== containerId) {
+            throw new ServiceOperationError(
+              'unarchive_service',
+              `Cannot restore '${serviceName}' because container name '${canonicalName}' is in use.`,
+              { serviceId: record.service.id, containerName: canonicalName },
+            );
+          }
+        } catch (error) {
+          if (!isDockerNotFoundError(error)) throw error;
+        }
+
+        if (preservedName !== canonicalName) {
+          await this.runtime.renameContainer(containerId, canonicalName);
+          renamed = true;
+        }
+        const projectNetwork = await this.runtime.ensureProjectNetwork(
+          sanitizeComposeProjectName(parentName),
+        );
+        await this.runtime.connectContainerToNetwork(containerId, projectNetwork, [serviceName]);
+        connected = true;
+        await this.runtime.startContainer(containerId);
+        await this.db.unarchiveProject(projectId);
+        await this.db.updateService(record.service.id, {
+          archivedAt: null,
+          status: 'running',
+          containerId,
+          containerName: canonicalName,
+        });
+        if (options.emitEvent ?? true) {
+          await eventBus.emit('project:unarchive', {
+            projectId,
+            port: record.service.assigned_port ?? 0,
+          });
+        }
+        return;
+      } catch (error) {
+        if (connected) {
+          const projectNetwork = projectContainerName(sanitizeComposeProjectName(parentName));
+          await this.runtime.disconnectContainerFromNetwork(containerId, projectNetwork);
+        }
+        if (renamed) {
+          await this.runtime.renameContainer(containerId, preservedName);
+        }
+        throw error;
+      }
+    }
 
     await this.db.unarchiveProject(projectId);
     const port = await allocatePort(this.db, this.runtime, {}, 'production');

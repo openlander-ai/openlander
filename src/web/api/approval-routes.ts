@@ -44,10 +44,48 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
             }
           : undefined;
       const args = plan['args'];
-      if (!args || typeof args !== 'object') return actor ? { toolName, actor } : { toolName };
+      const details: Record<string, unknown> = {};
+
+      const statefulCompose = plan['statefulCompose'];
+      if (statefulCompose && typeof statefulCompose === 'object') {
+        const changes = (statefulCompose as Record<string, unknown>)['changes'];
+        if (Array.isArray(changes)) {
+          const changeRecords = changes.filter(
+            (change): change is Record<string, unknown> =>
+              Boolean(change) && typeof change === 'object' && !Array.isArray(change),
+          );
+          details['services'] = changeRecords.flatMap((change) =>
+            typeof change['serviceName'] === 'string' ? [change['serviceName']] : [],
+          );
+          details['changed_fields'] = [
+            ...new Set(
+              changeRecords.flatMap((change) =>
+                Array.isArray(change['changedFields'])
+                  ? change['changedFields'].filter(
+                      (field): field is string => typeof field === 'string',
+                    )
+                  : [],
+              ),
+            ),
+          ];
+          details['backup'] = 'required before replacement';
+          details['data_effect'] = changeRecords.some((change) => change['change'] === 'remove')
+            ? 'removed resources are stopped and archived; named volumes and backups are retained'
+            : 'previous containers and named volumes are retained for rollback';
+        }
+      }
+
+      if (!args || typeof args !== 'object') {
+        return Object.keys(details).length > 0
+          ? actor
+            ? { toolName, details, actor }
+            : { toolName, details }
+          : actor
+            ? { toolName, actor }
+            : { toolName };
+      }
 
       const argRecord = args as Record<string, unknown>;
-      const details: Record<string, unknown> = {};
 
       for (const key of DESTRUCTIVE_DETAIL_KEYS) {
         const value = argRecord[key];

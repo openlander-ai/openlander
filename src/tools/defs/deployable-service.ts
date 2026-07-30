@@ -36,6 +36,11 @@ import {
   type DomainRouteHealth,
 } from '../route-health.js';
 import type { ToolContext, ToolDef } from './types.js';
+import {
+  buildStatefulComposeApprovalPlan,
+  statefulComposeApprovalDiff,
+} from '../../mcp/stateful-compose-approval.js';
+import { buildMcpActionStatusCall } from '../../mcp/agent-lifecycle-contract.js';
 
 const log = createModuleLogger('tools-defs-deployable-service');
 
@@ -795,7 +800,16 @@ function archiveLifecycleGuidance(serviceId: string) {
   };
 }
 
-function unarchiveLifecycleGuidance(serviceId: string) {
+function unarchiveLifecycleGuidance(serviceId: string, restoredRuntime: boolean) {
+  if (restoredRuntime) {
+    return {
+      message:
+        'Stateful Compose resource restored with its preserved container, named volumes, and project-network attachment.',
+      next_steps: [
+        `Call openlander_monitor.diagnose_service with service_id="${serviceId}" to verify runtime health.`,
+      ],
+    };
+  }
   return {
     message:
       'Service restored to the active lifecycle path. No container was started automatically.',
@@ -902,6 +916,7 @@ export async function runDeployableServiceAction(
   const healthCheckPath = args.health_check_path as string | undefined;
   const cmd = args.cmd as string[] | undefined;
   const envVars = parseInternalRedeployEnvVars(args);
+  const envKeys = Object.keys(envVars);
   let autoSelectedBlueGreen = false;
 
   const redeployTarget =
@@ -978,6 +993,82 @@ export async function runDeployableServiceAction(
         ],
       },
     };
+  }
+
+  const prepareStatefulComposeUpdateCandidate: unknown = Reflect.get(
+    context.appCtx.pipeline,
+    'prepareStatefulComposeUpdate',
+  );
+  const prepareStatefulComposeUpdate =
+    typeof prepareStatefulComposeUpdateCandidate === 'function'
+      ? (prepareStatefulComposeUpdateCandidate.bind(context.appCtx.pipeline) as (
+          serviceId: string,
+          options: { envVars: Record<string, string> },
+        ) => ReturnType<AppCtx['pipeline']['prepareStatefulComposeUpdate']>)
+      : undefined;
+  if (
+    action === 'update_app' &&
+    deploymentService.kind === 'compose' &&
+    typeof prepareStatefulComposeUpdate === 'function'
+  ) {
+    const approval = await prepareStatefulComposeUpdate(deploymentService.id, { envVars });
+    if (approval) {
+      if (envKeys.length > 0) {
+        await context.appCtx.env.setBulkForServiceDetailed(
+          deploymentRuntimeProject.id,
+          deploymentService.id,
+          envVars,
+        );
+        const mismatches = await context.appCtx.env.verifyRoundTripForService(
+          deploymentRuntimeProject.id,
+          deploymentService.id,
+          envVars,
+        );
+        if (mismatches.length > 0) {
+          return {
+            status: 'error',
+            error: 'ENV_ROUNDTRIP_FAILED',
+            service: serviceSummary(service, project),
+            keys: envKeys,
+            mismatches,
+            _agent_guidance: {
+              next_steps: [
+                'Do not approve or redeploy yet. Re-run set_env_vars for the mismatched keys.',
+              ],
+            },
+          };
+        }
+      }
+      const plan = buildStatefulComposeApprovalPlan({
+        approval,
+        noCache,
+        identity: context.identity,
+      });
+      const actionRunId = await context.appCtx.db.createPendingMcpApproval({
+        projectId: approval.projectId,
+        toolName: 'update_app',
+        plan: JSON.stringify(plan),
+      });
+      return {
+        status: 'pending_approval',
+        action_run_id: actionRunId,
+        project_id: approval.projectId,
+        service_id: approval.serviceId,
+        diff: statefulComposeApprovalDiff(approval),
+        backup_required: true,
+        effect:
+          'Approval stops each affected Stateful container, creates verified volume backups, preserves the previous container, and starts the replacement with the same named volumes. Removed resources are archived and remain restorable.',
+        poll_call: buildMcpActionStatusCall(actionRunId),
+        _agent_guidance: {
+          message:
+            'This Stateful Compose update is waiting for human approval. No container was stopped or replaced.',
+          next_steps: [
+            'Use poll_call to wait for approval and execution.',
+            'Do not retry update_app while this approval is pending.',
+          ],
+        },
+      };
+    }
   }
 
   const getBlueGreenEligibility =
@@ -1091,7 +1182,6 @@ export async function runDeployableServiceAction(
         );
       });
 
-  const envKeys = Object.keys(envVars);
   if (envKeys.length > 0) {
     const changes = await context.appCtx.env.setBulkForServiceDetailed(
       runtimeProject.id,
@@ -1432,8 +1522,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'unarchive_service',
     riskLevel: 'medium',
     description:
-      'Restore an archived Application/worker. Provide service_id or service_name. Does not deploy automatically.',
-    mcpDescription: 'Restore an archived Application/worker. Call update_app to run it.',
+      'Restore an archived Application/worker or preserved Stateful Compose resource. Stateful resources resume their retained container and volumes.',
+    mcpDescription:
+      'Restore an archived Application/worker. Preserved Stateful Compose resources resume in place; other services require update_app to run.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -1447,7 +1538,10 @@ export const deployableServiceToolDefs: ToolDef[] = [
         project_id: project.id,
         service_id: service.id,
         service: serviceSummary(service, project),
-        _agent_guidance: unarchiveLifecycleGuidance(service.id),
+        _agent_guidance: unarchiveLifecycleGuidance(
+          service.id,
+          service.kind === 'compose-child' && service.runtime_role === 'resource',
+        ),
       };
     },
   },
