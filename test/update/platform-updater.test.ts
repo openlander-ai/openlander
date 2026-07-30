@@ -104,6 +104,7 @@ async function harness(
     projectLocked?: boolean;
     updateRunnerPresent?: boolean;
     composePassword?: string | null;
+    ownershipRepairExitCode?: number;
   } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-platform-updater-'));
@@ -112,6 +113,11 @@ async function harness(
   const docker = {
     inspectContainer: vi.fn(async (containerId: string) => {
       if (containerId === 'stopped-runner') throw new TypeError('container not found');
+      if (containerId === 'runner-container-id' && options.ownershipRepairExitCode !== undefined) {
+        return {
+          State: { Running: false, ExitCode: options.ownershipRepairExitCode },
+        } as Awaited<ReturnType<Docker['inspectContainer']>>;
+      }
       if (containerId === '2'.repeat(64)) {
         return databaseInspectInfo(options.composePassword);
       }
@@ -151,6 +157,7 @@ async function harness(
         : []),
     ]),
     runUtilityContainer,
+    safeRemoveContainer: vi.fn(async () => undefined),
   };
   const updater = new PlatformUpdater({
     docker,
@@ -170,10 +177,57 @@ async function harness(
     },
     checkDiskSpace: async () => true,
   });
-  return { updater, runUtilityContainer, dataDir };
+  return { updater, docker, runUtilityContainer, dataDir };
 }
 
 describe('PlatformUpdater', () => {
+  it('repairs legacy runner file ownership before accepting updated startup', async () => {
+    const { updater, docker, runUtilityContainer, dataDir } = await harness({
+      ownershipRepairExitCode: 0,
+    });
+    const store = new PlatformUpdateStateStore(dataDir);
+    await store.writeOperation({
+      id: 'legacy-update',
+      sourceVersion: '0.2.13-rc.6',
+      targetVersion: '0.2.13-rc.7',
+      phase: 'verifying',
+      startedAt: '2026-07-30T00:00:00.000Z',
+      updatedAt: '2026-07-30T00:00:01.000Z',
+      message: null,
+      errorCode: null,
+      runnerContainerId: 'legacy-runner',
+    });
+    await store.writeRunnerInput({
+      operationId: 'legacy-update',
+      sourceVersion: '0.2.13-rc.6',
+      targetVersion: '0.2.13-rc.7',
+      targetImage: 'ghcr.io/openlander-ai/openlander:0.2.13-rc.7',
+      targetDigest: `sha256:${'a'.repeat(64)}`,
+      targetComposeSha256: 'b'.repeat(64),
+      sourceImage: 'ghcr.io/openlander-ai/openlander:0.2.13-rc.6',
+      runnerImageId: `sha256:${'c'.repeat(64)}`,
+      composeProject: 'openlander',
+      composeService: 'openlander',
+      workingDirectory: '/opt/openlander',
+      composeFiles: ['/opt/openlander/docker-compose.runtime.yml'],
+      dataVolumeName: 'openlander-data',
+      databaseContainerId: '2'.repeat(64),
+      networkNames: ['openlander_default'],
+    });
+
+    await updater.repairActiveUpdateFileOwnership();
+
+    expect(runUtilityContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: `sha256:${'1'.repeat(64)}`,
+        binds: ['/opt/openlander:/openlander-installation'],
+        network: 'none',
+        autoRemove: false,
+      }),
+    );
+    expect(docker.safeRemoveContainer).toHaveBeenCalledWith('runner-container-id');
+  });
+
   it('returns the REST status contract and starts the isolated runner', async () => {
     const { updater, runUtilityContainer } = await harness();
     await expect(updater.getStatus()).resolves.toMatchObject({

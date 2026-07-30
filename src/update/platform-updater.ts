@@ -11,6 +11,7 @@ import {
 import type { Docker } from '../pipeline/docker.js';
 import type { DeployQueue } from '../pipeline/deploy-queue.js';
 import type { JobManager } from '../pipeline/job-manager.js';
+import { sleep } from '../lib/sleep.js';
 import { compareSemVer, inferReleaseChannel, parseSemVer } from './semver.js';
 import { detectComposeInstallation } from './install-detector.js';
 import { PlatformReleaseChecker } from './release-checker.js';
@@ -35,8 +36,28 @@ const ACTIVE_PHASES = new Set([
   'rolling_back',
 ]);
 const RUNNER_RECONCILE_GRACE_MS = 15_000;
+const FILE_OWNERSHIP_REPAIR_TIMEOUT_MS = 15_000;
+const FILE_OWNERSHIP_REPAIR_MOUNT = '/openlander-installation';
+const FILE_OWNERSHIP_REPAIR_SCRIPT = `
+const { chmodSync, chownSync, existsSync, statSync } = require('node:fs');
+const { join } = require('node:path');
+const directory = ${JSON.stringify('/openlander-installation')};
+const owner = statSync(directory);
+for (const name of ['.env', 'docker-compose.runtime.yml']) {
+  const path = join(directory, name);
+  if (!existsSync(path)) continue;
+  const file = statSync(path);
+  if (file.uid !== owner.uid || file.gid !== owner.gid) {
+    chownSync(path, owner.uid, owner.gid);
+  }
+  chmodSync(path, file.mode & 0o777);
+}
+`;
 
-type UpdaterDocker = Pick<Docker, 'inspectContainer' | 'listAllContainers' | 'runUtilityContainer'>;
+type UpdaterDocker = Pick<
+  Docker,
+  'inspectContainer' | 'listAllContainers' | 'runUtilityContainer' | 'safeRemoveContainer'
+>;
 type UpdaterDatabase = Pick<Database, 'listProjects'>;
 type UpdaterDeployQueue = Pick<DeployQueue, 'isRunning'>;
 type UpdaterJobManager = Pick<JobManager, 'getActiveJobs'>;
@@ -146,6 +167,53 @@ export class PlatformUpdater {
         const stats = await statfs(this.dataDir);
         return stats.bavail * stats.bsize >= MINIMUM_FREE_BYTES;
       });
+  }
+
+  async repairActiveUpdateFileOwnership(): Promise<void> {
+    const operation = await this.store.readOperation();
+    if (!isActiveOperation(operation) || operation.targetVersion !== this.currentVersion) return;
+
+    const input = await this.store.readRunnerInput(operation.id);
+    const installation = await detectComposeInstallation(this.docker, this.environment);
+    if (
+      installation.mode !== 'compose' ||
+      !installation.imageId ||
+      installation.workingDirectory !== input.workingDirectory ||
+      installation.composeFiles.length !== 1 ||
+      installation.composeFiles[0] !== input.composeFiles[0]
+    ) {
+      throw new PlatformUpdateValidationError(
+        'The active update installation metadata changed before startup validation.',
+      );
+    }
+
+    const helperId = await this.docker.runUtilityContainer({
+      image: installation.imageId,
+      name: `openlander-update-permissions-${operation.id.slice(0, 12)}`,
+      command: ['node', '--input-type=commonjs', '--eval', FILE_OWNERSHIP_REPAIR_SCRIPT],
+      binds: [`${input.workingDirectory}:${FILE_OWNERSHIP_REPAIR_MOUNT}`],
+      network: 'none',
+      autoRemove: false,
+    });
+    try {
+      const deadline = Date.now() + FILE_OWNERSHIP_REPAIR_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        const helper = await this.docker.inspectContainer(helperId);
+        if (!helper.State.Running) {
+          if (helper.State.ExitCode === 0) return;
+          throw new PlatformUpdateValidationError(
+            'The updated process could not restore Compose file ownership.',
+            { exitCode: helper.State.ExitCode },
+          );
+        }
+        await sleep(100);
+      }
+      throw new PlatformUpdateValidationError(
+        'The updated process timed out while restoring Compose file ownership.',
+      );
+    } finally {
+      await this.docker.safeRemoveContainer(helperId);
+    }
   }
 
   async getStatus(): Promise<PlatformUpdateStatus> {
