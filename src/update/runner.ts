@@ -1,6 +1,16 @@
 import { spawn } from 'node:child_process';
-import { copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import {
+  chmod,
+  chown,
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { Docker } from '../pipeline/docker.js';
 import { PlatformUpdateExecutionError, PlatformUpdateValidationError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -99,9 +109,24 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function writeFileAtomic(path: string, content: string, mode: number): Promise<void> {
+async function writeFileAtomic(
+  path: string,
+  content: string | Uint8Array,
+  mode: number,
+): Promise<void> {
+  const existing = await stat(path).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  });
+  const ownership = existing ?? (await stat(dirname(path)));
+  const targetMode = existing ? existing.mode & 0o777 : mode;
   const tempPath = `${path}.openlander-update.tmp`;
   await writeFile(tempPath, content, { mode });
+  const temporary = await stat(tempPath);
+  if (temporary.uid !== ownership.uid || temporary.gid !== ownership.gid) {
+    await chown(tempPath, ownership.uid, ownership.gid);
+  }
+  await chmod(tempPath, targetMode);
   await rename(tempPath, path);
 }
 
@@ -296,7 +321,11 @@ async function restoreInstallation(
     0o600,
   );
   for (const composeFile of input.composeFiles) {
-    await copyFile(join(backupDirectory, basename(composeFile)), composeFile);
+    await writeFileAtomic(
+      composeFile,
+      await readFile(join(backupDirectory, basename(composeFile))),
+      0o644,
+    );
   }
 }
 
