@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.5] - 2026-07-30
+
+### Fixed
+
+- Repair Compose file ownership during target startup for one-click updates
+  initiated by legacy source-image runners, before startup validation succeeds.
+
 ## [0.2.14-rc.4] - 2026-07-30
 
 ### Fixed
