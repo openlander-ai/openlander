@@ -60,6 +60,23 @@ async function waitForDeploymentCount(projectId: string, minimumCount: number): 
   throw new Error(`Timed out waiting for ${String(minimumCount)} deployments on ${projectId}`);
 }
 
+async function waitForTerminalDeployment(serviceId: string): Promise<{ deploy_id: string }> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < SCENARIO_TIMEOUT_MS) {
+    const status = await callTool<{
+      active: number;
+      jobs: Array<{ deploy_id?: string; status?: string; terminal?: boolean }>;
+    }>('openlander_deploy', 'get_deploy_status', { service_id: serviceId });
+    const terminalJob = status.jobs.find((job) => job.terminal === true);
+    if (status.active === 0 && terminalJob?.deploy_id) {
+      expect(terminalJob.status).toBe('success');
+      return { deploy_id: terminalJob.deploy_id };
+    }
+    await sleep(POLL_INTERVAL_MS);
+  }
+  throw new Error(`Timed out waiting for terminal deployment on ${serviceId}`);
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Quality Gate — RC managed service smoke', () => {
@@ -177,6 +194,7 @@ test.describe('Quality Gate — RC managed service smoke', () => {
     expect(redeploy.status).toBe('deploying');
 
     await waitForDeploymentCount(projectId as string, beforeRedeploy.length + 1);
+    const terminalDeployment = await waitForTerminalDeployment(serviceId as string);
     await waitForServiceStatus(projectId as string, 'running', 180_000);
 
     const topology = await callTool<{
@@ -209,7 +227,7 @@ test.describe('Quality Gate — RC managed service smoke', () => {
     const buildLog = await callTool<{ status: string; full_log: boolean; truncated: boolean }>(
       'openlander_deploy',
       'get_build_log',
-      { project_id: projectId },
+      { deploy_id: terminalDeployment.deploy_id },
     );
     expect(buildLog.status).toBe('success');
     expect(buildLog.full_log).toBe(true);
