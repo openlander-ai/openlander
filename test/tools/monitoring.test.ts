@@ -1244,7 +1244,13 @@ describe('diagnose_service tool', () => {
             StartedAt: '2026-05-12T00:00:00.000Z',
             FinishedAt: '2026-05-12T00:02:00.000Z',
           },
-          Config: { Image: 'registry.example.com/app:failed' },
+          Config: {
+            Image: 'registry.example.com/app:failed',
+            Env: [
+              'DATABASE_URL=postgresql://postgres:secret@ol-db:5432/app',
+              'NEXT_PUBLIC_BASE_PATH=/admin',
+            ],
+          },
         })),
         listManagedContainers: vi.fn(async () => [{ id: 'container-1', status: 'running' }]),
         execSimple: vi.fn(async () => ({ exitCode: 1, stdout: '', stderr: 'connection refused' })),
@@ -1467,6 +1473,7 @@ describe('diagnose_service tool', () => {
 
 describe('service-targeted monitoring tools', () => {
   function createServiceTargetContext() {
+    const runtimeEnv = ['NODE_ENV=production'];
     const project = { id: 'app', name: 'app', status: 'running', container_id: 'legacy-container' };
     const service = {
       id: 'app__svc',
@@ -1544,14 +1551,14 @@ describe('service-targeted monitoring tools', () => {
             StartedAt: new Date(Date.now() - 10_000).toISOString(),
             FinishedAt: '0001-01-01T00:00:00Z',
           },
-          Config: { Image: 'app:latest' },
+          Config: { Image: 'app:latest', Env: [...runtimeEnv] },
           RestartCount: 2,
         })),
         listManagedContainers: vi.fn(async () => [{ id: 'service-container', status: 'running' }]),
         execSimple: vi.fn(async () => ({ exitCode: 0, stdout: 'OK', stderr: '' })),
       },
     } as unknown as AppContext;
-    return { ctx, project, service };
+    return { ctx, project, service, runtimeEnv };
   }
 
   it('get_logs accepts deployable service_id from list_projects output', async () => {
@@ -1884,9 +1891,8 @@ describe('service-targeted monitoring tools', () => {
           }),
         })),
         getLastDeployLogsForServices: vi.fn(async () => new Map()),
-        getServices: vi.fn(
-          async (opts: { kindIn?: readonly string[] } = {}) =>
-            opts.kindIn?.includes('compose-child') ? [web, api, postgres, redis] : [],
+        getServices: vi.fn(async (opts: { kindIn?: readonly string[] } = {}) =>
+          opts.kindIn?.includes('compose-child') ? [web, api, postgres, redis] : [],
         ),
         listServiceConnectionsByProject: vi.fn(async () => []),
         listServices: vi.fn(async () => [composeParent, web, api, postgres, redis]),
@@ -2622,7 +2628,7 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service excludes managed public route hosts from dependency diagnosis', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.listDomainMappingsForService).mockResolvedValueOnce([
       {
         id: 'domain-1',
@@ -2645,6 +2651,7 @@ describe('service-targeted monitoring tools', () => {
       NODE_ENV: 'production',
       API_URL: 'https://app.example.com/api',
     });
+    runtimeEnv.push('API_URL=https://app.example.com/api');
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async () => {
       throw new Error('ENOTFOUND app.example.com');
@@ -2670,13 +2677,14 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service excludes generated service routes and resolves stale pending input', async () => {
-    const { ctx, service } = createServiceTargetContext();
+    const { ctx, service, runtimeEnv } = createServiceTargetContext();
     const originalPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     process.env['OPENLANDER_PUBLIC_HOST'] = '100.75.249.124';
     service.name = 'incar/web__svc';
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       LOGTO_BASE_URL: 'http://incar-web.100.75.249.124.sslip.io',
     });
+    runtimeEnv.push('LOGTO_BASE_URL=http://incar-web.100.75.249.124.sslip.io');
 
     try {
       const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
@@ -2717,12 +2725,9 @@ describe('service-targeted monitoring tools', () => {
 
     expect(result).toMatchObject({
       dependencies: {
-        checks: [
-          expect.objectContaining({
-            key: 'DATABASE_URL',
-            reachable: false,
-          }),
-        ],
+        checks: [],
+        skipped: true,
+        reason: expect.stringContaining('Config.Env is unavailable'),
       },
       diagnosis: {
         code: 'CONTAINER_NOT_RUNNING',
@@ -2736,12 +2741,38 @@ describe('service-targeted monitoring tools', () => {
     expect(JSON.stringify(result['diagnosis'])).not.toContain('DEPENDENCY_UNREACHABLE');
   });
 
+  it('uses runtime Config.Env and treats stale saved DATABASE_URL only as drift', async () => {
+    const { ctx, runtimeEnv } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://stale.example.com:5432/app',
+    });
+    expect(runtimeEnv).toEqual(['NODE_ENV=production']);
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      env: {
+        runtime: { readable: true, keys: ['NODE_ENV'] },
+        drift: { savedOnlyKeys: ['DATABASE_URL'], runtimeOnlyKeys: [] },
+      },
+      dependencies: { count: 0, checks: [] },
+    });
+    expect(result['diagnosis']).toBeUndefined();
+    expect(ctx.db.upsertAiOpsPendingInput).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('stale.example.com');
+  });
+
   it('diagnose_service still reports real dependency failures', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       DATABASE_URL: 'postgres://db.example.com:5432/app',
     });
+    runtimeEnv.push('DATABASE_URL=postgres://db.example.com:5432/app');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
@@ -2795,16 +2826,18 @@ describe('service-targeted monitoring tools', () => {
       serviceId: 'app__svc',
       briefingId: null,
       field: 'DATABASE_URL',
-      reason: 'The saved DATABASE_URL endpoint is unreachable from the service network.',
+      reason:
+        "The running container's DATABASE_URL endpoint is unreachable from the service network.",
     });
   });
 
   it('diagnose_service does not create pending input for OpenLander-managed dependency hosts', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       DATABASE_URL: 'postgres://ol-svc-postgres:5432/app',
     });
+    runtimeEnv.push('DATABASE_URL=postgres://ol-svc-postgres:5432/app');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
@@ -2826,11 +2859,12 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service probes HTTP dependencies from the target service container', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       EXCHANGE_API_URL: 'https://api.exchange.test:443',
     });
+    runtimeEnv.push('EXCHANGE_API_URL=https://api.exchange.test:443');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -2884,11 +2918,12 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service confirms transient HTTP dependency failures before creating user input', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       EXCHANGE_API_URL: 'https://api.exchange.test:443',
     });
+    runtimeEnv.push('EXCHANGE_API_URL=https://api.exchange.test:443');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -2935,11 +2970,12 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service requires three HTTP network failures for high-confidence user input', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       EXCHANGE_API_URL: 'https://api.exchange.test:443',
     });
+    runtimeEnv.push('EXCHANGE_API_URL=https://api.exchange.test:443');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -2982,11 +3018,12 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service keeps HTTP non-2xx dependency evidence without high-confidence network diagnosis', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       EXCHANGE_API_URL: 'https://api.exchange.test:443',
     });
+    runtimeEnv.push('EXCHANGE_API_URL=https://api.exchange.test:443');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -3146,11 +3183,12 @@ describe('service-targeted monitoring tools', () => {
   });
 
   it('diagnose_service prefers dependency diagnosis over representative traffic symptoms', async () => {
-    const { ctx } = createServiceTargetContext();
+    const { ctx, runtimeEnv } = createServiceTargetContext();
     vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
       NODE_ENV: 'production',
       DATABASE_URL: 'postgres://db.example.com:5432/app',
     });
+    runtimeEnv.push('DATABASE_URL=postgres://db.example.com:5432/app');
     vi.mocked(ctx.docker.execSimple)
       .mockResolvedValueOnce({ exitCode: 0, stdout: '200', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '500', stderr: '' })
@@ -3365,7 +3403,7 @@ describe('service-targeted monitoring tools', () => {
         confidence: 'high',
         evidence: {
           missing_env_keys: ['DATABASE_URL'],
-          missing_from_saved_env: ['DATABASE_URL'],
+          missing_from_runtime_env: ['DATABASE_URL'],
         },
       },
       suggested_call: {

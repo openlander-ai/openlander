@@ -3684,6 +3684,12 @@ export const translations = {
       failed: 'Deploy failed.',
       fallbackError: 'Deploy failed',
       dismiss: 'Dismiss',
+      pending: 'Requesting…',
+      building: 'Building…',
+      approval: 'Approval required',
+      approvalReady: 'Stateful changes are waiting for approval.',
+      approvalEffect:
+        'Review the change list in Pending Approvals. OpenLander will back up named volumes and preserve the previous container before replacement; removed resources remain archived with their data.',
       // Surfaced when the redeploy route returns 409 / DEPLOY_LOCKED —
       // another deploy is already running for this project (could be the
       // same user in another tab, an MCP agent, or a webhook push).

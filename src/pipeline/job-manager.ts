@@ -67,6 +67,24 @@ export class JobManager {
     job.buildStepDesc = desc;
   }
 
+  appendBuildOutput(projectId: string, output: string): void {
+    const job = this.jobs.get(projectId);
+    if (!job || output.length === 0) return;
+
+    const nextLines = `${job.buildLogTail ?? ''}\n${output}`
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0)
+      .slice(-30);
+    job.buildLogTail = nextLines.join('\n');
+
+    for (const line of output.split(/\r?\n/)) {
+      const step = JobManager.parseDockerBuildStep(line);
+      if (step) {
+        this.updateBuildStep(projectId, step.step, step.total, step.desc);
+      }
+    }
+  }
+
   /** Parse Docker build step from output line (classic + BuildKit). Returns undefined if not a step line. */
   static parseDockerBuildStep(
     line: string,

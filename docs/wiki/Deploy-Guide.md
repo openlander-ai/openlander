@@ -291,6 +291,37 @@ publish host ports with `ports:` because that bypasses OpenLander's port
 allocation and can break safe redeploys. Use `expose:` to document internal
 container ports, then add a domain or use the generated service URL.
 
+#### Compose environment migration
+
+Saved OpenLander env values are interpolation input for Compose; they are not
+automatically copied into every child container. Each service receives only the
+keys it declares through `environment` or `env_file`:
+
+```yaml
+x-app-env: &app-env
+  DATABASE_URL: ${DATABASE_URL}
+  API_BASE_URL: ${API_BASE_URL}
+
+services:
+  web:
+    environment:
+      <<: *app-env
+      NODE_ENV: production
+  migrate:
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+  static:
+    environment: {} # explicitly inject no saved OpenLander env
+```
+
+This applies to a single Compose file and ordered base/overlay files; YAML merge
+keys such as `<<: *app-env` are resolved before deployment. If a workload has
+saved env but a service declares neither `environment` nor `env_file`, preflight
+stops with `COMPOSE_ENV_DECLARATION_REQUIRED`. Add an explicit declaration for
+the keys that child needs, or `environment: {}` when it intentionally receives
+none. This prevents database credentials meant for an API or migration job from
+being copied into a web/static container.
+
 ---
 
 ## Updating An Existing App
@@ -306,6 +337,28 @@ update_app(service_id: "my-app__svc")
 ```
 update_app(service_id: "my-app__svc", no_cache: true)
 ```
+
+For a Stateful Compose change, `update_app` can return a non-terminal approval
+response instead of starting the deploy:
+
+```json
+{
+  "status": "pending_approval",
+  "action_run_id": "action_...",
+  "diff": [{ "service_name": "db", "changed_fields": ["image"] }],
+  "backup_required": true,
+  "poll_call": {
+    "tool": "openlander_monitor",
+    "action": "mcp_action_status",
+    "params": { "action_run_id": "action_..." }
+  }
+}
+```
+
+Review or reject it in Pending Approvals. Approval pins the commit, Compose
+fingerprint, and current container; a stale plan stops with
+`STATEFUL_APPROVAL_STALE`. PostgreSQL major/image-family, volume contract, and
+runtime-role migrations remain blocked with `STATEFUL_MIGRATION_REQUIRED`.
 
 ### Blue-Green Deploy (Conditional Zero Downtime)
 

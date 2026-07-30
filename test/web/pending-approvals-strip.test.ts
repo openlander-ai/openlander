@@ -31,6 +31,8 @@ describe('pending approval strip surface', () => {
     expect(approvalsApiSource).toContain('/api/action-runs/${encodeURIComponent(id)}/reject');
     expect(componentSource).toContain('approveActionRun(actionRunId)');
     expect(componentSource).toContain('rejectActionRun(actionRunId)');
+    expect(componentSource).toContain('ACTION_RUN_RESOLVED_EVENT');
+    expect(componentSource).toContain('new CustomEvent<ActionRunResolvedDetail>');
   });
 
   it('renders destructive MCP details from approval metadata', () => {

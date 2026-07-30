@@ -3555,6 +3555,7 @@ export class DeployPipeline {
           },
           (line) => {
             buildLog += `${line}\n`;
+            this.jobManager?.appendBuildOutput(projectId, line);
           },
         );
       }

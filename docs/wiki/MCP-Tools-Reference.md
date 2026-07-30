@@ -761,6 +761,15 @@ not build an image.
 
 Provide either `service_id` or `service_name`.
 
+When `update_app` changes an existing Stateful Compose child, it returns
+`status: "pending_approval"`, `action_run_id`, a secret-free `diff`,
+`backup_required: true`, and `poll_call`; it does not report deploy success.
+Pending Approvals shows the changed fields, backup requirement, and data
+preservation effect. Approval is rejected as `STATEFUL_APPROVAL_STALE` if the
+commit, Compose fingerprint, or current container changed while waiting.
+PostgreSQL major/image-family, volume source/target, and runtime-role changes
+return `STATEFUL_MIGRATION_REQUIRED` and require a dedicated migration.
+
 A successful `restart_service` returns `status: "restarted"`, `project_id`,
 `service_id`, the unchanged `container_id`, and a `diagnostic_call` for
 `diagnose_service`.
@@ -1235,6 +1244,8 @@ confirming the data-loss impact.
 | `service_name` | string | Yes           | Service name |
 | `backup_id`    | string | Yes (restore) | Backup ID    |
 
+`list_service_backups.backups[].createdAt` is always an ISO-8601 string.
+
 ---
 
 ## Domains
@@ -1504,8 +1515,12 @@ traffic child can be resolved, the action returns the child status summary and m
 skipped instead of reporting the containerless parent as `CONTAINER_NOT_RUNNING`; diagnose a child
 `service_id` directly after selecting it from `get_topology`.
 
-Environment dependency checks, including HTTP and HTTPS endpoints, run from the diagnosed service
-container so Project-network DNS names are evaluated from the same network as the application.
+Environment dependency checks use the running container's actual `Config.Env`,
+including HTTP and HTTPS endpoints, and run from that container so Project-network DNS names are
+evaluated from the same network as the application. Saved env keys are returned only as a masked
+inventory and drift comparison; raw values are never returned. If Docker cannot provide
+`Config.Env`, dependency probes are marked skipped and OpenLander does not create a high-confidence
+dependency diagnosis or pending user input from saved values alone.
 HTTP/HTTPS failures without an HTTP status are retried before OpenLander promotes them to a
 high-confidence dependency diagnosis or pending user input. HTTP error responses keep their status
 evidence and are not treated as network failures. Endpoints that match the service's generated or
@@ -1521,7 +1536,7 @@ confidence, evidence }` and, when a safe next operation exists, top-level
 `buildTimeEnv`, `container`, `logs`, `httpCheck`, `route`, and `dependencies`
 fields for agent review.
 
-`DEPENDENCY_UNREACHABLE` is intentionally user-input-gated. When a saved
+`DEPENDENCY_UNREACHABLE` is intentionally user-input-gated. When a runtime
 dependency endpoint such as `EXCHANGE_API_URL` cannot be reached from Docker,
 `diagnosis.recoverability` is `needs_user_input`, `diagnosis.agent_terminal` is
 `true`, and `diagnosis.input_required` names the field with
@@ -1628,8 +1643,12 @@ Provide either `action_run_id` or `action_id`.
 
 Provide `deploy_id` by itself when known, or provide `service_id`/`service_name`
 with optional `deploy_index`. Project targets remain compatibility shortcuts.
-Without `tail`, `get_build_log` returns the full persisted build log and, when
-OpenLander captured one during a runtime crash, `runtime_log`. The response
+For an active service/project target, `get_build_log` returns
+`complete: false`, the latest BuildKit step when available, the most recent 30
+lines, and `status_call`; poll until terminal. Without `tail`, a completed
+target returns the full persisted Dockerfile or Compose build output. Compose
+children keep separate build logs, and one-shot migration/job deploy logs carry
+`runtime_log` with combined stdout/stderr plus the exit code. The response
 includes `full_log`, `returned_chars`, `total_chars`, and `truncated` for the
 build log, plus `runtime_full_log`, `runtime_returned_chars`,
 `runtime_total_chars`, and `runtime_truncated` when a runtime log is present, so

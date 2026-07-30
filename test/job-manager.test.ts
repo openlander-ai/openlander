@@ -246,5 +246,26 @@ describe('JobManager', () => {
       expect(status.buildStepTotal).toBe(10);
       expect(status.buildStepDesc).toBe('RUN npm build');
     });
+
+    it('keeps the latest 30 build lines and derives the active BuildKit step', () => {
+      jm.trackJob('p1', 'my-app');
+      jm.updatePhase('p1', 'building');
+      jm.appendBuildOutput(
+        'p1',
+        Array.from({ length: 35 }, (_, index) =>
+          index === 34 ? '#9 [4/7] RUN npm run build' : `output ${String(index + 1)}`,
+        ).join('\n'),
+      );
+
+      const status = jm.getStatus('p1')!;
+      expect(status.buildLogTail?.split('\n')).toHaveLength(30);
+      expect(status.buildLogTail).not.toContain('output 1\n');
+      expect(status.buildLogTail).toContain('#9 [4/7] RUN npm run build');
+      expect(status).toMatchObject({
+        buildStep: 4,
+        buildStepTotal: 7,
+        buildStepDesc: 'RUN npm run build',
+      });
+    });
   });
 });

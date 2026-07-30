@@ -666,15 +666,10 @@ export const monitoringToolDefs: ToolDef[] = [
         appCtx.db.getDeployLogs(deploymentRuntimeProject.id, 5),
       ]);
       const serviceEnv = { ...requestedServiceEnv, ...targetServiceEnv };
-      const effectiveEnv = { ...groupEnv, ...serviceEnv };
-      const probePath = selectServiceProbePath({
-        requestedPath: pathArg || healthCheckPathArg,
-        healthCheckPath: service.health_check_path,
-        env: effectiveEnv,
-      });
+      const savedEnv = { ...groupEnv, ...serviceEnv };
 
       const recentDeployment = summarizeRecentDeployments(deployLogs);
-      const buildDiagnostics = diagnoseBuildTimeEnv(effectiveEnv, deployLogs);
+      const buildDiagnostics = diagnoseBuildTimeEnv(savedEnv, deployLogs);
 
       if (requestedService.kind === 'compose' && service.id === requestedService.id) {
         const skippedReason =
@@ -720,7 +715,16 @@ export const monitoringToolDefs: ToolDef[] = [
         };
       }
 
-      const container = await summarizeContainer(appCtx, service);
+      const containerInspection = await summarizeContainer(appCtx, service);
+      const container = containerInspection.summary;
+      const runtimeEnv = containerInspection.runtimeEnv;
+      const runtimeEnvReadable = runtimeEnv !== null;
+      const diagnosticEnv = runtimeEnv ?? {};
+      const probePath = selectServiceProbePath({
+        requestedPath: pathArg || healthCheckPathArg,
+        healthCheckPath: service.health_check_path,
+        env: diagnosticEnv,
+      });
       const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
       const runtimeRole = normalizeRuntimeRole(service.runtime_role);
 
@@ -733,14 +737,23 @@ export const monitoringToolDefs: ToolDef[] = [
                 skipped: true,
                 reason: 'one-shot jobs are diagnosed from exit code and logs',
               }
-            : await probeEnvDependencies(
-                appCtx,
-                effectiveEnv,
-                timeoutMs,
-                service.container_id ?? undefined,
-                true,
-                { excludedHosts: await managedPublicDependencyHosts(appCtx, service) },
-              );
+            : runtimeEnvReadable && container['running'] === true
+              ? await probeEnvDependencies(
+                  appCtx,
+                  diagnosticEnv,
+                  timeoutMs,
+                  service.container_id ?? undefined,
+                  true,
+                  { excludedHosts: await managedPublicDependencyHosts(appCtx, service) },
+                )
+              : {
+                  count: 0,
+                  checks: [],
+                  skipped: true,
+                  reason: runtimeEnvReadable
+                    ? 'container is not running; dependency probes require its network context'
+                    : 'container Config.Env is unavailable; saved env is used only for drift comparison',
+                };
         const roleCheck =
           runtimeRole === 'job'
             ? {
@@ -778,7 +791,7 @@ export const monitoringToolDefs: ToolDef[] = [
             containerPort: service.container_port,
           },
           ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
-          env: summarizeEnvKeys(groupEnv, serviceEnv),
+          env: summarizeEnvKeys(groupEnv, serviceEnv, runtimeEnv ?? undefined),
           buildTimeEnv: buildDiagnostics,
           recentDeployment,
           container,
@@ -802,7 +815,7 @@ export const monitoringToolDefs: ToolDef[] = [
       });
       const trafficProbePath = selectServiceTrafficProbePath({
         primaryPath: probePath,
-        env: effectiveEnv,
+        env: diagnosticEnv,
       });
       const trafficCheck =
         !internal && httpCheck['reachable'] === true && trafficProbePath
@@ -822,14 +835,24 @@ export const monitoringToolDefs: ToolDef[] = [
           ? await probeServiceHttp(appCtx, service, probePath, timeoutMs, { internal: true })
           : null;
       const excludedDependencyHosts = await managedPublicDependencyHosts(appCtx, service);
-      const dependencies = await probeEnvDependencies(
-        appCtx,
-        effectiveEnv,
-        timeoutMs,
-        service.container_id ?? undefined,
-        true,
-        { excludedHosts: excludedDependencyHosts },
-      );
+      const dependencies =
+        runtimeEnvReadable && container['running'] === true
+          ? await probeEnvDependencies(
+              appCtx,
+              diagnosticEnv,
+              timeoutMs,
+              service.container_id ?? undefined,
+              true,
+              { excludedHosts: excludedDependencyHosts },
+            )
+          : {
+              count: 0,
+              checks: [],
+              skipped: true,
+              reason: runtimeEnvReadable
+                ? 'container is not running; dependency probes require its network context'
+                : 'container Config.Env is unavailable; saved env is used only for drift comparison',
+            };
       const nextSteps = buildDiagnoseNextSteps({
         service,
         recentDeployment,
@@ -849,7 +872,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const diagnosis = buildSynthesizedServiceDiagnosis({
         service,
         project,
-        effectiveEnv,
+        effectiveEnv: diagnosticEnv,
         buildDiagnostics,
         container,
         route,
@@ -900,8 +923,9 @@ export const monitoringToolDefs: ToolDef[] = [
         briefingId,
         diagnosis,
         dependencies,
-        effectiveEnv,
+        effectiveEnv: diagnosticEnv,
         excludedDependencyHosts,
+        runtimeEnvReadable,
       });
 
       return {
@@ -928,7 +952,7 @@ export const monitoringToolDefs: ToolDef[] = [
           containerPort: service.container_port,
         },
         ...(aggregateStatus ? { aggregate_status: aggregateStatus } : {}),
-        env: summarizeEnvKeys(groupEnv, serviceEnv),
+        env: summarizeEnvKeys(groupEnv, serviceEnv, runtimeEnv ?? undefined),
         buildTimeEnv: buildDiagnostics,
         recentDeployment,
         container,
@@ -1772,11 +1796,19 @@ function isBuildTimeEnvKey(key: string): boolean {
   return BUILD_TIME_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
-function summarizeEnvKeys(groupEnv: Record<string, string>, serviceEnv: Record<string, string>) {
+function summarizeEnvKeys(
+  groupEnv: Record<string, string>,
+  serviceEnv: Record<string, string>,
+  runtimeEnv?: Record<string, string>,
+) {
   const groupKeys = sortedKeys(groupEnv);
   const serviceKeys = sortedKeys(serviceEnv);
-  const effectiveKeys = sortedKeys({ ...groupEnv, ...serviceEnv });
+  const savedEnv = { ...groupEnv, ...serviceEnv };
+  const effectiveKeys = sortedKeys(savedEnv);
   const buildTimeKeys = effectiveKeys.filter(isBuildTimeEnvKey);
+  const runtimeKeys = runtimeEnv ? sortedKeys(runtimeEnv) : [];
+  const savedKeySet = new Set(effectiveKeys);
+  const runtimeKeySet = new Set(runtimeKeys);
   return {
     count: effectiveKeys.length,
     keys: effectiveKeys,
@@ -1784,8 +1816,21 @@ function summarizeEnvKeys(groupEnv: Record<string, string>, serviceEnv: Record<s
     serviceKeys,
     buildTimeKeys,
     runtimeOnlyKeys: effectiveKeys.filter((key) => !isBuildTimeEnvKey(key)),
+    runtime: runtimeEnv
+      ? {
+          readable: true,
+          count: runtimeKeys.length,
+          keys: runtimeKeys,
+        }
+      : { readable: false, count: 0, keys: [] },
+    drift: runtimeEnv
+      ? {
+          savedOnlyKeys: effectiveKeys.filter((key) => !runtimeKeySet.has(key)),
+          runtimeOnlyKeys: runtimeKeys.filter((key) => !savedKeySet.has(key)),
+        }
+      : { unavailable: true },
     masked: true,
-    note: 'Only environment variable keys are returned. Values are intentionally not exposed.',
+    note: 'Only saved/runtime environment variable keys and drift are returned. Values are intentionally not exposed.',
   };
 }
 
@@ -1903,16 +1948,38 @@ function getNumber(record: Record<string, unknown>, key: string): number | null 
   return typeof value === 'number' ? value : null;
 }
 
+interface DiagnosticContainerInspection {
+  summary: Record<string, unknown>;
+  runtimeEnv: Record<string, string> | null;
+}
+
+function parseContainerEnv(config: Record<string, unknown>): Record<string, string> | null {
+  const entries = config['Env'];
+  if (!Array.isArray(entries)) return null;
+  const env: Record<string, string> = {};
+  for (const entry of entries) {
+    if (typeof entry !== 'string') continue;
+    const separator = entry.indexOf('=');
+    if (separator <= 0) continue;
+    env[entry.slice(0, separator)] = entry.slice(separator + 1);
+  }
+  return env;
+}
+
 async function summarizeContainer(
   appCtx: AppCtx,
   service: ServiceRow,
-): Promise<Record<string, unknown>> {
+): Promise<DiagnosticContainerInspection> {
   if (!service.container_id) {
     return {
-      present: false,
-      running: false,
-      serviceStatus: service.status,
-      reason: 'service has no container_id',
+      summary: {
+        present: false,
+        running: false,
+        serviceStatus: service.status,
+        reason: 'service has no container_id',
+        envReadable: false,
+      },
+      runtimeEnv: null,
     };
   }
 
@@ -1921,33 +1988,43 @@ async function summarizeContainer(
     const state = getNestedRecord(rawInspect, 'State');
     const health = getNestedRecord(state, 'Health');
     const config = getNestedRecord(rawInspect, 'Config');
+    const runtimeEnv = parseContainerEnv(config);
     return {
-      present: true,
-      id: service.container_id,
-      name: service.container_name ?? getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
-      running: state['Running'] === true,
-      status: getString(state, 'Status'),
-      exitCode: getNumber(state, 'ExitCode'),
-      error: sanitizeDiagnosticText(getString(state, 'Error')),
-      startedAt: getString(state, 'StartedAt'),
-      finishedAt: getString(state, 'FinishedAt'),
-      restartCount: getNumber(rawInspect, 'RestartCount'),
-      healthStatus: getString(health, 'Status'),
-      inspectName: getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
-      image: sanitizeDiagnosticText(
-        getString(config, 'Image') ?? service.image_tag ?? service.image_url,
-      ),
+      summary: {
+        present: true,
+        id: service.container_id,
+        name: service.container_name ?? getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
+        running: state['Running'] === true,
+        status: getString(state, 'Status'),
+        exitCode: getNumber(state, 'ExitCode'),
+        error: sanitizeDiagnosticText(getString(state, 'Error')),
+        startedAt: getString(state, 'StartedAt'),
+        finishedAt: getString(state, 'FinishedAt'),
+        restartCount: getNumber(rawInspect, 'RestartCount'),
+        healthStatus: getString(health, 'Status'),
+        inspectName: getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
+        image: sanitizeDiagnosticText(
+          getString(config, 'Image') ?? service.image_tag ?? service.image_url,
+        ),
+        envReadable: runtimeEnv !== null,
+        envKeyCount: runtimeEnv ? Object.keys(runtimeEnv).length : 0,
+      },
+      runtimeEnv,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
-      present: false,
-      running: false,
-      id: service.container_id,
-      error: sanitizeDiagnosticText(message),
-      _agent_guidance: {
-        next_steps: ['Container inspect failed. Verify the container still exists on the host.'],
+      summary: {
+        present: false,
+        running: false,
+        id: service.container_id,
+        error: sanitizeDiagnosticText(message),
+        envReadable: false,
+        _agent_guidance: {
+          next_steps: ['Container inspect failed. Verify the container still exists on the host.'],
+        },
       },
+      runtimeEnv: null,
     };
   }
 }
@@ -2558,8 +2635,12 @@ async function syncPendingUserInputFromDiagnosis(
     dependencies: Record<string, unknown>;
     effectiveEnv: Record<string, string>;
     excludedDependencyHosts: Set<string>;
+    runtimeEnvReadable: boolean;
   },
 ): Promise<void> {
+  if (!input.runtimeEnvReadable) {
+    return;
+  }
   const diagnosis = input.diagnosis;
   if (
     diagnosis?.code === 'DEPENDENCY_UNREACHABLE' &&
@@ -3647,11 +3728,11 @@ function buildSynthesizedServiceDiagnosis(input: {
       summary:
         missingKeys.length > 0
           ? `${missingKeys.join(', ')} is missing from the service runtime env.`
-          : `${presentKeys.join(', ')} exists in saved env, but the running container logs still report it missing.`,
+          : `${presentKeys.join(', ')} exists in the running container env, but the container logs still report it missing.`,
       evidence: {
         missing_env_keys: missingRuntimeEnvKeys,
-        present_in_saved_env: presentKeys,
-        missing_from_saved_env: missingKeys,
+        present_in_runtime_env: presentKeys,
+        missing_from_runtime_env: missingKeys,
         build_time_suspected_keys: suspectedBuildEnv,
       },
       suggested_call: setEnvVarsSuggestedCall(input.service.id, missingRuntimeEnvKeys),
@@ -3665,7 +3746,7 @@ function buildSynthesizedServiceDiagnosis(input: {
     }
     const failed = failedDependency;
     const key = typeof failed['key'] === 'string' ? failed['key'] : 'endpoint';
-    const reason = `The saved ${key} endpoint is unreachable from the service network.`;
+    const reason = `The running container's ${key} endpoint is unreachable from the service network.`;
     const message = `OpenLander found that ${key} is unreachable from the service network, but it cannot infer the replacement value. Please provide the correct ${key} value; I should not guess or invent one.`;
     return {
       code: 'DEPENDENCY_UNREACHABLE',

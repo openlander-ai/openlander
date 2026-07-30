@@ -3886,6 +3886,12 @@ export const translations = {
       failed: '배포에 실패했습니다.',
       fallbackError: '배포 실패',
       dismiss: '닫기',
+      pending: '요청 중…',
+      building: '빌드 중…',
+      approval: '승인 필요',
+      approvalReady: 'Stateful 변경이 승인을 기다리고 있습니다.',
+      approvalEffect:
+        '승인 대기 목록에서 변경 내용을 확인하세요. 교체 전에 named volume을 백업하고 기존 컨테이너를 보존하며, 제거된 리소스도 데이터와 함께 보관됩니다.',
       // 재배포 라우트가 409 / DEPLOY_LOCKED 를 반환했을 때 노출합니다 —
       // 같은 프로젝트의 다른 배포가 진행 중인 상황 (다른 탭, MCP 에이전트,
       // 웹훅 푸시 등).

@@ -1139,7 +1139,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_service_backups',
     riskLevel: 'low',
     description:
-      'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, createdAt, and sizeBytes for each snapshot.',
+      'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, ISO-8601 createdAt, and sizeBytes for each snapshot.',
     mcpDescription: 'List available backup snapshots for a service.',
     inputSchema: listServiceBackupsSchema,
     execute: async (args, { appCtx }) => {
@@ -1150,7 +1150,7 @@ export const serviceToolDefs: ToolDef[] = [
         count: backups.length,
         backups: backups.map((backup) => ({
           backupId: backup.backupId,
-          createdAt: backup.createdAt,
+          createdAt: backup.createdAt.toISOString(),
           sizeBytes: backup.sizeBytes,
         })),
       };
