@@ -932,7 +932,15 @@ export class ProjectRepo {
       .returning({ id: projects.id });
   }
 
-  async archiveProject(id: string, archivedAt = new Date().toISOString()): Promise<void> {
+  async archiveProject(
+    id: string,
+    archivedAt = new Date().toISOString(),
+    retainedRuntime?: {
+      containerId: string;
+      containerName: string;
+      imageTag: string | null;
+    },
+  ): Promise<void> {
     const project = await this.getProject(id);
     if (!project) {
       throw new ProjectNotFoundError(id);
@@ -951,8 +959,9 @@ export class ProjectRepo {
         .set({
           archived_at: archivedAt,
           assigned_port: null,
-          container_id: null,
-          image_tag: null,
+          container_id: retainedRuntime?.containerId ?? null,
+          ...(retainedRuntime ? { container_name: retainedRuntime.containerName } : {}),
+          image_tag: retainedRuntime?.imageTag ?? null,
           status: 'stopped',
           updated_at: sql`CURRENT_TIMESTAMP`,
         })

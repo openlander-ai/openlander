@@ -54,8 +54,8 @@ export function lifecycleEffectForTool(toolName: string): LifecycleEffect {
     return {
       kind: 'archive',
       reversible: true,
-      runtime: 'stop_remove_container',
-      data: 'preserve_config_history',
+      runtime: 'stop_remove_or_preserve_stateful',
+      data: 'preserve_config_history_and_stateful_volumes',
       hard_delete: false,
     };
   }
@@ -64,8 +64,8 @@ export function lifecycleEffectForTool(toolName: string): LifecycleEffect {
     return {
       kind: 'unarchive',
       reversible: true,
-      runtime: 'no_auto_start',
-      data: 'preserve_config_history',
+      runtime: 'resume_preserved_stateful_or_no_auto_start',
+      data: 'preserve_config_history_and_stateful_volumes',
       hard_delete: false,
     };
   }
@@ -122,7 +122,7 @@ export function afterApprovalGuidanceForTool(toolName: string): Record<string, s
   if (toolName === 'unarchive_project' || toolName === 'unarchive_service') {
     return {
       succeeded:
-        'Confirm active lifecycle state, then redeploy only if the user wants runtime started.',
+        'Confirm active lifecycle state. Preserved Stateful Compose resources resume in place; redeploy other targets only if the user wants them started.',
       rejected: 'Stop and report that the human rejected the restore request.',
       failed: 'Report the failure; do not claim a container was started.',
     };

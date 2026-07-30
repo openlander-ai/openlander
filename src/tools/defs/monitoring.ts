@@ -1124,10 +1124,10 @@ export const monitoringToolDefs: ToolDef[] = [
                 : status === 'succeeded' && lifecycleEffect?.kind === 'unarchive'
                   ? {
                       message:
-                        'Restore completed. The target is back on the active lifecycle path, but no container was started automatically.',
+                        'Restore completed. Preserved Stateful Compose resources resumed in place; other targets are active but were not started automatically.',
                       next_steps: [
-                        'Call update_app only if the user wants the service running again.',
-                        'After updating, call diagnose_service to verify runtime health.',
+                        'Call diagnose_service to verify whether a preserved runtime resumed.',
+                        'Call update_app only when no container was restored and the user wants the service running again.',
                       ],
                     }
                   : status === 'failed'

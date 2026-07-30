@@ -56,6 +56,7 @@ import {
   fingerprintComposeServices,
   inferComposeRuntimeRoles,
   sanitizeComposeProjectName,
+  selectComposeServices,
   validateComposeProfiles,
   type ComposePipeline,
 } from './compose.js';
@@ -2669,6 +2670,7 @@ export class DeployPipeline {
       const parsed = composePipeline.parseComposeFiles(composePaths);
       validateComposeProfiles(parsed.services, config.composeProfiles);
       const activeServices = filterServicesByProfiles(parsed.services, config.composeProfiles);
+      const selectedServices = selectComposeServices(activeServices, config.composeServices);
       const runtimeRoles = inferComposeRuntimeRoles(activeServices);
       const currentFingerprints = fingerprintComposeServices(activeServices);
       const storedConfig = await this.db.loadDeployConfigForService(service.id);
@@ -2690,7 +2692,7 @@ export class DeployPipeline {
         (child) => !child.archived_at,
       );
       if (childServices.length > 0 && Object.keys(baseEnv).length > 0) {
-        const servicesWithoutEnvDeclaration = activeServices
+        const servicesWithoutEnvDeclaration = selectedServices
           .filter(
             (composeService) =>
               composeService.environment === undefined &&

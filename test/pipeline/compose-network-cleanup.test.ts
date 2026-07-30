@@ -1123,6 +1123,42 @@ describe('compose network cleanup', () => {
     expect(calls.at(-1)?.[0]).toEqual(expect.objectContaining({ envVars: {} }));
   });
 
+  it('does not require env declarations from unselected Compose services', async () => {
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx
+    environment: {}
+  caddy:
+    image: caddy:2-alpine
+`,
+      'utf8',
+    );
+    const docker = createFakeDocker();
+    const db = createFakeDb();
+    const pipeline = new ComposePipeline(docker, db, createEventBus());
+    const first = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+    });
+
+    const second = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      _parentId: first.parentProjectId,
+      services: ['web'],
+      envVars: { DATABASE_URL: 'postgres://stored.example/app' },
+    });
+
+    expect(second.success).toBe(true);
+    expect(second.services.map((service) => service.name)).toEqual(['web']);
+  });
+
   it('publishes every Compose container port and applies mem_limit', async () => {
     writeFileSync(
       composePath,

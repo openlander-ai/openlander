@@ -196,7 +196,22 @@ export class ContainerLifecycle {
   }
 
   async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
-    await this.archiveRuntimeProject(projectId, tunnelManager);
+    const children = await this.db.getComposeChildProjects(projectId);
+    if (children.length === 0) {
+      await this.archiveRuntimeProject(projectId, tunnelManager);
+      return;
+    }
+
+    const root = await this.loadRuntimeProjectForArchive(projectId, { allowMissing: true });
+    if (!root) return;
+
+    // One marker identifies the complete Compose restore set. Generating a
+    // timestamp independently for every child makes a parent restore unable
+    // to distinguish children archived by this operation from older archives.
+    await this.archiveRuntimeProject(projectId, tunnelManager, {
+      archivedAt: new Date().toISOString(),
+    });
+    await this.clearPartialGroupArchiveMarkerAfterRuntimeArchive(root.service ?? undefined);
   }
 
   async archiveGroup(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
@@ -273,6 +288,77 @@ export class ContainerLifecycle {
     const children = await this.db.getComposeChildProjects(projectId);
     for (const child of children) {
       await this.archiveRuntimeProject(child.id, tunnelManager, options);
+    }
+
+    if (
+      service?.kind === 'compose-child' &&
+      service.runtime_role === 'resource' &&
+      archiveContainerId &&
+      service.container_name
+    ) {
+      const separator = archiveState.project.name.lastIndexOf('/');
+      const parentName =
+        separator > 0 ? archiveState.project.name.slice(0, separator) : archiveState.project.name;
+      const serviceName =
+        separator > 0 ? archiveState.project.name.slice(separator + 1) : archiveState.project.name;
+      const canonicalName = composeContainerName(parentName, serviceName);
+      const originalName = service.container_name;
+      const containerSuffix = archiveContainerId.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 12);
+      const preservedName = `${canonicalName}-archived-${containerSuffix || 'preserved'}`;
+      const projectNetwork = projectContainerName(sanitizeComposeProjectName(parentName));
+      let stopped = false;
+      let disconnected = false;
+      let renamed = false;
+
+      try {
+        await this.runtime.stopContainer(archiveContainerId);
+        stopped = true;
+        await this.runtime.disconnectContainerFromNetwork(archiveContainerId, projectNetwork);
+        disconnected = true;
+        if (originalName !== preservedName) {
+          await this.runtime.renameContainer(archiveContainerId, preservedName);
+          renamed = true;
+        }
+        await this.db.archiveProject(projectId, options.archivedAt, {
+          containerId: archiveContainerId,
+          containerName: preservedName,
+          imageTag: archiveImageTag,
+        });
+      } catch (error) {
+        try {
+          if (renamed) {
+            await this.runtime.renameContainer(archiveContainerId, originalName);
+          }
+          if (disconnected) {
+            await this.runtime.connectContainerToNetwork(archiveContainerId, projectNetwork, [
+              serviceName,
+            ]);
+          }
+          if (stopped) {
+            await this.runtime.startContainer(archiveContainerId);
+          }
+        } catch (rollbackError) {
+          throw new ServiceOperationError(
+            'archive_service',
+            `Failed to archive Stateful Compose service '${serviceName}', and runtime rollback also failed.`,
+            {
+              serviceId: service.id,
+              containerId: archiveContainerId,
+              error: error instanceof Error ? error.message : String(error),
+              rollbackError:
+                rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+            },
+          );
+        }
+        throw error;
+      }
+
+      tunnelManager?.close(projectId);
+      clearPortScanCache();
+      if (emitEvent) {
+        await eventBus.emit('project:archive', { projectId });
+      }
+      return;
     }
 
     // Archive in DB first so if Docker emits a 'die' event during cleanup,
@@ -365,6 +451,14 @@ export class ContainerLifecycle {
     const record = await loadServiceViewRecord(this.db, project);
     if (!project.archived_at && !record.service?.archived_at) return;
 
+    const restoreMarker = project.archived_at ?? record.service?.archived_at;
+    const children = await this.db.getComposeChildProjects(projectId);
+    for (const child of children) {
+      if (restoreMarker && child.archived_at === restoreMarker) {
+        await this.unarchiveRuntimeProject(child.id, options);
+      }
+    }
+
     if (
       record.service?.kind === 'compose-child' &&
       record.service.container_id &&
@@ -430,6 +524,15 @@ export class ContainerLifecycle {
     }
 
     await this.db.unarchiveProject(projectId);
+    if (record.service?.kind === 'compose-child') {
+      if (options.emitEvent ?? true) {
+        await eventBus.emit('project:unarchive', {
+          projectId,
+          port: record.service.assigned_port ?? 0,
+        });
+      }
+      return;
+    }
     const port = await allocatePort(this.db, this.runtime, {}, 'production');
     await this.db.updateProject(projectId, { assignedPort: port });
     if (options.emitEvent ?? true) {

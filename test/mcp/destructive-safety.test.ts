@@ -449,10 +449,15 @@ describe('MCP destructive safety', () => {
 
     expect(result).toMatchObject({
       status: 'succeeded',
-      lifecycle_effect: { kind: 'unarchive', runtime: 'no_auto_start' },
+      lifecycle_effect: {
+        kind: 'unarchive',
+        runtime: 'resume_preserved_stateful_or_no_auto_start',
+      },
       _agent_guidance: {
-        message: expect.stringContaining('no container was started automatically'),
-        next_steps: expect.arrayContaining([expect.stringContaining('Call update_app only if')]),
+        message: expect.stringContaining('Preserved Stateful Compose resources resumed in place'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('Call update_app only when no container was restored'),
+        ]),
       },
     });
   });

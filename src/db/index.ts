@@ -469,7 +469,13 @@ export class Database implements AuthDatabase {
   listProjectsWithMetadata(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
   getDeployableServiceCountsByProjectIds(projectIds: string[]) { return this.projectRepo.getDeployableServiceCountsByProjectIds(projectIds); }
   setProjectArchivedAt(id: string, archivedAt: string | null) { return this.projectRepo.setProjectArchivedAt(id, archivedAt); }
-  archiveProject(id: string, archivedAt?: string) { return this.projectRepo.archiveProject(id, archivedAt); }
+  archiveProject(
+    id: string,
+    archivedAt?: string,
+    retainedRuntime?: Parameters<ProjectRepo['archiveProject']>[2],
+  ) {
+    return this.projectRepo.archiveProject(id, archivedAt, retainedRuntime);
+  }
   unarchiveProject(id: string) { return this.projectRepo.unarchiveProject(id); }
   listArchivedProjects() { return this.projectRepo.listArchivedProjects(); }
   isArchived(id: string) { return this.projectRepo.isArchived(id); }

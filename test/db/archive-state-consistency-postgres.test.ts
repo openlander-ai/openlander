@@ -151,6 +151,93 @@ describeWithDatabase('archive state consistency on Postgres', () => {
     });
   });
 
+  it('archives and restores a Stateful Compose child with one marker and the same container', async () => {
+    await withIsolatedPostgresDatabase('archive_compose_restore_set', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const parent = await db.createProject({
+          id: 'archive-restore-parent',
+          name: 'archive-restore-parent',
+          repoUrl: 'https://github.com/example/archive-restore-parent',
+          branch: 'main',
+          buildMethod: 'compose',
+        });
+        const child = await db.createProject({
+          id: 'archive-restore-db',
+          name: 'archive-restore-parent/db',
+          repoUrl: 'https://github.com/example/archive-restore-parent',
+          branch: 'main',
+          parentProjectId: parent.id,
+          runtimeRole: 'resource',
+        });
+        const childService = await db.getDeployableForProject(child.id);
+        expect(childService).toBeDefined();
+        await db.updateService(childService!.id, {
+          status: 'running',
+          runtimeRole: 'resource',
+          containerId: 'archive-db-container-1234567890',
+          containerName: 'ol-archive-restore-parent-db',
+          imageTag: 'postgres:17-alpine',
+        });
+        const runtime = {
+          listManagedContainers: vi.fn().mockResolvedValue([]),
+          listAllContainers: vi.fn().mockResolvedValue([]),
+          stopContainer: vi.fn().mockResolvedValue(undefined),
+          startContainer: vi.fn().mockResolvedValue(undefined),
+          removeContainer: vi.fn().mockResolvedValue(undefined),
+          removeImage: vi.fn().mockResolvedValue(undefined),
+          disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
+          connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
+          renameContainer: vi.fn().mockResolvedValue(undefined),
+          ensureProjectNetwork: vi.fn().mockResolvedValue('ol-archive-restore-parent'),
+          inspectContainer: vi.fn().mockRejectedValue(
+            new Error('No such container: ol-archive-restore-parent-db'),
+          ),
+        } as unknown as Docker;
+        const pipeline = new DeployPipeline(runtime, db, new EnvManager(db), testConfig);
+
+        await pipeline.archive(parent.id);
+
+        const archivedParent = await db.getProject(parent.id);
+        const archivedChild = await db.getProject(child.id);
+        const archivedChildService = await db.getDeployableForProject(child.id);
+        expect(archivedParent?.archived_at).not.toBeNull();
+        expect(archivedChild?.archived_at).toBe(archivedParent?.archived_at);
+        expect(archivedChildService).toMatchObject({
+          archived_at: archivedParent?.archived_at,
+          status: 'stopped',
+          container_id: 'archive-db-container-1234567890',
+          container_name: 'ol-archive-restore-parent-db-archived-archive-db-c',
+          image_tag: 'postgres:17-alpine',
+        });
+        expect(runtime.removeContainer).not.toHaveBeenCalledWith(
+          'archive-db-container-1234567890',
+        );
+
+        await pipeline.unarchive(parent.id);
+
+        const restoredChildService = await db.getDeployableForProject(child.id);
+        expect((await db.getProject(parent.id))?.archived_at).toBeNull();
+        expect((await db.getProject(child.id))?.archived_at).toBeNull();
+        expect(restoredChildService).toMatchObject({
+          archived_at: null,
+          status: 'running',
+          container_id: 'archive-db-container-1234567890',
+          container_name: 'ol-archive-restore-parent-db',
+          image_tag: 'postgres:17-alpine',
+        });
+        expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith(
+          'archive-db-container-1234567890',
+          'ol-archive-restore-parent',
+          ['db'],
+        );
+        expect(runtime.startContainer).toHaveBeenCalledWith('archive-db-container-1234567890');
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
   it('keeps attached runtime Projects in the reconciliation sweep', async () => {
     await withIsolatedPostgresDatabase('archive_attached_runtime_reconcile', async (url) => {
       const db = await Database.connect(url);

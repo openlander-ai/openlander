@@ -95,7 +95,8 @@ before executing.
 Archive is reversible cleanup, not permanent deletion: archived Applications
 are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
-`unarchive_project`. Restore actions do not redeploy automatically.
+`unarchive_project`. Preserved Stateful Compose resources resume in place;
+other restore actions do not redeploy automatically.
 Archive execution uses the durable deployment lock plus the in-process job
 registry as its concurrency check. Dockerfile and Compose deployments both own
 the same durable lock. An active deployment returns `DEPLOY_LOCKED`; after an

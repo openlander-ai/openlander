@@ -1143,8 +1143,13 @@ export class ComposePipeline {
       ...composeProject,
       services: filterServicesByProfiles(composeProject.services, config.profiles),
     };
-    // Validate requested names before computing dependency semantics.
-    selectComposeServices(activeComposeProject.services, config.services);
+    // Validate requested names before computing dependency semantics. The
+    // selected set also scopes declaration checks; an unselected reverse
+    // proxy must not block a targeted OpenLander deployment.
+    const selectedComposeServices = selectComposeServices(
+      activeComposeProject.services,
+      config.services,
+    );
     const runtimeRoles = inferComposeRuntimeRoles(activeComposeProject.services);
     const allExistingChildren = await this.db.getComposeChildProjects(parentProjectId);
     const allExistingChildServices = await this.db.getComposeChildren(`${parentProjectId}__svc`);
@@ -1152,7 +1157,7 @@ export class ComposePipeline {
     const existingChildServices = allExistingChildServices.filter((child) => !child.archived_at);
     const envVars = { ...(config.envVars ?? {}) };
     if (existingChildren.length > 0 && Object.keys(envVars).length > 0) {
-      const servicesWithoutEnvDeclaration = activeComposeProject.services
+      const servicesWithoutEnvDeclaration = selectedComposeServices
         .filter(
           (service) => service.environment === undefined && (service.envFile?.length ?? 0) === 0,
         )
