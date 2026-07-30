@@ -39,6 +39,7 @@ export class ImageOps {
         { context: contextPath, src: ['.'] },
         {
           t: tag,
+          version: '2',
           nocache: options?.noCache === true,
           buildargs: options?.buildArgs,
           target: options?.target,

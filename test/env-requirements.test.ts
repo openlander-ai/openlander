@@ -28,18 +28,14 @@ describe('env value requirements', () => {
       expect.objectContaining({ code: 'ENV_VALUE_PREFIX_MISMATCH', severity: 'fail' }),
     ]);
 
-    expect(
-      validateEnvValue('JWT_SECRET', 'short', inferEnvValueRequirement('JWT_SECRET')),
-    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_TOO_SHORT', severity: 'fail' })]);
+    expect(validateEnvValue('JWT_SECRET', 'short', inferEnvValueRequirement('JWT_SECRET'))).toEqual(
+      [expect.objectContaining({ code: 'ENV_VALUE_TOO_SHORT', severity: 'fail' })],
+    );
   });
 
   it('blocks reserved/example URL hosts for required URL env vars', () => {
     expect(
-      validateEnvValue(
-        'API_URL',
-        'https://api.example.com',
-        inferEnvValueRequirement('API_URL'),
-      ),
+      validateEnvValue('API_URL', 'https://api.example.com', inferEnvValueRequirement('API_URL')),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_RESERVED_URL_HOST', severity: 'fail' })]);
 
     expect(
@@ -55,10 +51,30 @@ describe('env value requirements', () => {
     ).toEqual([]);
   });
 
-  it('blocks obvious dummy/sample/test secrets even when their prefix looks valid', () => {
+  it('allows origin-relative URLs only for browser-public env vars', () => {
     expect(
-      validateEnvValue('API_KEY', 'test_secret', inferEnvValueRequirement('API_KEY')),
-    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
+      validateEnvValue(
+        'NEXT_PUBLIC_API_BASE_URL',
+        '/backend',
+        inferEnvValueRequirement('NEXT_PUBLIC_API_BASE_URL'),
+      ),
+    ).toEqual([]);
+    expect(validateEnvValue('API_URL', '/backend', inferEnvValueRequirement('API_URL'))).toEqual([
+      expect.objectContaining({ code: 'ENV_VALUE_INVALID_URL', severity: 'fail' }),
+    ]);
+    expect(
+      validateEnvValue(
+        'NEXT_PUBLIC_API_BASE_URL',
+        '//example.test/backend',
+        inferEnvValueRequirement('NEXT_PUBLIC_API_BASE_URL'),
+      ),
+    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_INVALID_URL', severity: 'fail' })]);
+  });
+
+  it('blocks obvious dummy/sample/test secrets even when their prefix looks valid', () => {
+    expect(validateEnvValue('API_KEY', 'test_secret', inferEnvValueRequirement('API_KEY'))).toEqual(
+      [expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })],
+    );
 
     expect(
       validateEnvValue(
@@ -71,7 +87,11 @@ describe('env value requirements', () => {
 
   it('blocks copied example secrets that satisfy basic shape checks', () => {
     expect(
-      validateEnvValue('API_KEY', ['key', 'supersecret'].join('_'), inferEnvValueRequirement('API_KEY')),
+      validateEnvValue(
+        'API_KEY',
+        ['key', 'supersecret'].join('_'),
+        inferEnvValueRequirement('API_KEY'),
+      ),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
 
     expect(
@@ -129,9 +149,9 @@ describe('env value requirements', () => {
       validateEnvValue('SMTP_HOST', 'smtp.sendgrid.net', inferEnvValueRequirement('SMTP_HOST')),
     ).toEqual([]);
 
-    expect(validateEnvValue('SMTP_HOST', 'demo.acme.io', inferEnvValueRequirement('SMTP_HOST'))).toEqual(
-      [],
-    );
+    expect(
+      validateEnvValue('SMTP_HOST', 'demo.acme.io', inferEnvValueRequirement('SMTP_HOST')),
+    ).toEqual([]);
   });
 
   it('requires trusted provenance for user-owned external env in deploy-plan inline input', () => {
@@ -188,7 +208,12 @@ describe('env value requirements', () => {
 
   it('hard-fails provided optional values that are placeholder-like or structurally invalid', () => {
     expect(
-      validateEnvValue('OPTIONAL_SECRET', 'placeholder', inferEnvValueRequirement('OPTIONAL_SECRET'), false),
+      validateEnvValue(
+        'OPTIONAL_SECRET',
+        'placeholder',
+        inferEnvValueRequirement('OPTIONAL_SECRET'),
+        false,
+      ),
     ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_PLACEHOLDER', severity: 'fail' })]);
 
     expect(
@@ -209,8 +234,8 @@ describe('env value requirements', () => {
     expect(inferEnvValueRequirement('SMTP_PORT')).toMatchObject({
       kind: 'int',
     });
-    expect(
-      validateEnvValue('SMTP_PORT', 'abc', inferEnvValueRequirement('SMTP_PORT')),
-    ).toEqual([expect.objectContaining({ code: 'ENV_VALUE_NOT_INTEGER', severity: 'fail' })]);
+    expect(validateEnvValue('SMTP_PORT', 'abc', inferEnvValueRequirement('SMTP_PORT'))).toEqual([
+      expect.objectContaining({ code: 'ENV_VALUE_NOT_INTEGER', severity: 'fail' }),
+    ]);
   });
 });

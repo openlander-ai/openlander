@@ -944,6 +944,11 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe('Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)'),
+    build_context: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Docker build context relative to repository root (e.g., . or services/api)'),
     docker_target: z
       .string()
       .optional()
@@ -997,6 +1002,13 @@ export const createDeployPlanSchema = z
     }
 
     if (data.source === 'image') {
+      if (data.build_context) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['build_context'],
+          message: 'build_context is only valid for Git Dockerfile deployments.',
+        });
+      }
       if (
         data.compose_file ||
         data.compose_files ||
@@ -1193,6 +1205,11 @@ export const deploySchema = z
       .string()
       .optional()
       .describe('Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)'),
+    build_context: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Docker build context relative to repository root (e.g., . or services/api)'),
     docker_target: z
       .string()
       .optional()
@@ -1250,6 +1267,13 @@ export const deploySchema = z
     }
 
     if (data.source === 'image') {
+      if (data.build_context) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['build_context'],
+          message: 'build_context is only valid for Git Dockerfile deployments.',
+        });
+      }
       if (data.git_credential_id) {
         ctx.addIssue({
           code: 'custom',

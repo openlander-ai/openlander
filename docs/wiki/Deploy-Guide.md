@@ -262,7 +262,12 @@ If `project_id` and `project_name` are both sent, `project_id` wins and a mismat
 | `env_vars`          | No       | JSON object of env vars                              |
 | `prefer_dockerfile` | No       | Use existing Dockerfile                              |
 | `dockerfile_path`   | No       | Path to Dockerfile                                   |
+| `build_context`     | No       | Build context relative to repository root            |
 | `docker_target`     | No       | Multi-stage build target                             |
+
+For a monorepo Dockerfile such as `infra/Dockerfile.api` that copies shared
+root packages, set `build_context: "."`. OpenLander uses BuildKit for both
+single-Application and Compose Dockerfile builds.
 
 ### From Docker Image
 

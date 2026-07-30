@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
@@ -81,6 +81,7 @@ export interface CreatePlanOptions {
   trigger?: string;
   preferDockerfile?: boolean;
   dockerfilePath?: string;
+  buildContext?: string;
   dockerTarget?: string;
   projectId?: string;
   targetProjectId?: string;
@@ -605,6 +606,61 @@ export class PlanEngine {
     }
   }
 
+  private resolveExplicitBuildContext(
+    clonePath: string,
+    userDockerfile: string,
+    buildMethod: DeployPlan['build']['method'],
+    requestedBuildContext?: string,
+  ): string | undefined {
+    if (requestedBuildContext === undefined) {
+      return undefined;
+    }
+    if (buildMethod !== 'dockerfile') {
+      throw new ServiceConfigError('build_context is only valid for Dockerfile deployments.', {
+        buildMethod,
+      });
+    }
+
+    const normalized = requestedBuildContext.trim().replace(/\\/g, '/');
+    if (normalized.length === 0 || isAbsolute(normalized) || normalized.split('/').includes('..')) {
+      throw new ServiceConfigError(
+        'build_context must be a relative directory inside the repository.',
+        {
+          buildContext: requestedBuildContext,
+        },
+      );
+    }
+
+    const contextCandidate = resolve(clonePath, normalized);
+    if (!existsSync(contextCandidate) || !statSync(contextCandidate).isDirectory()) {
+      throw new ServiceConfigError(`Build context directory not found: ${normalized}`, {
+        buildContext: normalized,
+      });
+    }
+
+    const repositoryRoot = realpathSync(clonePath);
+    const contextPath = realpathSync(contextCandidate);
+    const dockerfilePath = realpathSync(resolve(clonePath, userDockerfile));
+    const contextFromRoot = relative(repositoryRoot, contextPath);
+    const dockerfileFromContext = relative(contextPath, dockerfilePath);
+    const escapedRepository =
+      contextFromRoot === '..' ||
+      contextFromRoot.startsWith(`..${sep}`) ||
+      isAbsolute(contextFromRoot);
+    const dockerfileOutsideContext =
+      dockerfileFromContext === '..' ||
+      dockerfileFromContext.startsWith(`..${sep}`) ||
+      isAbsolute(dockerfileFromContext);
+    if (escapedRepository || dockerfileOutsideContext) {
+      throw new ServiceConfigError(
+        'build_context must remain inside the repository and contain the selected Dockerfile.',
+        { buildContext: normalized, dockerfilePath: userDockerfile },
+      );
+    }
+
+    return contextFromRoot.length === 0 ? '.' : contextFromRoot.split(sep).join('/');
+  }
+
   private buildExecutionContext(opts: CreatePlanOptions): PlanExecutionContext | undefined {
     const execution: PlanExecutionContext = {
       visibility: opts.visibility,
@@ -1066,6 +1122,7 @@ export class PlanEngine {
     imageUrl?: string;
     buildMethod: DeployPlan['build']['method'];
     userDockerfile: string;
+    buildContext?: string;
     dockerTarget?: string;
     generatedDockerfile?: string;
     composeFilePath?: string;
@@ -1086,9 +1143,11 @@ export class PlanEngine {
     environment: 'production' | 'development';
   }): DeployPlan {
     const now = new Date().toISOString();
-    const dockerfileDir = params.userDockerfile.includes('/')
-      ? params.userDockerfile.substring(0, params.userDockerfile.lastIndexOf('/'))
-      : '.';
+    const dockerfileDir =
+      params.buildContext ??
+      (params.userDockerfile.includes('/')
+        ? params.userDockerfile.substring(0, params.userDockerfile.lastIndexOf('/'))
+        : '.');
 
     const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
       name: service.name,
@@ -1259,6 +1318,9 @@ export class PlanEngine {
     }
 
     if (source === 'image' || imageUrl) {
+      if (opts.buildContext !== undefined) {
+        throw new ServiceConfigError('build_context is only valid for Git Dockerfile deployments.');
+      }
       const normalizedImageUrl = imageUrl?.trim();
       if (!normalizedImageUrl) {
         throw new Error('imageUrl is required when source is "image"');
@@ -1367,6 +1429,12 @@ export class PlanEngine {
       trafficServiceCandidates,
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
+    const buildContext = this.resolveExplicitBuildContext(
+      clonePath,
+      userDockerfile,
+      buildMethod,
+      opts.buildContext,
+    );
     let trafficService: string | undefined;
     if (buildMethod === 'compose') {
       const candidates = trafficServiceCandidates ?? [];
@@ -1450,6 +1518,7 @@ export class PlanEngine {
       gitCredentialId: cloneResult.gitCredentialId,
       buildMethod,
       userDockerfile,
+      buildContext,
       dockerTarget: opts.dockerTarget,
       generatedDockerfile,
       composeFilePath,
@@ -2263,7 +2332,7 @@ export class PlanEngine {
       dockerfilePath:
         !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
       dockerTarget: plan.build.target,
-      buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
+      buildContext: plan.build.context,
       ...(isCompose && plan.build.compose_files
         ? { composeFiles: plan.build.compose_files }
         : isCompose && plan.build.compose_file

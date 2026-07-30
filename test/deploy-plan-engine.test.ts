@@ -902,6 +902,7 @@ describe('PlanEngine.executePlan', () => {
         API_KEY: 'key123',
       },
       preferDockerfile: true,
+      buildContext: '.',
     });
   });
 
@@ -1718,6 +1719,7 @@ describe('PlanEngine.executePlan', () => {
     expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'new-worker',
+        buildContext: '.',
         _networkProjectName: 'ais-server',
         _lockSessionId: 'session-target',
       }),

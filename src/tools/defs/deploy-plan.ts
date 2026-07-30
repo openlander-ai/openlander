@@ -1064,6 +1064,7 @@ const EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS = [
   'port',
   'prefer_dockerfile',
   'dockerfile_path',
+  'build_context',
   'docker_target',
   'git_credential_id',
 ] as const;
@@ -1076,7 +1077,7 @@ const EXISTING_SERVICE_SOURCE_UPDATE_PARAMS = [
   'port',
   'git_credential_id',
 ];
-const EXISTING_SERVICE_BUILD_CONFIG_PARAMS = ['dockerfile_path', 'docker_target'];
+const EXISTING_SERVICE_BUILD_CONFIG_PARAMS = ['dockerfile_path', 'build_context', 'docker_target'];
 
 const EXISTING_SERVICE_REDEPLOY_ALLOWED_PARAMS = [
   'service_id',
@@ -1311,9 +1312,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'create_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Analyze a repository/image and create a deployment plan for a new Application/Compose workload. Valid Compose is selected by default; otherwise one Dockerfile creates one Application per plan. Multiple Dockerfiles return structured needs_selection candidates unless dockerfile_path selects one. target_project_id permits Application, worker, and Compose sibling workloads. Use name for the workload name. Returns detected resources, required env vars, and build config.',
+      'Analyze a repository/image and create a deployment plan for a new Application/Compose workload. Valid Compose is selected by default; otherwise one Dockerfile creates one Application per plan. Multiple Dockerfiles return structured needs_selection candidates unless dockerfile_path selects one. For monorepos, build_context explicitly selects the repository-relative Docker build context. target_project_id permits Application, worker, and Compose sibling workloads. Use name for the workload name. Returns detected resources, required env vars, and build config.',
     mcpDescription:
-      'Create a deployment plan for one Application or Compose workload. Compose is the default when valid; multiple Dockerfiles require dockerfile_path and return needs_selection candidates. target_project_id attaches a sibling workload. New app names use name, not project_name.',
+      'Create a deployment plan for one Application or Compose workload. Compose is the default when valid; multiple Dockerfiles require dockerfile_path and return needs_selection candidates. Use build_context="." when a nested monorepo Dockerfile copies repository-root files. target_project_id attaches a sibling workload. New app names use name, not project_name.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1334,6 +1335,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           envVars,
           preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
           dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+          buildContext: (args['build_context'] as string | undefined) ?? undefined,
           dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
           composeFile: (args['compose_file'] as string | undefined) ?? undefined,
           composeFiles: (args['compose_files'] as string[] | undefined) ?? undefined,
@@ -1591,7 +1593,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Successful deploy_app runs are adopted into the Delivery ledger as an implicit immutable Release without rebuilding the image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed Application, worker, or Compose workload to an existing Project after successful deploy. Repositories with multiple Dockerfiles require one dockerfile_path per plan; repeat with the same target_project_id to add each Application. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Successful deploy_app runs are adopted into the Delivery ledger as an implicit immutable Release without rebuilding the image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed Application, worker, or Compose workload to an existing Project after successful deploy. Repositories with multiple Dockerfiles require one dockerfile_path per plan; build_context can select a monorepo root; repeat with the same target_project_id to add each Application. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
       'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. A successful run records an implicit immutable Release without rebuilding. For approved safe Database/Cache proposals, keep the deploy-plan path; OpenLander provisions them on the same Project/network as the app. To add an Application/worker/Compose workload into an existing Project, pass target_project_id without expose=true. Multiple Dockerfiles require dockerfile_path and one Application per plan. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
@@ -1823,6 +1825,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           envVars,
           preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
           dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+          buildContext: (args['build_context'] as string | undefined) ?? undefined,
           dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
           trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
           targetProjectId,

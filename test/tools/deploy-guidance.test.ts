@@ -899,6 +899,41 @@ describe('deploy MCP guidance', () => {
     );
   });
 
+  it('forwards an explicit build_context when creating a Dockerfile plan', async () => {
+    const ctx = {
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-context',
+          status: 'ready',
+          complexity: 'simple',
+          app: { name: 'api' },
+          build: { method: 'dockerfile', dockerfile: 'infra/Dockerfile.api', context: '.' },
+          services: [],
+          env: { required: [], auto: [], provided: {}, detected: {} },
+          missing: [],
+          warnings: [],
+        })),
+      },
+    } as unknown as AppContext;
+
+    await getTool(ctx, 'create_deploy_plan').execute(
+      {
+        repo_url: 'https://github.com/acme/monorepo',
+        name: 'api',
+        dockerfile_path: 'infra/Dockerfile.api',
+        build_context: '.',
+      },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.planEngine.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dockerfilePath: 'infra/Dockerfile.api',
+        buildContext: '.',
+      }),
+    );
+  });
+
   it('executes deploy plans with MCP deploy trigger so Activity shows MCP actor', async () => {
     const plan = {
       plan_id: 'plan-1',

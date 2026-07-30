@@ -194,7 +194,12 @@ describeDocker('Docker core operations', () => {
 
     expect(mockBuildImage).toHaveBeenCalledWith(
       { context: '/tmp/app', src: ['.'] },
-      { t: 'my-image:latest', nocache: true, buildargs: { NODE_ENV: 'production' } },
+      {
+        t: 'my-image:latest',
+        version: '2',
+        nocache: true,
+        buildargs: { NODE_ENV: 'production' },
+      },
     );
     expect(onProgress).toHaveBeenCalledTimes(2);
   });

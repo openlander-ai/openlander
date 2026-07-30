@@ -45,6 +45,8 @@ const SECRET_KEY_PATTERN =
   /(?:SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|JWT|PASSWORD)/i;
 const SECRET_EXAMPLE_PATTERN =
   /(^|[^a-z0-9])(abcdef|123456|super[-_]?secret|very[-_]?long[-_]?secret|example[-_]?(?:key|secret|token|value)?)([^a-z0-9]|$)|AKIA[0-9A-Z]*EXAMPLE|wJalrXUtnFEMI/i;
+const BROWSER_PUBLIC_ENV_KEY_PATTERN =
+  /^(?:NEXT_PUBLIC_|VITE_|REACT_APP_|NUXT_PUBLIC_|PUBLIC_|GATSBY_)/i;
 
 const PLATFORM_MANAGED_ENV_KEYS = new Set([
   'DATABASE_URL',
@@ -276,6 +278,12 @@ function isProbablyUrl(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
 }
 
+function isOriginRelativeBrowserUrl(key: string, value: string): boolean {
+  return (
+    BROWSER_PUBLIC_ENV_KEY_PATTERN.test(key) && value.startsWith('/') && !value.startsWith('//')
+  );
+}
+
 function isReservedHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   if (
@@ -428,7 +436,8 @@ export function validateEnvValue(
   }
 
   if (requirement.kind === 'url') {
-    if (!isProbablyUrl(trimmed)) {
+    const isOriginRelative = isOriginRelativeBrowserUrl(key, trimmed);
+    if (!isProbablyUrl(trimmed) && !isOriginRelative) {
       issues.push({
         key,
         code: 'ENV_VALUE_INVALID_URL',
@@ -436,7 +445,11 @@ export function validateEnvValue(
         message: `${key} must be a full URL/DSN with a scheme, such as https://, postgres://, or redis://.`,
         requirement,
       });
-    } else if (requirement.allowLocalhost !== true && isLocalhostUrl(trimmed)) {
+    } else if (
+      !isOriginRelative &&
+      requirement.allowLocalhost !== true &&
+      isLocalhostUrl(trimmed)
+    ) {
       issues.push({
         key,
         code: 'ENV_VALUE_LOCALHOST_URL',
@@ -444,7 +457,7 @@ export function validateEnvValue(
         message: `${key} points to localhost; inside a container this usually needs a service hostname or external URL.`,
         requirement,
       });
-    } else if (isReservedUrlHost(trimmed)) {
+    } else if (!isOriginRelative && isReservedUrlHost(trimmed)) {
       issues.push({
         key,
         code: 'ENV_VALUE_RESERVED_URL_HOST',
