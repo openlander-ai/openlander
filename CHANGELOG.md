@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.4] - 2026-07-30
+
+### Fixed
+
+- Preserve the installation user's ownership and permissions when the isolated
+  one-click update runner replaces Compose environment and definition files,
+  including during automatic rollback.
+
 ## [0.2.14-rc.3] - 2026-07-30
 
 ### Fixed
