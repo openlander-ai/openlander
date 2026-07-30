@@ -3440,8 +3440,9 @@ function buildAiOpsRecoveryReceipt(input: {
 
 function extractListeningPort(text: string): number | null {
   const patterns = [
-    /\b(?:listening|listen|started|server|ready|running)\b[^\n]{0,100}\b(?:on\s+)?(?:port\s+)?(\d{2,5})\b/i,
     /\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d{2,5})\b/i,
+    /\b(?:listening|running)\s+(?:at\s+|on\s+)?(?:port\s+)?(\d{2,5})\b/i,
+    /\b(?:started|ready)\b[^\n]{0,40}\bon\s+port\s+(\d{2,5})\b/i,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(text);
