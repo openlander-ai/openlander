@@ -360,8 +360,11 @@ describe('compose network cleanup', () => {
       `services:\n  migrate:\n    image: example/migrate\n  api:\n    build: .\n    depends_on:\n      migrate:\n        condition: service_completed_successfully\n`,
       'utf8',
     );
+    const completeBuildOutput = `${'#9 [4/5] RUN npm run build\n'.repeat(120)}registry request timed out\n`;
     const docker = createFakeDocker({
-      buildComposeService: vi.fn().mockRejectedValue(new Error('registry request timed out')),
+      buildComposeService: vi
+        .fn()
+        .mockRejectedValue(new DockerBuildError('example/api:latest', completeBuildOutput)),
     });
     const db = createFakeDb();
     const jobManager = new JobManager();
@@ -383,10 +386,18 @@ describe('compose network cleanup', () => {
     for (const child of childProjects) {
       expect(jobManager.getStatus(child.id)).toMatchObject({
         phase: 'failed',
-        errorSummary: 'registry request timed out',
+        errorSummary: 'Docker build failed for example/api:latest',
       });
     }
     expect(jobManager.getActiveJobs()).toEqual([]);
+    const apiProject = childProjects.find((project) => project.name === 'stack/api');
+    expect(db._deployLogs).toContainEqual(
+      expect.objectContaining({
+        serviceId: `${apiProject?.id ?? ''}__svc`,
+        status: 'failed',
+        buildLog: expect.stringContaining(completeBuildOutput.trimEnd()),
+      }),
+    );
   });
 
   it('synchronizes metadata for existing children excluded from a selective deploy', async () => {

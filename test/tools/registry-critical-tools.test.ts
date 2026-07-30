@@ -422,6 +422,39 @@ describe('registry critical tool behaviors', () => {
     });
   });
 
+  it('get_deploy_status keeps recent build output visible while the container is starting', async () => {
+    const { ctx, jobManager } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+    const now = new Date(Date.now() - 3000);
+
+    jobManager.getStatus.mockReturnValue({
+      projectId: 'p1',
+      projectName: 'critical-app',
+      phase: 'starting',
+      startedAt: now,
+      buildLogTail: '#4 [5/5] RUN npm run build\n#4 DONE 18.2s',
+      buildStep: 5,
+      buildStepTotal: 5,
+      buildStepDesc: 'RUN npm run build',
+    });
+
+    const result = await tool.execute({ service_id: 'p1__svc' }, { target: 'mcp' });
+
+    expect(result).toMatchObject({
+      active: 1,
+      jobs: [
+        {
+          service_id: 'p1__svc',
+          phase: 'starting',
+          build_log_tail: '#4 [5/5] RUN npm run build\n#4 DONE 18.2s',
+          build_step: 5,
+          build_step_total: 5,
+          build_step_desc: 'RUN npm run build',
+        },
+      ],
+    });
+  });
+
   it('get_deploy_status prefers a newer deploy lock over stale completed job state', async () => {
     const { ctx, jobManager } = createMockContext();
     const tool = getTool(ctx, 'get_deploy_status');

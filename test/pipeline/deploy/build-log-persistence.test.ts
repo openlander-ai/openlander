@@ -11,6 +11,7 @@ import {
 } from '../../../src/pipeline/deploy/orchestrator.js';
 import { JobManager } from '../../../src/pipeline/job-manager.js';
 import type { RuntimeBackend } from '../../../src/pipeline/runtime/index.js';
+import { DockerBuildError } from '../../../src/errors.js';
 
 describe('successful Dockerfile build logging', () => {
   const tempDirs: string[] = [];
@@ -74,5 +75,48 @@ describe('successful Dockerfile build logging', () => {
       buildStep: 2,
       buildStepTotal: 4,
     });
+  });
+
+  it('attaches complete failed builder output instead of the bounded error preview', async () => {
+    const clonePath = mkdtempSync(join(tmpdir(), 'openlander-build-log-'));
+    tempDirs.push(clonePath);
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:22\nRUN npm ci\n', 'utf8');
+    const completeBuildOutput = `${'#8 [3/4] RUN npm ci\n'.repeat(140)}process exited with code 1\n`;
+    const deps = {
+      runtime: {} as RuntimeBackend,
+      db: {
+        updateProject: vi.fn(async () => undefined),
+        getService: vi.fn(async () => undefined),
+        getDeployableForProject: vi.fn(async () => undefined),
+      } as unknown as Database,
+      env: {
+        getGlobalSecrets: vi.fn(async () => ({})),
+        getAllWithInheritance: vi.fn(async () => ({})),
+        getAllForService: vi.fn(async () => ({})),
+      } as unknown as EnvManager,
+      buildExecutor: {
+        build: vi.fn(async () => {
+          throw new DockerBuildError('openlander/app:latest', completeBuildOutput);
+        }),
+      },
+    } as unknown as DeployOrchestrationDeps;
+
+    const error = await buildProject(deps, {
+      projectId: 'project-1',
+      environmentId: 'environment-1',
+      routeName: 'app',
+      trigger: 'api',
+      imageTag: 'openlander/app:latest',
+      repoUrl: 'https://example.invalid/app.git',
+      startTime: Date.now(),
+      shouldSyncProjectState: true,
+      config: { source: 'git' },
+      clonePath,
+      commitSha: 'abc123',
+      sourceRevisionChanged: true,
+      buildLog: '[clone] Done\n',
+    }).catch((caught: unknown) => caught);
+
+    expect((error as Error & { buildLog?: string }).buildLog).toContain(completeBuildOutput);
   });
 });

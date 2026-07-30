@@ -17,8 +17,7 @@ const COMPOSE_BUILD_NETWORK_RETRY_DELAYS_MS = [500, 1_500] as const;
 
 function isRetryableComposeBuildNetworkError(error: unknown): boolean {
   if (!(error instanceof DockerBuildError)) return false;
-  const detail = error.details?.['buildLog'];
-  const evidence = `${error.message}\n${typeof detail === 'string' ? detail : ''}`;
+  const evidence = `${error.message}\n${error.buildLog}`;
   return /(?:context deadline exceeded|i\/o timeout|connection (?:reset|refused)|network is unreachable|temporary failure in name resolution|no such host|tls handshake timeout|failed to do request|unexpected eof|no active session)/i.test(
     evidence,
   );

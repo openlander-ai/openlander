@@ -19,7 +19,7 @@ import type { ContainerRunner } from './run-step.js';
 import type { DeployResult, MonorepoConfig } from '../deploy-core.js';
 import type { OrchestrationResult, ServiceNode } from '../orchestrator.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
-import { isDockerBuildCancelledError } from '../../errors.js';
+import { getCompleteDockerBuildLog, isDockerBuildCancelledError } from '../../errors.js';
 import { loadServiceView } from '../../db/views/service-view.js';
 
 const log = createModuleLogger('deploy');
@@ -272,8 +272,9 @@ export async function deployMonorepoService(
     const terminalLogLine = isCancelled
       ? `[cancelled] [monorepo] ${dockerfilePath}: ${cancelMessage}\n`
       : `[error] [monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`;
-    const buildLogWithOutput = dockerBuildOutput
-      ? `--- Docker build output ---\n${dockerBuildOutput}${terminalLogLine}`
+    const completeDockerBuildOutput = getCompleteDockerBuildLog(error) ?? dockerBuildOutput;
+    const buildLogWithOutput = completeDockerBuildOutput
+      ? `--- Docker build output ---\n${completeDockerBuildOutput}${terminalLogLine}`
       : terminalLogLine;
 
     await transitionProjectState(

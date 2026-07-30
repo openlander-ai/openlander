@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DockerBuildError } from '../src/errors.js';
 import { Docker } from '../src/pipeline/docker.js';
 
 const describeDocker = describe;
@@ -26,6 +27,14 @@ require.cache[dockerodePath] = {
 } as unknown as NodeJS.Module;
 
 describeDocker('Docker build startup error context', () => {
+  it('keeps the complete log internally while exposing only a bounded error preview', () => {
+    const completeLog = `${'build output\n'.repeat(300)}terminal failure\n`;
+    const error = new DockerBuildError('acme/repo-app:latest', completeLog);
+
+    expect(error.buildLog).toBe(completeLog);
+    expect(error.details?.['buildLog']).toBe(completeLog.slice(-2000));
+  });
+
   it('includes image tag and context path in DockerBuildError when stream fails to start', async () => {
     mockBuildImage.mockRejectedValueOnce(new Error('Cannot connect to Docker daemon'));
     const docker = new Docker();

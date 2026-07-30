@@ -35,12 +35,12 @@ import {
   ComposeEnvDeclarationRequiredError,
   ComposeJobFailedError,
   ComposePrerequisiteUnhealthyError,
-  DockerBuildError,
   InvalidTrafficServiceError,
   ServiceConfigError,
   ServiceOperationError,
   StatefulApprovalStaleError,
   TrafficServiceRequiredError,
+  getCompleteDockerBuildLog,
   isDockerNotFoundError,
 } from '../errors.js';
 import { planComposeDeploymentSets } from './compose-deployment-sets.js';
@@ -64,16 +64,15 @@ const COMPOSE_FILES = [
   'compose.yaml',
 ] as const;
 
-function getDockerBuildLog(error: unknown): string | undefined {
-  if (!(error instanceof DockerBuildError)) return undefined;
-  const buildLog = error.details?.['buildLog'];
-  return typeof buildLog === 'string' && buildLog.trim().length > 0 ? buildLog : undefined;
-}
-
 function appendComposeError(buildLog: string, error: unknown): string {
   const errorMsg = error instanceof Error ? error.message : String(error);
-  const dockerBuildLog = getDockerBuildLog(error);
-  return `${buildLog}${dockerBuildLog ? `[docker build output]\n${dockerBuildLog.trimEnd()}\n` : ''}[error] ${errorMsg}\n`;
+  const dockerBuildLog = getCompleteDockerBuildLog(error);
+  const normalizedDockerBuildLog = dockerBuildLog?.trimEnd();
+  const missingDockerOutput =
+    normalizedDockerBuildLog && !buildLog.includes(normalizedDockerBuildLog)
+      ? `[docker build output]\n${normalizedDockerBuildLog}\n`
+      : '';
+  return `${buildLog}${missingDockerOutput}[error] ${errorMsg}\n`;
 }
 
 interface ProjectStateTransitioner {
@@ -1135,6 +1134,8 @@ export class ComposePipeline {
     let buildLog = '';
     const buildLogsByService = new Map<string, string>();
     const runtimeLogsByService = new Map<string, string>();
+    const persistedChildDeployLogServiceNames = new Set<string>();
+    let failedImagePreparationServiceName: string | undefined;
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFiles(config.composePaths ?? [config.composePath]);
@@ -1593,30 +1594,35 @@ export class ComposePipeline {
         const composeService = serviceByName.get(serviceName);
         if (!composeService) continue;
         const imageTag = this.resolveComposeServiceImageTag(composeService, projectName, envVars);
-        if (composeService.build) {
-          const { contextPath, dockerfile } = this.resolveBuildContext(
-            filteredComposeProject.projectPath,
-            composeService,
-          );
-          buildLog += `[compose build ${serviceName}] ${contextPath}\n`;
-          buildLogsByService.set(
-            serviceName,
-            `${buildLogsByService.get(serviceName) ?? ''}[compose build ${serviceName}] ${contextPath}\n`,
-          );
-          await this.docker.buildComposeService({
-            contextPath,
-            dockerfile,
-            tag: imageTag,
-            cacheFrom: [imageTag],
-            noCache: config.noCache === true,
-            onProgress: (output) => {
-              appendComposeBuildOutput(serviceName, output);
-            },
-          });
-        } else {
-          buildLog += `[compose pull ${serviceName}] ${imageTag}\n`;
-          buildLogsByService.set(serviceName, `[compose pull ${serviceName}] ${imageTag}\n`);
-          await this.docker.pullImage(imageTag);
+        try {
+          if (composeService.build) {
+            const { contextPath, dockerfile } = this.resolveBuildContext(
+              filteredComposeProject.projectPath,
+              composeService,
+            );
+            buildLog += `[compose build ${serviceName}] ${contextPath}\n`;
+            buildLogsByService.set(
+              serviceName,
+              `${buildLogsByService.get(serviceName) ?? ''}[compose build ${serviceName}] ${contextPath}\n`,
+            );
+            await this.docker.buildComposeService({
+              contextPath,
+              dockerfile,
+              tag: imageTag,
+              cacheFrom: [imageTag],
+              noCache: config.noCache === true,
+              onProgress: (output) => {
+                appendComposeBuildOutput(serviceName, output);
+              },
+            });
+          } else {
+            buildLog += `[compose pull ${serviceName}] ${imageTag}\n`;
+            buildLogsByService.set(serviceName, `[compose pull ${serviceName}] ${imageTag}\n`);
+            await this.docker.pullImage(imageTag);
+          }
+        } catch (error) {
+          failedImagePreparationServiceName = serviceName;
+          throw error;
         }
         preparedImageTags.set(serviceName, imageTag);
       }
@@ -1955,6 +1961,10 @@ export class ComposePipeline {
             });
             this.jobManager?.updatePhase(childId, 'failed', errorMsg);
             buildLog = appendComposeError(buildLog, error);
+            buildLogsByService.set(
+              service.name,
+              appendComposeError(buildLogsByService.get(service.name) ?? '', error),
+            );
             buildLog += `[compose error ${service.name}] ${errorMsg}\n`;
 
             return {
@@ -2334,6 +2344,7 @@ export class ComposePipeline {
           runtimeLog: runtimeLogsByService.get(status.name),
           durationMs: Date.now() - startTime,
         });
+        persistedChildDeployLogServiceNames.add(status.name);
       }
 
       const parentLogTail = hasError
@@ -2485,6 +2496,30 @@ export class ComposePipeline {
         buildLog: buildLogWithError,
         durationMs: Date.now() - startTime,
       });
+
+      for (const serviceName of new Set([
+        ...buildLogsByService.keys(),
+        ...runtimeLogsByService.keys(),
+      ])) {
+        if (persistedChildDeployLogServiceNames.has(serviceName)) continue;
+        const childId = childrenByService.get(serviceName);
+        if (!childId) continue;
+        const serviceBuildLog = buildLogsByService.get(serviceName) ?? '';
+        await this.db.createDeployLogForService({
+          id: nanoid(12),
+          serviceId: projectIdToDeployableServiceId(childId),
+          status: 'failed',
+          trigger,
+          commitSha: config.commitSha,
+          commitMessage,
+          buildLog:
+            serviceName === failedImagePreparationServiceName
+              ? appendComposeError(serviceBuildLog, error)
+              : `${serviceBuildLog}[compose aborted] ${errorMsg}\n`,
+          runtimeLog: runtimeLogsByService.get(serviceName),
+          durationMs: Date.now() - startTime,
+        });
+      }
 
       const buildLogTail = buildLogWithError.split('\n').filter(Boolean).slice(-30).join('\n');
       this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg, buildLogTail);
