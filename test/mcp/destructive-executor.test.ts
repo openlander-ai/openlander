@@ -242,7 +242,10 @@ describe('destructive MCP approval executor', () => {
       'failed',
       expect.stringMatching(/DEPLOY_LOCKED:.*deploy-live-session/),
     );
-    expect(db.updateActionRunPlan).not.toHaveBeenCalled();
+    expect(db.updateActionRunPlan).toHaveBeenCalledWith(
+      'action-run-archive-locked',
+      expect.stringContaining('"code":"DEPLOY_LOCKED"'),
+    );
   });
 
   it('executes approved deployable unarchive_service approvals without redeploying', async () => {

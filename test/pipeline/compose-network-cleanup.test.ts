@@ -49,6 +49,7 @@ type ProjectPatch = {
 function createFakeDb() {
   const projects = new Map<string, ProjectRow>();
   const deployLogs: unknown[] = [];
+  const deployLocks = new Map<string, string>();
 
   return {
     createProject: vi.fn(async (input: ProjectInput) => {
@@ -114,6 +115,22 @@ function createFakeDb() {
       deployLogs.push(log);
     }),
     getUsedPorts: vi.fn(async () => []),
+    acquireDeployLock: vi.fn(async (projectId: string, sessionId: string) => {
+      const current = deployLocks.get(projectId);
+      if (current && current !== sessionId) return false;
+      deployLocks.set(projectId, sessionId);
+      return true;
+    }),
+    releaseDeployLock: vi.fn(async (projectId: string, sessionId?: string) => {
+      const current = deployLocks.get(projectId);
+      if (!current || (sessionId && current !== sessionId)) return false;
+      deployLocks.delete(projectId);
+      return true;
+    }),
+    getDeployLockInfo: vi.fn(async (projectId: string) => {
+      const session = deployLocks.get(projectId);
+      return session ? { session, lockedAt: new Date().toISOString() } : null;
+    }),
     _projects: projects,
     _deployLogs: deployLogs,
   } as unknown as Database & { _projects: Map<string, ProjectRow>; _deployLogs: unknown[] };

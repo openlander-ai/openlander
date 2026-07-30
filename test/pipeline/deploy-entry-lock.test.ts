@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
+import { JobManager } from '../../src/pipeline/job-manager.js';
 import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../../src/db/index.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
@@ -1047,6 +1048,66 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
       expect(db.archiveProject).not.toHaveBeenCalled();
       expect((await db.getProject('p-active-deploy'))?.archived_at).toBeNull();
       expect((await db.getDeployLockInfo('p-active-deploy'))?.session).toBe('deploy-live-session');
+    });
+
+    it('rejects an archive during an active in-process job before its durable lock is visible', async () => {
+      db.createProject({
+        id: 'p-active-job',
+        name: 'active-job-app',
+        repoUrl: 'https://github.com/test/active-job-app',
+        branch: 'main',
+      });
+      const jobManager = new JobManager();
+      jobManager.trackJob('p-active-job', 'active-job-app');
+      jobManager.updatePhase('p-active-job', 'building');
+      pipeline = new DeployPipeline(docker, db, env as never, testConfig, jobManager);
+
+      await expect(pipeline.archive('p-active-job')).rejects.toMatchObject({
+        code: 'DEPLOY_LOCKED',
+        details: {
+          projectId: 'p-active-job',
+          lockedBySession: 'job-manager:building',
+          blockedServiceId: 'p-active-job__svc',
+          statusSource: 'job_manager',
+          operationPhase: 'building',
+        },
+      });
+
+      expect(db.archiveProject).not.toHaveBeenCalled();
+      expect(await db.getDeployLockInfo('p-active-job')).toBeNull();
+    });
+
+    it('clears an in-process job marker when a newer terminal deploy log proves it stale', async () => {
+      db.createProject({
+        id: 'p-stale-job',
+        name: 'stale-job-app',
+        repoUrl: 'https://github.com/test/stale-job-app',
+        branch: 'main',
+      });
+      const jobManager = new JobManager();
+      jobManager.trackJob('p-stale-job', 'stale-job-app');
+      jobManager.updatePhase('p-stale-job', 'building');
+      vi.mocked(db.getLastDeployLog).mockResolvedValue({
+        id: 'deploy-terminal',
+        service_id: 'p-stale-job__svc',
+        environment_id: null,
+        status: 'success',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: null,
+        commit_message: null,
+        build_log: null,
+        runtime_log: null,
+        representative_traffic_json: null,
+        duration_ms: 1,
+        created_at: new Date(Date.now() + 1000).toISOString(),
+      });
+      pipeline = new DeployPipeline(docker, db, env as never, testConfig, jobManager);
+
+      await pipeline.archive('p-stale-job');
+
+      expect(jobManager.getStatus('p-stale-job')?.phase).toBe('done');
+      expect(db.archiveProject).toHaveBeenCalledWith('p-stale-job', undefined);
     });
 
     it('acquires every Compose lock before mutation and releases earlier locks on contention', async () => {

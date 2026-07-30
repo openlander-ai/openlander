@@ -150,4 +150,32 @@ describeWithDatabase('archive state consistency on Postgres', () => {
       }
     });
   });
+
+  it('keeps attached runtime Projects in the reconciliation sweep', async () => {
+    await withIsolatedPostgresDatabase('archive_attached_runtime_reconcile', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const target = await db.createProjectGroup({
+          id: 'visible-project',
+          name: 'visible-project',
+        });
+        const runtime = await db.createProject({
+          id: 'hidden-runtime',
+          name: 'hidden-runtime',
+          repoUrl: 'https://github.com/example/hidden-runtime',
+          branch: 'main',
+        });
+        const runtimeService = await db.getDeployableForProject(runtime.id);
+        expect(runtimeService).toBeDefined();
+        await db.attachServiceToProject(runtimeService!.id, target.id);
+
+        expect((await db.listProjects()).map((project) => project.id)).not.toContain(runtime.id);
+        expect(
+          (await db.listRuntimeProjectsForReconciliation()).map((project) => project.id),
+        ).toContain(runtime.id);
+      } finally {
+        await db.close();
+      }
+    });
+  });
 });

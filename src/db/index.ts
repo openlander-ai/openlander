@@ -465,6 +465,7 @@ export class Database implements AuthDatabase {
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
   listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
+  listRuntimeProjectsForReconciliation() { return this.projectRepo.listRuntimeProjectsForReconciliation(); }
   listProjectsWithMetadata(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
   getDeployableServiceCountsByProjectIds(projectIds: string[]) { return this.projectRepo.getDeployableServiceCountsByProjectIds(projectIds); }
   setProjectArchivedAt(id: string, archivedAt: string | null) { return this.projectRepo.setProjectArchivedAt(id, archivedAt); }

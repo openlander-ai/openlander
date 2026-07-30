@@ -18,6 +18,11 @@ export interface DestructiveMcpPlanSummary {
   tool: string;
   args: Record<string, unknown>;
   targetProjectId: string | null;
+  failure?: {
+    code: string;
+    message?: string;
+    details?: Record<string, string>;
+  };
 }
 
 const safeArgKeys = new Set([
@@ -174,11 +179,48 @@ export function parseDestructiveMcpPlan(plan: string | null): DestructiveMcpPlan
       typeof parsed['targetProjectId'] === 'string' && parsed['targetProjectId'].trim()
         ? parsed['targetProjectId'].trim()
         : null;
+    const failureCandidate = parsed['failure'];
+    const rawFailure =
+      failureCandidate && typeof failureCandidate === 'object' && !Array.isArray(failureCandidate)
+        ? (failureCandidate as Record<string, unknown>)
+        : null;
+    const rawDetails =
+      rawFailure?.['details'] &&
+      typeof rawFailure['details'] === 'object' &&
+      !Array.isArray(rawFailure['details'])
+        ? (rawFailure['details'] as Record<string, unknown>)
+        : null;
+    const safeDetailMappings = [
+      ['projectId', 'project_id'],
+      ['lockedBySession', 'lock_session'],
+      ['blockedServiceId', 'blocked_service_id'],
+      ['statusSource', 'status_source'],
+      ['operationPhase', 'operation_phase'],
+      ['deployId', 'deploy_id'],
+      ['environmentId', 'environment_id'],
+    ] as const;
+    const safeDetails = Object.fromEntries(
+      safeDetailMappings.flatMap(([sourceKey, outputKey]) => {
+        const value = rawDetails?.[sourceKey];
+        return typeof value === 'string' && value.length > 0 ? [[outputKey, value]] : [];
+      }),
+    );
+    const failure =
+      typeof rawFailure?.['code'] === 'string'
+        ? {
+            code: rawFailure['code'],
+            ...(typeof rawFailure['message'] === 'string'
+              ? { message: rawFailure['message'] }
+              : {}),
+            ...(Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
+          }
+        : undefined;
 
     return {
       tool: parsed['tool'],
       args,
       targetProjectId,
+      ...(failure ? { failure } : {}),
     };
   } catch {
     // Malformed historical action-run plans should not break status polling.

@@ -1,4 +1,5 @@
 import { DOCKER_LABELS } from '../config/index.js';
+import type { EnvironmentRow } from '../db/types.js';
 import { loadServiceViewRecord } from '../db/views/service-view.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { ContainerInfo } from '../pipeline/docker/types.js';
@@ -162,9 +163,11 @@ export class ProjectStateManager {
    * @returns { reconciled: count, skipped: count }
    */
   async reconcileAll(): Promise<{ reconciled: number; skipped: number }> {
-    const containers = await this.ctx.docker.listManagedContainers();
+    const [containers, projects] = await Promise.all([
+      this.ctx.docker.listManagedContainers(),
+      this.ctx.db.listRuntimeProjectsForReconciliation(),
+    ]);
     const containerIndex = this.buildContainerIndex(containers);
-    const projects = await this.ctx.db.listProjects();
 
     let reconciled = 0;
     let skipped = 0;
@@ -181,7 +184,10 @@ export class ProjectStateManager {
     const runningContainerIds = new Set(
       containers.filter((c) => c.status === 'running').map((c) => c.id),
     );
-    reconciled += await this.reconcileStaleEnvironments(projects, runningContainerIds);
+    const environmentsByProject = await this.ctx.db.getEnvironmentsByProjectIds(
+      projects.map((project) => project.id),
+    );
+    reconciled += await this.reconcileStaleEnvironments(environmentsByProject, runningContainerIds);
 
     return { reconciled, skipped };
   }
@@ -238,17 +244,12 @@ export class ProjectStateManager {
   }
 
   private async reconcileStaleEnvironments(
-    projects: { id: string }[],
+    environmentsByProject: Map<string, EnvironmentRow[]>,
     runningContainerIds: Set<string>,
   ): Promise<number> {
-    if (typeof this.ctx.db.getEnvironmentsByProject !== 'function') {
-      return 0;
-    }
-
     let count = 0;
 
-    for (const project of projects) {
-      const envs = await this.ctx.db.getEnvironmentsByProject(project.id);
+    for (const envs of environmentsByProject.values()) {
       for (const env of envs) {
         if (env.status !== 'building') continue;
         const isContainerRunning =

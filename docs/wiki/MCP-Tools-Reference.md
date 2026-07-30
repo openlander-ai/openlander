@@ -96,10 +96,14 @@ Archive is reversible cleanup, not permanent deletion: archived Applications
 are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
 `unarchive_project`. Restore actions do not redeploy automatically.
-Archive execution uses the durable deployment lock as its concurrency check.
-An active deployment returns `DEPLOY_LOCKED` with the blocking lock session;
-an old persisted `building` status without that lock is normalized and does
-not block archive.
+Archive execution uses the durable deployment lock plus the in-process job
+registry as its concurrency check. Dockerfile and Compose deployments both own
+the same durable lock. An active deployment returns `DEPLOY_LOCKED`; after an
+approved archive fails this way, `mcp_action_status` includes sanitized
+`error_code` and `error_details` such as `lock_session`,
+`blocked_service_id`, `status_source`, and `operation_phase` when known. An old
+persisted `building` status without an active lock or job is normalized and
+does not block archive.
 Approval-hold responses include both `actionRunId` and `action_run_id`, plus a
 `poll_call` envelope for `openlander_monitor.mcp_action_status`, an
 `effect_preview`, and `after_approval` guidance so agents know what changed and
@@ -472,8 +476,9 @@ tracked separately for restore behavior.
 Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
 `poll_call`; poll `mcp_action_status` after the user approves or rejects the
-request. After approval, a real concurrent deployment returns `DEPLOY_LOCKED`;
-stale stored `building` markers do not cause `ARCHIVE_BUILDING_PROJECT`.
+request. After approval, a real concurrent deployment returns `DEPLOY_LOCKED`
+with sanitized blocker evidence in the polled action status; stale stored
+`building` markers do not cause `ARCHIVE_BUILDING_PROJECT`.
 
 ### `unarchive_project`
 
@@ -489,7 +494,9 @@ automatically; call `update_app` with each `service_id` that should run again.
 Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
 `poll_call`; poll `mcp_action_status` after the user approves or rejects the
-request.
+request. If execution races with a deployment, the terminal poll response uses
+`error_code: "DEPLOY_LOCKED"` and may include `error_details.lock_session`,
+`blocked_service_id`, `status_source`, and `operation_phase`.
 
 ## Delivery Workspace
 
@@ -1629,9 +1636,10 @@ probe from the correct isolated project network.
 Check a held destructive MCP action. Approval-hold responses include a
 `poll_call` that calls this action with `action_run_id`. The response includes
 the approval status, sanitized `requested_args_summary`, `lifecycle_effect`, and
-agent guidance. Archive success returns `suggested_call` for
-`list_archived_services`; restore success reminds agents that no container was
-started automatically.
+agent guidance. A typed execution failure may also return `error_code` and a
+sanitized `error_details` object; arbitrary error-detail keys are not exposed.
+Archive success returns `suggested_call` for `list_archived_services`; restore
+success reminds agents that no container was started automatically.
 
 | Parameter       | Type   | Required | Description                               |
 | --------------- | ------ | -------- | ----------------------------------------- |

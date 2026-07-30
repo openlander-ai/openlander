@@ -121,7 +121,7 @@ function serviceIsHttpProviderRoutable(service: ServiceRow): boolean {
   if (service.archived_at) return false;
   if (MANAGED_SERVICE_KINDS.has(service.kind)) return false;
   if (!isHttpRoutableRuntimeService(service)) return false;
-  const status = service.status as ServiceRow['status'] | 'building';
+  const status = service.status;
   if (status === 'running') return true;
   return status === 'building' && Boolean(service.container_id);
 }
@@ -406,7 +406,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       if (mapping.status !== 'active') continue;
 
       const service = servicesById.get(mapping.service_id);
-      const serviceStatus = service?.status as ServiceRow['status'] | 'building' | undefined;
+      const serviceStatus = service?.status;
       const isRoutable =
         serviceStatus === 'running' || (serviceStatus === 'building' && service?.container_id);
       if (

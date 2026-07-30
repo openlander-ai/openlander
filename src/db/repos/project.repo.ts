@@ -484,6 +484,48 @@ export class ProjectRepo {
     });
   }
 
+  /**
+   * Return every active runtime row that owns a canonical deployable service.
+   *
+   * User-facing Project lists intentionally hide attached runtime rows and
+   * Compose-child rows. Reconciliation must include them because their
+   * environments and Docker state remain keyed by the runtime Project id.
+   */
+  async listRuntimeProjectsForReconciliation(): Promise<ProjectRow[]> {
+    const rows = await this.db
+      .select()
+      .from(projects)
+      .where(
+        and(
+          ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
+          isNull(projects.archived_at),
+          sql`EXISTS (
+            SELECT 1
+            FROM services s
+            WHERE s.id = (${projects.id} || '__svc')
+              AND s.kind IN ('git', 'image', 'compose', 'compose-child')
+              AND s.archived_at IS NULL
+          )`,
+        ),
+      )
+      .orderBy(desc(projects.updated_at));
+
+    if (rows.length === 0) return [];
+
+    const serviceIds = rows.map((row) => projectIdToDeployableServiceId(row.id));
+    const serviceRows = await this.db
+      .select()
+      .from(services)
+      .where(inArray(services.id, serviceIds));
+    const serviceById = new Map(serviceRows.map((service) => [service.id, toServiceRow(service)]));
+
+    return rows.map((row) => {
+      const project = toProjectRow(row);
+      const service = serviceById.get(projectIdToDeployableServiceId(row.id));
+      return service ? this.mergeDeployable(project, service) : project;
+    });
+  }
+
   async getDeployableServiceCountsByProjectIds(
     projectIds: string[],
     opts: { includeArchived?: boolean } = {},

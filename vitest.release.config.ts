@@ -123,6 +123,7 @@ export default defineConfig({
       'test/pipeline/auto-recovery-llm-down.test.ts',
       'test/pipeline/cascade-isolation.test.ts',
       'test/pipeline/compose-host-ports.test.ts',
+      'test/pipeline/compose-deploy-lock.test.ts',
       'test/pipeline/compose-network-cleanup.test.ts',
       'test/pipeline/docker-sandbox.test.ts',
       'test/operations/application-operation-contract.test.ts',

@@ -68,7 +68,7 @@ export interface EngagementPortfolioRows {
   serviceRows: Array<{
     project_id: string;
     kind: string;
-    status: 'running' | 'stopped' | 'error' | 'recovering' | null;
+    status: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null;
     runtime_role: 'application' | 'job' | 'resource';
     archived_at: string | null;
   }>;

@@ -46,10 +46,11 @@ function createProject(partial: Partial<ProjectRow> = {}): ProjectRow {
 describe('ProjectStateManager', () => {
   let eventBus: EventBus;
   let getProject: ReturnType<typeof vi.fn>;
-  let listProjects: ReturnType<typeof vi.fn>;
+  let listRuntimeProjectsForReconciliation: ReturnType<typeof vi.fn>;
   let updateProject: ReturnType<typeof vi.fn>;
   let listManagedContainers: ReturnType<typeof vi.fn>;
   let getDeployableForProject: ReturnType<typeof vi.fn>;
+  let getEnvironmentsByProjectIds: ReturnType<typeof vi.fn>;
   let manager: ProjectStateManager;
   let capturedEvents: Array<{ event: string; payload: unknown }>;
 
@@ -61,16 +62,18 @@ describe('ProjectStateManager', () => {
     });
 
     getProject = vi.fn();
-    listProjects = vi.fn();
+    listRuntimeProjectsForReconciliation = vi.fn();
     updateProject = vi.fn();
     listManagedContainers = vi.fn();
     getDeployableForProject = vi.fn().mockReturnValue(undefined);
+    getEnvironmentsByProjectIds = vi.fn().mockResolvedValue(new Map());
 
     const ctx = {
       db: {
         getProject,
-        listProjects,
+        listRuntimeProjectsForReconciliation,
         updateProject,
+        getEnvironmentsByProjectIds,
         // PR 4.5: canonical-first reads need this helper.
         getDeployableForProject,
       },
@@ -142,7 +145,11 @@ describe('ProjectStateManager', () => {
       container_id: null,
     });
 
-    listProjects.mockReturnValue([buildingProject, runningButMissing, alreadyStopped]);
+    listRuntimeProjectsForReconciliation.mockReturnValue([
+      buildingProject,
+      runningButMissing,
+      alreadyStopped,
+    ]);
     getProject.mockImplementation((projectId: string) => {
       if (projectId === buildingProject.id) {
         return buildingProject;
@@ -198,7 +205,7 @@ describe('ProjectStateManager', () => {
       container_name: 'ol-home-menu',
     } as ServiceRow;
 
-    listProjects.mockReturnValue([restoredProject]);
+    listRuntimeProjectsForReconciliation.mockReturnValue([restoredProject]);
     getProject.mockReturnValue(restoredProject);
     getDeployableForProject.mockReturnValue(restoredDeployable);
     listManagedContainers.mockResolvedValue([
@@ -236,7 +243,7 @@ describe('ProjectStateManager', () => {
       container_name: 'ol-canonical-demo',
     } as ServiceRow;
 
-    listProjects.mockReturnValue([staleProject]);
+    listRuntimeProjectsForReconciliation.mockReturnValue([staleProject]);
     getProject.mockReturnValue(staleProject);
     getDeployableForProject.mockReturnValue(canonicalDeployable);
     listManagedContainers.mockResolvedValue([

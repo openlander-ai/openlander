@@ -1,5 +1,5 @@
 import type { AppContext } from '../app.js';
-import { OpenLanderError } from '../errors.js';
+import { DeployLockedError, OpenLanderError } from '../errors.js';
 import { deployableServiceToolDefs } from '../tools/defs/deployable-service.js';
 import { envToolDefs } from '../tools/defs/env.js';
 import { networkOperationToolDefs } from '../tools/defs/network-operations.js';
@@ -147,5 +147,16 @@ export async function handleDestructiveMcpApproval(
           ? error.message
           : String(error);
     await ctx.db.updateActionRunStatus(actionRun.id, 'failed', message);
+    if (error instanceof DeployLockedError && actionRun.plan) {
+      const storedPlan = JSON.parse(actionRun.plan) as Record<string, unknown>;
+      await ctx.db.updateActionRunPlan(
+        actionRun.id,
+        JSON.stringify({
+          ...storedPlan,
+          failure: error.toJSON(),
+          failedAt: new Date().toISOString(),
+        }),
+      );
+    }
   }
 }

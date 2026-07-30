@@ -1091,12 +1091,22 @@ export class ProjectRecoveringError extends OpenLanderError {
 // --- Deploy lock errors ---
 
 export class DeployLockedError extends OpenLanderError {
-  constructor(projectId: string, lockedBySession: string) {
+  constructor(
+    projectId: string,
+    lockedBySession: string,
+    context: {
+      blockedServiceId?: string;
+      statusSource?: 'deploy_lock' | 'job_manager';
+      operationPhase?: string;
+      deployId?: string;
+      environmentId?: string;
+    } = {},
+  ) {
     super(
       `Project ${projectId} is currently being deployed by operation ${lockedBySession}. Try again after it completes.`,
       'DEPLOY_LOCKED',
       409,
-      { projectId, lockedBySession },
+      { projectId, lockedBySession, ...context },
     );
     this.name = 'DeployLockedError';
   }

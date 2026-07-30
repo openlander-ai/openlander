@@ -22,6 +22,7 @@ import type { OpenLanderEnv } from '../config/index.js';
 import { extractProjectName, composeContainerName, containerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
+import { acquireDeployLockOrThrow, withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
@@ -197,6 +198,10 @@ export interface ComposeDeployConfig {
   trigger?: 'chat' | 'webhook' | 'api';
   environmentType?: OpenLanderEnv;
   _parentId?: string;
+  /** @internal Deploy lock session owned by an outer deploy orchestration. */
+  _lockSessionId?: string;
+  /** @internal Preserve first-deploy validation after the lock wrapper creates the parent row. */
+  _parentCreatedForDeploy?: boolean;
   gitCredentialId?: string;
   trafficService?: string;
   previousServiceFingerprints?: Record<string, string>;
@@ -1062,17 +1067,62 @@ export class ComposePipeline {
     });
     this.jobManager?.trackJob(parentProjectId, parentName);
 
-    void this.deployCompose({ ...config, name: parentName, _parentId: parentProjectId }).catch(
-      (error: unknown) => {
+    const lockSessionId = `compose-${nanoid(12)}`;
+    await acquireDeployLockOrThrow(this.db, {
+      projectId: parentProjectId,
+      sessionId: lockSessionId,
+    });
+
+    void this.deployCompose({
+      ...config,
+      name: parentName,
+      _parentId: parentProjectId,
+      _lockSessionId: lockSessionId,
+    })
+      .finally(async () => {
+        await this.db.releaseDeployLock(parentProjectId, lockSessionId);
+      })
+      .catch((error: unknown) => {
         log.error({ err: error, parentProjectId }, 'Background compose deploy failed');
-      },
-    );
+      });
 
     return { parentProjectId, parentName, status: 'building' };
   }
 
   async deployCompose(config: ComposeDeployConfig): Promise<ComposeDeployResult> {
-    return this.deployComposeViaDockerode(config);
+    const parentName = config.name ?? extractProjectName(config.repoUrl);
+    let parentProjectId = config._parentId;
+
+    if (!parentProjectId) {
+      parentProjectId = nanoid(12);
+      await this.db.createProject({
+        id: parentProjectId,
+        name: parentName,
+        repoUrl: config.repoUrl,
+        branch: config.branch,
+        dockerfilePath: relative(config.clonePath, config.composePath),
+        buildMethod: 'compose',
+      });
+      this.jobManager?.trackJob(parentProjectId, parentName);
+    }
+
+    const lockedConfig = {
+      ...config,
+      name: parentName,
+      _parentId: parentProjectId,
+      ...(!config._parentId ? { _parentCreatedForDeploy: true } : {}),
+    };
+    if (config._lockSessionId) {
+      return this.deployComposeViaDockerode(lockedConfig);
+    }
+
+    const lockSessionId = `compose-${nanoid(12)}`;
+    return withDeployLock(this.db, { projectId: parentProjectId, sessionId: lockSessionId }, () =>
+      this.deployComposeViaDockerode({
+        ...lockedConfig,
+        _lockSessionId: lockSessionId,
+      }),
+    );
   }
 
   async deployComposeViaDockerode(config: ComposeDeployConfig): Promise<ComposeDeployResult> {
@@ -1226,7 +1276,7 @@ export class ComposePipeline {
       config.trafficService ?? (trafficCandidates.length === 1 ? trafficCandidates[0] : undefined);
     const warnings: string[] = [];
     if (!trafficService && trafficCandidates.length > 1) {
-      if (!config._parentId) {
+      if (!config._parentId || config._parentCreatedForDeploy) {
         throw new TrafficServiceRequiredError(trafficCandidates);
       }
       warnings.push('traffic_target_unresolved');
