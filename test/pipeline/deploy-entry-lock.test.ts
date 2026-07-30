@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
+import { JobManager } from '../../src/pipeline/job-manager.js';
 import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../../src/db/index.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
@@ -386,6 +387,9 @@ function createInMemoryDb(): Database {
       return project;
     }),
     getDeployableForProject: vi.fn((projectId: string) => services.get(`${projectId}__svc`)),
+    getDeployablesByGroup: vi.fn((projectId: string) =>
+      Array.from(services.values()).filter((service) => service.project_id === projectId),
+    ),
     getService: vi.fn((serviceId: string) => services.get(serviceId)),
     getServices: vi.fn(({ ids }: { ids?: string[] } = {}) => {
       const rows = Array.from(services.values());
@@ -422,6 +426,31 @@ function createInMemoryDb(): Database {
         }
       }
       return undefined;
+    }),
+    archiveProject: vi.fn((projectId: string, archivedAt = nowIso()) => {
+      const project = projects.get(projectId);
+      if (!project) return;
+      project.archived_at = archivedAt;
+      project.updated_at = nowIso();
+      const service = services.get(`${projectId}__svc`);
+      if (service) {
+        service.archived_at = archivedAt;
+        service.status = 'stopped';
+        service.assigned_port = null;
+        service.container_id = null;
+        service.image_tag = null;
+        service.updated_at = nowIso();
+      }
+      for (const environment of environments.get(projectId) ?? []) {
+        environment.status = 'stopped';
+        environment.updated_at = nowIso();
+      }
+    }),
+    setProjectArchivedAt: vi.fn((projectId: string, archivedAt: string | null) => {
+      const project = projects.get(projectId);
+      if (!project) return;
+      project.archived_at = archivedAt;
+      project.updated_at = nowIso();
     }),
     loadDeployConfig: vi.fn(() => null),
     loadDeployConfigForService: vi.fn(() => null),
@@ -974,6 +1003,197 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
 
       // Rival session retains ownership.
       expect(db.getDeployLockInfo('p-bg-locked')?.session).toBe('rival-bg-session');
+    });
+  });
+
+  describe('archive lock and state consistency', () => {
+    it('archives when persisted building markers are stale and normalizes environments', async () => {
+      db.createProject({
+        id: 'p-stale-building',
+        name: 'stale-building-app',
+        repoUrl: 'https://github.com/test/stale-building-app',
+        branch: 'main',
+      });
+      await db.updateProject('p-stale-building', { status: 'building' });
+      const production = (await db.getEnvironmentsByProject('p-stale-building'))[0];
+      expect(production).toBeDefined();
+      await db.updateEnvironment(production!.id, { status: 'building' });
+
+      await pipeline.archive('p-stale-building');
+
+      expect(db.archiveProject).toHaveBeenCalledWith('p-stale-building', undefined);
+      expect((await db.getProject('p-stale-building'))?.archived_at).not.toBeNull();
+      expect((await db.getDeployableForProject('p-stale-building'))?.status).toBe('stopped');
+      expect((await db.getEnvironment(production!.id))?.status).toBe('stopped');
+      expect(await db.getDeployLockInfo('p-stale-building')).toBeNull();
+    });
+
+    it('rejects an archive while a real deploy lock is active without mutating runtime state', async () => {
+      db.createProject({
+        id: 'p-active-deploy',
+        name: 'active-deploy-app',
+        repoUrl: 'https://github.com/test/active-deploy-app',
+        branch: 'main',
+      });
+      await db.acquireDeployLock('p-active-deploy', 'deploy-live-session');
+
+      await expect(pipeline.archive('p-active-deploy')).rejects.toMatchObject({
+        code: 'DEPLOY_LOCKED',
+        details: {
+          projectId: 'p-active-deploy',
+          lockedBySession: 'deploy-live-session',
+        },
+      });
+
+      expect(db.archiveProject).not.toHaveBeenCalled();
+      expect((await db.getProject('p-active-deploy'))?.archived_at).toBeNull();
+      expect((await db.getDeployLockInfo('p-active-deploy'))?.session).toBe('deploy-live-session');
+    });
+
+    it('rejects an archive during an active in-process job before its durable lock is visible', async () => {
+      db.createProject({
+        id: 'p-active-job',
+        name: 'active-job-app',
+        repoUrl: 'https://github.com/test/active-job-app',
+        branch: 'main',
+      });
+      const jobManager = new JobManager();
+      jobManager.trackJob('p-active-job', 'active-job-app');
+      jobManager.updatePhase('p-active-job', 'building');
+      pipeline = new DeployPipeline(docker, db, env as never, testConfig, jobManager);
+
+      await expect(pipeline.archive('p-active-job')).rejects.toMatchObject({
+        code: 'DEPLOY_LOCKED',
+        details: {
+          projectId: 'p-active-job',
+          lockedBySession: 'job-manager:building',
+          blockedServiceId: 'p-active-job__svc',
+          statusSource: 'job_manager',
+          operationPhase: 'building',
+        },
+      });
+
+      expect(db.archiveProject).not.toHaveBeenCalled();
+      expect(await db.getDeployLockInfo('p-active-job')).toBeNull();
+    });
+
+    it('clears an in-process job marker when a newer terminal deploy log proves it stale', async () => {
+      db.createProject({
+        id: 'p-stale-job',
+        name: 'stale-job-app',
+        repoUrl: 'https://github.com/test/stale-job-app',
+        branch: 'main',
+      });
+      const jobManager = new JobManager();
+      jobManager.trackJob('p-stale-job', 'stale-job-app');
+      jobManager.updatePhase('p-stale-job', 'building');
+      vi.mocked(db.getLastDeployLog).mockResolvedValue({
+        id: 'deploy-terminal',
+        service_id: 'p-stale-job__svc',
+        environment_id: null,
+        status: 'success',
+        trigger: 'api',
+        trigger_detail: null,
+        commit_sha: null,
+        commit_message: null,
+        build_log: null,
+        runtime_log: null,
+        representative_traffic_json: null,
+        duration_ms: 1,
+        created_at: new Date(Date.now() + 1000).toISOString(),
+      });
+      pipeline = new DeployPipeline(docker, db, env as never, testConfig, jobManager);
+
+      await pipeline.archive('p-stale-job');
+
+      expect(jobManager.getStatus('p-stale-job')?.phase).toBe('done');
+      expect(db.archiveProject).toHaveBeenCalledWith('p-stale-job', undefined);
+    });
+
+    it('acquires every Compose lock before mutation and releases earlier locks on contention', async () => {
+      const parent = await db.createProject({
+        id: 'a-compose-parent',
+        name: 'compose-parent',
+        repoUrl: 'https://github.com/test/compose-parent',
+        branch: 'main',
+      });
+      const child = await db.createProject({
+        id: 'z-compose-child',
+        name: 'compose-child',
+        repoUrl: 'https://github.com/test/compose-parent',
+        branch: 'main',
+      });
+      vi.mocked(db.getComposeChildProjects).mockImplementation(async (projectId) =>
+        projectId === parent.id ? [child] : [],
+      );
+      await db.acquireDeployLock(child.id, 'deploy-child-session');
+
+      await expect(pipeline.archive(parent.id)).rejects.toMatchObject({
+        code: 'DEPLOY_LOCKED',
+        details: { projectId: child.id, lockedBySession: 'deploy-child-session' },
+      });
+
+      expect(db.archiveProject).not.toHaveBeenCalled();
+      expect(await db.getDeployLockInfo(parent.id)).toBeNull();
+      expect((await db.getDeployLockInfo(child.id))?.session).toBe('deploy-child-session');
+    });
+
+    it('does not let an unrelated sibling deployment block a single workload archive', async () => {
+      const compose = await db.createProject({
+        id: 'compose-runtime',
+        name: 'compose-runtime',
+        repoUrl: 'https://github.com/test/compose-runtime',
+        branch: 'main',
+      });
+      const sibling = await db.createProject({
+        id: 'api-runtime',
+        name: 'api-runtime',
+        repoUrl: 'https://github.com/test/api-runtime',
+        branch: 'main',
+      });
+      await db.acquireDeployLock(sibling.id, 'deploy-sibling-session');
+
+      await pipeline.archive(compose.id);
+
+      expect(db.archiveProject).toHaveBeenCalledWith(compose.id, undefined);
+      expect((await db.getProject(compose.id))?.archived_at).not.toBeNull();
+      expect((await db.getProject(sibling.id))?.archived_at).toBeNull();
+      expect((await db.getDeployLockInfo(sibling.id))?.session).toBe('deploy-sibling-session');
+    });
+
+    it('pre-acquires every active sibling lock before a Project archive mutates any workload', async () => {
+      const group = await db.createProject({
+        id: 'a-project-group',
+        name: 'project-group',
+        repoUrl: 'https://github.com/test/project-group',
+        branch: 'main',
+      });
+      const sibling = await db.createProject({
+        id: 'z-sibling-runtime',
+        name: 'sibling-runtime',
+        repoUrl: 'https://github.com/test/sibling-runtime',
+        branch: 'main',
+      });
+      const groupService = await db.getDeployableForProject(group.id);
+      const siblingService = await db.getDeployableForProject(sibling.id);
+      expect(groupService).toBeDefined();
+      expect(siblingService).toBeDefined();
+      vi.mocked(db.getDeployablesByGroup).mockResolvedValue([
+        { ...groupService!, project_id: group.id },
+        { ...siblingService!, project_id: group.id },
+      ]);
+      await db.acquireDeployLock(sibling.id, 'deploy-sibling-session');
+
+      await expect(pipeline.archiveGroup(group.id)).rejects.toMatchObject({
+        code: 'DEPLOY_LOCKED',
+        details: { projectId: sibling.id, lockedBySession: 'deploy-sibling-session' },
+      });
+
+      expect(db.archiveProject).not.toHaveBeenCalled();
+      expect((await db.getProject(group.id))?.archived_at).toBeNull();
+      expect((await db.getProject(sibling.id))?.archived_at).toBeNull();
+      expect(await db.getDeployLockInfo(group.id)).toBeNull();
+      expect((await db.getDeployLockInfo(sibling.id))?.session).toBe('deploy-sibling-session');
     });
   });
 });

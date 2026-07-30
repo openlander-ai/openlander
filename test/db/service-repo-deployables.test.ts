@@ -67,8 +67,8 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     const schema = readFileSync('src/db/schema.drizzle.ts', 'utf8');
     const types = readFileSync('src/db/types.ts', 'utf8');
 
-    expect(schema).toContain("enum: ['running', 'stopped', 'error', 'recovering']");
-    expect(types).toContain("'running' | 'stopped' | 'error' | 'recovering' | null");
+    expect(schema).toContain("enum: ['running', 'stopped', 'building', 'error', 'recovering']");
+    expect(types).toContain("'running' | 'stopped' | 'building' | 'error' | 'recovering' | null");
   });
 });
 

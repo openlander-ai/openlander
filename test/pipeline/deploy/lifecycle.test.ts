@@ -256,7 +256,7 @@ describe('ContainerLifecycle', () => {
     expect(db.getProject('archive-child')?.archived_at).toBeTruthy();
   });
 
-  it('archive() fails for building project', async () => {
+  it('archive() ignores a stale building marker', async () => {
     db.createProject({
       id: 'building-project',
       name: 'building-app',
@@ -265,9 +265,8 @@ describe('ContainerLifecycle', () => {
     });
     db.updateProject('building-project', { status: 'building' });
 
-    await expect(lifecycle.archive('building-project')).rejects.toMatchObject({
-      code: 'ARCHIVE_BUILDING_PROJECT',
-    });
+    await expect(lifecycle.archive('building-project')).resolves.toBeUndefined();
+    expect(db.getProject('building-project')?.archived_at).toBeTruthy();
   });
 
   it('archive() does not fail when image removal fails', async () => {

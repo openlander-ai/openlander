@@ -366,6 +366,7 @@ export async function buildProject(
       envVars: composeEnvVars,
       environmentType: params.environmentType,
       _parentId: projectId,
+      _lockSessionId: config._lockSessionId,
       gitCredentialId: config.gitCredentialId,
       previousServiceFingerprints,
       noCache: config._noCacheBuild === true,

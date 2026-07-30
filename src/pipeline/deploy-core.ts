@@ -31,6 +31,7 @@ import {
   BlueGreenStabilityError,
   ComposeEnvDeclarationRequiredError,
   ContainerNotFoundError,
+  DeployLockedError,
   ImagePullError,
   InvalidProjectNameError,
   ManagedTraefikRouteError,
@@ -64,6 +65,7 @@ import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
 import { sleep } from '../lib/sleep.js';
+import { parseDBTimestamp } from '../lib/parse-db-timestamp.js';
 import { resolveComposeFilePath, resolveComposeFilePaths } from './compose-spec.js';
 
 import {
@@ -4221,11 +4223,127 @@ export class DeployPipeline {
   }
 
   async archive(projectId: string): Promise<void> {
-    await this.lifecycle.archive(projectId, this.tunnelManager);
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      await this.lifecycle.archive(projectId, this.tunnelManager);
+      return;
+    }
+
+    // A durable deploy lock, not a persisted `building` marker, determines
+    // whether archive can safely run. Compose descendants are locked first as
+    // one set so contention cannot leave a partially archived workload.
+    const lockProjectIds = await this.collectArchiveLockProjectIds([projectId]);
+    await this.assertNoActiveArchiveJobs(lockProjectIds);
+    await this.withArchiveLocks(lockProjectIds, () =>
+      this.lifecycle.archive(projectId, this.tunnelManager),
+    );
   }
 
   async archiveGroup(projectId: string): Promise<void> {
-    await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+      return;
+    }
+
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    const runtimeProjectIds = deployables
+      .filter((service) => !service.archived_at)
+      .map((service) => deployableServiceIdToProjectId(service.id));
+    const lockProjectIds = await this.collectArchiveLockProjectIds([
+      projectId,
+      ...(runtimeProjectIds.length > 0 ? runtimeProjectIds : [projectId]),
+    ]);
+    await this.assertNoActiveArchiveJobs(lockProjectIds);
+    await this.withArchiveLocks(lockProjectIds, () =>
+      this.lifecycle.archiveGroup(projectId, this.tunnelManager),
+    );
+  }
+
+  private async collectArchiveLockProjectIds(rootProjectIds: readonly string[]): Promise<string[]> {
+    const projectIds = new Set(rootProjectIds);
+    const queue = [...projectIds];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      const children = await this.db.getComposeChildProjects(current);
+      for (const child of children) {
+        if (projectIds.has(child.id)) continue;
+        projectIds.add(child.id);
+        queue.push(child.id);
+      }
+    }
+
+    return [...projectIds].sort();
+  }
+
+  private async withArchiveLocks<T>(
+    projectIds: readonly string[],
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const sessionId = `archive-${nanoid(12)}`;
+    const blockedServiceIdByProject = new Map<string, string>();
+    await Promise.all(
+      projectIds.map(async (projectId) => {
+        const service = await this.db.getDeployableForProject(projectId);
+        if (service) blockedServiceIdByProject.set(projectId, service.id);
+      }),
+    );
+
+    const acquireNext = async (index: number): Promise<T> => {
+      const projectId = projectIds[index];
+      if (!projectId) return operation();
+      return withDeployLock(
+        this.db,
+        {
+          projectId,
+          sessionId,
+          onContention: (lockedBySession) => {
+            throw new DeployLockedError(projectId, lockedBySession, {
+              ...(blockedServiceIdByProject.has(projectId)
+                ? { blockedServiceId: blockedServiceIdByProject.get(projectId) }
+                : {}),
+              statusSource: 'deploy_lock',
+            });
+          },
+        },
+        () => acquireNext(index + 1),
+      );
+    };
+
+    return acquireNext(0);
+  }
+
+  private async assertNoActiveArchiveJobs(projectIds: readonly string[]): Promise<void> {
+    if (!this.jobManager) return;
+
+    const activeJobs = this.jobManager
+      .getStatuses([...projectIds])
+      .filter((job) => job.phase !== 'done' && job.phase !== 'failed');
+
+    for (const job of activeJobs) {
+      const lastDeploy = await this.db.getLastDeployLog(job.projectId);
+      const terminalLogIsNewer =
+        lastDeploy !== undefined &&
+        parseDBTimestamp(lastDeploy.created_at).getTime() >= job.startedAt.getTime();
+
+      if (terminalLogIsNewer) {
+        this.jobManager.updatePhase(
+          job.projectId,
+          lastDeploy.status === 'success' ? 'done' : 'failed',
+          lastDeploy.status === 'success' ? undefined : 'Deployment finished before archive.',
+        );
+        continue;
+      }
+
+      const service = await this.db.getDeployableForProject(job.projectId);
+      throw new DeployLockedError(job.projectId, `job-manager:${job.phase}`, {
+        ...(service ? { blockedServiceId: service.id } : {}),
+        statusSource: 'job_manager',
+        operationPhase: job.phase,
+      });
+    }
   }
 
   async unarchive(projectId: string): Promise<void> {

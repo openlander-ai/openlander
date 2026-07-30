@@ -234,7 +234,7 @@ export interface ServiceRow {
     | 'minio';
   parent_service_id: string | null;
   runtime_role: 'application' | 'job' | 'resource';
-  status: 'running' | 'stopped' | 'error' | 'recovering' | null;
+  status: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null;
   visibility: 'internal' | 'quick-share' | 'shared' | 'production' | null;
   assigned_port: number | null;
   container_id: string | null;

@@ -365,6 +365,59 @@ describe('MCP destructive safety', () => {
     });
   });
 
+  it('returns structured archive lock evidence without exposing arbitrary error details', async () => {
+    const statusTool = monitoringToolDefs.find((tool) => tool.name === 'mcp_action_status');
+    expect(statusTool).toBeDefined();
+    const context = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getActionRun: vi.fn().mockResolvedValue({
+            id: 'action-run-locked',
+            project_id: 'project-1',
+            status: 'failed',
+            approval_status: 'approved',
+            approval_tool: 'destructive_mcp',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'archive_service',
+              args: { service_id: 'service-1' },
+              targetProjectId: 'project-1',
+              failure: {
+                code: 'DEPLOY_LOCKED',
+                message: 'A deployment is active.',
+                details: {
+                  projectId: 'runtime-1',
+                  lockedBySession: 'deploy-live-session',
+                  blockedServiceId: 'runtime-1__svc',
+                  statusSource: 'deploy_lock',
+                  secret: 'must-not-return',
+                },
+              },
+            }),
+            error_message: 'DEPLOY_LOCKED: A deployment is active.',
+            approval_requested_at: '2026-05-05T00:00:00.000Z',
+            approval_resolved_at: '2026-05-05T00:01:00.000Z',
+          }),
+        },
+      } as unknown as AppContext,
+    } as ToolContext;
+
+    const result = await statusTool!.execute({ action_run_id: 'action-run-locked' }, context);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error_code: 'DEPLOY_LOCKED',
+      error_details: {
+        project_id: 'runtime-1',
+        lock_session: 'deploy-live-session',
+        blocked_service_id: 'runtime-1__svc',
+        status_source: 'deploy_lock',
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('must-not-return');
+  });
+
   it('keeps succeeded restore status explicit that redeploy is separate', async () => {
     const statusTool = monitoringToolDefs.find((tool) => tool.name === 'mcp_action_status');
     expect(statusTool).toBeDefined();

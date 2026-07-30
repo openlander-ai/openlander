@@ -1054,9 +1054,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'mcp_action_status',
     riskLevel: 'low',
     description:
-      'Check the status of a destructive MCP action that was routed to human approval. Pass action_run_id, or action_id as an alias.',
+      'Check the status of a destructive MCP action that was routed to human approval. Pass action_run_id, or action_id as an alias. Typed execution failures include sanitized error_code/error_details when available.',
     mcpDescription:
-      'Check pending/approved/rejected/failed status for a held MCP action. Accepts action_run_id or action_id.',
+      'Check pending/approved/rejected/failed status for a held MCP action, including sanitized typed failure evidence. Accepts action_run_id or action_id.',
     inputSchema: mcpActionStatusSchema,
     execute: async (args, context) => {
       const actionRunId =
@@ -1156,6 +1156,8 @@ export const monitoringToolDefs: ToolDef[] = [
         poll_call: pollCall,
         suggested_call: suggestedCall,
         error: run.error_message,
+        error_code: planSummary?.failure?.code,
+        error_details: planSummary?.failure?.details,
         requestedAt: run.approval_requested_at,
         resolvedAt: run.approval_resolved_at,
         _agent_guidance: guidance,

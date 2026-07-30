@@ -164,7 +164,10 @@ Project archive/restore is also available to MCP agents through
 `archive_project` / `unarchive_project`, but it enters the same human approval
 queue before executing. A Project archive spans active Applications; a restore does not redeploy
 Applications automatically. For one Application, prefer a specific `service_id` with
-`archive_service` / `unarchive_service`.
+`archive_service` / `unarchive_service`. Archive and deployment serialize on the
+same durable runtime lock, including Compose deployments. Stale stored
+`building` markers are reconciled instead of blocking cleanup; a real active
+operation returns `DEPLOY_LOCKED` with sanitized blocker evidence.
 
 ---
 

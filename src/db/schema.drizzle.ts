@@ -412,9 +412,9 @@ export const services = pgTable(
       .notNull()
       .default('application'),
     // Deployable-specific (NULL for managed)
-    status: text('status', { enum: ['running', 'stopped', 'error', 'recovering'] }).default(
-      'stopped',
-    ),
+    status: text('status', {
+      enum: ['running', 'stopped', 'building', 'error', 'recovering'],
+    }).default('stopped'),
     visibility: text('visibility'),
     assigned_port: integer('assigned_port').unique(),
     container_id: text('container_id'),
