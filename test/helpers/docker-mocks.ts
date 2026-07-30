@@ -245,7 +245,23 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       waitForContainer: vi.fn().mockResolvedValue({ StatusCode: 0 }),
       connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
       pullImage: vi.fn().mockResolvedValue(undefined),
-      inspectImage: vi.fn().mockResolvedValue({ Config: { ExposedPorts: {} } }),
+      inspectImage: vi.fn(async (image: string) => {
+        if (!image.startsWith('postgres:')) {
+          return { Config: { ExposedPorts: {} } };
+        }
+        const isPg18 = /^postgres:18(?:-|$)/.test(image);
+        return {
+          Config: {
+            ExposedPorts: {},
+            Env: [
+              isPg18 ? 'PGDATA=/var/lib/postgresql/18/docker' : 'PGDATA=/var/lib/postgresql/data',
+            ],
+            Volumes: {
+              [isPg18 ? '/var/lib/postgresql' : '/var/lib/postgresql/data']: {},
+            },
+          },
+        };
+      }),
       removeImage: vi.fn().mockResolvedValue(undefined),
       listVolumes: vi.fn().mockResolvedValue([]),
       inspectVolume: vi.fn(),

@@ -28,6 +28,7 @@ import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-s
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
 import {
+  ComposeEnvDeclarationRequiredError,
   ComposeJobFailedError,
   ComposePrerequisiteUnhealthyError,
   DockerBuildError,
@@ -140,9 +141,7 @@ export function knownComposeResourcePort(service: ComposeService): number | null
 }
 
 export type ComposeDependencyCondition =
-  | 'service_started'
-  | 'service_healthy'
-  | 'service_completed_successfully';
+  'service_started' | 'service_healthy' | 'service_completed_successfully';
 
 export interface ComposeEnvFile {
   path: string;
@@ -260,6 +259,7 @@ function mergeComposeValues(
 
 function parseComposeDocument(composePath: string): Record<string, unknown> {
   const document = parseDocument(readFileSync(composePath, 'utf8'), {
+    merge: true,
     customTags: [composeResetScalarTag, composeResetSequenceTag, composeResetMapTag],
   });
   if (document.errors.length > 0) {
@@ -645,9 +645,10 @@ export class ComposePipeline {
     }
     const parsed = composePaths
       .map((path) => parseComposeDocument(path))
-      .reduce<
-        Record<string, unknown>
-      >((merged, overlay) => mergeComposeValues(merged, overlay) as Record<string, unknown>, {});
+      .reduce<Record<string, unknown>>(
+        (merged, overlay) => mergeComposeValues(merged, overlay) as Record<string, unknown>,
+        {},
+      );
     const servicesRaw = parsed['services'];
 
     if (!servicesRaw || typeof servicesRaw !== 'object' || Array.isArray(servicesRaw)) {
@@ -912,6 +913,20 @@ export class ComposePipeline {
     const runtimeRoles = inferComposeRuntimeRoles(activeComposeProject.services);
     const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
     const existingChildServices = await this.db.getComposeChildren(`${parentProjectId}__svc`);
+    const envVars = { ...(config.envVars ?? {}) };
+    if (existingChildren.length > 0 && Object.keys(envVars).length > 0) {
+      const servicesWithoutEnvDeclaration = activeComposeProject.services
+        .filter(
+          (service) => service.environment === undefined && (service.envFile?.length ?? 0) === 0,
+        )
+        .map((service) => service.name);
+      if (servicesWithoutEnvDeclaration.length > 0) {
+        throw new ComposeEnvDeclarationRequiredError(
+          servicesWithoutEnvDeclaration,
+          Object.keys(envVars).sort(),
+        );
+      }
+    }
     const existingByName = new Map(existingChildren.map((child) => [child.name, child]));
     const existingServiceNames = new Set(
       existingChildren.flatMap((child) => {
@@ -1000,7 +1015,6 @@ export class ComposePipeline {
       warnings.push('traffic_target_unresolved');
     }
 
-    const envVars = { ...(config.envVars ?? {}) };
     this.validateComposeInterpolation(filteredComposeProject, envVars);
 
     const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
@@ -2327,10 +2341,6 @@ export class ComposePipeline {
       }
     }
 
-    // Explicit OpenLander environment values override env_file, while the
-    // service's own environment block remains the highest precedence.
-    Object.assign(resolved, baseEnvVars);
-
     if (!service.environment) {
       return resolved;
     }
@@ -2342,7 +2352,7 @@ export class ComposePipeline {
 
         const separatorIndex = line.indexOf('=');
         if (separatorIndex === -1) {
-          resolved[line] = resolved[line] ?? process.env[line] ?? '';
+          resolved[line] = baseEnvVars[line] ?? resolved[line] ?? process.env[line] ?? '';
           continue;
         }
 

@@ -17,8 +17,6 @@ import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { formatEnvValue } from '../src/pipeline/env-inject.js';
 
-const REQUIRED_ENV_VARS = { API_KEY: 'test-api-key' };
-
 function createMockDocker(): Docker {
   return {
     listAllContainers: vi.fn().mockResolvedValue([]),
@@ -48,7 +46,7 @@ describe('ComposePipeline', () => {
   async function deployWithEnv(targetPipeline: ComposePipelineType, config: ComposeDeployConfig) {
     return targetPipeline.deployCompose({
       ...config,
-      envVars: { ...REQUIRED_ENV_VARS, ...(config.envVars ?? {}) },
+      envVars: { ...(config.envVars ?? {}) },
     });
   }
 
@@ -134,6 +132,32 @@ describe('ComposePipeline', () => {
     expect(api?.environment).toEqual(['NODE_ENV=production']);
     expect(api?.dependsOn).toEqual(['db']);
     expect(dbService?.environment).toEqual({ POSTGRES_DB: 'app' });
+  });
+
+  it('resolves YAML merge keys into service definitions', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `x-service: &service_defaults
+  image: nginx:alpine
+  restart: unless-stopped
+  environment:
+    NODE_ENV: production
+services:
+  web:
+    <<: *service_defaults
+    ports:
+      - "3000:3000"
+`,
+      'utf8',
+    );
+
+    expect(pipeline.parseComposeFile(composePath).services[0]).toMatchObject({
+      name: 'web',
+      image: 'nginx:alpine',
+      restart: 'unless-stopped',
+      environment: { NODE_ENV: 'production' },
+    });
   });
 
   it('parseComposeFile parses service profiles from YAML', () => {

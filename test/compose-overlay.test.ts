@@ -125,6 +125,47 @@ volumes:
     expect(inferComposeHealthcheckPort(web ?? { name: 'web' })).toBe(3000);
   });
 
+  it('resolves merge keys in both base and overlay files before combining them', () => {
+    const repositoryPath = mkdtempSync(join(tmpdir(), 'openlander-compose-anchor-overlay-'));
+    temporaryDirectories.push(repositoryPath);
+    const basePath = join(repositoryPath, 'compose.yml');
+    const overlayPath = join(repositoryPath, 'compose.production.yml');
+    writeFileSync(
+      basePath,
+      `x-runtime: &runtime
+  image: node:22-alpine
+  restart: unless-stopped
+services:
+  api:
+    <<: *runtime
+    environment:
+      NODE_ENV: development
+`,
+      'utf8',
+    );
+    writeFileSync(
+      overlayPath,
+      `x-production: &production
+  environment:
+    NODE_ENV: production
+  mem_limit: 512m
+services:
+  api:
+    <<: *production
+`,
+      'utf8',
+    );
+    const pipeline = new ComposePipeline({} as Docker, {} as Database, {} as EventBus);
+
+    expect(pipeline.parseComposeFiles([basePath, overlayPath]).services[0]).toMatchObject({
+      name: 'api',
+      image: 'node:22-alpine',
+      restart: 'unless-stopped',
+      environment: { NODE_ENV: 'production' },
+      memoryLimitBytes: 512 * 1024 * 1024,
+    });
+  });
+
   it('rejects empty, duplicate, and repository-escaping Compose file lists', () => {
     const repositoryPath = mkdtempSync(join(tmpdir(), 'openlander-compose-paths-'));
     temporaryDirectories.push(repositoryPath);

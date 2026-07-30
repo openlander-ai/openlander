@@ -13,6 +13,9 @@ function createDbMock(services: ServiceRow[]): Database {
       byId.set(service.id, service);
       return service;
     }),
+    deleteService: vi.fn((id: string) => {
+      byId.delete(id);
+    }),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
@@ -50,9 +53,10 @@ describe('AVAILABLE_VERSIONS constant', () => {
     });
   });
 
-  it('postgresql should have 4 versions with latest first', () => {
+  it('keeps PostgreSQL 17 as the default and offers PostgreSQL 18', () => {
     expect(AVAILABLE_VERSIONS.postgresql).toEqual([
       '17-alpine',
+      '18-alpine',
       '16-alpine',
       '15-alpine',
       '14-alpine',
@@ -91,6 +95,7 @@ describe('ServiceManager.create() with version selection', () => {
       .calls[0];
     expect(runCall).toBeDefined();
     expect(runCall?.[0]?.imageTag).toBe('postgres:17-alpine');
+    expect(runCall?.[0]?.volumeBinds).toEqual(['ol-svc-data-test-pg:/var/lib/postgresql/data']);
   });
 
   it('should override image tag when specific version is provided', async () => {
@@ -108,6 +113,47 @@ describe('ServiceManager.create() with version selection', () => {
       .calls[0];
     expect(runCall).toBeDefined();
     expect(runCall?.[0]?.imageTag).toBe('postgres:15-alpine');
+  });
+
+  it('mounts PostgreSQL 18 at the image-declared persistent root', async () => {
+    const dockerHarness = createMockDockerHarness();
+    const db = createDbMock([]);
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await manager.create({
+      name: 'test-pg-18',
+      template: 'postgresql',
+      version: '18-alpine',
+    });
+
+    expect(dockerHarness.docker.runServiceContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'postgres:18-alpine',
+        volumeBinds: ['ol-svc-data-test-pg-18:/var/lib/postgresql'],
+      }),
+    );
+  });
+
+  it('rejects an unknown PostgreSQL volume contract before creating storage', async () => {
+    const dockerHarness = createMockDockerHarness();
+    (dockerHarness.docker.inspectImage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      Config: {
+        Env: ['PGDATA=/data/postgres'],
+        Volumes: { '/data': {} },
+      },
+    });
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(
+      manager.create({
+        name: 'custom-pg',
+        template: 'postgresql',
+        image: 'ghcr.io/example/custom-postgres:latest',
+      }),
+    ).rejects.toMatchObject({ code: 'MANAGED_POSTGRES_VOLUME_CONTRACT_UNSUPPORTED' });
+
+    expect(dockerHarness.docker.createVolume).not.toHaveBeenCalled();
+    expect(dockerHarness.docker.runServiceContainer).not.toHaveBeenCalled();
   });
 
   it('should use first version for mysql when version is omitted', async () => {
