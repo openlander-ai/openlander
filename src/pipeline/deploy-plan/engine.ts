@@ -52,10 +52,12 @@ import {
 import { resolveComposeFilePath, resolveComposeFilePaths } from '../compose-spec.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import {
+  DockerfileSelectionRequiredError,
   InvalidTrafficServiceError,
   ProjectAlreadyExistsError,
   ProjectNotFoundError,
   ServiceConfigError,
+  TargetProjectServiceNameConflictError,
   TrafficServiceRequiredError,
 } from '../../errors.js';
 import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
@@ -170,6 +172,8 @@ export interface ExecutePlanResult {
   runtime_project_id?: string;
   estimated_seconds?: number;
   error?: string;
+  code?: string;
+  details?: Record<string, unknown>;
   message?: string;
   /**
    * Populated only when status === 'needs_approval'. Lists the identifiers to
@@ -261,14 +265,25 @@ export class PlanEngine {
     let userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
     let dockerfileExists = existsSync(join(clonePath, userDockerfile));
 
-    // If the specified/default Dockerfile doesn't exist but we found one elsewhere, use it.
+    if (opts.dockerfilePath && !dockerfileExists) {
+      throw new ServiceConfigError(`Dockerfile not found: ${opts.dockerfilePath}`, {
+        dockerfilePath: opts.dockerfilePath,
+        candidates: relativeDockerfiles,
+      });
+    }
+
+    // A sole discovered Dockerfile is unambiguous. Multiple Dockerfiles are
+    // handled after Compose detection so a valid Compose file remains the default.
     const firstFound = relativeDockerfiles[0];
-    if (!dockerfileExists && firstFound) {
+    if (
+      !opts.dockerfilePath &&
+      !dockerfileExists &&
+      relativeDockerfiles.length === 1 &&
+      firstFound
+    ) {
       userDockerfile = firstFound;
       dockerfileExists = true;
-      warnings.push(
-        `Specified "${opts.dockerfilePath ?? 'Dockerfile'}" not found; using discovered ${userDockerfile}`,
-      );
+      warnings.push(`Root Dockerfile not found; using discovered ${userDockerfile}`);
     }
 
     if (relativeDockerfiles.length > 1) {
@@ -421,6 +436,16 @@ export class PlanEngine {
             }
           }
         }
+      }
+    }
+
+    if (buildMethod === 'dockerfile' && !opts.dockerfilePath && relativeDockerfiles.length > 1) {
+      const rootDockerfile = relativeDockerfiles.find((path) => path === 'Dockerfile');
+      if (opts.preferDockerfile && rootDockerfile) {
+        userDockerfile = rootDockerfile;
+        dockerfileExists = true;
+      } else {
+        throw new DockerfileSelectionRequiredError(relativeDockerfiles);
       }
     }
 
@@ -623,15 +648,56 @@ export class PlanEngine {
       return 'compose';
     }
 
-    if (plan.build.dockerfile !== 'Dockerfile') {
-      return 'single';
-    }
-
-    if ((plan.build.dockerfiles_found?.length ?? 0) > 1) {
-      return 'monorepo';
-    }
-
+    // A deploy plan always represents one Dockerfile Application. Repositories
+    // with multiple Dockerfiles are resolved during plan creation instead of
+    // silently expanding one plan into a monorepo deployment.
     return 'single';
+  }
+
+  private serviceNameLeaf(name: string): string {
+    const canonical = name.replace(/__svc$/, '');
+    return canonical.split('/').at(-1) ?? canonical;
+  }
+
+  private async targetServiceNameConflicts(params: {
+    targetProjectId: string;
+    appName: string;
+    composeServices?: PlanBuildService[];
+  }): Promise<
+    Array<{ serviceId: string; serviceName: string; kind: string; plannedName: string }>
+  > {
+    const plannedNames = [
+      params.appName,
+      ...(params.composeServices?.map((service) => service.name) ?? []),
+    ];
+    const plannedByLeaf = new Map(plannedNames.map((name) => [this.serviceNameLeaf(name), name]));
+    const services = await this.db.listServices();
+    return services
+      .filter((service) => service.project_id === params.targetProjectId)
+      .flatMap((service) => {
+        const plannedName = plannedByLeaf.get(this.serviceNameLeaf(service.name));
+        return plannedName
+          ? [
+              {
+                serviceId: service.id,
+                serviceName: service.name,
+                kind: service.kind,
+                plannedName,
+              },
+            ]
+          : [];
+      });
+  }
+
+  private async assertTargetServiceNamesAvailable(params: {
+    targetProjectId: string;
+    appName: string;
+    composeServices?: PlanBuildService[];
+  }): Promise<void> {
+    const conflicts = await this.targetServiceNameConflicts(params);
+    if (conflicts.length > 0) {
+      throw new TargetProjectServiceNameConflictError(params.targetProjectId, conflicts);
+    }
   }
 
   private buildAutoEnvVars(services: PlanService[]): Record<string, string> {
@@ -1208,6 +1274,12 @@ export class PlanEngine {
       const targetProject = await this.getExistingTargetProject(projectId);
       const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
       const projectName = targetProject?.name ?? name ?? fallbackProjectName;
+      if (attachTargetProject) {
+        await this.assertTargetServiceNamesAvailable({
+          targetProjectId: attachTargetProject.id,
+          appName: projectName,
+        });
+      }
       // Image-source plans carry no detected service dependencies (services: []),
       // but caller-provided env_vars can still require value validation.
       const envIssues = this.validatePlanEnvValues([], envVars);
@@ -1303,19 +1375,12 @@ export class PlanEngine {
       }
       trafficService = opts.trafficService ?? (candidates.length === 1 ? candidates[0] : undefined);
     }
-    if (
-      attachTargetProject &&
-      (buildMethod === 'compose' ||
-        (userDockerfile === 'Dockerfile' && relativeDockerfiles.length > 1))
-    ) {
-      throw new ServiceConfigError(
-        'target_project_id currently supports a single Application only. Select one Dockerfile or deploy the Compose/monorepo app as a separate Project.',
-        {
-          targetProjectId: attachTargetProject.id,
-          buildMethod,
-          dockerfilesFound: relativeDockerfiles,
-        },
-      );
+    if (attachTargetProject) {
+      await this.assertTargetServiceNamesAvailable({
+        targetProjectId: attachTargetProject.id,
+        appName: projectName,
+        ...(buildMethod === 'compose' ? { composeServices: composeBuildServices } : {}),
+      });
     }
 
     const detectedServices = await this.detectPlanServices(
@@ -1735,6 +1800,30 @@ export class PlanEngine {
     const { planId, plan, planExecution, approvedSafeResources } = params;
     const attachTargetProject = await this.getExistingTargetProject(planExecution.targetProjectId);
     if (attachTargetProject) {
+      const conflicts = await this.targetServiceNameConflicts({
+        targetProjectId: attachTargetProject.id,
+        appName: plan.app.name,
+        ...(plan.build.method === 'compose'
+          ? { composeServices: plan.build.compose_services }
+          : {}),
+      });
+      if (conflicts.length > 0) {
+        return {
+          attachTargetProject,
+          targetProject: null,
+          response: {
+            status: 'failed',
+            plan_id: planId,
+            project_name: plan.app.name,
+            target_project_id: attachTargetProject.id,
+            code: 'TARGET_PROJECT_SERVICE_NAME_CONFLICT',
+            error:
+              'One or more planned workload names conflict with services already attached to the target Project.',
+            details: { conflicts },
+            message: 'Choose unique Application and Compose service names before retrying.',
+          },
+        };
+      }
       const collidingProject = await this.db.getProjectByName(plan.app.name);
       if (collidingProject && collidingProject.id !== attachTargetProject.id) {
         return {

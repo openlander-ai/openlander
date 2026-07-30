@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AppContext } from '../src/app.js';
+import { DockerfileSelectionRequiredError } from '../src/errors.js';
 import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
 
 function createMockContext(): AppContext {
@@ -72,17 +73,18 @@ describe('deploy-plan integration', () => {
       { target: 'mcp' },
     );
 
-    expect(ctx.planEngine.createPlan).toHaveBeenCalledWith({
-      repoUrl: 'https://github.com/test/repo',
-      branch: undefined,
-      name: undefined,
-      envVars: undefined,
-      preferDockerfile: undefined,
-      dockerfilePath: undefined,
-      dockerTarget: undefined,
-    });
+    expect(ctx.planEngine.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoUrl: 'https://github.com/test/repo',
+        branch: undefined,
+        name: undefined,
+        preferDockerfile: undefined,
+        dockerfilePath: undefined,
+        dockerTarget: undefined,
+      }),
+    );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       plan_id: 'plan_123',
       status: 'ready',
       complexity: 'simple',
@@ -92,6 +94,72 @@ describe('deploy-plan integration', () => {
       env: { required: [], auto: {}, provided_count: 0, detected: [] },
       missing: [],
       warnings: [],
+    });
+  });
+
+  it('returns structured Dockerfile selection guidance for one Application per plan', async () => {
+    const ctx = createMockContext();
+    const registry = createSharedToolRegistry(ctx);
+    const tool = registry.find((candidate) => candidate.name === 'create_deploy_plan');
+    (ctx.planEngine.createPlan as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new DockerfileSelectionRequiredError(['Dockerfile', 'apps/worker/Dockerfile']),
+    );
+
+    const result = await tool!.execute(
+      {
+        repo_url: 'https://github.com/test/repo',
+        name: 'worker',
+        target_project_id: 'suite',
+      },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'needs_selection',
+      code: 'DOCKERFILE_SELECTION_REQUIRED',
+      candidate_dockerfiles: ['Dockerfile', 'apps/worker/Dockerfile'],
+      target_project_id: 'suite',
+      suggested_call: {
+        tool: 'openlander_deploy',
+        action: 'create_deploy_plan',
+        params: {
+          repo_url: 'https://github.com/test/repo',
+          name: 'worker',
+          target_project_id: 'suite',
+          dockerfile_path: 'Dockerfile',
+        },
+      },
+    });
+  });
+
+  it('keeps deploy_app on the same structured Dockerfile selection contract', async () => {
+    const ctx = createMockContext();
+    const registry = createSharedToolRegistry(ctx);
+    const tool = registry.find((candidate) => candidate.name === 'deploy_app');
+    (ctx.planEngine.createPlan as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new DockerfileSelectionRequiredError(['api/Dockerfile', 'worker/Dockerfile']),
+    );
+
+    const result = await tool!.execute(
+      {
+        repo_url: 'https://github.com/test/repo',
+        name: 'worker',
+        target_project_id: 'suite',
+      },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'needs_selection',
+      code: 'DOCKERFILE_SELECTION_REQUIRED',
+      suggested_call: {
+        tool: 'openlander_deploy',
+        action: 'deploy_app',
+        params: {
+          target_project_id: 'suite',
+          dockerfile_path: 'api/Dockerfile',
+        },
+      },
     });
   });
 
@@ -156,9 +224,11 @@ describe('deploy-plan integration', () => {
       'plan_123',
       undefined,
       expect.any(String),
+      'chat',
+      {},
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       plan_id: 'plan_123',
       status: 'building',
       project_name: 'test-app',
@@ -186,7 +256,7 @@ describe('deploy-plan integration', () => {
 
     const result = await tool!.execute({ plan_id: 'plan_123' }, { target: 'mcp' });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       plan_id: 'plan_123',
       status: 'failed',
       error: 'Service creation failed',

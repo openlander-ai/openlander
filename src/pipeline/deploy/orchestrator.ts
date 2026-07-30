@@ -371,6 +371,7 @@ export async function buildProject(
       noCache: config._noCacheBuild === true,
       sourceRevisionChanged,
       statefulApproval: config._statefulComposeApproval,
+      networkProjectName: config._networkProjectName,
     });
 
     if (result.success) {

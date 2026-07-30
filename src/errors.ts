@@ -1262,6 +1262,33 @@ export class StatefulBackupUnsupportedError extends OpenLanderError {
   }
 }
 
+export class DockerfileSelectionRequiredError extends OpenLanderError {
+  constructor(candidates: string[]) {
+    super(
+      'Multiple Dockerfiles were found and one Application must be selected for this deployment plan.',
+      'DOCKERFILE_SELECTION_REQUIRED',
+      409,
+      { candidates },
+    );
+    this.name = 'DockerfileSelectionRequiredError';
+  }
+}
+
+export class TargetProjectServiceNameConflictError extends OpenLanderError {
+  constructor(
+    targetProjectId: string,
+    conflicts: Array<{ serviceId: string; serviceName: string; kind: string; plannedName: string }>,
+  ) {
+    super(
+      'One or more planned workload names conflict with services already attached to the target Project.',
+      'TARGET_PROJECT_SERVICE_NAME_CONFLICT',
+      409,
+      { targetProjectId, conflicts },
+    );
+    this.name = 'TargetProjectServiceNameConflictError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {
