@@ -659,7 +659,7 @@ describeGitClone('cloneRepo — error classification', () => {
     expect(cloneCalls).toHaveLength(1);
   });
 
-  it('tries GitHub SSH port 22 again after both SSH endpoints have network failures', async () => {
+  it('retries GitHub SSH port 443 after both SSH endpoints have network failures', async () => {
     const manager = {
       runWithCloneCredential: vi.fn(
         async (
@@ -706,7 +706,7 @@ describeGitClone('cloneRepo — error classification', () => {
     expect(cloneCalls.map((call) => (call[1] as string[]).at(-2))).toEqual([
       'git@github.com:user/private-repo.git',
       'ssh://git@ssh.github.com:443/user/private-repo.git',
-      'git@github.com:user/private-repo.git',
+      'ssh://git@ssh.github.com:443/user/private-repo.git',
     ]);
   });
 

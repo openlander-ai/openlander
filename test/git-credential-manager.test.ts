@@ -223,7 +223,7 @@ describe('GitCredentialManager', () => {
     expect(attemptedUrls).toEqual([
       'git@github.com:Team-SpaceY/incar-app.git',
       'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
-      'git@github.com:Team-SpaceY/incar-app.git',
+      'ssh://git@ssh.github.com:443/Team-SpaceY/incar-app.git',
     ]);
   });
 

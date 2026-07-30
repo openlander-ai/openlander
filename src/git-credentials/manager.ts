@@ -360,7 +360,7 @@ export class GitCredentialManager {
     const attempts = [
       { sshUrl: repository.sshUrl, transport: 'ssh_22' },
       { sshUrl: githubSshFallbackUrl(repository), transport: 'ssh_443' },
-      { sshUrl: repository.sshUrl, transport: 'ssh_22_retry' },
+      { sshUrl: githubSshFallbackUrl(repository), transport: 'ssh_443_retry' },
     ] as const;
 
     for (let index = 0; index < attempts.length; index++) {
