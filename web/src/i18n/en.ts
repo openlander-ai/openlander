@@ -1314,6 +1314,9 @@ export const translations = {
     card: {
       archivedBadge: 'Archived',
       partiallyArchivedBadge: 'Partially archived',
+      failedInitialDeployBadge: 'Failed setup',
+      failedInitialDeployHint:
+        'The first deployment did not complete. Open it to review or request approval-gated cleanup.',
       lastDeploy: 'Last Deploy',
       branch: 'Branch',
       endpoint: 'Endpoint',

@@ -146,6 +146,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
           deployableChildCount,
           isCompose,
           partiallyArchived,
+          failedInitialDeploy,
         }) => {
           const mapped = mapProjectForApi(p, serviceRecords.get(p.id)?.service ?? undefined);
           return {
@@ -173,6 +174,8 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
             partiallyArchived,
             partially_archived: partiallyArchived,
             isCompose,
+            failedInitialDeploy,
+            failed_initial_deploy: failedInitialDeploy,
             activeServiceCount: activeChildCount,
             active_service_count: activeChildCount,
             serviceCount: childCount,

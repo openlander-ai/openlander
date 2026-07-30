@@ -10,6 +10,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import {
   environments,
+  deployLogs,
   envVars,
   projects,
   secretFiles,
@@ -50,6 +51,8 @@ export interface ProjectWithMetadata {
   isCompose: boolean;
   /** True when at least one deployable service is archived while at least one remains active. */
   partiallyArchived: boolean;
+  /** True when the group has failed deploy evidence but has never completed a successful deploy. */
+  failedInitialDeploy: boolean;
 }
 
 export interface EnsureDeployableServiceInput {
@@ -638,6 +641,7 @@ export class ProjectRepo {
         status: services.status,
         runtime_role: services.runtime_role,
         archived_at: services.archived_at,
+        container_id: services.container_id,
       })
       .from(services)
       .where(inArray(services.project_id, projectIds));
@@ -646,20 +650,24 @@ export class ProjectRepo {
     const servicesByProject = new Map<
       string,
       Array<{
+        id: string;
         kind: string;
         status: ServiceRow['status'];
         runtime_role: ServiceRow['runtime_role'];
         archived_at: string | null;
+        container_id: string | null;
       }>
     >();
     for (const s of groupServices) {
       if (!s.project_id) continue;
       const rows = servicesByProject.get(s.project_id) ?? [];
       rows.push({
+        id: s.id,
         kind: s.kind,
         status: s.status,
         runtime_role: s.runtime_role,
         archived_at: s.archived_at,
+        container_id: s.container_id,
       });
       servicesByProject.set(s.project_id, rows);
       if (s.kind === 'compose' || s.kind === 'compose-child') {
@@ -679,9 +687,44 @@ export class ProjectRepo {
       this.getConnectedManagedServiceCountsByProjectIds(projectIds, { includeArchived: true }),
     ]);
 
+    const deployableServiceIds = groupServices
+      .filter((service) => isDeployableStatusService(service.kind))
+      .map((service) => service.id);
+    const deployAttemptRows =
+      deployableServiceIds.length === 0
+        ? []
+        : await this.db
+            .select({ serviceId: deployLogs.service_id, status: deployLogs.status })
+            .from(deployLogs)
+            .where(
+              and(
+                inArray(deployLogs.service_id, deployableServiceIds),
+                inArray(deployLogs.status, ['success', 'failed']),
+              ),
+            );
+    const successfulDeployServiceIds = new Set(
+      deployAttemptRows
+        .filter((attempt) => attempt.status === 'success')
+        .map((attempt) => attempt.serviceId),
+    );
+    const failedDeployServiceIds = new Set(
+      deployAttemptRows
+        .filter((attempt) => attempt.status === 'failed')
+        .map((attempt) => attempt.serviceId),
+    );
+
     return projectRows.map((project) => {
       const servicesForProject = servicesByProject.get(project.id) ?? [];
       const aggregateStatus = deriveGroupStatusFromServices(servicesForProject);
+      const activeDeployables = servicesForProject.filter(
+        (service) => !service.archived_at && isDeployableStatusService(service.kind),
+      );
+      const failedInitialDeploy =
+        aggregateStatus === 'error' &&
+        activeDeployables.length > 0 &&
+        activeDeployables.every((service) => !service.container_id) &&
+        activeDeployables.some((service) => failedDeployServiceIds.has(service.id)) &&
+        activeDeployables.every((service) => !successfulDeployServiceIds.has(service.id));
       const deployableChildCount = activeDeployableCountByParent.get(project.id) ?? 0;
       const activeChildCount =
         deployableChildCount + (activeManagedCountByParent.get(project.id) ?? 0);
@@ -697,6 +740,7 @@ export class ProjectRepo {
         deployableChildCount,
         isCompose: isComposeByProject.get(project.id) ?? false,
         partiallyArchived: derivePartiallyArchivedFromServices(servicesForProject),
+        failedInitialDeploy,
       };
     });
   }

@@ -160,12 +160,18 @@ async function listProjectsWithRuntimeStatus(appCtx: Parameters<ToolDef['execute
       runtimeStatusByProject: new Map(
         projectsWithMetadata.map((entry) => [entry.project.id, entry.runtimeStatus]),
       ),
+      failedInitialDeployProjectIds: new Set(
+        projectsWithMetadata
+          .filter((entry) => entry.failedInitialDeploy)
+          .map((entry) => entry.project.id),
+      ),
     };
   }
 
   return {
     projects: await appCtx.db.listProjects(),
     runtimeStatusByProject: new Map<string, 'running' | 'stopped' | 'error'>(),
+    failedInitialDeployProjectIds: new Set<string>(),
   };
 }
 
@@ -285,18 +291,17 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     riskLevel: 'low',
     description:
-      'List Projects with status, ports, container names, local URLs, public URLs, Application count, and Application identifiers. Projects organize Applications, Compose stacks, and Database/Cache/Storage resources. Compatibility fields deployable_service/deployable_services list app/worker service_id values. Returns { count, projects[] }. Always available, no errors.',
+      'List Projects with status, ports, URLs, Application identifiers, and failed_initial_deploy when a retained first deployment has no successful history. Projects organize Applications, Compose stacks, and Database/Cache/Storage resources. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
-      'List Projects and Application service_id values for follow-up workload actions. deployable_service_count is the app/worker count; deployable_service is the primary workload; deployable_services includes app/worker siblings.',
+      'List Projects and Application service_id values for follow-up workload actions. failed_initial_deploy marks retained failed setup evidence; cleanup stays approval-gated.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
         await reconcileRunningProjects(context.appCtx);
       }
 
-      const { projects, runtimeStatusByProject } = await listProjectsWithRuntimeStatus(
-        context.appCtx,
-      );
+      const { projects, runtimeStatusByProject, failedInitialDeployProjectIds } =
+        await listProjectsWithRuntimeStatus(context.appCtx);
       const serviceRecords = await loadProjectServiceRecords(context.appCtx, projects);
       const deployables = new Map<string, ServiceRow | undefined>();
       const domainMappings =
@@ -493,6 +498,9 @@ export const projectOpsToolDefs: ToolDef[] = [
                   )
                 : undefined,
               deployable_service_count: deployableServiceCount,
+              ...(failedInitialDeployProjectIds.has(project.id)
+                ? { failed_initial_deploy: true }
+                : {}),
               deployable_service: deployableService,
               deployable_services: deployableServices,
               createdAt: project.created_at,
@@ -556,6 +564,9 @@ export const projectOpsToolDefs: ToolDef[] = [
                 )
               : undefined,
             deployable_service_count: deployableServiceCount,
+            ...(failedInitialDeployProjectIds.has(project.id)
+              ? { failed_initial_deploy: true }
+              : {}),
           };
         }),
       };

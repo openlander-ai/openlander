@@ -73,14 +73,20 @@ export function ProjectsGrid() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const filtered = projects.filter((p) => {
-    if (!q) return true;
-    const needle = q.toLowerCase();
-    return (
-      (p.displayName ?? p.name).toLowerCase().includes(needle) ||
-      p.name.toLowerCase().includes(needle)
-    );
-  });
+  const filtered = projects
+    .filter((p) => {
+      if (!q) return true;
+      const needle = q.toLowerCase();
+      return (
+        (p.displayName ?? p.name).toLowerCase().includes(needle) ||
+        p.name.toLowerCase().includes(needle)
+      );
+    })
+    .sort((a, b) => {
+      const aFailedAttempt = a.failedInitialDeploy === true || a.failed_initial_deploy === true;
+      const bFailedAttempt = b.failedInitialDeploy === true || b.failed_initial_deploy === true;
+      return Number(aFailedAttempt) - Number(bFailedAttempt);
+    });
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,6 +211,8 @@ export function ProjectsGrid() {
                   const isArchived = p.archived_at != null;
                   const isPartiallyArchived =
                     p.partiallyArchived === true || p.partially_archived === true;
+                  const isFailedInitialDeploy =
+                    p.failedInitialDeploy === true || p.failed_initial_deploy === true;
                   const activeServiceCount =
                     p.activeServiceCount ??
                     p.active_service_count ??
@@ -254,6 +262,11 @@ export function ProjectsGrid() {
                                 wire-format field, hydrated from services.* server-side post-0012. */}
                               {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                               <StatusPill status={p.status} />
+                              {isFailedInitialDeploy && (
+                                <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklch,var(--ol-error)_12%,transparent)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-error)]">
+                                  {t('projects.card.failedInitialDeployBadge')}
+                                </span>
+                              )}
                               {isPartiallyArchived && (
                                 <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklch,var(--ol-warning)_12%,transparent)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-warning)]">
                                   {t('projects.card.partiallyArchivedBadge')}
@@ -269,6 +282,11 @@ export function ProjectsGrid() {
                         {p.description && (
                           <p className="mt-1 truncate text-[12.5px] text-[color:var(--ol-fg-muted)]">
                             {p.description}
+                          </p>
+                        )}
+                        {!p.description && isFailedInitialDeploy && (
+                          <p className="mt-1 truncate text-[12.5px] text-[color:var(--ol-fg-muted)]">
+                            {t('projects.card.failedInitialDeployHint')}
                           </p>
                         )}
                         {/* Tags — chip row per the card grid spec

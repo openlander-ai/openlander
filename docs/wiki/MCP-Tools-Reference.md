@@ -441,6 +441,11 @@ project.
 
 List all projects with status, ports, URLs. No parameters.
 
+`failed_initial_deploy: true` identifies a retained deployment attempt that has failed evidence but
+no successful deployment history or running container. Inspect its logs before retrying; if it is
+no longer needed, use the existing approval-gated `archive_project` flow. OpenLander does not
+auto-delete failed deployment evidence.
+
 When called with a scoped MCP token, the response is filtered before it reaches the agent:
 project-scoped tokens see only the scoped Project, and service-scoped tokens see only Projects that
 contain the scoped service. For service-scoped tokens, `deployable_service`,
