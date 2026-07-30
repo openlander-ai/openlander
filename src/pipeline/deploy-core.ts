@@ -2616,11 +2616,7 @@ export class DeployPipeline {
     const target = await resolveComposeRedeployTarget(this.db, service);
     return await this.redeployResolvedService(target.service, {
       ...options,
-      ...(target.composeServices
-        ? { composeServices: target.composeServices }
-        : target.service.kind === 'compose'
-          ? { composeServices: [] }
-          : {}),
+      ...(target.composeServices ? { composeServices: target.composeServices } : {}),
     });
   }
 

@@ -412,7 +412,7 @@ describe('redeploy() config reconstruction characterization', () => {
     expect(capturedConfig.envVars).toBeUndefined();
   });
 
-  it('service-level Compose parent update clears the previous selective target set', async () => {
+  it('service-level Compose parent update preserves the previous selective target set', async () => {
     await db.createProject({
       id: 'stack-parent',
       name: 'stack-parent',
@@ -430,7 +430,7 @@ describe('redeploy() config reconstruction characterization', () => {
       'stack-parent__svc',
       serializeConfig({
         composeFile: 'docker-compose.yml',
-        composeServices: ['api'],
+        composeServices: ['api', 'web'],
         trafficService: 'web',
       }),
     );
@@ -439,7 +439,7 @@ describe('redeploy() config reconstruction characterization', () => {
 
     expect(result.success).toBe(true);
     const capturedConfig = deploySpy.mock.calls[0][0] as ProjectConfig;
-    expect(capturedConfig.composeServices).toEqual([]);
+    expect(capturedConfig.composeServices).toEqual(['api', 'web']);
     expect(capturedConfig.trafficService).toBe('web');
   });
 
