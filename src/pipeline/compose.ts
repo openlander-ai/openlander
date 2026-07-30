@@ -203,6 +203,7 @@ export interface ComposeDeployConfig {
   noCache?: boolean;
   sourceRevisionChanged?: boolean;
   statefulApproval?: StatefulComposeApproval;
+  networkProjectName?: string;
 }
 
 interface ComposeResetValue {
@@ -1471,7 +1472,9 @@ export class ComposePipeline {
     try {
       this.jobManager?.updatePhase(parentProjectId, 'building');
 
-      projectNetwork = await this.docker.ensureProjectNetwork(projectName);
+      projectNetwork = await this.docker.ensureProjectNetwork(
+        config.networkProjectName ?? projectName,
+      );
       const activeProjectNetwork = projectNetwork;
       await ensureManagedTraefikNetwork(this.docker, activeProjectNetwork);
       const services: ServiceNode[] = filteredComposeProject.services.map((service) => {

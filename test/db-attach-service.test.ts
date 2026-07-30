@@ -44,11 +44,20 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
     if (db) await db.close();
   });
 
-  async function createTestProject(label: string) {
+  async function createTestProject(
+    label: string,
+    options: { buildMethod?: 'compose'; parentProjectId?: string } = {},
+  ) {
     const id = uniqueId(label);
     projectIds.push(id);
     serviceIds.push(`${id}__svc`);
-    await db.createProject({ id, name: id, repoUrl: `https://example.test/${id}` });
+    await db.createProject({
+      id,
+      name: id,
+      repoUrl: `https://example.test/${id}`,
+      ...(options.buildMethod ? { buildMethod: options.buildMethod } : {}),
+      ...(options.parentProjectId ? { parentProjectId: options.parentProjectId } : {}),
+    });
     return id;
   }
 
@@ -99,6 +108,53 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
     expect(await db.getEnvVars(source)).toEqual({});
   });
 
+  it('attaches two selected Dockerfile Applications to the same Project sequentially', async () => {
+    const target = await createTestProject('target');
+    const api = await createTestProject('api');
+    const worker = await createTestProject('worker');
+
+    await db.attachServiceToProject(`${api}__svc`, target);
+    await db.attachServiceToProject(`${worker}__svc`, target);
+
+    expect((await db.getService(`${api}__svc`))?.project_id).toBe(target);
+    expect((await db.getService(`${worker}__svc`))?.project_id).toBe(target);
+    expect(await db.getProject(api)).toBeDefined();
+    expect(await db.getProject(worker)).toBeDefined();
+  });
+
+  it('attaches a Compose parent and every child in one transaction while preserving hierarchy', async () => {
+    const target = await createTestProject('target');
+    const sibling = await createTestProject('sibling');
+    const parent = await createTestProject('stack', { buildMethod: 'compose' });
+    const child = await createTestProject('stack-api', { parentProjectId: parent });
+    const postgresId = uniqueId('postgres');
+    serviceIds.push(postgresId);
+    await db.createService({
+      id: postgresId,
+      name: postgresId,
+      projectId: target,
+      type: 'postgresql',
+      image: 'postgres:17',
+      containerName: `ol-svc-${postgresId}`,
+      port: 5432,
+    });
+
+    await db.attachServiceToProject(`${sibling}__svc`, target);
+    await db.attachServiceToProject(`${parent}__svc`, target);
+
+    const parentService = await db.getService(`${parent}__svc`);
+    const childService = await db.getService(`${child}__svc`);
+    const siblingService = await db.getService(`${sibling}__svc`);
+    const postgresService = await db.getService(postgresId);
+    expect(parentService?.project_id).toBe(target);
+    expect(childService?.project_id).toBe(target);
+    expect(childService?.parent_service_id).toBe(`${parent}__svc`);
+    expect(siblingService?.project_id).toBe(target);
+    expect(postgresService).toMatchObject({ project_id: target, kind: 'postgres' });
+    expect(await db.getProject(parent)).toBeDefined();
+    expect(await db.getProject(child)).toBeDefined();
+  });
+
   it('is a no-op when source equals target', async () => {
     const project = await createTestProject('same');
 
@@ -123,9 +179,9 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
 
   it('throws on missing target project', async () => {
     const source = await createTestProject('source');
-    await expect(db.attachServiceToProject(`${source}__svc`, uniqueId('missing-target'))).rejects.toThrow(
-      ProjectNotFoundError,
-    );
+    await expect(
+      db.attachServiceToProject(`${source}__svc`, uniqueId('missing-target')),
+    ).rejects.toThrow(ProjectNotFoundError);
   });
 });
 

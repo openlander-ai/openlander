@@ -975,7 +975,7 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe(
-        'Create the plan for deploying one new Application/worker into an existing Project. For new apps with proposed safe Database/Cache resources, prefer the deploy-plan approval path so OpenLander owns same-project provisioning.',
+        'Create the plan for deploying one Application, worker, or Compose workload into an existing Project. A plan selects one Dockerfile Application; repeat with the same target_project_id for siblings. Proposed safe Database/Cache resources use the deploy-plan approval path for same-project provisioning.',
       ),
   })
   .superRefine((data, ctx) => {
@@ -1228,7 +1228,7 @@ export const deploySchema = z
       .string()
       .optional()
       .describe(
-        'Attach a newly deployed single Application/worker to an existing Project after the deploy succeeds. The attach is owned by durable deploy-plan execution; failed deploys remain as separate failed attempts. Not supported with expose=true, compose, or monorepo deploys.',
+        'Attach a newly deployed Application, worker, or Compose workload to an existing Project after the deploy succeeds. The attach is owned by durable deploy-plan execution; failed deploys remain separate attempts. Multiple Dockerfiles require one dockerfile_path per plan. Not supported with expose=true.',
       ),
   })
   .superRefine((data, ctx) => {

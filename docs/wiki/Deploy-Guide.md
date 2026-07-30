@@ -15,11 +15,21 @@ create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  ge
 ```
 
 There's also a convenience `deploy_app` tool that combines all 3 steps.
-`deploy_app(target_project_id=...)` adds a newly deployed single Application
-into an existing Project after the deploy succeeds. The attach is
-owned by the durable deploy-plan execution path, so MCP disconnects or timeouts
-do not own the group move. It is not supported with `expose=true`, compose, or
-ambiguous monorepo deploys; expose the service after attach if needed.
+`deploy_app(target_project_id=...)` adds a newly deployed Application, worker,
+or Compose workload into an existing Project. Containers use the target
+Project network from their first start, and the parent plus Compose children
+are attached transactionally after deployment succeeds. The attach is owned by
+the durable deploy-plan execution path, so MCP disconnects or timeouts do not
+own the group move. It is not supported with `expose=true`; expose the service
+after attach if needed.
+
+Repository selection is deterministic: a valid Compose file is the default;
+without Compose, one Dockerfile creates one Application per plan. If multiple
+Dockerfiles are found, OpenLander returns `DOCKERFILE_SELECTION_REQUIRED` with
+`candidate_dockerfiles`. Retry with one `dockerfile_path`, and repeat with the
+same `target_project_id` to add sibling Applications. Set
+`prefer_dockerfile=true` to override Compose; when a root `Dockerfile` exists,
+it is selected.
 
 ## Mental Model
 

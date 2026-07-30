@@ -1647,6 +1647,22 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
+  it('rejects target_project_id image name conflicts before storing the plan', async () => {
+    mockDb.listServices.mockResolvedValue([
+      { id: 'existing-worker', project_id: 'p1', name: 'new-worker__svc', kind: 'image' },
+    ]);
+
+    await expect(
+      engine.createPlan({
+        source: 'image',
+        imageUrl: 'nginx:latest',
+        name: 'new-worker',
+        targetProjectId: 'p1',
+      }),
+    ).rejects.toMatchObject({ code: 'TARGET_PROJECT_SERVICE_NAME_CONFLICT' });
+    expect(mockDb.createDeployPlan).not.toHaveBeenCalled();
+  });
+
   it('attaches a target_project_id service from the plan event listener after deploy success', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
@@ -1721,6 +1737,46 @@ describe('PlanEngine.executePlan', () => {
       expect(completedPlan.project_id).toBe('target');
       expect(completedPlan.target_project_id).toBe('target');
     });
+  });
+
+  it('rechecks target Project service-name conflicts before persisting execution', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      target_project_id: 'target',
+      app: {
+        name: 'worker',
+        source: {
+          repo_url: 'https://github.com/test/worker',
+          branch: 'main',
+          commit_sha: 'abc123',
+        },
+      },
+      execution: { targetProjectId: 'target' },
+    });
+    mockDb.getProject.mockResolvedValue({ id: 'target', name: 'suite' });
+    mockDb.listServices.mockResolvedValue([
+      { id: 'existing-worker', project_id: 'target', name: 'worker__svc', kind: 'git' },
+    ]);
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const result = await engine.executePlan(plan.plan_id);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'TARGET_PROJECT_SERVICE_NAME_CONFLICT',
+      target_project_id: 'target',
+      details: {
+        conflicts: [
+          expect.objectContaining({
+            serviceId: 'existing-worker',
+            plannedName: 'worker',
+          }),
+        ],
+      },
+    });
+    expect(mockDb.updateDeployPlan).not.toHaveBeenCalled();
+    expect(mockDb.acquireDeployLock).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
   it('executes target_project_id plan when Application name matches the target Project', async () => {
@@ -1891,13 +1947,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('uses monorepo mode when default Dockerfile and multiple dockerfiles found', async () => {
-    const { cloneRepo } = await import('../src/pipeline/git.js');
-    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
-      path: '/tmp/test-clone',
-      commitSha: 'mono-sha',
-    });
-
+  it('keeps a stored multi-Dockerfile plan scoped to its selected root Application', async () => {
     mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
       parentProjectId: 'mono-1',
       parentName: 'test-app',
@@ -1921,17 +1971,13 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalled();
-    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({ preferDockerfile: true }),
+    );
+    expect(mockPipeline.startMonorepoDeploy).not.toHaveBeenCalled();
   });
 
-  it('propagates the plan lock session into monorepo execution for existing projects', async () => {
-    const { cloneRepo } = await import('../src/pipeline/git.js');
-    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
-      path: '/tmp/test-clone',
-      commitSha: 'mono-sha',
-    });
-
+  it('propagates the plan lock session into selected Dockerfile execution', async () => {
     mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
       parentProjectId: 'p1',
       parentName: 'test-app',
@@ -1957,11 +2003,12 @@ describe('PlanEngine.executePlan', () => {
     await engine.executePlan(plan.plan_id, undefined, 'plan-session-mono');
 
     expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('p1', 'plan-session-mono');
-    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         _lockSessionId: 'plan-session-mono',
       }),
     );
+    expect(mockPipeline.startMonorepoDeploy).not.toHaveBeenCalled();
   });
 });
 
@@ -2249,13 +2296,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(persistedPlan.target_project_id).toBeUndefined();
   });
 
-  it('creates and reuses the target Project for approved new-app monorepo resource plans', async () => {
-    const { cloneRepo } = await import('../src/pipeline/git.js');
-    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
-      path: '/tmp/test-clone',
-      commitSha: 'mono-sha',
-    });
-
+  it('creates and reuses the target Project for an approved selected-Dockerfile resource plan', async () => {
     const plan = createNeedsApprovalPlan({
       project_id: undefined,
       build: {
@@ -2267,6 +2308,11 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     });
     mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
     mockDb.getProjectByName.mockReturnValue(null);
+    mockPipeline.startDeploy.mockResolvedValueOnce({
+      status: 'building',
+      projectId: 'auto-p1',
+      projectName: 'test-app',
+    });
 
     const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
       approveAllSafeResources: true,
@@ -2286,6 +2332,11 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       }),
     );
     expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('auto-p1', expect.any(String));
+    const deferred = getLastDeferredRuntimeEnvVars();
+    await expect(deferred()).resolves.toEqual({
+      ok: true,
+      envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+    });
     expect(mockDocker.ensureProjectNetwork).toHaveBeenCalledWith('test-app');
     expect(mockServiceManager.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2295,19 +2346,16 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       }),
     );
     expect(mockDb.attachServiceToProject).toHaveBeenCalledWith('svc-pg-1', 'auto-p1');
-    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
-    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'test-app',
         repoUrl: plan.app.source.repo_url,
         branch: plan.app.source.branch,
-        clonePath: '/tmp/test-clone',
-        commitSha: 'mono-sha',
-        dockerfiles: ['Dockerfile', 'apps/api/Dockerfile'],
-        envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+        envVars: {},
         _lockSessionId: expect.any(String),
       }),
     );
+    expect(mockPipeline.startMonorepoDeploy).not.toHaveBeenCalled();
   });
 
   it('uses plan.project_id as the lock target even when the project name lookup is empty', async () => {

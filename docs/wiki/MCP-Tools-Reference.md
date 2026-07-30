@@ -169,26 +169,26 @@ Composite catalog:
 
 Analyze a repository and create a deployment plan.
 
-| Parameter           | Type     | Required | Description                                         |
-| ------------------- | -------- | -------- | --------------------------------------------------- |
-| `repo_url`          | string   | No       | Git repository URL                                  |
-| `branch`            | string   | No       | Branch to deploy                                    |
-| `name`              | string   | No       | Project name                                        |
-| `source`            | string   | No       | `'git'` or `'image'`                                |
-| `image`             | string   | No       | Docker image (if source=image)                      |
-| `cmd`               | string   | No       | Container command override                          |
-| `port`              | number   | No       | Container port                                      |
-| `health_check_path` | string   | No       | Health check path                                   |
-| `env_vars`          | object   | No       | Environment variables                               |
-| `prefer_dockerfile` | boolean  | No       | Prefer existing Dockerfile                          |
-| `dockerfile_path`   | string   | No       | Relative Dockerfile path                            |
-| `docker_target`     | string   | No       | Docker build target stage                           |
-| `compose_file`      | string   | No       | Repository-relative Compose file                    |
-| `compose_files`     | string[] | No       | Ordered Compose files, from base to overlays        |
-| `compose_profiles`  | string[] | No       | Compose profiles to activate                        |
-| `traffic_service`   | string   | No       | Compose application used for representative traffic |
-| `environment`       | string   | No       | `production` (default) or `development`             |
-| `target_project_id` | string   | No       | Deploy first Application into an existing Project   |
+| Parameter           | Type     | Required | Description                                                        |
+| ------------------- | -------- | -------- | ------------------------------------------------------------------ |
+| `repo_url`          | string   | No       | Git repository URL                                                 |
+| `branch`            | string   | No       | Branch to deploy                                                   |
+| `name`              | string   | No       | Project name                                                       |
+| `source`            | string   | No       | `'git'` or `'image'`                                               |
+| `image`             | string   | No       | Docker image (if source=image)                                     |
+| `cmd`               | string   | No       | Container command override                                         |
+| `port`              | number   | No       | Container port                                                     |
+| `health_check_path` | string   | No       | Health check path                                                  |
+| `env_vars`          | object   | No       | Environment variables                                              |
+| `prefer_dockerfile` | boolean  | No       | Prefer existing Dockerfile                                         |
+| `dockerfile_path`   | string   | No       | Relative Dockerfile path                                           |
+| `docker_target`     | string   | No       | Docker build target stage                                          |
+| `compose_file`      | string   | No       | Repository-relative Compose file                                   |
+| `compose_files`     | string[] | No       | Ordered Compose files, from base to overlays                       |
+| `compose_profiles`  | string[] | No       | Compose profiles to activate                                       |
+| `traffic_service`   | string   | No       | Compose application used for representative traffic                |
+| `environment`       | string   | No       | `production` (default) or `development`                            |
+| `target_project_id` | string   | No       | Deploy an Application or Compose workload into an existing Project |
 
 For Compose plans, OpenLander auto-selects `traffic_service` when exactly one exposed application
 exists. Multiple exposed applications return `needs_input` with
@@ -269,35 +269,42 @@ When dependency manifests declare git-based dependencies, OpenLander refreshes t
 install layer while preserving normal Docker cache behavior for other repos. Use `no_cache=true`
 only when you need a fully uncached build.
 
-`target_project_id` attaches a newly deployed single app/worker service to an
-existing Project after the deploy succeeds. The attach is owned by the
+`target_project_id` attaches a newly deployed Application, worker, or Compose
+workload to an existing Project after the deploy succeeds. The target Project
+network is used from the first container start. The attach is owned by the
 durable deploy-plan execution path, not request-local MCP post-processing, so
 agents should poll status and then use the returned `service_id` for follow-up
-service actions. It is not supported with `expose=true`, compose, or ambiguous
-monorepo deploys; expose the service after attach if needed. Use `create_project`
+service actions. It is not supported with `expose=true`; expose the service
+after attach if needed. Use `create_project`
 first when a brand-new app needs a project-scoped Database/Cache/Storage resource before first
 boot.
 
-| Parameter           | Type    | Required | Description                                                      |
-| ------------------- | ------- | -------- | ---------------------------------------------------------------- |
-| `service_id`        | string  | No       | Existing Application id                                          |
-| `service_name`      | string  | No       | Existing Application name                                        |
-| `project_name`      | string  | No       | Existing group lookup or service name scope                      |
-| `repo_url`          | string  | No       | Git repository URL for a new app                                 |
-| `branch`            | string  | No       | Branch                                                           |
-| `name`              | string  | No       | New Project name, or existing project alias                      |
-| `source`            | string  | No       | `'git'` or `'image'`                                             |
-| `image`             | string  | No       | Docker image                                                     |
-| `cmd`               | string  | No       | Command override                                                 |
-| `port`              | number  | No       | Container port                                                   |
-| `env_vars`          | object  | No       | Environment variables                                            |
-| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes  |
-| `target_project_id` | string  | No       | Attach new single Application to an existing group               |
-| `strategy`          | string  | No       | Redeploy strategy for existing services                          |
-| `health_check_path` | string  | No       | Health check path                                                |
-| `traffic_service`   | string  | No       | Compose application used for readiness, URL, and traffic probing |
-| `wait`              | boolean | No       | Block until complete (default: true)                             |
-| `timeout`           | number  | No       | Max seconds to wait (default: 300)                               |
+If a repository has valid Compose, Compose is selected by default. Without
+Compose, multiple Dockerfiles return `status: "needs_selection"`, code
+`DOCKERFILE_SELECTION_REQUIRED`, and `candidate_dockerfiles`. Choose one
+`dockerfile_path` per plan. “One Application per plan” does not mean one
+Application per Project: repeat with the same `target_project_id` for siblings.
+
+| Parameter           | Type    | Required | Description                                                       |
+| ------------------- | ------- | -------- | ----------------------------------------------------------------- |
+| `service_id`        | string  | No       | Existing Application id                                           |
+| `service_name`      | string  | No       | Existing Application name                                         |
+| `project_name`      | string  | No       | Existing group lookup or service name scope                       |
+| `repo_url`          | string  | No       | Git repository URL for a new app                                  |
+| `branch`            | string  | No       | Branch                                                            |
+| `name`              | string  | No       | New Project name, or existing project alias                       |
+| `source`            | string  | No       | `'git'` or `'image'`                                              |
+| `image`             | string  | No       | Docker image                                                      |
+| `cmd`               | string  | No       | Command override                                                  |
+| `port`              | number  | No       | Container port                                                    |
+| `env_vars`          | object  | No       | Environment variables                                             |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes   |
+| `target_project_id` | string  | No       | Attach a new Application or Compose workload to an existing group |
+| `strategy`          | string  | No       | Redeploy strategy for existing services                           |
+| `health_check_path` | string  | No       | Health check path                                                 |
+| `traffic_service`   | string  | No       | Compose application used for readiness, URL, and traffic probing  |
+| `wait`              | boolean | No       | Block until complete (default: true)                              |
+| `timeout`           | number  | No       | Max seconds to wait (default: 300)                                |
 
 ### `validate_deploy_plan`
 

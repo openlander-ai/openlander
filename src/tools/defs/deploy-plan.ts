@@ -1,5 +1,9 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError, OpenLanderError } from '../../errors.js';
+import {
+  DeployLockedError,
+  DockerfileSelectionRequiredError,
+  OpenLanderError,
+} from '../../errors.js';
 import type { ToolContext, ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
@@ -853,6 +857,49 @@ function deployPlanResponse(
   };
 }
 
+function buildDockerfileSelectionResponse(
+  error: DockerfileSelectionRequiredError,
+  args: Record<string, unknown>,
+  action: 'create_deploy_plan' | 'deploy_app',
+): Record<string, unknown> {
+  const candidates = Array.isArray(error.details?.['candidates'])
+    ? error.details['candidates'].filter(
+        (candidate): candidate is string => typeof candidate === 'string',
+      )
+    : [];
+  const firstCandidate = candidates[0] ?? '<dockerfile_path>';
+  const retryParams = {
+    ...(typeof args['repo_url'] === 'string' ? { repo_url: args['repo_url'] } : {}),
+    ...(typeof args['branch'] === 'string' ? { branch: args['branch'] } : {}),
+    ...(typeof args['name'] === 'string' ? { name: args['name'] } : {}),
+    ...(typeof args['target_project_id'] === 'string'
+      ? { target_project_id: args['target_project_id'] }
+      : {}),
+    dockerfile_path: firstCandidate,
+  };
+  return {
+    status: 'needs_selection',
+    error: error.code,
+    code: error.code,
+    candidate_dockerfiles: candidates,
+    target_project_id:
+      typeof args['target_project_id'] === 'string' ? args['target_project_id'] : undefined,
+    suggested_call: {
+      tool: 'openlander_deploy',
+      action,
+      params: retryParams,
+    },
+    _agent_guidance: {
+      message:
+        'This repository has multiple Dockerfiles and no selected Compose deployment. One deployment plan creates one Application, not one entire Project.',
+      next_steps: [
+        'Choose one candidate_dockerfiles entry and retry with dockerfile_path.',
+        'To add more Applications, repeat the call for each Dockerfile with the same target_project_id.',
+      ],
+    },
+  };
+}
+
 async function resolveCancelProject(
   args: Record<string, unknown>,
   appCtx: AppCtx,
@@ -1264,36 +1311,45 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'create_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Analyze a repository/image and create a deployment plan for a new Application/Compose workload. Use name for the Project name. Returns detected resources, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
+      'Analyze a repository/image and create a deployment plan for a new Application/Compose workload. Valid Compose is selected by default; otherwise one Dockerfile creates one Application per plan. Multiple Dockerfiles return structured needs_selection candidates unless dockerfile_path selects one. target_project_id permits Application, worker, and Compose sibling workloads. Use name for the workload name. Returns detected resources, required env vars, and build config.',
     mcpDescription:
-      'Create a deployment plan for a new Application/Compose workload. New app names use name, not project_name. Returns plan_id, status, detected resources, missing vars, warnings.',
+      'Create a deployment plan for one Application or Compose workload. Compose is the default when valid; multiple Dockerfiles require dockerfile_path and return needs_selection candidates. target_project_id attaches a sibling workload. New app names use name, not project_name.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const envVars = parseEnvVarsInput(args['env_vars']) ?? {};
 
-      const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
-        branch: (args['branch'] as string | undefined) ?? undefined,
-        gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
-        name: (args['name'] as string | undefined) ?? undefined,
-        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
-        imageUrl: (args['image'] as string | undefined) ?? undefined,
-        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
-        containerPort: (args['port'] as number | undefined) ?? undefined,
-        healthCheckPath: (args['health_check_path'] as string | undefined) ?? undefined,
-        envVars,
-        preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
-        dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
-        dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
-        composeFile: (args['compose_file'] as string | undefined) ?? undefined,
-        composeFiles: (args['compose_files'] as string[] | undefined) ?? undefined,
-        composeProfiles: (args['compose_profiles'] as string[] | undefined) ?? undefined,
-        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
-        environment: (args['environment'] as 'production' | 'development' | undefined) ?? undefined,
-        targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
-        trigger: deployTriggerForToolContext(context),
-      });
+      let plan: DeployPlan;
+      try {
+        plan = await appCtx.planEngine.createPlan({
+          repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
+          branch: (args['branch'] as string | undefined) ?? undefined,
+          gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
+          name: (args['name'] as string | undefined) ?? undefined,
+          source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
+          imageUrl: (args['image'] as string | undefined) ?? undefined,
+          imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+          containerPort: (args['port'] as number | undefined) ?? undefined,
+          healthCheckPath: (args['health_check_path'] as string | undefined) ?? undefined,
+          envVars,
+          preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+          dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+          dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+          composeFile: (args['compose_file'] as string | undefined) ?? undefined,
+          composeFiles: (args['compose_files'] as string[] | undefined) ?? undefined,
+          composeProfiles: (args['compose_profiles'] as string[] | undefined) ?? undefined,
+          trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
+          environment:
+            (args['environment'] as 'production' | 'development' | undefined) ?? undefined,
+          targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
+          trigger: deployTriggerForToolContext(context),
+        });
+      } catch (error) {
+        if (error instanceof DockerfileSelectionRequiredError) {
+          return buildDockerfileSelectionResponse(error, args, 'create_deploy_plan');
+        }
+        throw error;
+      }
       return deployPlanResponse(plan);
     },
   },
@@ -1535,9 +1591,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Successful deploy_app runs are adopted into the Delivery ledger as an implicit immutable Release without rebuilding the image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed single Application/worker to an existing Project after successful deploy. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Successful deploy_app runs are adopted into the Delivery ledger as an implicit immutable Release without rebuilding the image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. When a new-app plan proposes safe Project-scoped Database/Cache resources, approve them with execute_deploy_plan; OpenLander owns target Project creation, same-project provisioning, and env wiring. target_project_id attaches a newly deployed Application, worker, or Compose workload to an existing Project after successful deploy. Repositories with multiple Dockerfiles require one dockerfile_path per plan; repeat with the same target_project_id to add each Application. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
-      'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. A successful run records an implicit immutable Release without rebuilding. For approved safe Database/Cache proposals, keep the deploy-plan path; OpenLander provisions them on the same Project/network as the app. To add one new Application/worker into an existing Project, pass target_project_id without expose=true. Poll get_deploy_status; diagnose failures with diagnose_service.',
+      'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. A successful run records an implicit immutable Release without rebuilding. For approved safe Database/Cache proposals, keep the deploy-plan path; OpenLander provisions them on the same Project/network as the app. To add an Application/worker/Compose workload into an existing Project, pass target_project_id without expose=true. Multiple Dockerfiles require dockerfile_path and one Application per plan. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1752,24 +1808,32 @@ export const deployPlanToolDefs: ToolDef[] = [
         };
       }
 
-      const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
-        branch: (args['branch'] as string | undefined) ?? undefined,
-        gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
-        name: newAppName,
-        source,
-        imageUrl: image,
-        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
-        containerPort: (args['port'] as number | undefined) ?? undefined,
-        healthCheckPath: (args['health_check_path'] as string | undefined) ?? undefined,
-        envVars,
-        preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
-        dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
-        dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
-        trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
-        targetProjectId,
-        trigger: deployTriggerForToolContext(context),
-      });
+      let plan: DeployPlan;
+      try {
+        plan = await appCtx.planEngine.createPlan({
+          repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
+          branch: (args['branch'] as string | undefined) ?? undefined,
+          gitCredentialId: (args['git_credential_id'] as string | undefined) ?? undefined,
+          name: newAppName,
+          source,
+          imageUrl: image,
+          imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+          containerPort: (args['port'] as number | undefined) ?? undefined,
+          healthCheckPath: (args['health_check_path'] as string | undefined) ?? undefined,
+          envVars,
+          preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+          dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+          dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+          trafficService: (args['traffic_service'] as string | undefined) ?? undefined,
+          targetProjectId,
+          trigger: deployTriggerForToolContext(context),
+        });
+      } catch (error) {
+        if (error instanceof DockerfileSelectionRequiredError) {
+          return buildDockerfileSelectionResponse(error, args, 'deploy_app');
+        }
+        throw error;
+      }
       const planBuild = (plan as Partial<DeployPlan>).build;
 
       if (plan.status === 'needs_input') {

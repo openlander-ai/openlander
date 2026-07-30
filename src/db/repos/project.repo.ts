@@ -985,7 +985,7 @@ export class ProjectRepo {
   }> {
     return await this.db.transaction(async (tx) => {
       const [svc] = await tx
-        .select({ project_id: services.project_id })
+        .select({ project_id: services.project_id, kind: services.kind })
         .from(services)
         .where(eq(services.id, serviceId))
         .limit(1);
@@ -1015,10 +1015,19 @@ export class ProjectRepo {
         throw new ProjectNotFoundError(targetProjectId);
       }
 
+      const attachedServiceIds = [serviceId];
+      if (svc.kind === 'compose') {
+        const composeChildren = await tx
+          .select({ id: services.id })
+          .from(services)
+          .where(eq(services.parent_service_id, serviceId));
+        attachedServiceIds.push(...composeChildren.map((child) => child.id));
+      }
+
       await tx
         .update(services)
         .set({ project_id: targetProjectId, updated_at: sql`CURRENT_TIMESTAMP` })
-        .where(eq(services.id, serviceId))
+        .where(inArray(services.id, attachedServiceIds))
         .returning({ id: services.id });
 
       // CCG #4: when source is __orphan_managed (the synthetic pool that
