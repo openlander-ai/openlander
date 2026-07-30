@@ -20,6 +20,7 @@ import {
 import type { Docker } from '../../src/pipeline/docker.js';
 import { DockerBuildError } from '../../src/errors.js';
 import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/port.js';
+import { JobManager } from '../../src/pipeline/job-manager.js';
 import type { EventBus } from '../../src/events/index.js';
 import type { Database, ProjectRow } from '../../src/db/index.js';
 
@@ -351,6 +352,41 @@ describe('compose network cleanup', () => {
     expect(db._deployLogs).toContainEqual(
       expect.objectContaining({ buildLog: expect.stringContaining('[compose rebuild]') }),
     );
+  });
+
+  it('marks every queued child job failed when image preparation fails', async () => {
+    writeFileSync(
+      composePath,
+      `services:\n  migrate:\n    image: example/migrate\n  api:\n    build: .\n    depends_on:\n      migrate:\n        condition: service_completed_successfully\n`,
+      'utf8',
+    );
+    const docker = createFakeDocker({
+      buildComposeService: vi.fn().mockRejectedValue(new Error('registry request timed out')),
+    });
+    const db = createFakeDb();
+    const jobManager = new JobManager();
+    const pipeline = new ComposePipeline(docker, db, createEventBus(), jobManager);
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(false);
+    const childProjects = [...db._projects.values()].filter(
+      (project) => project.parent_project_id === result.parentProjectId,
+    );
+    expect(childProjects).toHaveLength(2);
+    for (const child of childProjects) {
+      expect(jobManager.getStatus(child.id)).toMatchObject({
+        phase: 'failed',
+        errorSummary: 'registry request timed out',
+      });
+    }
+    expect(jobManager.getActiveJobs()).toEqual([]);
   });
 
   it('synchronizes metadata for existing children excluded from a selective deploy', async () => {

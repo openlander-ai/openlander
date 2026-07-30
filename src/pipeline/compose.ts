@@ -2472,6 +2472,7 @@ export class ComposePipeline {
           containerId: null,
           assignedPort: null,
         });
+        this.jobManager?.updatePhase(childId, 'failed', errorMsg);
       }
 
       await this.db.createDeployLog({
