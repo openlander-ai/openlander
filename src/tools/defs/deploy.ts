@@ -482,12 +482,8 @@ export const deployToolDefs: ToolDef[] = [
                 },
               }
             : {}),
-          ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
-            ? { build_log_tail: job.buildLogTail }
-            : {}),
-          ...(job.phase === 'building' &&
-          job.buildStep !== undefined &&
-          job.buildStepTotal !== undefined
+          ...(job.buildLogTail && job.phase !== 'done' ? { build_log_tail: job.buildLogTail } : {}),
+          ...(!terminal && job.buildStep !== undefined && job.buildStepTotal !== undefined
             ? {
                 build_step: job.buildStep,
                 build_step_total: job.buildStepTotal,

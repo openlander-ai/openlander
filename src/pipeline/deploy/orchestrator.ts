@@ -22,7 +22,11 @@ import { scanForSecrets } from '../secret-scan.js';
 import { persistDeployConfig, validateStoredConfig } from '../config-snapshot.js';
 import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
-import { DockerfileNotFoundError, StatefulApprovalStaleError } from '../../errors.js';
+import {
+  DockerfileNotFoundError,
+  StatefulApprovalStaleError,
+  getCompleteDockerBuildLog,
+} from '../../errors.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { resolveComposeFilePath, resolveComposeFilePaths } from '../compose-spec.js';
 import { resolveDockerfilePath } from './helpers.js';
@@ -565,8 +569,9 @@ export async function buildProject(
       },
     );
   } catch (buildErr) {
-    if (dockerBuildOutput) {
-      buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+    const completeDockerBuildOutput = getCompleteDockerBuildLog(buildErr) ?? dockerBuildOutput;
+    if (completeDockerBuildOutput) {
+      buildLog += '--- Docker build output ---\n' + completeDockerBuildOutput;
     }
     const err = buildErr instanceof Error ? buildErr : new Error(String(buildErr));
     (err as Error & { buildLog?: string }).buildLog = buildLog;

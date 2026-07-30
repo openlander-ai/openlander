@@ -336,6 +336,8 @@ export class DockerNotRunningError extends OpenLanderError {
 }
 
 export class DockerBuildError extends OpenLanderError {
+  readonly buildLog: string;
+
   constructor(imageTag: string, buildLog: string) {
     super(
       `Docker build failed for ${imageTag}`,
@@ -343,8 +345,15 @@ export class DockerBuildError extends OpenLanderError {
       500,
       { imageTag, buildLog: buildLog.slice(-2000) }, // Last 2KB of log
     );
+    this.buildLog = buildLog;
     this.name = 'DockerBuildError';
   }
+}
+
+export function getCompleteDockerBuildLog(error: unknown): string | undefined {
+  return error instanceof DockerBuildError && error.buildLog.trim().length > 0
+    ? error.buildLog
+    : undefined;
 }
 
 export class DockerBuildCancelledError extends OpenLanderError {

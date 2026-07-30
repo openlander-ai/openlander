@@ -45,6 +45,7 @@ import {
   ServiceSelectionRequiredError,
   ServiceSourceMissingError,
   StatefulApprovalStaleError,
+  getCompleteDockerBuildLog,
   isDockerNotFoundError,
   isDockerBuildCancelledError,
 } from '../errors.js';
@@ -3806,6 +3807,11 @@ export class DeployPipeline {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const isCancelled = isDockerBuildCancelledError(error);
       const cancelMessage = 'Build cancelled by user';
+      const completeDockerBuildLog = getCompleteDockerBuildLog(error)?.trimEnd();
+      const buildLogSignature = completeDockerBuildLog?.slice(0, 256);
+      if (completeDockerBuildLog && buildLogSignature && !buildLog.includes(buildLogSignature)) {
+        buildLog += `--- Docker build output ---\n${completeDockerBuildLog}\n`;
+      }
       buildLog += isCancelled ? `[cancelled] ${cancelMessage}\n` : `[error] ${errorMsg}\n`;
       const runtimeLog = isCancelled
         ? undefined
