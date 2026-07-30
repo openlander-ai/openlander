@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -80,6 +90,8 @@ function imageInspect(): Awaited<ReturnType<Docker['inspectImage']>> {
 describe('platform update runner', () => {
   it('backs up, preserves unrelated settings, restarts only OpenLander, and completes', async () => {
     const context = await fixture();
+    await chmod(context.environmentPath, 0o640);
+    await chmod(context.composePath, 0o664);
     for (let index = 1; index <= 3; index += 1) {
       const oldBackup = join(context.store.updateRoot, `old-update-${String(index)}`, 'backup');
       await mkdir(oldBackup, { recursive: true });
@@ -127,6 +139,8 @@ describe('platform update runner', () => {
       `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
     expect(await readFile(context.composePath, 'utf8')).toBe(targetCompose);
+    expect((await stat(context.environmentPath)).mode & 0o777).toBe(0o640);
+    expect((await stat(context.composePath)).mode & 0o777).toBe(0o664);
     expect(observedPhases).toContain('backing_up');
     expect(observedPhases).toContain('pulling');
     expect(observedPhases).toContain('restarting');
@@ -295,6 +309,7 @@ describe('platform update runner', () => {
     expect(await readFile(context.environmentPath, 'utf8')).toBe(
       `OPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PORT=10114\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
+    expect((await stat(context.environmentPath)).mode & 0o777).toBe(0o600);
   });
 });
 
