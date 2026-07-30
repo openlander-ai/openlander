@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Docker } from '../pipeline/docker.js';
 import { PlatformUpdateExecutionError, PlatformUpdateValidationError } from '../errors.js';
@@ -27,11 +27,22 @@ interface CommandResult {
 type RunnerDocker = Pick<Docker, 'execToFile' | 'pullImage' | 'inspectImage'>;
 type CommandRunner = typeof runCommand;
 
+const COMPOSE_ENVIRONMENT_KEYS = [
+  'OPENLANDER_POSTGRES_PASSWORD',
+  'OPENLANDER_PORT',
+  'OPENLANDER_PUBLIC_HOST',
+  'OPENLANDER_DATA_VOLUME',
+] as const;
+
+type ComposeEnvironmentKey = (typeof COMPOSE_ENVIRONMENT_KEYS)[number];
+type ComposeEnvironment = Record<ComposeEnvironmentKey, string>;
+
 export interface PlatformUpdateRunnerDependencies {
   docker?: RunnerDocker;
   fetchImpl?: typeof fetch;
   commandRunner?: CommandRunner;
   healthTimeoutMs?: number;
+  environment?: NodeJS.ProcessEnv;
 }
 
 async function runCommand(command: string, args: string[], cwd: string): Promise<CommandResult> {
@@ -94,28 +105,74 @@ async function writeFileAtomic(path: string, content: string, mode: number): Pro
   await rename(tempPath, path);
 }
 
-export function replaceOpenLanderImage(environmentContent: string, image: string): string {
+function formatComposeEnvironmentValue(value: string): string {
+  if (value.length === 0) return '""';
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  throw new PlatformUpdateValidationError(
+    'A Compose environment value cannot be persisted safely for the platform update.',
+  );
+}
+
+function updateComposeEnvironmentEntry(
+  environmentContent: string,
+  key: string,
+  value: string,
+  replaceExisting: boolean,
+): string {
   const lineEnding = environmentContent.includes('\r\n') ? '\r\n' : '\n';
-  if (environmentContent.length === 0) return `OPENLANDER_IMAGE=${image}${lineEnding}`;
+  const formattedValue = formatComposeEnvironmentValue(value);
+  if (environmentContent.length === 0) return `${key}=${formattedValue}${lineEnding}`;
   const endedWithNewline = /\r?\n$/.test(environmentContent);
   const lines = environmentContent.split(/\r?\n/);
   const matchingIndexes = lines
-    .map((line, index) => (/^OPENLANDER_IMAGE=/.test(line) ? index : -1))
+    .map((line, index) => (line.startsWith(`${key}=`) ? index : -1))
     .filter((index) => index >= 0);
   if (matchingIndexes.length > 1) {
     throw new PlatformUpdateValidationError(
-      'The Compose .env file contains multiple OPENLANDER_IMAGE entries.',
+      `The Compose .env file contains multiple ${key} entries.`,
     );
   }
-  if (matchingIndexes.length === 1) {
+  if (matchingIndexes.length === 1 && replaceExisting) {
     const index = matchingIndexes[0];
-    if (index !== undefined) lines[index] = `OPENLANDER_IMAGE=${image}`;
-  } else {
+    if (index !== undefined) lines[index] = `${key}=${formattedValue}`;
+  } else if (matchingIndexes.length === 0) {
     const insertionIndex = endedWithNewline ? lines.length - 1 : lines.length;
-    lines.splice(insertionIndex, 0, `OPENLANDER_IMAGE=${image}`);
+    lines.splice(insertionIndex, 0, `${key}=${formattedValue}`);
   }
   const updated = lines.join(lineEnding);
   return endedWithNewline ? updated : `${updated}${lineEnding}`;
+}
+
+export function replaceOpenLanderImage(environmentContent: string, image: string): string {
+  return updateComposeEnvironmentEntry(environmentContent, 'OPENLANDER_IMAGE', image, true);
+}
+
+export function persistOpenLanderComposeEnvironment(
+  environmentContent: string,
+  image: string,
+  composeEnvironment: ComposeEnvironment,
+): string {
+  let updated = replaceOpenLanderImage(environmentContent, image);
+  for (const key of COMPOSE_ENVIRONMENT_KEYS) {
+    updated = updateComposeEnvironmentEntry(updated, key, composeEnvironment[key], true);
+  }
+  return updated;
+}
+
+function readComposeEnvironment(environment: NodeJS.ProcessEnv): ComposeEnvironment {
+  const values = {} as ComposeEnvironment;
+  for (const key of COMPOSE_ENVIRONMENT_KEYS) {
+    const value = environment[key];
+    if (value === undefined) {
+      throw new PlatformUpdateValidationError(
+        'The current Compose environment cannot be preserved for the platform update.',
+        { missingKey: key },
+      );
+    }
+    formatComposeEnvironmentValue(value);
+    values[key] = value;
+  }
+  return values;
 }
 
 function targetComposeUrl(version: string): string {
@@ -225,14 +282,19 @@ async function restoreInstallation(
   input: PlatformUpdateRunnerInput,
   store: PlatformUpdateStateStore,
   environmentExisted: boolean,
+  composeEnvironment: ComposeEnvironment,
 ): Promise<void> {
   const backupDirectory = store.backupDirectory(input.operationId);
   const environmentPath = join(input.workingDirectory, '.env');
+  let restoredEnvironment = '';
   if (environmentExisted) {
-    await copyFile(join(backupDirectory, '.env'), environmentPath);
-  } else {
-    await rm(environmentPath, { force: true });
+    restoredEnvironment = await readFile(join(backupDirectory, '.env'), 'utf8');
   }
+  await writeFileAtomic(
+    environmentPath,
+    persistOpenLanderComposeEnvironment(restoredEnvironment, input.sourceImage, composeEnvironment),
+    0o600,
+  );
   for (const composeFile of input.composeFiles) {
     await copyFile(join(backupDirectory, basename(composeFile)), composeFile);
   }
@@ -315,8 +377,10 @@ export async function runPlatformUpdate(
   let backupComplete = false;
   let environmentExisted = false;
   let filesChanged = false;
+  let composeEnvironment: ComposeEnvironment | null = null;
   try {
     await transition('preparing');
+    composeEnvironment = readComposeEnvironment(dependencies.environment ?? process.env);
     const targetCompose = await downloadTargetCompose(input, fetchImpl);
     await transition('backing_up');
     const backup = await backupInstallation(input, store, docker);
@@ -337,7 +401,7 @@ export async function runPlatformUpdate(
     const currentEnvironment = environmentExisted ? await readFile(environmentPath, 'utf8') : '';
     await writeFileAtomic(
       environmentPath,
-      replaceOpenLanderImage(currentEnvironment, targetReference),
+      persistOpenLanderComposeEnvironment(currentEnvironment, targetReference, composeEnvironment),
       0o600,
     );
     filesChanged = true;
@@ -364,7 +428,12 @@ export async function runPlatformUpdate(
           'Update verification failed; restoring the previous version.',
           failureCode,
         );
-        await restoreInstallation(input, store, environmentExisted);
+        if (!composeEnvironment) {
+          throw new PlatformUpdateValidationError(
+            'The current Compose environment is unavailable for rollback.',
+          );
+        }
+        await restoreInstallation(input, store, environmentExisted, composeEnvironment);
         await runCompose(input, ['config', '--quiet'], commandRunner);
         await runCompose(
           input,

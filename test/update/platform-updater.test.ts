@@ -61,6 +61,7 @@ function inspectInfo(): Awaited<ReturnType<Docker['inspectContainer']>> {
     Image: `sha256:${'1'.repeat(64)}`,
     Config: {
       Image: 'ghcr.io/openlander-ai/openlander:0.2.13-rc.7',
+      Env: ['OPENLANDER_PUBLIC_HOST=openlander.example.com'],
       Labels: {
         'com.docker.compose.project': 'openlander',
         'com.docker.compose.service': 'openlander',
@@ -76,7 +77,23 @@ function inspectInfo(): Awaited<ReturnType<Docker['inspectContainer']>> {
         Destination: '/var/run/docker.sock',
       },
     ],
-    NetworkSettings: { Networks: { openlander_default: {} } },
+    NetworkSettings: {
+      Networks: { openlander_default: {} },
+      Ports: { '10114/tcp': [{ HostIp: '0.0.0.0', HostPort: '10114' }] },
+    },
+  } as Awaited<ReturnType<Docker['inspectContainer']>>;
+}
+
+function databaseInspectInfo(
+  password: string | null = 'openlander-test-password',
+): Awaited<ReturnType<Docker['inspectContainer']>> {
+  return {
+    Config: {
+      Env: password === null ? [] : [`POSTGRES_PASSWORD=${password}`],
+      Labels: {},
+    },
+    NetworkSettings: { Networks: { openlander_default: {} }, Ports: {} },
+    Mounts: [],
   } as Awaited<ReturnType<Docker['inspectContainer']>>;
 }
 
@@ -86,6 +103,7 @@ async function harness(
     deployActive?: boolean;
     projectLocked?: boolean;
     updateRunnerPresent?: boolean;
+    composePassword?: string | null;
   } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-platform-updater-'));
@@ -94,6 +112,9 @@ async function harness(
   const docker = {
     inspectContainer: vi.fn(async (containerId: string) => {
       if (containerId === 'stopped-runner') throw new TypeError('container not found');
+      if (containerId === '2'.repeat(64)) {
+        return databaseInspectInfo(options.composePassword);
+      }
       return inspectInfo();
     }),
     listAllContainers: vi.fn(async () => [
@@ -174,6 +195,11 @@ describe('PlatformUpdater', () => {
           'openlander-data:/root/.openlander',
           '/opt/openlander:/opt/openlander',
         ]),
+        envVars: expect.objectContaining({
+          OPENLANDER_POSTGRES_PASSWORD: 'openlander-test-password',
+          OPENLANDER_PORT: '10114',
+          OPENLANDER_DATA_VOLUME: 'openlander-data',
+        }),
       }),
     );
   });
@@ -213,6 +239,20 @@ describe('PlatformUpdater', () => {
       statusCode: 409,
       details: { reason: 'project_locked' },
     });
+  });
+
+  it('blocks one-click update when the running Compose environment cannot be preserved', async () => {
+    const { updater, runUtilityContainer } = await harness({ composePassword: null });
+    await expect(updater.getStatus()).resolves.toMatchObject({
+      canUpdate: false,
+      checks: expect.arrayContaining([
+        expect.objectContaining({ id: 'compose_environment', ok: false }),
+      ]),
+    });
+    await expect(updater.startUpdate(targetVersion)).rejects.toMatchObject({
+      code: 'PLATFORM_UPDATE_VALIDATION_FAILED',
+    });
+    expect(runUtilityContainer).not.toHaveBeenCalled();
   });
 
   it('recovers persisted state and marks a vanished runner as failed', async () => {

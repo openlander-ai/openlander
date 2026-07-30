@@ -129,6 +129,18 @@ jobs:
         if: ${{ inputs.rc_upgrade_from_image != '' }}
         run: docker pull "$OPENLANDER_UPGRADE_FROM_IMAGE"
 
+      - name: Persist official Compose environment
+        if: ${{ inputs.rc_upgrade_from_image != '' && inputs.one_click_update }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "OPENLANDER_IMAGE=${OPENLANDER_UPGRADE_FROM_IMAGE}" \
+            "OPENLANDER_POSTGRES_PASSWORD=${OPENLANDER_POSTGRES_PASSWORD}" \
+            "OPENLANDER_PORT=${OPENLANDER_PORT}" \
+            "OPENLANDER_PUBLIC_HOST=${OPENLANDER_PUBLIC_HOST}" \
+            'OPENLANDER_DATA_VOLUME=openlander-data' > .env
+          chmod 600 .env
+
       - name: Start OpenLander runtime
         run: |
           if [[ -n "$OPENLANDER_UPGRADE_FROM_IMAGE" ]]; then
