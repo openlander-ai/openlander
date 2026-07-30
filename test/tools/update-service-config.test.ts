@@ -58,6 +58,26 @@ function createContext(service: ServiceRow, configJson?: string) {
 }
 
 describe('update_service_config Compose selection', () => {
+  it('publishes memory profile inputs in the existing action schema', () => {
+    const { ctx } = createContext(serviceRow());
+    const schema = getTool(ctx).inputSchema;
+
+    expect(schema.safeParse({ service_id: 'incar__svc', resource_profile: 'large' }).success).toBe(
+      true,
+    );
+    expect(
+      schema.safeParse({
+        service_id: 'incar__svc',
+        resource_profile: 'custom',
+        memory_mb: 2048,
+      }).success,
+    ).toBe(true);
+    expect(schema.safeParse({ service_id: 'incar__svc', resource_profile: 'custom' }).success).toBe(
+      false,
+    );
+    expect(schema.safeParse({ service_id: 'incar__svc', memory_mb: 2048 }).success).toBe(false);
+  });
+
   it('replaces Compose files while preserving unrelated saved configuration', async () => {
     const initial = serializeConfig({
       sshKeyPath: '/run/secrets/deploy-key',
@@ -162,5 +182,58 @@ describe('update_service_config Compose selection', () => {
       getTool(ctx).execute({ service_id: 'incar__svc', compose_profiles: [] }, { target: 'mcp' }),
     ).rejects.toMatchObject({ code: 'INVALID_SERVICE_CONFIG', statusCode: 409 });
     expect(db.saveDeployConfigForService).not.toHaveBeenCalled();
+  });
+
+  it('saves a named memory profile for a non-Compose Application', async () => {
+    const initial = serializeConfig({ environment: 'production', resourceProfile: 'small' });
+    const { ctx, db } = createContext(serviceRow({ kind: 'git', source: 'git' }), initial);
+
+    const result = (await getTool(ctx).execute(
+      { service_id: 'incar__svc', resource_profile: 'large' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(db.saveDeployConfigForService).toHaveBeenCalledOnce();
+    const [, savedJson] = db.saveDeployConfigForService.mock.calls[0]!;
+    expect(validateStoredConfig(savedJson)?.snapshot).toEqual({
+      environment: 'production',
+      resourceProfile: 'large',
+      memoryLimitBytes: 2147483648,
+    });
+    expect(result).toMatchObject({
+      status: 'updated',
+      config: { resource_profile: 'large', memory_mb: 2048 },
+      needs_redeploy: true,
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'update_app',
+        params: { service_id: 'incar__svc' },
+      },
+    });
+  });
+
+  it('saves custom memory and rejects unsafe host allocations', async () => {
+    const { ctx, db } = createContext(serviceRow({ kind: 'git', source: 'git' }));
+
+    await getTool(ctx).execute(
+      { service_id: 'incar__svc', resource_profile: 'custom', memory_mb: 768 },
+      { target: 'mcp' },
+    );
+    const [, savedJson] = db.saveDeployConfigForService.mock.calls[0]!;
+    expect(validateStoredConfig(savedJson)?.snapshot).toMatchObject({
+      resourceProfile: 'custom',
+      memoryLimitBytes: 805306368,
+    });
+
+    await expect(
+      getTool(ctx).execute(
+        {
+          service_id: 'incar__svc',
+          resource_profile: 'custom',
+          memory_mb: Number.MAX_SAFE_INTEGER,
+        },
+        { target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_SERVICE_CONFIG', statusCode: 400 });
   });
 });

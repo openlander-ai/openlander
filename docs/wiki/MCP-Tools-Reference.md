@@ -900,9 +900,13 @@ the base file to overlays.
 | `compose_services` | string[] | No       | Selected services; an empty array selects all                  |
 | `traffic_service`  | string   | No       | Application service representing public traffic                |
 | `environment`      | string   | No       | `production` or `development`                                  |
+| `resource_profile` | string   | No       | `micro`, `small`, `medium`, `large`, or `custom`               |
+| `memory_mb`        | number   | No       | Custom memory in MB; requires `resource_profile: "custom"`     |
 
 `compose_file` and `compose_files` cannot be supplied together. Compose-specific fields are valid
 only for the Compose parent service; child services and non-Compose Applications are rejected.
+Resource profiles apply to any deployable service. The saved limit takes effect on the next
+`update_app`; OpenLander rejects limits above 80% of host memory.
 
 ### `update_application_source`
 

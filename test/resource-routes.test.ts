@@ -71,6 +71,20 @@ describe('resource routes', () => {
     expect(db.saveDeployConfig).not.toHaveBeenCalled();
   });
 
+  it('rejects custom memory paired with a named profile', async () => {
+    const { app, db } = createApp();
+
+    const response = await app.request('/api/projects/proj-1/services/svc-1/resources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: 'large', memoryMb: 768 }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'VALIDATION_ERROR' });
+    expect(db.saveDeployConfigForService).not.toHaveBeenCalled();
+  });
+
   it('keeps project resource endpoint as compatibility shim', async () => {
     const { app, db } = createApp({
       loadDeployConfig: vi.fn(async () => ({

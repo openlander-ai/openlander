@@ -12,16 +12,20 @@ import {
   serializeConfig,
   type DeployConfigSnapshot,
 } from '../../pipeline/config-snapshot.js';
-import { buildResourceLimitConfig, RESOURCE_PROFILES } from '../../pipeline/docker/types.js';
+import { buildResourceLimitConfig } from '../../pipeline/docker/types.js';
+import {
+  applyResourceProfileUpdate,
+  formatMemoryBytes,
+  RESOURCE_PROFILE_NAMES,
+  validateResourceProfileUpdate,
+} from '../../pipeline/resource-limits-policy.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 // ─── Validation Schemas ────────────────────────────────────────────────────
 
-const VALID_PROFILES = ['micro', 'small', 'medium', 'large', 'custom'] as const;
-
 export const UpdateResourceLimitsSchema = z
   .object({
-    profile: z.enum(VALID_PROFILES),
+    profile: z.enum(RESOURCE_PROFILE_NAMES),
     memoryMb: z.number().min(64).optional(),
   })
   .refine(
@@ -32,7 +36,7 @@ export const UpdateResourceLimitsSchema = z
 export type UpdateResourceLimitsInput = z.infer<typeof UpdateResourceLimitsSchema>;
 
 export const ResourceLimitsResponseSchema = z.object({
-  profile: z.enum(VALID_PROFILES).nullable(),
+  profile: z.enum(RESOURCE_PROFILE_NAMES).nullable(),
   memory: z
     .object({
       limitBytes: z.number(),
@@ -72,10 +76,7 @@ function readSnapshot(configJson: string | null | undefined): DeployConfigSnapsh
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
-  }
-  return `${String(Math.floor(bytes / (1024 * 1024)))}MB`;
+  return formatMemoryBytes(bytes);
 }
 
 // ─── Route Factory ─────────────────────────────────────────────────────────
@@ -119,36 +120,17 @@ export function createResourceRoutes(ctx: AppContext): Hono {
   }
 
   function validateMemoryProfile(profile: UpdateResourceLimitsInput['profile'], memoryMb?: number) {
-    const maxMemoryBytes = Math.floor(os.totalmem() * 0.8);
-    const maxMemoryMb = Math.floor(maxMemoryBytes / 1024 / 1024);
-
-    if (profile === 'custom') {
-      if (memoryMb !== undefined && memoryMb > maxMemoryMb) {
-        return `memoryMb (${String(memoryMb)}) exceeds maximum allowed (${String(maxMemoryMb)}MB, 80% of host memory)`;
-      }
-      return null;
-    }
-
-    const profileMemoryBytes = RESOURCE_PROFILES[profile].memoryLimitBytes;
-    if (profileMemoryBytes > maxMemoryBytes) {
-      return `Profile "${profile}" requires ${formatBytes(profileMemoryBytes)} but host allows max ${formatBytes(maxMemoryBytes)} (80% of host memory)`;
-    }
-    return null;
+    return validateResourceProfileUpdate({
+      profile,
+      ...(memoryMb === undefined ? {} : { memoryMb }),
+    });
   }
 
   function applyResourceUpdate(
     snapshot: DeployConfigSnapshot,
     input: UpdateResourceLimitsInput,
   ): DeployConfigSnapshot {
-    const next = { ...snapshot };
-    if (input.profile === 'custom') {
-      next.resourceProfile = 'custom';
-      next.memoryLimitBytes = (input.memoryMb ?? 0) * 1024 * 1024;
-    } else {
-      next.resourceProfile = input.profile;
-      next.memoryLimitBytes = RESOURCE_PROFILES[input.profile].memoryLimitBytes;
-    }
-    return next;
+    return applyResourceProfileUpdate(snapshot, input);
   }
 
   function appendHostMemoryWarnings(response: ResourceLimitsResponse): ResourceLimitsResponse {

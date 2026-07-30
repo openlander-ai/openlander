@@ -22,6 +22,13 @@ import {
 import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
 import { resolveComposeRedeployTarget } from '../../pipeline/compose-redeploy-target.js';
 import {
+  applyResourceProfileUpdate,
+  isResourceProfileSelection,
+  resourceMemoryMb,
+  RESOURCE_PROFILE_NAMES,
+  validateResourceProfileUpdate,
+} from '../../pipeline/resource-limits-policy.js';
+import {
   buildDeployLockedResponse,
   buildPolicyRejectionResponse,
   deployTriggerForToolContext,
@@ -144,6 +151,16 @@ const updateServiceConfigSchema = z
       .enum(['production', 'development'])
       .optional()
       .describe('Deployment environment saved for the next update.'),
+    resource_profile: z
+      .enum(RESOURCE_PROFILE_NAMES)
+      .optional()
+      .describe('Container resource profile saved for the next update.'),
+    memory_mb: z
+      .number()
+      .int()
+      .min(64)
+      .optional()
+      .describe('Custom memory limit in MB. Requires resource_profile="custom".'),
   })
   .refine((value) => !(value.compose_file && value.compose_files), {
     message: 'compose_file and compose_files cannot be combined',
@@ -151,6 +168,19 @@ const updateServiceConfigSchema = z
   })
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',
+  })
+  .refine(
+    (value) =>
+      value.resource_profile !== 'custom' ||
+      (value.memory_mb !== undefined && value.memory_mb >= 64),
+    {
+      message: 'memory_mb is required when resource_profile is "custom"',
+      path: ['memory_mb'],
+    },
+  )
+  .refine((value) => value.memory_mb === undefined || value.resource_profile === 'custom', {
+    message: 'memory_mb can only be used with resource_profile="custom"',
+    path: ['memory_mb'],
   });
 
 function normalizeSavedComposePath(value: unknown, field: string): string {
@@ -1549,9 +1579,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_service_config',
     riskLevel: 'medium',
     description:
-      'Update Application/Compose build config, including saved Compose files, profiles, selected services, traffic target, and environment. Takes effect on next update_app.',
+      'Update Application/Compose build and resource config, including saved Compose selection, traffic target, environment, and memory profile. Takes effect on next update_app.',
     mcpDescription:
-      'Update Application/Compose build config and Compose selection. Save-only; call update_app to apply.',
+      'Update Application/Compose build, Compose selection, or memory profile. Save-only; call update_app to apply.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(
@@ -1571,9 +1601,12 @@ export const deployableServiceToolDefs: ToolDef[] = [
       const hasComposeUpdate = composeFields.some((field) =>
         Object.prototype.hasOwnProperty.call(args, field),
       );
+      const hasResourceUpdate =
+        Object.prototype.hasOwnProperty.call(args, 'resource_profile') ||
+        Object.prototype.hasOwnProperty.call(args, 'memory_mb');
       let savedSnapshot: DeployConfigSnapshot | undefined;
 
-      if (hasComposeUpdate) {
+      if (hasComposeUpdate || hasResourceUpdate) {
         if (args.compose_file !== undefined && args.compose_files !== undefined) {
           throw new OpenLanderError(
             'compose_file and compose_files cannot be combined.',
@@ -1582,7 +1615,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
             { invalid_fields: ['compose_file', 'compose_files'] },
           );
         }
-        if (service.kind !== 'compose' && service.source !== 'compose') {
+        if (hasComposeUpdate && service.kind !== 'compose' && service.source !== 'compose') {
           throw new OpenLanderError(
             'Compose selection fields can only be updated on a Compose parent service.',
             'INVALID_SERVICE_CONFIG',
@@ -1644,6 +1677,31 @@ export const deployableServiceToolDefs: ToolDef[] = [
         if (args.environment !== undefined) {
           snapshot.environment = args.environment as 'production' | 'development';
         }
+        if (hasResourceUpdate) {
+          if (!isResourceProfileSelection(args.resource_profile)) {
+            throw new OpenLanderError(
+              'memory_mb requires resource_profile="custom".',
+              'INVALID_SERVICE_CONFIG',
+              400,
+              { invalid_fields: ['resource_profile', 'memory_mb'] },
+            );
+          }
+          const memoryMb =
+            typeof args.memory_mb === 'number' && Number.isFinite(args.memory_mb)
+              ? args.memory_mb
+              : undefined;
+          const resourceInput = {
+            profile: args.resource_profile,
+            ...(memoryMb === undefined ? {} : { memoryMb }),
+          };
+          const resourceError = validateResourceProfileUpdate(resourceInput);
+          if (resourceError) {
+            throw new OpenLanderError(resourceError, 'INVALID_SERVICE_CONFIG', 400, {
+              invalid_fields: ['resource_profile', 'memory_mb'],
+            });
+          }
+          Object.assign(snapshot, applyResourceProfileUpdate(snapshot, resourceInput));
+        }
 
         await context.appCtx.db.saveDeployConfigForService(
           service.id,
@@ -1700,6 +1758,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
                 compose_services: savedSnapshot.composeServices,
                 traffic_service: savedSnapshot.trafficService,
                 environment: savedSnapshot.environment,
+                resource_profile: savedSnapshot.resourceProfile,
+                memory_mb: resourceMemoryMb(savedSnapshot),
               }
             : {}),
         },
