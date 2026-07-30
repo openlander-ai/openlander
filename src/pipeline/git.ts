@@ -293,7 +293,7 @@ async function cloneRepoWithAuth(
 interface GitCloneAttempt {
   cloneUrl: string;
   gitSshCommand?: string;
-  transport: 'default' | 'ssh_22' | 'ssh_443' | 'ssh_22_retry';
+  transport: 'default' | 'ssh_22' | 'ssh_443' | 'ssh_443_retry';
 }
 
 function buildCloneAttempts(
@@ -318,7 +318,11 @@ function buildCloneAttempts(
       gitSshCommand: deployKeyAuth.fallbackGitSshCommand ?? deployKeyAuth.gitSshCommand,
       transport: 'ssh_443',
     },
-    { ...primary, transport: 'ssh_22_retry' },
+    {
+      cloneUrl: deployKeyAuth.fallbackCloneUrl,
+      gitSshCommand: deployKeyAuth.fallbackGitSshCommand ?? deployKeyAuth.gitSshCommand,
+      transport: 'ssh_443_retry',
+    },
   ];
 }
 
