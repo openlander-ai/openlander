@@ -46,7 +46,7 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
 
   async function createTestProject(
     label: string,
-    options: { buildMethod?: 'compose'; parentProjectId?: string } = {},
+    options: { buildMethod?: 'compose'; parentProjectId?: string; buildContext?: string } = {},
   ) {
     const id = uniqueId(label);
     projectIds.push(id);
@@ -57,6 +57,7 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
       repoUrl: `https://example.test/${id}`,
       ...(options.buildMethod ? { buildMethod: options.buildMethod } : {}),
       ...(options.parentProjectId ? { parentProjectId: options.parentProjectId } : {}),
+      ...(options.buildContext ? { buildContext: options.buildContext } : {}),
     });
     return id;
   }
@@ -87,7 +88,7 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
     expect(archivedIds).not.toContain(source);
   });
 
-  it('moves group-shared env_vars to target and reports UNIQUE-conflict losers', async () => {
+  it('promotes runtime group env vars to service overrides without changing target defaults', async () => {
     const target = await createTestProject('target');
     const source = await createTestProject('source');
 
@@ -98,14 +99,41 @@ describeWithDatabase('Database.attachServiceToProject behavior', () => {
 
     const result = await db.attachServiceToProject(`${source}__svc`, target);
 
-    const merged = await db.getEnvVars(target);
-    expect(merged['DATABASE_URL']).toBe('postgres://target');
-    expect(merged['API_KEY']).toBe('target-secret');
-    expect(merged['NEW_VAR']).toBe('source-only');
+    expect(await db.getEnvVars(target)).toEqual({
+      DATABASE_URL: 'postgres://target',
+      API_KEY: 'target-secret',
+    });
+    expect(await db.getEnvVarsForService(target, `${source}__svc`)).toEqual({
+      DATABASE_URL: 'postgres://source',
+      NEW_VAR: 'source-only',
+    });
 
-    expect(result.droppedEnvVarKeys).toEqual(['DATABASE_URL']);
+    expect(result.droppedEnvVarKeys).toEqual([]);
     expect(result.droppedSecretFiles).toEqual([]);
     expect(await db.getEnvVars(source)).toEqual({});
+  });
+
+  it('preserves service-scoped env vars and build context while attaching', async () => {
+    const target = await createTestProject('target');
+    const source = await createTestProject('source', { buildContext: '.' });
+    const serviceId = `${source}__svc`;
+
+    await db.setEnvVar(target, 'DATABASE_URL', 'postgres://target');
+    await db.setEnvVarForService(source, serviceId, 'DATABASE_URL', 'postgres://source');
+    await db.setEnvVarForService(source, serviceId, 'NEXT_PUBLIC_API_BASE_URL', '/backend');
+
+    await db.attachServiceToProject(serviceId, target);
+
+    expect(await db.getEnvVarsForService(target, serviceId)).toEqual({
+      DATABASE_URL: 'postgres://source',
+      NEXT_PUBLIC_API_BASE_URL: '/backend',
+    });
+    expect(await db.getEnvVarsForService(source, serviceId)).toEqual({
+      DATABASE_URL: 'postgres://source',
+      NEXT_PUBLIC_API_BASE_URL: '/backend',
+    });
+    expect(await db.getEnvVars(target)).toEqual({ DATABASE_URL: 'postgres://target' });
+    expect((await db.getService(serviceId))?.build_context).toBe('.');
   });
 
   it('attaches two selected Dockerfile Applications to the same Project sequentially', async () => {

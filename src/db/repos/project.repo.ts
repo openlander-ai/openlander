@@ -967,8 +967,9 @@ export class ProjectRepo {
    * but hidden from project lists because service-level redeploy/rollback still
    * needs it for environments and deploy locks. Project-scoped tables (env_vars,
    * timeline_events, secret_files, project_ops_overrides) are relocated with
-   * `UPDATE OR IGNORE` — on env_vars (project_id, key) UNIQUE collision the
-   * target's row wins, matching the hotdeal/quickpoll resolution.
+   * their ownership semantics intact. Group compatibility env rows become
+   * service-scoped overrides for the attached workload, while existing
+   * service-scoped rows keep their service owner.
    *
    * Throws if either side is missing or if source == target.
    */
@@ -978,7 +979,7 @@ export class ProjectRepo {
   ): Promise<{
     sourceProjectId: string;
     targetProjectId: string;
-    /** env_var keys that lost the UNIQUE(project_id, key) race — target won. */
+    /** Legacy compatibility field. Env vars are preserved during attach. */
     droppedEnvVarKeys: string[];
     /** secret_file filenames that lost the UNIQUE(project_id, filename) race. */
     droppedSecretFiles: string[];
@@ -1042,34 +1043,49 @@ export class ProjectRepo {
       const droppedSecretFiles: string[] = [];
 
       if (!isPoolSource) {
-        // env_vars (project_id, key) UNIQUE. CCG #3: capture the collision
-        // losers BEFORE we drop them so the caller can surface "key X was
-        // dropped because the target already had it".
-        const targetEnvRows = await tx
-          .select({ key: envVars.key })
+        // Service-scoped rows are keyed by service identity, not by Project.
+        // Move every attached service row to the target grouping context. A
+        // sibling service using the same key cannot conflict with this update.
+        await tx
+          .update(envVars)
+          .set({ project_id: targetProjectId })
+          .where(inArray(envVars.service_id, attachedServiceIds))
+          .returning({ id: envVars.id });
+
+        // Legacy/runtime Projects can still contain group compatibility rows.
+        // Scope those values to the attached Application instead of merging
+        // them into the target Project, where they would leak to siblings or
+        // lose a same-key collision. When an explicit service value already
+        // exists, retain the lower-precedence compatibility row on the hidden
+        // runtime Project rather than deleting either value.
+        const existingServiceEnvRows = await tx
+          .select({ key: envVars.key, environmentId: envVars.environment_id })
           .from(envVars)
-          .where(eq(envVars.project_id, targetProjectId));
-        const targetEnvKeys = new Set(targetEnvRows.map((row) => row.key));
-        const sourceEnvRows = await tx
-          .select({ id: envVars.id, key: envVars.key })
-          .from(envVars)
-          .where(eq(envVars.project_id, sourceProjectId));
-        const movableEnvIds = sourceEnvRows
-          .filter((row) => !targetEnvKeys.has(row.key))
-          .map((row) => row.id);
-        droppedEnvVarKeys.push(
-          ...sourceEnvRows.filter((row) => targetEnvKeys.has(row.key)).map((row) => row.key),
+          .where(eq(envVars.service_id, serviceId));
+        const existingServiceScopes = new Set(
+          existingServiceEnvRows.map((row) => JSON.stringify([row.environmentId ?? null, row.key])),
         );
-        if (movableEnvIds.length > 0) {
+        const sourceGroupEnvRows = await tx
+          .select({
+            id: envVars.id,
+            key: envVars.key,
+            environmentId: envVars.environment_id,
+          })
+          .from(envVars)
+          .where(and(eq(envVars.project_id, sourceProjectId), isNull(envVars.service_id)));
+        const promotableEnvIds = sourceGroupEnvRows
+          .filter(
+            (row) =>
+              !existingServiceScopes.has(JSON.stringify([row.environmentId ?? null, row.key])),
+          )
+          .map((row) => row.id);
+        if (promotableEnvIds.length > 0) {
           await tx
             .update(envVars)
-            .set({ project_id: targetProjectId })
-            .where(inArray(envVars.id, movableEnvIds))
+            .set({ project_id: targetProjectId, service_id: serviceId })
+            .where(inArray(envVars.id, promotableEnvIds))
             .returning({ id: envVars.id });
         }
-        await tx.delete(envVars).where(eq(envVars.project_id, sourceProjectId)).returning({
-          id: envVars.id,
-        });
 
         // timeline_events: project_id FK only, no UNIQUE — straight UPDATE.
         await tx
