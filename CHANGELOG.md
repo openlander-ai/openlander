@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.3] - 2026-07-30
+
+### Fixed
+
+- Preserve the running official Compose database password, published port,
+  public host, data-volume name, and exact image across one-click updates and
+  automatic rollback instead of falling back to default settings or `latest`.
+- Block one-click replacement when the effective Compose environment cannot be
+  reconstructed safely, and exercise the installer-style persistent `.env` in
+  the RC upgrade gate.
+
 ## [0.2.14-rc.2] - 2026-07-30
 
 ### Added
