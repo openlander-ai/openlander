@@ -280,6 +280,14 @@ export class ContainerLifecycle {
     if (!archiveState) return;
     const { service, view } = archiveState;
     const emitEvent = options.emitEvent ?? true;
+    const alreadyArchived = service
+      ? service.archived_at !== null
+      : archiveState.project.archived_at !== null;
+
+    // A shared marker represents only the resources archived by the current
+    // parent/group operation. Preserve older child markers so a later parent
+    // restore cannot reactivate services that were already archived.
+    if (options.archivedAt !== undefined && alreadyArchived) return;
 
     const archiveContainerId = view.containerId;
     const archiveImageTag = view.imageTag;

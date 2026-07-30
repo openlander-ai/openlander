@@ -59,6 +59,67 @@ function service(
 }
 
 describe('Stateful Compose archive lifecycle', () => {
+  it('preserves children that were archived before their Compose parent', async () => {
+    const oldMarker = '2026-07-29T00:00:00.000Z';
+    const parentProject = project('parent', 'demo', null);
+    const activeChildProject = project('db-child', 'demo/db', null);
+    const archivedChildProject = project('testdb-child', 'demo/testdb', oldMarker);
+    const parentService = service('parent__svc', {
+      kind: 'compose',
+      parent_service_id: null,
+      runtime_role: 'application',
+    });
+    const activeChildService = service('db-child__svc', {
+      container_id: 'active-db-container',
+      container_name: 'ol-demo-db',
+      image_tag: 'postgres:17-alpine',
+    });
+    const archivedChildService = service('testdb-child__svc', {
+      status: 'stopped',
+      archived_at: oldMarker,
+      container_id: 'archived-testdb-container',
+      container_name: 'ol-demo-testdb-archived',
+      image_tag: 'postgres:17-alpine',
+    });
+    const projects = new Map([
+      [parentProject.id, parentProject],
+      [activeChildProject.id, activeChildProject],
+      [archivedChildProject.id, archivedChildProject],
+    ]);
+    const services = new Map([
+      [parentProject.id, parentService],
+      [activeChildProject.id, activeChildService],
+      [archivedChildProject.id, archivedChildService],
+    ]);
+    const archiveProject = vi.fn(async () => undefined);
+    const db = {
+      getProject: vi.fn(async (id: string) => projects.get(id)),
+      getDeployableForProject: vi.fn(async (id: string) => services.get(id)),
+      getComposeChildProjects: vi.fn(async (id: string) =>
+        id === parentProject.id ? [activeChildProject, archivedChildProject] : [],
+      ),
+      getDeployablesByGroup: vi.fn(async () => [parentService]),
+      archiveProject,
+    } as unknown as Database;
+    const runtime = {
+      stopContainer: vi.fn(async () => undefined),
+      disconnectContainerFromNetwork: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
+      startContainer: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      removeImage: vi.fn(async () => undefined),
+    } as unknown as RuntimeBackend;
+    const lifecycle = new ContainerLifecycle(runtime, db);
+
+    await lifecycle.archive(parentProject.id);
+
+    expect(archiveProject.mock.calls.map(([id]) => id)).toEqual(['db-child', 'parent']);
+    expect(runtime.stopContainer).toHaveBeenCalledWith('active-db-container');
+    expect(runtime.stopContainer).not.toHaveBeenCalledWith('archived-testdb-container');
+    expect(archivedChildService.archived_at).toBe(oldMarker);
+  });
+
   it('retains a resource container and records one restore-set marker', async () => {
     const childProject = project('db-child', 'demo/db', null);
     const childService = service('db-child__svc', {
