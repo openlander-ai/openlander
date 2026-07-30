@@ -1,4 +1,4 @@
-import { createContext, useMemo, type ReactNode } from 'react';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
 import { ProjectsContext } from '@/contexts/projects-context';
 import { useNotifications, type Notification } from '@/hooks/use-notifications';
 import { useProjects, type UseProjectsReturn } from '@/hooks/use-projects';
@@ -6,6 +6,7 @@ import { useSystemStats } from '@/hooks/use-system-stats';
 import { useSystemStatus } from '@/hooks/use-system-status';
 import type { ServerStatus, SetupStatus } from '@/lib/api/system';
 import type { SystemStats } from '@/types';
+import { usePlatformUpdate, type UsePlatformUpdateReturn } from '@/hooks/use-platform-update';
 
 export interface AppDataContextValue {
   projectsState: UseProjectsReturn;
@@ -27,6 +28,9 @@ export interface AppDataContextValue {
   notificationsError: Error | null;
   dismissNotification: (id: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
+  platformUpdateState: UsePlatformUpdateReturn;
+  platformUpdateDialogOpen: boolean;
+  setPlatformUpdateDialogOpen: (open: boolean) => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -37,6 +41,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const systemStatusState = useSystemStatus();
   const statsState = useSystemStats();
   const notificationsState = useNotifications();
+  const platformUpdateState = usePlatformUpdate();
+  const [platformUpdateDialogOpen, setPlatformUpdateDialogOpen] = useState(false);
 
   const value = useMemo<AppDataContextValue>(
     () => ({
@@ -59,8 +65,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       notificationsError: notificationsState.error,
       dismissNotification: notificationsState.dismiss,
       refreshNotifications: notificationsState.refresh,
+      platformUpdateState,
+      platformUpdateDialogOpen,
+      setPlatformUpdateDialogOpen,
     }),
-    [notificationsState, projectsState, statsState, systemStatusState],
+    [
+      notificationsState,
+      platformUpdateDialogOpen,
+      platformUpdateState,
+      projectsState,
+      statsState,
+      systemStatusState,
+    ],
   );
 
   return (

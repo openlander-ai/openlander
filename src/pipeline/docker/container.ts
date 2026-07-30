@@ -7,6 +7,7 @@ import type {
   RunContainerOptions,
   RunEphemeralContainerOptions,
   RunEphemeralContainerResult,
+  RunUtilityContainerOptions,
   WaitForHealthyResult,
 } from './types.js';
 import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
@@ -360,6 +361,33 @@ export class ContainerOps {
       if (timeout) clearTimeout(timeout);
       await container.remove({ force: true });
     }
+  }
+
+  async runUtilityContainer(options: RunUtilityContainerOptions): Promise<string> {
+    const container = await this.ctx.client.createContainer({
+      Image: options.image,
+      name: options.name,
+      Cmd: options.command,
+      Env: Object.entries(options.envVars ?? {}).map(([key, value]) => `${key}=${value}`),
+      Labels: {
+        ...options.labels,
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.ROLE]: 'platform-update-runner',
+        ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
+      },
+      HostConfig: {
+        AutoRemove: options.autoRemove ?? true,
+        Binds: options.binds,
+        NetworkMode: options.network,
+        RestartPolicy: { Name: 'no' },
+        Memory: 512 * 1024 * 1024,
+        MemorySwap: 512 * 1024 * 1024,
+        PidsLimit: 512,
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '1' } },
+      },
+    });
+    await container.start();
+    return container.id;
   }
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {

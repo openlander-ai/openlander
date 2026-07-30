@@ -60,6 +60,17 @@ export interface RunEphemeralContainerResult {
   timedOut: boolean;
 }
 
+export interface RunUtilityContainerOptions {
+  image: string;
+  name: string;
+  command: string[];
+  envVars?: Record<string, string>;
+  binds: string[];
+  network: string;
+  labels?: Record<string, string>;
+  autoRemove?: boolean;
+}
+
 export interface RunComposeServiceOptions {
   imageTag: string;
   name: string;

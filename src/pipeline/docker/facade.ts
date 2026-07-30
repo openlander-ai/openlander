@@ -54,6 +54,10 @@ export class Docker implements RuntimeBackend {
     return this.containerOps.runEphemeralContainer(...args);
   }
 
+  runUtilityContainer(...args: Parameters<ContainerOps['runUtilityContainer']>) {
+    return this.containerOps.runUtilityContainer(...args);
+  }
+
   runComposeService(...args: Parameters<ContainerOps['runComposeService']>) {
     return this.runContainerStart(() => this.containerOps.runComposeService(...args));
   }
@@ -232,6 +236,10 @@ export class Docker implements RuntimeBackend {
 
   execStream(...args: Parameters<ExecOps['execStream']>) {
     return this.execOps.execStream(...args);
+  }
+
+  execToFile(...args: Parameters<ExecOps['execToFile']>) {
+    return this.execOps.execToFile(...args);
   }
 
   execTerminal(...args: Parameters<ExecOps['execTerminal']>) {

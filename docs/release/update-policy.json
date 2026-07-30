@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "minimum_source_version": "0.2.14-rc.1",
+  "rollback_safe": true
+}

@@ -19,6 +19,10 @@ on:
         description: 'Optional previous runtime image to start and upgrade from before the RC smoke'
         type: string
         default: ''
+      one_click_update:
+        description: 'Use the user-confirmed one-click updater for the RC-to-RC upgrade gate'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -154,8 +158,21 @@ jobs:
         run: node scripts/rc-upgrade-state-smoke.mjs seed "$RUNNER_TEMP/openlander-upgrade-state.json"
 
       - name: Upgrade OpenLander runtime
-        if: ${{ inputs.rc_upgrade_from_image != '' }}
+        if: ${{ inputs.rc_upgrade_from_image != '' && !inputs.one_click_update }}
         run: docker compose -f docker-compose.runtime.yml up -d --no-deps --force-recreate openlander
+
+      - name: Upgrade OpenLander through the one-click API
+        if: ${{ inputs.rc_upgrade_from_image != '' && inputs.one_click_update }}
+        env:
+          OPENLANDER_E2E_BASE_URL: http://localhost:10114
+        run: |
+          set -euo pipefail
+          if [[ -z "${{ inputs.rc_image }}" ]]; then
+            echo "one_click_update requires an official rc_image" >&2
+            exit 1
+          fi
+          target_version="${OPENLANDER_IMAGE##*:}"
+          node scripts/rc-upgrade-state-smoke.mjs update "$RUNNER_TEMP/openlander-upgrade-state.json" "$target_version"
 
       - name: Wait for upgraded OpenLander
         if: ${{ inputs.rc_upgrade_from_image != '' }}
@@ -164,7 +181,10 @@ jobs:
           for attempt in {1..90}; do
             if curl -fsS "http://127.0.0.1:${OPENLANDER_PORT}/health" >/dev/null; then
               actual_image="$(docker inspect --format '{{.Config.Image}}' openlander)"
-              test "$actual_image" = "$OPENLANDER_IMAGE"
+              if [[ "$actual_image" != "$OPENLANDER_IMAGE" && "$actual_image" != "$OPENLANDER_IMAGE"@sha256:* ]]; then
+                echo "Unexpected upgraded image: $actual_image" >&2
+                exit 1
+              fi
               exit 0
             fi
             echo "Upgraded OpenLander not ready yet (attempt ${attempt}/90)"

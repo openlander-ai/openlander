@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.1] - 2026-07-30
+
+### Added
+
+- Add an administrator-confirmed update button and bilingual progress dialog
+  for newer Stable or RC releases, with manual guidance for unsupported
+  installation methods.
+- Add official release-manifest validation, Compose installation preflight,
+  PostgreSQL and configuration backups, exact GHCR digest pulls, post-restart
+  health and Traefik verification, and automatic image/configuration rollback.
+
+### Changed
+
+- Include Docker Compose in the runtime image and publish a verified
+  `openlander-update.json` asset with every multi-architecture GitHub Release.
+- Extend the RC release gate with the authenticated one-click update path for
+  updater-enabled RC-to-RC upgrades.
+
 ## [0.2.13-rc.7] - 2026-07-30
 
 ### Fixed

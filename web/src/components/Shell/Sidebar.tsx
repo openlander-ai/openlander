@@ -37,6 +37,7 @@ import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
 import { AccountPopover } from '@/components/account/AccountPopover';
+import { PlatformUpdateButton } from '@/components/Shell/PlatformUpdateButton';
 
 interface NavItem {
   id: string;
@@ -272,6 +273,9 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           out. The legacy "self-hosted vX.Y.Z" version
           stamp was dropped (replaced by the brand chip up top). */}
       <div className="border-t border-[color:var(--ol-border-subtle)] p-3">
+        <div className="mb-2">
+          <PlatformUpdateButton collapsed={collapsed} />
+        </div>
         <AccountPopover collapsed={collapsed} />
       </div>
     </aside>

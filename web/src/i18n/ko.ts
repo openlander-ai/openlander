@@ -686,6 +686,72 @@ export const translations = {
       aiProviders: 'AI 모델 연결',
     },
   },
+  platformUpdate: {
+    button: {
+      available: '새 버전 v{version}',
+      progress: 'OpenLander 업데이트 중',
+      rolledBack: '이전 버전으로 복구됨',
+      failed: '업데이트 확인 필요',
+    },
+    dialog: {
+      title: 'OpenLander 업데이트',
+      description: '이 서버를 업데이트하기 전에 릴리스 내용과 안전 점검 결과를 확인하세요.',
+      currentVersion: '현재 버전',
+      targetVersion: '대상 버전',
+      changes: '변경 사항',
+      preflight: '사전 점검',
+      progress: '업데이트 진행 상태',
+      reconnectNotice:
+        'OpenLander가 한 번 재시작됩니다. 이후 업데이트를 예약하지 않으며 이 화면은 자동으로 다시 연결됩니다.',
+      reconnecting: 'OpenLander가 재시작 중입니다. 2초마다 다시 연결하고 있습니다…',
+      updateNow: '지금 업데이트',
+      starting: '시작 중…',
+      retry: '업데이트 다시 시도',
+      manualUpdate: '수동 업데이트 안내 보기',
+      rolledBackHelp:
+        '이전 버전이 다시 실행 중입니다. 확인을 위해 DB 백업은 보존했습니다. 오류를 확인한 뒤 다시 시도하세요.',
+      failedHelp: '업데이트와 자동 복구를 모두 완료하지 못했습니다. 수동 복구 안내를 따라 주세요.',
+    },
+    phase: {
+      preparing: '업데이트 준비 중',
+      backing_up: '설정과 데이터베이스 백업 중',
+      pulling: '검증된 이미지 다운로드 중',
+      restarting: 'OpenLander 재시작 중',
+      verifying: '상태와 라우팅 검증 중',
+      completed: '업데이트 완료',
+      rolling_back: '이전 버전 복구 중',
+      rolled_back: '이전 버전으로 복구됨',
+      failed: '업데이트 실패',
+    },
+    checks: {
+      official_compose: {
+        pass: '공식 Docker Compose 설치를 확인했습니다.',
+        fail: '현재 설치 방식에서는 원클릭 업데이트를 사용할 수 없습니다.',
+      },
+      release_manifest: {
+        pass: '공식 릴리스 정보와 롤백 정책 검증을 통과했습니다.',
+        fail: '이 릴리스에는 안전한 원클릭 업데이트 정보가 없습니다.',
+      },
+      active_operations: {
+        pass: '진행 중인 배포와 프로젝트 잠금이 없습니다.',
+        fail: '진행 중인 배포와 프로젝트 작업이 끝날 때까지 기다려 주세요.',
+      },
+      database: {
+        pass: 'OpenLander 데이터베이스 컨테이너가 실행 중입니다.',
+        fail: 'OpenLander 데이터베이스 컨테이너가 실행 중이 아닙니다.',
+      },
+      disk_space: {
+        pass: '백업과 이미지 저장 공간이 2 GiB 이상 남아 있습니다.',
+        fail: '사용 가능한 공간이 2 GiB 이상 필요합니다.',
+      },
+    },
+    toast: {
+      completed: 'OpenLander 업데이트를 완료했습니다.',
+      rolledBack: '업데이트에 실패해 이전 버전으로 자동 복구했습니다.',
+      failed: '업데이트와 자동 복구에 실패했습니다.',
+      startFailed: '업데이트를 시작하지 못했습니다. 사전 점검 결과를 확인한 뒤 다시 시도하세요.',
+    },
+  },
   topBar: {
     agentChipPrefix: '에이전트',
     agentIdleStatus: '대기',

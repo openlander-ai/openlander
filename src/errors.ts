@@ -1102,6 +1102,58 @@ export class DeployLockedError extends OpenLanderError {
   }
 }
 
+export class PlatformUpdateBusyError extends OpenLanderError {
+  constructor(reason: 'update_in_progress' | 'deploy_in_progress' | 'project_locked') {
+    super(
+      'OpenLander cannot start an update while another operation is active.',
+      'PLATFORM_UPDATE_BUSY',
+      409,
+      {
+        reason,
+      },
+    );
+    this.name = 'PlatformUpdateBusyError';
+  }
+}
+
+export class PlatformUpdateUnsupportedError extends OpenLanderError {
+  constructor(reason: string) {
+    super(
+      'One-click updates require the official docker-compose.runtime.yml installation.',
+      'PLATFORM_UPDATE_UNSUPPORTED',
+      409,
+      { reason },
+    );
+    this.name = 'PlatformUpdateUnsupportedError';
+  }
+}
+
+export class PlatformUpdateTargetError extends OpenLanderError {
+  constructor(targetVersion: string) {
+    super(
+      'The requested version is not the currently offered official OpenLander release.',
+      'PLATFORM_UPDATE_TARGET_INVALID',
+      400,
+      { targetVersion },
+    );
+    this.name = 'PlatformUpdateTargetError';
+  }
+}
+
+export class PlatformUpdateValidationError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'PLATFORM_UPDATE_VALIDATION_FAILED', 409, details);
+    this.name = 'PlatformUpdateValidationError';
+  }
+}
+
+export class PlatformUpdateExecutionError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'PLATFORM_UPDATE_EXECUTION_FAILED', 500, details);
+    this.name = 'PlatformUpdateExecutionError';
+  }
+}
+
 export class ComposeJobFailedError extends OpenLanderError {
   constructor(serviceName: string, exitCode: number | null, error?: string) {
     super(

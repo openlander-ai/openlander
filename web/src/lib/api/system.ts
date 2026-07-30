@@ -148,6 +148,64 @@ export interface ServerStatus {
   externalContainers: { name: string; image: string; ports: number[] }[];
 }
 
+export type PlatformUpdatePhase =
+  | 'preparing'
+  | 'backing_up'
+  | 'pulling'
+  | 'restarting'
+  | 'verifying'
+  | 'completed'
+  | 'rolling_back'
+  | 'rolled_back'
+  | 'failed';
+
+export interface PlatformUpdateOperation {
+  id: string;
+  sourceVersion: string;
+  targetVersion: string;
+  phase: PlatformUpdatePhase;
+  startedAt: string;
+  updatedAt: string;
+  message: string | null;
+  errorCode: string | null;
+  runnerContainerId: string | null;
+}
+
+export interface PlatformUpdateStatus {
+  currentVersion: string;
+  channel: 'stable' | 'rc' | 'development';
+  updateAvailable: boolean;
+  canUpdate: boolean;
+  release: {
+    version: string;
+    tag: string;
+    publishedAt: string;
+    notes: string[];
+    url: string;
+    oneClickBlockReason: string | null;
+  } | null;
+  support: {
+    mode: 'compose' | 'manual';
+    reason: string | null;
+    manualUpdateUrl: string;
+  };
+  checks: Array<{ id: string; ok: boolean; message: string }>;
+  operation: PlatformUpdateOperation | null;
+  releaseCheckStale: boolean;
+}
+
+export async function getPlatformUpdateStatus(): Promise<PlatformUpdateStatus> {
+  return apiGet<PlatformUpdateStatus>('/api/system/update');
+}
+
+export async function startPlatformUpdate(
+  targetVersion: string,
+): Promise<{ updateId: string; operation: PlatformUpdateOperation }> {
+  return apiPost<{ updateId: string; operation: PlatformUpdateOperation }>('/api/system/update', {
+    targetVersion,
+  });
+}
+
 export async function getServerStatus(): Promise<ServerStatus> {
   const res = await fetch('/api/server/status');
   return res.json();
