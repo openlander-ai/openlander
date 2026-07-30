@@ -1226,6 +1226,42 @@ export class StatefulServiceRemovalBlockedError extends OpenLanderError {
   }
 }
 
+export class StatefulMigrationRequiredError extends OpenLanderError {
+  constructor(serviceName: string, changedFields: string[]) {
+    super(
+      `Stateful Compose service '${serviceName}' requires a dedicated data migration.`,
+      'STATEFUL_MIGRATION_REQUIRED',
+      409,
+      { serviceName, changedFields },
+    );
+    this.name = 'StatefulMigrationRequiredError';
+  }
+}
+
+export class StatefulApprovalStaleError extends OpenLanderError {
+  constructor(details: Record<string, unknown>) {
+    super(
+      'The approved Stateful Compose plan no longer matches the source or running containers.',
+      'STATEFUL_APPROVAL_STALE',
+      409,
+      details,
+    );
+    this.name = 'StatefulApprovalStaleError';
+  }
+}
+
+export class StatefulBackupUnsupportedError extends OpenLanderError {
+  constructor(serviceName: string, mountTypes: string[]) {
+    super(
+      `Stateful Compose service '${serviceName}' uses mounts that cannot be backed up consistently.`,
+      'STATEFUL_BACKUP_UNSUPPORTED',
+      409,
+      { serviceName, mountTypes },
+    );
+    this.name = 'StatefulBackupUnsupportedError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {

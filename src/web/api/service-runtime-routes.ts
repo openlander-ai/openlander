@@ -21,6 +21,10 @@ import { createModuleLogger } from '../../lib/logger.js';
 import type { LifecycleAction } from '../../pipeline/mutation-policy.js';
 import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
 import { resolveComposeRedeployTarget } from '../../pipeline/compose-redeploy-target.js';
+import {
+  buildStatefulComposeApprovalPlan,
+  statefulComposeApprovalDiff,
+} from '../../mcp/stateful-compose-approval.js';
 import { resolveEnvironmentByType } from './helpers/project-helpers.js';
 import {
   assertProjectLifecycleMutableForRoute,
@@ -379,6 +383,53 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (sourceMissingError) {
       return c.json({ success: false, ...sourceMissingError.toJSON() }, 400);
     }
+    const requestEnvVars: Record<string, string> = {};
+    if (body.env_vars && typeof body.env_vars === 'object') {
+      for (const [key, value] of Object.entries(body.env_vars)) {
+        const trimmed = value.trim();
+        if (trimmed) requestEnvVars[key] = trimmed;
+      }
+    }
+    if (
+      deploymentService.kind === 'compose' &&
+      typeof ctx.pipeline.prepareStatefulComposeUpdate === 'function'
+    ) {
+      const approval = await ctx.pipeline.prepareStatefulComposeUpdate(deploymentService.id, {
+        envVars: requestEnvVars,
+      });
+      if (approval) {
+        if (Object.keys(requestEnvVars).length > 0) {
+          await ctx.env.setBulkForService(
+            deploymentRuntimeProject.id,
+            deploymentService.id,
+            requestEnvVars,
+          );
+        }
+        const plan = buildStatefulComposeApprovalPlan({
+          approval,
+          noCache: body.no_cache === true,
+        });
+        const actionRunId = await ctx.db.createPendingMcpApproval({
+          projectId: approval.projectId,
+          toolName: 'update_app',
+          plan: JSON.stringify(plan),
+        });
+        return c.json(
+          {
+            success: false,
+            status: 'pending_approval',
+            action_run_id: actionRunId,
+            project_id: approval.projectId,
+            service_id: approval.serviceId,
+            diff: statefulComposeApprovalDiff(approval),
+            backup_required: true,
+            data_effect:
+              'Affected named volumes are backed up and retained. Replaced containers are preserved for rollback; removed resources are archived.',
+          },
+          202,
+        );
+      }
+    }
     if (strategy === 'blue-green') {
       const eligibility = await ctx.pipeline.getBlueGreenEligibility(deploymentRuntimeProject.id, {
         healthCheckPath: body.health_check_path,
@@ -398,15 +449,8 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         );
       }
     }
-    if (body.env_vars && typeof body.env_vars === 'object') {
-      const envVars: Record<string, string> = {};
-      for (const [key, value] of Object.entries(body.env_vars)) {
-        const trimmed = value.trim();
-        if (trimmed) envVars[key] = trimmed;
-      }
-      if (Object.keys(envVars).length > 0) {
-        await ctx.env.setBulkForService(runtimeProject.id, service.id, envVars);
-      }
+    if (Object.keys(requestEnvVars).length > 0) {
+      await ctx.env.setBulkForService(runtimeProject.id, service.id, requestEnvVars);
     }
     const lockSessionId = `redeploy-${deploymentRuntimeProject.id}-${Date.now().toString(36)}`;
     if (

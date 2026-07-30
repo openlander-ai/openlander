@@ -346,6 +346,7 @@ export class ServiceRepo {
       imageCmd: string | null;
       gitCredentialId: string | null;
       healthCheckStrategy: ServiceRow['health_check_strategy'];
+      archivedAt: string | null;
     }>,
   ): Promise<void> {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -385,6 +386,9 @@ export class ServiceRepo {
     }
     if (updates.healthCheckStrategy !== undefined) {
       setValues.health_check_strategy = updates.healthCheckStrategy;
+    }
+    if (updates.archivedAt !== undefined) {
+      setValues.archived_at = updates.archivedAt;
     }
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;

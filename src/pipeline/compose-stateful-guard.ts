@@ -15,10 +15,12 @@ export function assertComposeStatefulChangesSafe(options: {
   existingServices: readonly ExistingComposeRuntime[];
   previousFingerprints?: Readonly<Record<string, string>>;
   currentFingerprints: Readonly<Record<string, string>>;
+  approvedChanges?: ReadonlyMap<string, 'update' | 'remove'>;
 }): void {
   for (const existing of options.existingServices) {
     if (existing.runtimeRole !== 'resource') continue;
     if (!options.currentServiceNames.has(existing.name)) {
+      if (options.approvedChanges?.get(existing.name) === 'remove') continue;
       throw new StatefulServiceRemovalBlockedError(existing.name);
     }
   }
@@ -32,6 +34,7 @@ export function assertComposeStatefulChangesSafe(options: {
     // A v1 snapshot has no fingerprint. Record the current definition on this
     // deploy instead of blocking an unverifiable legacy state.
     if (previous !== undefined && current !== undefined && previous !== current) {
+      if (options.approvedChanges?.get(serviceName) === 'update') continue;
       throw new StatefulServiceChangeBlockedError(serviceName);
     }
   }

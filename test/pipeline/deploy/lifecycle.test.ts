@@ -513,4 +513,93 @@ describe('ContainerLifecycle group archive semantics', () => {
     });
     expect(db.setProjectArchivedAt).toHaveBeenCalledWith('group-1', null);
   });
+
+  it('unarchives a preserved Stateful Compose resource with the same container and volumes', async () => {
+    const project = {
+      ...makeRuntimeProject('db-child', '2026-07-30T00:00:00.000Z'),
+      name: 'demo/db',
+    };
+    const service = makeDeployable('db-child__svc', {
+      kind: 'compose-child',
+      runtime_role: 'resource',
+      archived_at: project.archived_at,
+      container_id: 'db-container',
+      container_name: 'ol-demo-db-preserved-action',
+      assigned_port: null,
+    });
+    const db = {
+      getProject: vi.fn(async () => project),
+      getDeployableForProject: vi.fn(async () => service),
+      unarchiveProject: vi.fn(async () => undefined),
+      updateService: vi.fn(async () => undefined),
+    };
+    const runtime = {
+      ...createMockDocker(),
+      inspectContainer: vi.fn(async () => {
+        throw new Error('No such container: ol-demo-db');
+      }),
+      renameContainer: vi.fn(async () => undefined),
+      ensureProjectNetwork: vi.fn(async () => 'ol-demo'),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      disconnectContainerFromNetwork: vi.fn(async () => undefined),
+    };
+    const lifecycle = new ContainerLifecycle(
+      runtime as unknown as Docker,
+      db as unknown as Database,
+    );
+
+    await lifecycle.unarchive('db-child');
+
+    expect(runtime.renameContainer).toHaveBeenCalledWith('db-container', 'ol-demo-db');
+    expect(runtime.ensureProjectNetwork).toHaveBeenCalledWith('demo');
+    expect(runtime.connectContainerToNetwork).toHaveBeenCalledWith('db-container', 'ol-demo', [
+      'db',
+    ]);
+    expect(runtime.startContainer).toHaveBeenCalledWith('db-container');
+    expect(db.unarchiveProject).toHaveBeenCalledWith('db-child');
+    expect(db.updateService).toHaveBeenCalledWith('db-child__svc', {
+      archivedAt: null,
+      status: 'running',
+      containerId: 'db-container',
+      containerName: 'ol-demo-db',
+    });
+  });
+
+  it('leaves a preserved Stateful Compose resource archived when its canonical name conflicts', async () => {
+    const project = {
+      ...makeRuntimeProject('db-child', '2026-07-30T00:00:00.000Z'),
+      name: 'demo/db',
+    };
+    const service = makeDeployable('db-child__svc', {
+      kind: 'compose-child',
+      runtime_role: 'resource',
+      archived_at: project.archived_at,
+      container_id: 'db-container',
+      container_name: 'ol-demo-db-preserved-action',
+    });
+    const db = {
+      getProject: vi.fn(async () => project),
+      getDeployableForProject: vi.fn(async () => service),
+      unarchiveProject: vi.fn(async () => undefined),
+      updateService: vi.fn(async () => undefined),
+    };
+    const runtime = {
+      ...createMockDocker(),
+      inspectContainer: vi.fn(async () => ({ Id: 'different-container' })),
+      renameContainer: vi.fn(async () => undefined),
+      ensureProjectNetwork: vi.fn(async () => 'ol-demo'),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      disconnectContainerFromNetwork: vi.fn(async () => undefined),
+    };
+    const lifecycle = new ContainerLifecycle(
+      runtime as unknown as Docker,
+      db as unknown as Database,
+    );
+
+    await expect(lifecycle.unarchive('db-child')).rejects.toMatchObject({
+      code: 'SERVICE_OPERATION_FAILED',
+    });
+    expect(runtime.renameContainer).not.toHaveBeenCalled();
+    expect(db.unarchiveProject).not.toHaveBeenCalled();
+  });
 });

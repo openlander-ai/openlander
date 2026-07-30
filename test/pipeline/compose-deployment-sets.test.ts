@@ -119,4 +119,22 @@ describe('planComposeDeploymentSets', () => {
       hooks: ['migrate'],
     });
   });
+
+  it('replaces only a human-approved Stateful resource target', () => {
+    const fingerprints = Object.fromEntries(services.map((service) => [service.name, 'same']));
+    const plan = planComposeDeploymentSets({
+      services,
+      runtimeRoles,
+      existingServices: new Set(services.map((service) => service.name)),
+      previousFingerprints: fingerprints,
+      currentFingerprints: { ...fingerprints, db: 'changed' },
+      statefulReplaceTargets: new Set(['db']),
+    });
+
+    expectSets(plan, {
+      replace: ['db'],
+      prerequisites: ['api', 'logto', 'web'],
+      hooks: [],
+    });
+  });
 });

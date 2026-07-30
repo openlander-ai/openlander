@@ -7,6 +7,7 @@ import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import type { ToolDef } from '../tools/defs/types.js';
 import type { EventPayload } from '../events/index.js';
 import { assertMcpActiveScope, isGroupBMcpHoldTool } from './destructive-safety.js';
+import { parseStatefulComposeApprovalPlan } from './stateful-compose-approval.js';
 import type { RequestIdentity } from '../types/identity.js';
 
 interface DestructiveMcpPlan {
@@ -79,6 +80,36 @@ export async function handleDestructiveMcpApproval(
   }
 
   try {
+    const statefulPlan = parseStatefulComposeApprovalPlan(actionRun.plan);
+    if (statefulPlan) {
+      await assertMcpActiveScope(
+        ctx,
+        statefulPlan.targetProjectId,
+        true,
+        statefulPlan.identity,
+        statefulPlan.targetServiceId,
+      );
+      await ctx.db.updateActionRunStatus(actionRun.id, 'running');
+      const result = await ctx.pipeline.executeApprovedStatefulComposeUpdate(
+        { ...statefulPlan.statefulCompose, actionRunId: actionRun.id },
+        { noCache: statefulPlan.args.no_cache, actionRunId: actionRun.id },
+      );
+      await ctx.db.updateActionRunPlan(
+        actionRun.id,
+        JSON.stringify({ ...statefulPlan, result, executedAt: new Date().toISOString() }),
+      );
+      if (!result.success) {
+        await ctx.db.updateActionRunStatus(
+          actionRun.id,
+          'failed',
+          result.error ?? 'stateful_compose_update_failed',
+        );
+        return;
+      }
+      await ctx.db.updateActionRunStatus(actionRun.id, 'succeeded');
+      return;
+    }
+
     const plan = parsePlan(actionRun.plan);
     const def = findExecutableTool(plan.tool);
     if (!def) {

@@ -55,4 +55,28 @@ describe('assertComposeStatefulChangesSafe', () => {
       }),
     ).not.toThrow();
   });
+
+  it('allows only the exact approved update and removal classifications', () => {
+    expect(() =>
+      assertComposeStatefulChangesSafe({
+        currentServiceNames: new Set(['web']),
+        currentRuntimeRoles: new Map([['web', 'application']]),
+        existingServices: existing,
+        previousFingerprints: { db: 'old', web: 'old' },
+        currentFingerprints: { web: 'new' },
+        approvedChanges: new Map([['db', 'remove']]),
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertComposeStatefulChangesSafe({
+        currentServiceNames: new Set(['db', 'web']),
+        currentRuntimeRoles: roles,
+        existingServices: existing,
+        previousFingerprints: { db: 'old' },
+        currentFingerprints: { db: 'new' },
+        approvedChanges: new Map([['db', 'update']]),
+      }),
+    ).not.toThrow();
+  });
 });

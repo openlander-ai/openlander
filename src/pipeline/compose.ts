@@ -22,7 +22,10 @@ import type { OpenLanderEnv } from '../config/index.js';
 import { extractProjectName, composeContainerName, containerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
-import { projectIdToDeployableServiceId } from '../db/service-ids.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../db/service-ids.js';
 import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
@@ -34,11 +37,22 @@ import {
   DockerBuildError,
   InvalidTrafficServiceError,
   ServiceConfigError,
+  ServiceOperationError,
+  StatefulApprovalStaleError,
   TrafficServiceRequiredError,
   isDockerNotFoundError,
 } from '../errors.js';
 import { planComposeDeploymentSets } from './compose-deployment-sets.js';
 import { assertComposeStatefulChangesSafe } from './compose-stateful-guard.js';
+import {
+  fingerprintComposeProject,
+  type StatefulComposeApproval,
+  type StatefulComposeChange,
+} from './compose-stateful-update.js';
+import {
+  backupComposeStatefulVolumes,
+  type ComposeStatefulBackupManifest,
+} from './compose-stateful-backup.js';
 
 const log = createModuleLogger('compose');
 
@@ -68,6 +82,15 @@ interface ProjectStateTransitioner {
     reason: string,
     options?: StateTransitionOptions,
   ) => Promise<boolean>;
+}
+
+interface PreservedStatefulContainer {
+  change: StatefulComposeChange;
+  originalContainerId: string;
+  originalContainerName: string;
+  preservedContainerName: string;
+  networks: Array<{ name: string; aliases: string[] }>;
+  backupManifest: ComposeStatefulBackupManifest;
 }
 
 export interface ComposeService {
@@ -179,6 +202,7 @@ export interface ComposeDeployConfig {
   previousServiceFingerprints?: Record<string, string>;
   noCache?: boolean;
   sourceRevisionChanged?: boolean;
+  statefulApproval?: StatefulComposeApproval;
 }
 
 interface ComposeResetValue {
@@ -452,7 +476,7 @@ export interface EnvFileReferenceError {
   templatePath: string | null;
 }
 
-function sanitizeComposeProjectName(name: string): string {
+export function sanitizeComposeProjectName(name: string): string {
   return name
     .replace(/\//g, '-')
     .replace(/[^a-z0-9_-]/gi, '')
@@ -527,6 +551,164 @@ export class ComposePipeline {
         'Failed to remove compose container during cleanup',
       );
     }
+  }
+
+  private composeContainerNetworks(
+    inspection: Awaited<ReturnType<Docker['inspectContainer']>>,
+  ): Array<{ name: string; aliases: string[] }> {
+    return Object.entries(inspection.NetworkSettings.Networks).map(([name, settings]) => ({
+      name,
+      aliases: Array.isArray(settings.Aliases)
+        ? settings.Aliases.filter((alias): alias is string => typeof alias === 'string')
+        : [],
+    }));
+  }
+
+  private async assertContainerNameAvailable(containerName: string): Promise<void> {
+    try {
+      const existing = await this.docker.inspectContainer(containerName);
+      throw new ServiceOperationError(
+        'stateful_compose_preserve',
+        `Cannot preserve the Stateful Compose container because '${containerName}' is already in use.`,
+        { containerId: existing.Id, containerName },
+      );
+    } catch (error) {
+      if (isDockerNotFoundError(error)) return;
+      throw error;
+    }
+  }
+
+  private async restorePreservedStatefulContainer(
+    preserved: PreservedStatefulContainer,
+    childProjectId: string,
+  ): Promise<void> {
+    try {
+      const conflicting = await this.docker.inspectContainer(preserved.originalContainerName);
+      if (conflicting.Id !== preserved.originalContainerId) {
+        await this.cleanupComposeContainer(
+          conflicting.Id,
+          preserved.networks.map((network) => network.name),
+          'stateful-compose-restore-new-container',
+        );
+      }
+    } catch (error) {
+      if (!isDockerNotFoundError(error)) throw error;
+    }
+
+    await this.docker.renameContainer(
+      preserved.originalContainerId,
+      preserved.originalContainerName,
+    );
+    for (const network of preserved.networks) {
+      await this.docker.connectContainerToNetwork(
+        preserved.originalContainerId,
+        network.name,
+        network.aliases,
+      );
+    }
+    await this.docker.startContainer(preserved.originalContainerId);
+    await this.db.updateProject(childProjectId, {
+      status: 'running',
+      containerId: preserved.originalContainerId,
+      containerName: preserved.originalContainerName,
+    });
+  }
+
+  private async prepareApprovedStatefulSwap(params: {
+    change: StatefulComposeChange;
+    containerName: string;
+    actionRunId: string;
+  }): Promise<PreservedStatefulContainer> {
+    const inspection = await this.docker.inspectContainer(params.change.containerId);
+    if (inspection.Id !== params.change.containerId) {
+      throw new StatefulApprovalStaleError({
+        reason: 'container_changed',
+        serviceName: params.change.serviceName,
+      });
+    }
+
+    const preservedContainerName = sanitizeComposeProjectName(
+      `${params.containerName}-preserved-${params.actionRunId.slice(0, 12)}`,
+    );
+    await this.assertContainerNameAvailable(preservedContainerName);
+    const networks = this.composeContainerNetworks(inspection);
+    let renamed = false;
+
+    try {
+      await this.docker.stopContainer(params.change.containerId);
+      const backupManifest = await backupComposeStatefulVolumes({
+        runtime: this.docker,
+        actionRunId: params.actionRunId,
+        serviceId: params.change.serviceId,
+        serviceName: params.change.serviceName,
+        containerId: params.change.containerId,
+        volumes: params.change.backupVolumes,
+      });
+      await this.docker.renameContainer(params.change.containerId, preservedContainerName);
+      renamed = true;
+      for (const network of networks) {
+        await this.docker.disconnectContainerFromNetwork(params.change.containerId, network.name);
+      }
+      return {
+        change: params.change,
+        originalContainerId: params.change.containerId,
+        originalContainerName: params.containerName,
+        preservedContainerName,
+        networks,
+        backupManifest,
+      };
+    } catch (error) {
+      if (renamed) {
+        await this.docker.renameContainer(params.change.containerId, params.containerName);
+      }
+      for (const network of networks) {
+        await this.docker.connectContainerToNetwork(
+          params.change.containerId,
+          network.name,
+          network.aliases,
+        );
+      }
+      await this.docker.startContainer(params.change.containerId);
+      throw error;
+    }
+  }
+
+  private async archiveApprovedStatefulRemoval(params: {
+    change: StatefulComposeChange;
+    parentName: string;
+    actionRunId: string;
+  }): Promise<PreservedStatefulContainer> {
+    const childProjectId = deployableServiceIdToProjectId(params.change.serviceId);
+    const containerName = composeContainerName(params.parentName, params.change.serviceName);
+    const preserved = await this.prepareApprovedStatefulSwap({
+      change: params.change,
+      containerName,
+      actionRunId: params.actionRunId,
+    });
+    const archivedAt = new Date().toISOString();
+    try {
+      await this.db.setProjectArchivedAt(childProjectId, archivedAt);
+      await this.db.updateService(params.change.serviceId, {
+        archivedAt,
+        status: 'stopped',
+        containerId: preserved.originalContainerId,
+        containerName: preserved.preservedContainerName,
+        assignedPort: null,
+      });
+      return preserved;
+    } catch (error) {
+      await this.restorePreservedStatefulContainer(preserved, childProjectId);
+      throw error;
+    }
+  }
+
+  private async unarchiveApprovedStatefulRemoval(
+    preserved: PreservedStatefulContainer,
+  ): Promise<void> {
+    const childProjectId = deployableServiceIdToProjectId(preserved.change.serviceId);
+    await this.db.setProjectArchivedAt(childProjectId, null);
+    await this.db.updateService(preserved.change.serviceId, { archivedAt: null });
+    await this.restorePreservedStatefulContainer(preserved, childProjectId);
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -911,8 +1093,10 @@ export class ComposePipeline {
     // Validate requested names before computing dependency semantics.
     selectComposeServices(activeComposeProject.services, config.services);
     const runtimeRoles = inferComposeRuntimeRoles(activeComposeProject.services);
-    const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
-    const existingChildServices = await this.db.getComposeChildren(`${parentProjectId}__svc`);
+    const allExistingChildren = await this.db.getComposeChildProjects(parentProjectId);
+    const allExistingChildServices = await this.db.getComposeChildren(`${parentProjectId}__svc`);
+    const existingChildren = allExistingChildren.filter((child) => !child.archived_at);
+    const existingChildServices = allExistingChildServices.filter((child) => !child.archived_at);
     const envVars = { ...(config.envVars ?? {}) };
     if (existingChildren.length > 0 && Object.keys(envVars).length > 0) {
       const servicesWithoutEnvDeclaration = activeComposeProject.services
@@ -935,6 +1119,30 @@ export class ComposePipeline {
       }),
     );
     const currentServiceFingerprints = fingerprintComposeServices(activeComposeProject.services);
+    const approvedChanges = new Map(
+      config.statefulApproval?.changes.map((change) => [change.serviceName, change.change]) ?? [],
+    );
+    if (config.statefulApproval) {
+      const staleDetails: Record<string, unknown> = {};
+      if (config.commitSha !== config.statefulApproval.commitSha) {
+        staleDetails['expectedCommitSha'] = config.statefulApproval.commitSha;
+        staleDetails['actualCommitSha'] = config.commitSha;
+      }
+      const actualComposeFingerprint = fingerprintComposeProject(currentServiceFingerprints);
+      if (actualComposeFingerprint !== config.statefulApproval.composeFingerprint) {
+        staleDetails['expectedComposeFingerprint'] = config.statefulApproval.composeFingerprint;
+        staleDetails['actualComposeFingerprint'] = actualComposeFingerprint;
+      }
+      const existingChildById = new Map(existingChildServices.map((child) => [child.id, child]));
+      const staleContainers = config.statefulApproval.changes.flatMap((change) => {
+        const child = existingChildById.get(change.serviceId);
+        return child?.container_id === change.containerId ? [] : [change.serviceName];
+      });
+      if (staleContainers.length > 0) staleDetails['staleContainers'] = staleContainers;
+      if (Object.keys(staleDetails).length > 0) {
+        throw new StatefulApprovalStaleError(staleDetails);
+      }
+    }
     const inferredExistingRuntimeRoles = inferComposeRuntimeRoles(
       existingChildren.map((child) => ({
         name: composeChildServiceName(child.name, parentName),
@@ -955,6 +1163,7 @@ export class ComposePipeline {
       })),
       previousFingerprints: config.previousServiceFingerprints,
       currentFingerprints: currentServiceFingerprints,
+      approvedChanges,
     });
     const deploymentSets = planComposeDeploymentSets({
       services: activeComposeProject.services,
@@ -964,6 +1173,11 @@ export class ComposePipeline {
       previousFingerprints: config.previousServiceFingerprints,
       currentFingerprints: currentServiceFingerprints,
       forceReplaceApplications: config.noCache === true || config.sourceRevisionChanged === true,
+      statefulReplaceTargets: new Set(
+        config.statefulApproval?.changes
+          .filter((change) => change.change === 'update')
+          .map((change) => change.serviceName) ?? [],
+      ),
     });
     if (config.noCache === true || config.sourceRevisionChanged === true) {
       const reasons = [
@@ -1170,7 +1384,11 @@ export class ComposePipeline {
           }
 
           const serviceName = child.name.slice(prefix.length);
-          if (serviceName.length === 0 || composeServiceNames.has(serviceName)) {
+          if (
+            serviceName.length === 0 ||
+            composeServiceNames.has(serviceName) ||
+            approvedChanges.get(serviceName) === 'remove'
+          ) {
             return null;
           }
 
@@ -1242,6 +1460,9 @@ export class ComposePipeline {
         return existing?.container_id ? [[serviceName, existing] as const] : [];
       }),
     );
+    const statefulSwaps = new Map<string, PreservedStatefulContainer>();
+    const restoredStatefulServiceNames = new Set<string>();
+    const archivedStatefulRemovals = new Map<string, PreservedStatefulContainer>();
     let projectNetwork: string | null = null;
     const sharedSecretFiles = this.env
       ? await this.env.getSecretFilesForDeploy(parentProjectId)
@@ -1316,6 +1537,17 @@ export class ComposePipeline {
           await this.docker.pullImage(imageTag);
         }
         preparedImageTags.set(serviceName, imageTag);
+      }
+
+      for (const change of config.statefulApproval?.changes ?? []) {
+        if (change.change !== 'remove') continue;
+        const preserved = await this.archiveApprovedStatefulRemoval({
+          change,
+          parentName,
+          actionRunId: config.statefulApproval?.actionRunId ?? 'approved-stateful-update',
+        });
+        archivedStatefulRemovals.set(change.serviceName, preserved);
+        buildLog += `[stateful archive ${change.serviceName}] backup=${preserved.backupManifest.manifestPath}\n`;
       }
 
       for (const service of filteredComposeProject.services) {
@@ -1428,11 +1660,24 @@ export class ComposePipeline {
             }
 
             this.jobManager?.updatePhase(childId, 'starting');
-            await this.cleanupComposeContainer(
-              containerName,
-              this.composeNetworkNames(projectNetwork, envType),
-              'compose-service-replace',
+            const approvedStatefulChange = config.statefulApproval?.changes.find(
+              (change) => change.serviceName === service.name && change.change === 'update',
             );
+            if (approvedStatefulChange) {
+              const preserved = await this.prepareApprovedStatefulSwap({
+                change: approvedStatefulChange,
+                containerName,
+                actionRunId: config.statefulApproval?.actionRunId ?? 'approved-stateful-update',
+              });
+              statefulSwaps.set(service.name, preserved);
+              buildLog += `[stateful backup ${service.name}] ${preserved.backupManifest.manifestPath}\n`;
+            } else {
+              await this.cleanupComposeContainer(
+                containerName,
+                this.composeNetworkNames(projectNetwork, envType),
+                'compose-service-replace',
+              );
+            }
 
             const declaredContainerPorts = this.resolveServiceContainerPorts(
               composeService,
@@ -1462,7 +1707,7 @@ export class ComposePipeline {
                   this.routeProvider,
                 )
               : {};
-            const resolvedEnvVars = this.resolveComposeServiceEnvVars(
+            const resolvedEnvVars = this.resolveComposeServiceRuntimeEnv(
               composeService,
               envVars,
               filteredComposeProject.projectPath,
@@ -1602,8 +1847,18 @@ export class ComposePipeline {
               'compose-service-start-failure',
             );
 
+            const preservedStateful = statefulSwaps.get(service.name);
+            if (preservedStateful) {
+              await this.restorePreservedStatefulContainer(preservedStateful, childId);
+              statefulSwaps.delete(service.name);
+              restoredStatefulServiceNames.add(service.name);
+              deploymentByService.delete(service.name);
+              createdDeploymentServiceNames.delete(service.name);
+              containerNameByService.delete(service.name);
+            }
+
             await this.db.updateProject(childId, {
-              status: 'error',
+              status: preservedStateful ? 'running' : 'error',
             });
             this.jobManager?.updatePhase(childId, 'failed', errorMsg);
             buildLog = appendComposeError(buildLog, error);
@@ -1671,6 +1926,7 @@ export class ComposePipeline {
           const deployment = deploymentByService.get(service.name);
           const containerName = containerNameByService.get(service.name);
           const childId = childrenByService.get(service.name);
+          const preservedStateful = statefulSwaps.get(service.name);
 
           if (deployment) {
             try {
@@ -1703,6 +1959,19 @@ export class ComposePipeline {
             );
           }
 
+          if (preservedStateful && childId) {
+            await this.restorePreservedStatefulContainer(preservedStateful, childId);
+            statefulSwaps.delete(service.name);
+            restoredStatefulServiceNames.add(service.name);
+            deploymentByService.delete(service.name);
+            this.jobManager?.updatePhase(
+              childId,
+              'failed',
+              'Restored the previous Stateful Compose container after deployment failure',
+            );
+            return;
+          }
+
           if (childId) {
             await this.db.updateProject(childId, {
               status: 'error',
@@ -1727,6 +1996,20 @@ export class ComposePipeline {
         const deployment = deploymentByService.get(service.name);
         const orchestrationEntry = orchestrationByService.get(service.name);
         const orchestrationStatus = orchestrationEntry?.status;
+
+        if (restoredStatefulServiceNames.has(service.name)) {
+          const previous = existingByName.get(`${parentName}/${service.name}`);
+          return {
+            name: service.name,
+            status: 'running' as const,
+            ports:
+              previous?.assigned_port != null && previous.container_port != null
+                ? [`${String(previous.assigned_port)}:${String(previous.container_port)}`]
+                : [],
+            containerId: previous?.container_id ?? undefined,
+            ...(orchestrationEntry?.error ? { error: orchestrationEntry.error } : {}),
+          };
+        }
 
         if (deployment && reusedServiceNames.has(service.name)) {
           return {
@@ -1877,6 +2160,12 @@ export class ComposePipeline {
         reconciledStatuses.some((status) => status.status === 'error') ||
         failedOrchestration.length > 0 ||
         partialStateServices.length > 0;
+      if (hasError) {
+        for (const [serviceName, preserved] of archivedStatefulRemovals) {
+          await this.unarchiveApprovedStatefulRemoval(preserved);
+          archivedStatefulRemovals.delete(serviceName);
+        }
+      }
       const failedJob = jobFailures.values().next().value;
       const failedPrerequisite = prerequisiteFailures.values().next().value;
       const errorMessage =
@@ -2029,6 +2318,18 @@ export class ComposePipeline {
         }
       }
 
+      for (const [serviceName, preserved] of statefulSwaps) {
+        const childId = childrenByService.get(serviceName);
+        if (!childId) continue;
+        await this.restorePreservedStatefulContainer(preserved, childId);
+        restoredStatefulServiceNames.add(serviceName);
+        statefulSwaps.delete(serviceName);
+      }
+      for (const [serviceName, preserved] of archivedStatefulRemovals) {
+        await this.unarchiveApprovedStatefulRemoval(preserved);
+        archivedStatefulRemovals.delete(serviceName);
+      }
+
       await this.transitionProjectStatus(parentProjectId, 'error', 'compose-orchestration-error');
       for (const service of filteredComposeProject.services) {
         if (reusedServiceNames.has(service.name)) {
@@ -2036,6 +2337,16 @@ export class ComposePipeline {
         }
         const childId = childrenByService.get(service.name);
         if (!childId) continue;
+        if (restoredStatefulServiceNames.has(service.name)) {
+          const previous = existingByName.get(`${parentName}/${service.name}`);
+          await this.db.updateProject(childId, {
+            status: 'running',
+            containerId: previous?.container_id ?? null,
+            assignedPort: previous?.assigned_port ?? null,
+          });
+          this.jobManager?.updatePhase(childId, 'done');
+          continue;
+        }
         const preservedExisting = existingByName.get(`${parentName}/${service.name}`);
         if (preservedExisting?.container_id && !createdDeploymentServiceNames.has(service.name)) {
           await this.db.updateProject(childId, {
@@ -2284,7 +2595,7 @@ export class ComposePipeline {
     }
   }
 
-  private resolveComposeServiceImageTag(
+  resolveComposeServiceImageTag(
     service: ComposeService,
     projectName: string,
     envVars: Record<string, string>,
@@ -2321,7 +2632,7 @@ export class ComposePipeline {
     };
   }
 
-  private resolveComposeServiceEnvVars(
+  resolveComposeServiceRuntimeEnv(
     service: ComposeService,
     baseEnvVars: Record<string, string>,
     projectPath: string,
