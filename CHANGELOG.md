@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.11] - 2026-07-31
+
+### Fixed
+
+- Preserve complete Dockerfile and Compose build output in deploy history,
+  including child-service failures that occur during image preparation.
+- Keep recent build output and the final build step visible while a deployment
+  transitions from building to container startup.
+
 ## [0.2.14-rc.10] - 2026-07-31
 
 ### Fixed
