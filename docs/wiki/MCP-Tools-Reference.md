@@ -905,7 +905,7 @@ the base file to overlays.
 
 `compose_file` and `compose_files` cannot be supplied together. Compose-specific fields are valid
 only for the Compose parent service; child services and non-Compose Applications are rejected.
-Resource profiles apply to any deployable service. The saved limit takes effect on the next
+Resource profiles apply to any Application or Compose workload. The saved limit takes effect on the next
 `update_app`; OpenLander rejects limits above 80% of host memory.
 
 ### `update_application_source`
