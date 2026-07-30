@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.2] - 2026-07-30
+
+### Added
+
+- Add approval-gated Stateful Compose updates and removals with immutable
+  source fingerprints, consistent Docker volume backups, rollback, archive,
+  and unarchive support.
+- Add MCP-managed Application memory profiles and clearer failed initial
+  deployment records in the web interface.
+
+### Changed
+
+- Isolate Compose environment variables per service, expand YAML merge keys,
+  and validate PostgreSQL 17 and 18 data-volume contracts before creating
+  managed resources.
+- Support Compose workloads and multiple Dockerfile Applications in existing
+  Projects, including explicit Dockerfile selection and conflict detection.
+- Preserve full Dockerfile, Compose, and migration build output while exposing
+  live build steps and runtime-based dependency diagnostics.
+
+### Fixed
+
+- Keep stable internal DNS aliases attached across blue-green replacements and
+  preserve build context and Application environment variables when attaching
+  workloads to an existing Project.
+- Handle monorepo root build contexts and relative web API URLs without unsafe
+  URL or build-path inference.
+- Avoid false port and dependency diagnoses from process IDs or stale stored
+  environment values, and serialize backup creation timestamps correctly.
+- Archive terminal Compose workloads even when stale `building` markers remain,
+  while durable deploy locks and active jobs continue to block unsafe cleanup.
+
 ## [0.2.14-rc.1] - 2026-07-30
 
 ### Added
