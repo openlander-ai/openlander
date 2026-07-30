@@ -1527,7 +1527,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     description:
       'Archive an Application/worker. Provide service_id or service_name. Stops runtime and preserves configuration/history.',
     mcpDescription:
-      'Request human approval to archive an Application/worker while preserving configuration/history.',
+      'Request human approval to archive an Application/worker while preserving configuration/history. Execution returns DEPLOY_LOCKED only when an active deployment owns the runtime lock.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
+import { DeployLockedError } from '../../src/errors.js';
 import { handleDestructiveMcpApproval } from '../../src/mcp/destructive-executor.js';
 
 function createApprovalContext() {
@@ -197,6 +198,51 @@ describe('destructive MCP approval executor', () => {
       expect.stringContaining('"status":"archived"'),
     );
     expect(db.updateActionRunStatus).toHaveBeenLastCalledWith('action-run-archive', 'succeeded');
+  });
+
+  it('reports the blocking deployment operation when an approved archive cannot execute', async () => {
+    const service = {
+      id: 'project-1__svc',
+      name: 'web',
+      project_id: 'project-1',
+      kind: 'git',
+      source: 'git',
+    };
+    const project = { id: 'project-1', name: 'demo' };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-archive-locked',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'archive_service',
+          args: { service_id: service.id },
+          targetProjectId: project.id,
+          requestedAt: '2026-05-05T00:00:00.000Z',
+        }),
+      }),
+      getService: vi.fn().mockResolvedValue(service),
+      getProject: vi.fn().mockResolvedValue(project),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = {
+      archive: vi.fn().mockRejectedValue(new DeployLockedError(project.id, 'deploy-live-session')),
+    };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-archive-locked',
+      approved: true,
+      projectId: project.id,
+    });
+
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-archive-locked',
+      'failed',
+      expect.stringMatching(/DEPLOY_LOCKED:.*deploy-live-session/),
+    );
+    expect(db.updateActionRunPlan).not.toHaveBeenCalled();
   });
 
   it('executes approved deployable unarchive_service approvals without redeploying', async () => {

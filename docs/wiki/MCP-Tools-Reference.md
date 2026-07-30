@@ -96,6 +96,10 @@ Archive is reversible cleanup, not permanent deletion: archived Applications
 are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
 `unarchive_project`. Restore actions do not redeploy automatically.
+Archive execution uses the durable deployment lock as its concurrency check.
+An active deployment returns `DEPLOY_LOCKED` with the blocking lock session;
+an old persisted `building` status without that lock is normalized and does
+not block archive.
 Approval-hold responses include both `actionRunId` and `action_run_id`, plus a
 `poll_call` envelope for `openlander_monitor.mcp_action_status`, an
 `effect_preview`, and `after_approval` guidance so agents know what changed and
@@ -468,7 +472,8 @@ tracked separately for restore behavior.
 Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
 `poll_call`; poll `mcp_action_status` after the user approves or rejects the
-request.
+request. After approval, a real concurrent deployment returns `DEPLOY_LOCKED`;
+stale stored `building` markers do not cause `ARCHIVE_BUILDING_PROJECT`.
 
 ### `unarchive_project`
 

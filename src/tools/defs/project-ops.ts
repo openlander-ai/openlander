@@ -578,7 +578,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     description:
       'Archive a Project by archiving its active Applications/workers. Preserves configuration/history and does not delete Database/Cache/Storage resources.',
     mcpDescription:
-      'Request human approval to archive a Project. Archives active Applications/workers while preserving configuration/history.',
+      'Request human approval to archive a Project. Archives active Applications/workers while preserving configuration/history; execution returns DEPLOY_LOCKED if any target has an active deployment.',
     inputSchema: projectLifecycleSchema,
     execute: async (args, context) => {
       const project = await resolveProjectGroup(args, context);

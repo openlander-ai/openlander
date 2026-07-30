@@ -4,7 +4,6 @@ import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { EnvironmentRepo } from '../../../src/db/repos/environment.repo.js';
 import { ProjectRepo } from '../../../src/db/repos/project.repo.js';
 import { ServiceRepo } from '../../../src/db/repos/service.repo.js';
-import { OpenLanderError } from '../../../src/errors.js';
 import type { SqliteDatabase } from '../../../src/db/drizzle.js';
 
 /**
@@ -78,28 +77,24 @@ describe('ProjectRepo - Archive', () => {
       expect(project!.status).toBe('stopped');
     });
 
-    it('throws when project status is building', () => {
-      createTestProject();
-      // Post-0012: 'building' state lives on environments (services schema only
-      // allows running|stopped|error). Set a building environment to trigger
-      // the archiveProject guard.
+    it('normalizes a stale building environment while archiving', async () => {
+      await createTestProject();
       const envRepo = new EnvironmentRepo(
         (repo as unknown as { db: Parameters<typeof EnvironmentRepo>[0] }).db,
         sqlite,
       );
-      envRepo.createEnvironment({ id: 'proj-1-prod', projectId: 'proj-1', type: 'production', branch: 'main', status: 'building' });
+      await envRepo.createEnvironment({
+        id: 'proj-1-prod',
+        projectId: 'proj-1',
+        type: 'production',
+        branch: 'main',
+        status: 'building',
+      });
 
-      expect(() => repo.archiveProject('proj-1')).toThrow(
-        'Cannot archive a project that is currently building',
-      );
+      await repo.archiveProject('proj-1');
 
-      try {
-        repo.archiveProject('proj-1');
-      } catch (err) {
-        expect(err).toBeInstanceOf(OpenLanderError);
-        expect((err as OpenLanderError).code).toBe('ARCHIVE_BUILDING_PROJECT');
-        expect((err as OpenLanderError).statusCode).toBe(400);
-      }
+      expect((await repo.getProject('proj-1'))?.archived_at).toBeTruthy();
+      expect((await envRepo.getEnvironment('proj-1-prod'))?.status).toBe('stopped');
     });
 
     it('throws ProjectNotFoundError for non-existent project', () => {

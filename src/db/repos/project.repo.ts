@@ -895,43 +895,32 @@ export class ProjectRepo {
     if (!project) {
       throw new ProjectNotFoundError(id);
     }
-    // Post-0012: check environments for building status (services table has no 'building' state;
-    // building is tracked per-environment in environments.status).
-    const [buildingEnv] = await this.db
-      .select({ id: environments.id })
-      .from(environments)
-      .where(
-        and(
-          eq(environments.service_id, projectIdToDeployableServiceId(id)),
-          sql`${environments.status} = 'building'`,
-        ),
-      )
-      .limit(1);
-    if (buildingEnv) {
-      throw new OpenLanderError(
-        'Cannot archive a project that is currently building',
-        'ARCHIVE_BUILDING_PROJECT',
-        400,
-        { projectId: id },
-      );
-    }
-    await this.db
-      .update(projects)
-      .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(projects.id, id))
-      .returning({ id: projects.id });
-    await this.db
-      .update(services)
-      .set({
-        archived_at: archivedAt,
-        assigned_port: null,
-        container_id: null,
-        image_tag: null,
-        status: 'stopped',
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
-      .where(eq(services.id, projectIdToDeployableServiceId(id)))
-      .returning({ id: services.id });
+    const serviceId = projectIdToDeployableServiceId(id);
+    // The pipeline deploy lock is the concurrency authority. Normalize stale
+    // runtime markers in the same transaction as the archive metadata.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(projects)
+        .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(projects.id, id))
+        .returning({ id: projects.id });
+      await tx
+        .update(services)
+        .set({
+          archived_at: archivedAt,
+          assigned_port: null,
+          container_id: null,
+          image_tag: null,
+          status: 'stopped',
+          updated_at: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(services.id, serviceId))
+        .returning({ id: services.id });
+      await tx
+        .update(environments)
+        .set({ status: 'stopped', updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(environments.service_id, serviceId));
+    });
   }
 
   async unarchiveProject(id: string): Promise<void> {

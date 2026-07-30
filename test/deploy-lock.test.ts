@@ -199,6 +199,7 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
       expect(err.code).toBe('DEPLOY_LOCKED');
       expect(err.statusCode).toBe(409);
       expect(err.message).toContain('p1');
+      expect(err.message).toContain('session-1');
       expect(err.name).toBe('DeployLockedError');
     });
 

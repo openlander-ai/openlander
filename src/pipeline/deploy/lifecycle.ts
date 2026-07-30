@@ -216,7 +216,7 @@ export class ContainerLifecycle {
     }
 
     for (const service of activeDeployables) {
-      await this.assertRuntimeProjectArchivable(deployableServiceIdToProjectId(service.id));
+      await this.loadRuntimeProjectForArchive(deployableServiceIdToProjectId(service.id));
     }
 
     // Freeze-safe restore-set marker: unarchiveGroup restores only services
@@ -236,7 +236,11 @@ export class ContainerLifecycle {
     await eventBus.emit('project:archive', { projectId });
   }
 
-  private async assertRuntimeProjectArchivable(
+  /**
+   * Load archive state only. Concurrency eligibility belongs to DeployPipeline's
+   * deploy-lock boundary; persisted service/environment statuses may be stale.
+   */
+  private async loadRuntimeProjectForArchive(
     projectId: string,
     options: { allowMissing?: boolean } = {},
   ): Promise<ServiceViewRecord | null> {
@@ -247,27 +251,6 @@ export class ContainerLifecycle {
     }
 
     const record = await loadServiceViewRecord(this.db, project);
-    const archiveStatus = record.view.status;
-
-    if (archiveStatus === 'building') {
-      throw new OpenLanderError(
-        'Cannot archive a building project',
-        'ARCHIVE_BUILDING_PROJECT',
-        400,
-        { projectId },
-      );
-    }
-
-    const environments = await this.db.getEnvironmentsByProject(projectId);
-    if (environments.some((environment) => environment.status === 'building')) {
-      throw new OpenLanderError(
-        'Cannot archive a building project',
-        'ARCHIVE_BUILDING_PROJECT',
-        400,
-        { projectId },
-      );
-    }
-
     return record;
   }
 
@@ -276,7 +259,7 @@ export class ContainerLifecycle {
     tunnelManager?: TunnelManager,
     options: ArchiveRuntimeOptions = {},
   ): Promise<void> {
-    const archiveState = await this.assertRuntimeProjectArchivable(projectId, {
+    const archiveState = await this.loadRuntimeProjectForArchive(projectId, {
       allowMissing: true,
     });
     if (!archiveState) return;

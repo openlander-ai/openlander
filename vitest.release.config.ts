@@ -20,6 +20,7 @@ export default defineConfig({
       'test/db/env-var-scope-schema.test.ts',
       'test/db/env-var-scope-postgres.test.ts',
       'test/db/managed-service-orphan-group.test.ts',
+      'test/db/archive-state-consistency-postgres.test.ts',
       'test/db/service-repo-deployables.test.ts',
       'test/db/target-identity-resolver.test.ts',
       'test/data-inspector.test.ts',

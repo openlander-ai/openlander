@@ -4221,11 +4221,72 @@ export class DeployPipeline {
   }
 
   async archive(projectId: string): Promise<void> {
-    await this.lifecycle.archive(projectId, this.tunnelManager);
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      await this.lifecycle.archive(projectId, this.tunnelManager);
+      return;
+    }
+
+    // A durable deploy lock, not a persisted `building` marker, determines
+    // whether archive can safely run. Compose descendants are locked first as
+    // one set so contention cannot leave a partially archived workload.
+    const lockProjectIds = await this.collectArchiveLockProjectIds([projectId]);
+    await this.withArchiveLocks(lockProjectIds, () =>
+      this.lifecycle.archive(projectId, this.tunnelManager),
+    );
   }
 
   async archiveGroup(projectId: string): Promise<void> {
-    await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+      return;
+    }
+
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    const runtimeProjectIds = deployables
+      .filter((service) => !service.archived_at)
+      .map((service) => deployableServiceIdToProjectId(service.id));
+    const lockProjectIds = await this.collectArchiveLockProjectIds([
+      projectId,
+      ...(runtimeProjectIds.length > 0 ? runtimeProjectIds : [projectId]),
+    ]);
+    await this.withArchiveLocks(lockProjectIds, () =>
+      this.lifecycle.archiveGroup(projectId, this.tunnelManager),
+    );
+  }
+
+  private async collectArchiveLockProjectIds(rootProjectIds: readonly string[]): Promise<string[]> {
+    const projectIds = new Set(rootProjectIds);
+    const queue = [...projectIds];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      const children = await this.db.getComposeChildProjects(current);
+      for (const child of children) {
+        if (projectIds.has(child.id)) continue;
+        projectIds.add(child.id);
+        queue.push(child.id);
+      }
+    }
+
+    return [...projectIds].sort();
+  }
+
+  private async withArchiveLocks<T>(
+    projectIds: readonly string[],
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const sessionId = `archive-${nanoid(12)}`;
+
+    const acquireNext = async (index: number): Promise<T> => {
+      const projectId = projectIds[index];
+      if (!projectId) return operation();
+      return withDeployLock(this.db, { projectId, sessionId }, () => acquireNext(index + 1));
+    };
+
+    return acquireNext(0);
   }
 
   async unarchive(projectId: string): Promise<void> {
