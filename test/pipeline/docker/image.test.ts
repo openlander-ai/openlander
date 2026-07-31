@@ -14,6 +14,7 @@ const mockCreateContainer = vi.fn();
 const mockGetImage = vi.fn();
 const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
+const mockFollowBuildProgress = vi.fn();
 const mockGetNetwork = vi.fn();
 const mockDemuxStream = vi.fn();
 const mockDf = vi.fn();
@@ -36,6 +37,7 @@ const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
   this.listVolumes = mockListVolumes;
   this.createVolume = mockCreateVolume;
   this.getEvents = mockGetEvents;
+  this.followProgress = mockFollowBuildProgress;
   this.modem = {
     followProgress: mockFollowProgress,
     demuxStream: mockDemuxStream,
@@ -62,6 +64,7 @@ const resetMocks = () => {
   mockGetImage.mockReset();
   mockGetContainer.mockReset();
   mockFollowProgress.mockReset();
+  mockFollowBuildProgress.mockReset();
   mockGetNetwork.mockReset();
   mockDemuxStream.mockReset();
   mockDf.mockReset();
@@ -144,7 +147,7 @@ describe('buildImage', () => {
   it('uses BuildKit for standalone Dockerfiles', async () => {
     const stream = { stream: true } as unknown as NodeJS.ReadableStream;
     mockBuildImage.mockResolvedValueOnce(stream);
-    mockFollowProgress.mockImplementationOnce(
+    mockFollowBuildProgress.mockImplementationOnce(
       (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => done(null),
     );
 
@@ -161,6 +164,33 @@ describe('buildImage', () => {
         version: '2',
       }),
     );
+    expect(mockFollowBuildProgress).toHaveBeenCalledWith(
+      stream,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(mockFollowProgress).not.toHaveBeenCalled();
+  });
+
+  it('forwards decoded BuildKit output from the Docker client helper', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    const onProgress = vi.fn();
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowBuildProgress.mockImplementationOnce(
+      (
+        _stream: NodeJS.ReadableStream,
+        done: (err: Error | null) => void,
+        progress: (event: { stream?: string }) => void,
+      ) => {
+        progress({ stream: '#7 [2/4] RUN npm ci\n' });
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'incar-api:dev', { onProgress });
+
+    expect(onProgress).toHaveBeenCalledWith({ stream: '#7 [2/4] RUN npm ci\n' });
   });
 });
 
@@ -175,7 +205,7 @@ describe('buildComposeService', () => {
   it('uses BuildKit for Compose Dockerfiles', async () => {
     const stream = { stream: true } as unknown as NodeJS.ReadableStream;
     mockBuildImage.mockResolvedValueOnce(stream);
-    mockFollowProgress.mockImplementationOnce(
+    mockFollowBuildProgress.mockImplementationOnce(
       (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => done(null),
     );
 
@@ -201,7 +231,7 @@ describe('buildComposeService', () => {
     const firstStream = { stream: 'first' } as unknown as NodeJS.ReadableStream;
     const secondStream = { stream: 'second' } as unknown as NodeJS.ReadableStream;
     mockBuildImage.mockResolvedValueOnce(firstStream).mockResolvedValueOnce(secondStream);
-    mockFollowProgress
+    mockFollowBuildProgress
       .mockImplementationOnce((_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) =>
         done(new Error('context deadline exceeded')),
       )
@@ -222,7 +252,7 @@ describe('buildComposeService', () => {
   it('does not retry deterministic Dockerfile failures', async () => {
     const stream = { stream: true } as unknown as NodeJS.ReadableStream;
     mockBuildImage.mockResolvedValueOnce(stream);
-    mockFollowProgress.mockImplementationOnce(
+    mockFollowBuildProgress.mockImplementationOnce(
       (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) =>
         done(new Error('process exited with code 1')),
     );
