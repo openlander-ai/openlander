@@ -5,89 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.14-rc.12] - 2026-07-31
-
-### Fixed
-
-- Decode BuildKit v2 progress messages for Dockerfile and Compose builds so
-  complete build output is retained in deployment history and live progress.
-
-## [0.2.14-rc.11] - 2026-07-31
-
-### Fixed
-
-- Preserve complete Dockerfile and Compose build output in deploy history,
-  including child-service failures that occur during image preparation.
-- Keep recent build output and the final build step visible while a deployment
-  transitions from building to container startup.
-
-## [0.2.14-rc.10] - 2026-07-31
-
-### Fixed
-
-- Preserve older Compose child archive markers during parent/group archive so
-  restoring a parent cannot reactivate independently archived services.
-
-## [0.2.14-rc.9] - 2026-07-31
-
-### Fixed
-
-- Finalize every tracked Compose child deployment when image preparation or
-  orchestration fails, preventing stale `queued` jobs from blocking archive.
-
-## [0.2.14-rc.8] - 2026-07-30
-
-### Fixed
-
-- Retry GitHub Deploy Key clones and verification over SSH port 443 instead of
-  returning to a known-unreachable port 22 after a transient fallback failure.
-
-## [0.2.14-rc.7] - 2026-07-30
-
-### Fixed
-
-- Preserve the saved Compose service subset when updating a parent workload by
-  service ID, so approval preflight and execution apply environment guards to
-  the same selected services.
-
-## [0.2.14-rc.6] - 2026-07-30
-
-### Fixed
-
-- Preserve Stateful Compose containers and volumes during archive, use one
-  restore marker for the complete Compose tree, and restore matching child
-  resources in place instead of leaving them archived.
-- Apply the Compose environment-declaration guard only to selected services
-  and their dependencies, so unrelated services cannot block a targeted
-  deployment.
-
-## [0.2.14-rc.5] - 2026-07-30
-
-### Fixed
-
-- Repair Compose file ownership during target startup for one-click updates
-  initiated by legacy source-image runners, before startup validation succeeds.
-
-## [0.2.14-rc.4] - 2026-07-30
-
-### Fixed
-
-- Preserve the installation user's ownership and permissions when the isolated
-  one-click update runner replaces Compose environment and definition files,
-  including during automatic rollback.
-
-## [0.2.14-rc.3] - 2026-07-30
-
-### Fixed
-
-- Preserve the running official Compose database password, published port,
-  public host, data-volume name, and exact image across one-click updates and
-  automatic rollback instead of falling back to default settings or `latest`.
-- Block one-click replacement when the effective Compose environment cannot be
-  reconstructed safely, and exercise the installer-style persistent `.env` in
-  the RC upgrade gate.
-
-## [0.2.14-rc.2] - 2026-07-30
+## [0.2.14] - 2026-07-31
 
 ### Added
 
@@ -96,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and unarchive support.
 - Add MCP-managed Application memory profiles and clearer failed initial
   deployment records in the web interface.
+- Add an administrator-confirmed update button and bilingual progress dialog
+  for newer Stable or RC releases, with manual guidance for unsupported
+  installation methods.
+- Add official release-manifest validation, Compose installation preflight,
+  PostgreSQL and configuration backups, exact GHCR digest pulls, post-restart
+  health and Traefik verification, and automatic image/configuration rollback.
 
 ### Changed
 
@@ -106,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Projects, including explicit Dockerfile selection and conflict detection.
 - Preserve full Dockerfile, Compose, and migration build output while exposing
   live build steps and runtime-based dependency diagnostics.
+- Include Docker Compose in the runtime image, publish a verified
+  `openlander-update.json` asset with every multi-architecture release, and
+  exercise authenticated RC-to-RC updates in the release gate.
 
 ### Fixed
 
@@ -118,24 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   environment values, and serialize backup creation timestamps correctly.
 - Archive terminal Compose workloads even when stale `building` markers remain,
   while durable deploy locks and active jobs continue to block unsafe cleanup.
-
-## [0.2.14-rc.1] - 2026-07-30
-
-### Added
-
-- Add an administrator-confirmed update button and bilingual progress dialog
-  for newer Stable or RC releases, with manual guidance for unsupported
-  installation methods.
-- Add official release-manifest validation, Compose installation preflight,
-  PostgreSQL and configuration backups, exact GHCR digest pulls, post-restart
-  health and Traefik verification, and automatic image/configuration rollback.
-
-### Changed
-
-- Include Docker Compose in the runtime image and publish a verified
-  `openlander-update.json` asset with every multi-architecture GitHub Release.
-- Extend the RC release gate with the authenticated one-click update path for
-  updater-enabled RC-to-RC upgrades.
+- Preserve Stateful Compose containers, volumes, selected service subsets, and
+  independent child archive markers across update, archive, and restore flows.
+- Finalize tracked Compose child jobs on early failures so stale `queued`
+  records cannot block later lifecycle operations.
+- Preserve official Compose credentials, ports, hosts, volumes, exact images,
+  file ownership, and permissions across one-click updates and rollback.
+- Retry GitHub Deploy Key clones and verification over SSH port 443 after
+  transient failures on networks where port 22 is unavailable.
+- Decode BuildKit v2 progress for Dockerfile and Compose builds, retain complete
+  child and parent build output, and keep recent steps visible through startup.
 
 ## [0.2.13-rc.7] - 2026-07-30
 
