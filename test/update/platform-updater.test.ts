@@ -12,12 +12,23 @@ import { PlatformUpdater } from '../../src/update/platform-updater.js';
 import { PlatformReleaseChecker } from '../../src/update/release-checker.js';
 import { PlatformUpdateStateStore } from '../../src/update/state-store.js';
 
+const statfsMock = vi.hoisted(() => vi.fn());
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    statfs: statfsMock,
+  };
+});
+
 const tempDirectories: string[] = [];
 const targetVersion = '0.2.14-rc.1';
 const digest = `sha256:${'d'.repeat(64)}`;
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  statfsMock.mockReset();
   await Promise.all(
     tempDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -106,6 +117,7 @@ async function harness(
     composePassword?: string | null;
     ownershipRepairExitCode?: number;
     releaseChecker?: PlatformReleaseChecker;
+    useDefaultDiskSpaceCheck?: boolean;
     diskSpaceCheck?:
       | boolean
       | {
@@ -183,12 +195,76 @@ async function harness(
       OPENLANDER_CONTAINERIZED: options.containerized === false ? 'false' : 'true',
       HOSTNAME: 'openlander-container',
     },
-    checkDiskSpace: async () => options.diskSpaceCheck ?? true,
+    ...(options.useDefaultDiskSpaceCheck
+      ? {}
+      : { checkDiskSpace: async () => options.diskSpaceCheck ?? true }),
   });
   return { updater, docker, runUtilityContainer, dataDir };
 }
 
 describe('PlatformUpdater', () => {
+  it.each([
+    { limitingPath: 'root', rootBytes: 512 * 1024 * 1024, dataBytes: 4 * 1024 * 1024 * 1024 },
+    { limitingPath: 'data', rootBytes: 4 * 1024 * 1024 * 1024, dataBytes: 512 * 1024 * 1024 },
+  ])(
+    'blocks updates when the $limitingPath filesystem is below the threshold',
+    async ({ rootBytes, dataBytes }) => {
+      const { updater, dataDir } = await harness({ useDefaultDiskSpaceCheck: true });
+      statfsMock.mockImplementation(async (path: string) => {
+        const availableBytes = path === '/' ? rootBytes : dataBytes;
+        return { bavail: availableBytes, bsize: 1 };
+      });
+
+      const status = await updater.getStatus();
+
+      expect(statfsMock).toHaveBeenNthCalledWith(1, '/');
+      expect(statfsMock).toHaveBeenNthCalledWith(2, dataDir);
+      expect(status.canUpdate).toBe(false);
+      expect(status.checks).toContainEqual({
+        id: 'disk_space',
+        ok: false,
+        message: 'At least 2 GiB of free space is required.',
+        availableBytes: 512 * 1024 * 1024,
+        requiredBytes: 2 * 1024 * 1024 * 1024,
+      });
+    },
+  );
+
+  it('allows updates when both the root and data filesystems meet the threshold', async () => {
+    const { updater, dataDir } = await harness({ useDefaultDiskSpaceCheck: true });
+    statfsMock.mockImplementation(async (path: string) => ({
+      bavail: path === '/' ? 3 * 1024 * 1024 * 1024 : 4 * 1024 * 1024 * 1024,
+      bsize: 1,
+    }));
+
+    const status = await updater.getStatus();
+
+    expect(statfsMock).toHaveBeenNthCalledWith(1, '/');
+    expect(statfsMock).toHaveBeenNthCalledWith(2, dataDir);
+    expect(status.canUpdate).toBe(true);
+    expect(status.checks).toContainEqual({
+      id: 'disk_space',
+      ok: true,
+      message: 'At least 2 GiB is available for the backup and image.',
+      availableBytes: 3 * 1024 * 1024 * 1024,
+      requiredBytes: 2 * 1024 * 1024 * 1024,
+    });
+  });
+
+  it('fails closed when filesystem usage cannot be measured', async () => {
+    const { updater } = await harness({ useDefaultDiskSpaceCheck: true });
+    statfsMock.mockRejectedValueOnce(new Error('statfs unavailable'));
+
+    const status = await updater.getStatus();
+
+    expect(status.canUpdate).toBe(false);
+    expect(status.checks).toContainEqual({
+      id: 'disk_space',
+      ok: false,
+      message: 'At least 2 GiB of free space is required.',
+    });
+  });
+
   it('blocks updates and reports measured free space when the host is below the threshold', async () => {
     const availableBytes = 512 * 1024 * 1024;
     const requiredBytes = 2 * 1024 * 1024 * 1024;

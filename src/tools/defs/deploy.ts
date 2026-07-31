@@ -529,15 +529,19 @@ export const deployToolDefs: ToolDef[] = [
           service?.project_id ?? log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
         const runtimeProjectId = representativeService
-          ? representativeService.project_id
+          ? deployableServiceIdToProjectId(representativeService.id)
           : inferredProjectId;
         const runtimeProject =
           runtimeProjectId === inferredProjectId
             ? project
             : await appCtx.db.getProject(runtimeProjectId);
         const view = await resolveServiceView(runtimeProjectId, runtimeProject);
-        const runtimeContainerId = representativeService?.container_id ?? view?.containerId;
-        const runtimeStatus = representativeService?.status ?? view?.status;
+        const runtimeContainerId = representativeService
+          ? (representativeService.container_id ?? undefined)
+          : view?.containerId;
+        const runtimeStatus = representativeService
+          ? (representativeService.status ?? undefined)
+          : view?.status;
         const assignedPort =
           representativeService?.assigned_port ?? view?.assignedPort ?? undefined;
         const routeService = representativeService
