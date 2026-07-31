@@ -686,6 +686,7 @@ export const translations = {
   platformUpdate: {
     button: {
       available: 'New version v{version}',
+      availableTitle: 'New version',
       progress: 'Updating OpenLander',
       rolledBack: 'Update restored',
       failed: 'Update needs attention',

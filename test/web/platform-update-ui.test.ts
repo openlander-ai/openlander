@@ -20,10 +20,17 @@ describe('platform update sidebar and dialog contract', () => {
     expect(sidebar.indexOf('<PlatformUpdateButton')).toBeLessThan(
       sidebar.indexOf('<AccountPopover'),
     );
+    expect(sidebar).toContain('mb-2 empty:hidden');
     expect(button).toContain('if (!status) return null');
+    expect(button).toContain(
+      'if (!active && !rolledBack && !failed && !available && !checkUnavailable) return null',
+    );
     expect(button).toContain("t('platformUpdate.button.available'");
-    expect(button).toContain("t('platformUpdate.button.upToDate'");
+    expect(button).toContain("t('platformUpdate.button.availableTitle'");
     expect(button).toContain("t('platformUpdate.button.checkUnavailable'");
+    expect(button).toContain('bg-[color:var(--ol-panel)]');
+    expect(button).toContain('text-[color:var(--ol-primary)]');
+    expect(button).toContain('text-[color:var(--ol-fg-muted)]');
   });
 
   it('supports expanded, collapsed, and mobile sidebars from one shared state', () => {
@@ -88,6 +95,8 @@ describe('platform update sidebar and dialog contract', () => {
       expect(ko).toContain(key);
     }
     expect(en).toContain("available: 'New version v{version}'");
+    expect(en).toContain("availableTitle: 'New version'");
     expect(ko).toContain("available: '새 버전 v{version}'");
+    expect(ko).toContain("availableTitle: '새 버전'");
   });
 });

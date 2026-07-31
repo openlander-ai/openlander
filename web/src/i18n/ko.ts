@@ -689,6 +689,7 @@ export const translations = {
   platformUpdate: {
     button: {
       available: '새 버전 v{version}',
+      availableTitle: '새 버전',
       progress: 'OpenLander 업데이트 중',
       rolledBack: '이전 버전으로 복구됨',
       failed: '업데이트 확인 필요',

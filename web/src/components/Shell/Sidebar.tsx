@@ -273,7 +273,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           out. The legacy "self-hosted vX.Y.Z" version
           stamp was dropped (replaced by the brand chip up top). */}
       <div className="border-t border-[color:var(--ol-border-subtle)] p-3">
-        <div className="mb-2">
+        <div className="mb-2 empty:hidden">
           <PlatformUpdateButton collapsed={collapsed} />
         </div>
         <AccountPopover collapsed={collapsed} />
