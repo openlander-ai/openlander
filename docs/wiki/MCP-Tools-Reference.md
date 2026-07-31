@@ -1459,9 +1459,10 @@ OOM, disk pressure, or Docker daemon instability.
 
 `list_docker_networks` is an instance/org-scoped, read-only inventory for Docker
 network address-pool incidents. It returns compact rows with `network_id`,
-`network_name`, subnet, endpoint count, instance ownership, `cleanup_eligible`,
-and a machine-readable `cleanup_blocker`. External and system networks are omitted
-by default; pass `include_external=true` to include them in the returned rows.
+`network_name`, subnet, endpoint count verified from running and stopped container
+attachments, instance ownership, `cleanup_eligible`, and a machine-readable
+`cleanup_blocker`. External and system networks are omitted by default; pass
+`include_external=true` to include them in the returned rows.
 Summary counts always cover the complete Docker network inventory.
 
 `remove_unused_docker_network` removes one exact network only after all of these

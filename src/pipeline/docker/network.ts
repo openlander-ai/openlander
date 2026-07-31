@@ -45,11 +45,14 @@ function isAddressPoolExhausted(error: unknown): boolean {
 export class NetworkOps {
   constructor(private readonly ctx: DockerContext) {}
 
-  private summarizeNetwork(info: Dockerode.NetworkInspectInfo): DockerNetworkSummary {
+  private summarizeNetwork(
+    info: Dockerode.NetworkInspectInfo,
+    endpointCountOverride?: number,
+  ): DockerNetworkSummary {
     const name = info.Name;
     const labels = info.Labels ?? {};
     const ownerInstanceId = labels[DOCKER_LABELS.INSTANCE] ?? null;
-    const endpointCount = Object.keys(info.Containers ?? {}).length;
+    const endpointCount = endpointCountOverride ?? Object.keys(info.Containers ?? {}).length;
     const isSystem = SYSTEM_NETWORK_NAMES.has(name);
     const isShared = name === SHARED_NETWORK_NAME;
     const isLegacyOpenLander = labels[DOCKER_LABELS.MANAGED] === 'true' || name.startsWith('ol-');
@@ -97,12 +100,39 @@ export class NetworkOps {
 
   /** List Docker networks with ownership and zero-endpoint cleanup eligibility. */
   async listNetworks(): Promise<DockerNetworkSummary[]> {
-    const networks = await withTimeout(
-      this.ctx.client.listNetworks(),
-      NETWORK_INSPECT_TIMEOUT_MS,
-      'Docker network list',
+    const [networks, containers] = await Promise.all([
+      withTimeout(
+        this.ctx.client.listNetworks(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        'Docker network list',
+      ),
+      withTimeout(
+        this.ctx.client.listContainers({ all: true }),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        'Docker container list for network inventory',
+      ),
+    ]);
+    const endpointCountsById = new Map<string, number>();
+    const endpointCountsByName = new Map<string, number>();
+
+    for (const container of containers) {
+      for (const [networkName, endpoint] of Object.entries(container.NetworkSettings.Networks)) {
+        endpointCountsByName.set(networkName, (endpointCountsByName.get(networkName) ?? 0) + 1);
+        if (endpoint.NetworkID) {
+          endpointCountsById.set(
+            endpoint.NetworkID,
+            (endpointCountsById.get(endpoint.NetworkID) ?? 0) + 1,
+          );
+        }
+      }
+    }
+
+    return networks.map((network) =>
+      this.summarizeNetwork(
+        network,
+        endpointCountsById.get(network.Id) ?? endpointCountsByName.get(network.Name) ?? 0,
+      ),
     );
-    return networks.map((network) => this.summarizeNetwork(network));
   }
 
   /**
