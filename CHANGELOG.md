@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.3] - 2026-07-31
+
+### Fixed
+
+- Block one-click updates when either the container root filesystem or the
+  OpenLander data filesystem is below the free-space threshold, and show the
+  measured capacity in the update dialog.
+- Resolve completed multi-service deploy readiness from the exact
+  representative service without falling back to a stale canonical container.
+- Offer the latest release after completed, failed, or rolled-back update
+  operations instead of resubmitting an obsolete target version.
+
 ## [0.2.15-rc.2] - 2026-07-31
 
 ### Changed
