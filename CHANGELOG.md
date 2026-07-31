@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.2] - 2026-07-31
+
+### Changed
+
+- Keep the sidebar update affordance hidden when OpenLander is current, and
+  present available updates on a white surface with signature-color emphasis
+  and a neutral target-version label.
+
 ## [0.2.15-rc.1] - 2026-07-31
 
 ### Added
