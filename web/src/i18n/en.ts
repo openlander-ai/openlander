@@ -754,6 +754,7 @@ export const translations = {
       disk_space: {
         pass: 'At least 2 GiB is available for backup and image data.',
         fail: 'At least 2 GiB of free space is required.',
+        detail: '{available} GiB available / {required} GiB required',
       },
       compose_environment: {
         pass: 'The current Compose environment can be preserved safely.',

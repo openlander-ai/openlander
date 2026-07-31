@@ -72,7 +72,13 @@ export interface PlatformUpdaterOptions {
   releaseChecker?: PlatformReleaseChecker;
   environment?: NodeJS.ProcessEnv;
   now?: () => Date;
-  checkDiskSpace?: () => Promise<boolean>;
+  checkDiskSpace?: () => Promise<boolean | DiskSpaceCheck>;
+}
+
+interface DiskSpaceCheck {
+  ok: boolean;
+  availableBytes?: number;
+  requiredBytes: number;
 }
 
 interface PreflightResult {
@@ -145,7 +151,7 @@ export class PlatformUpdater {
   private readonly environment: NodeJS.ProcessEnv;
   private readonly now: () => Date;
   private readonly store: PlatformUpdateStateStore;
-  private readonly checkDiskSpace: () => Promise<boolean>;
+  private readonly checkDiskSpace: () => Promise<boolean | DiskSpaceCheck>;
   private starting = false;
 
   constructor(options: PlatformUpdaterOptions) {
@@ -164,8 +170,16 @@ export class PlatformUpdater {
     this.checkDiskSpace =
       options.checkDiskSpace ??
       (async () => {
-        const stats = await statfs(this.dataDir);
-        return stats.bavail * stats.bsize >= MINIMUM_FREE_BYTES;
+        const [rootStats, dataStats] = await Promise.all([statfs('/'), statfs(this.dataDir)]);
+        const availableBytes = Math.min(
+          rootStats.bavail * rootStats.bsize,
+          dataStats.bavail * dataStats.bsize,
+        );
+        return {
+          ok: availableBytes >= MINIMUM_FREE_BYTES,
+          availableBytes,
+          requiredBytes: MINIMUM_FREE_BYTES,
+        };
       });
   }
 
@@ -420,12 +434,21 @@ export class PlatformUpdater {
         composeEnvironmentReady = false;
       }
     }
-    let diskSpaceOk = false;
+    let diskSpace: DiskSpaceCheck = {
+      ok: false,
+      requiredBytes: MINIMUM_FREE_BYTES,
+    };
     try {
-      diskSpaceOk = await this.checkDiskSpace();
+      const result = await this.checkDiskSpace();
+      diskSpace =
+        typeof result === 'boolean' ? { ok: result, requiredBytes: MINIMUM_FREE_BYTES } : result;
     } catch {
-      diskSpaceOk = false;
+      diskSpace = {
+        ok: false,
+        requiredBytes: MINIMUM_FREE_BYTES,
+      };
     }
+    const diskSpaceOk = diskSpace.ok;
     const manifestOk = Boolean(release?.manifest && !release.oneClickBlockReason);
     return {
       deployActive,
@@ -477,6 +500,12 @@ export class PlatformUpdater {
           message: diskSpaceOk
             ? 'At least 2 GiB is available for the backup and image.'
             : 'At least 2 GiB of free space is required.',
+          ...(diskSpace.availableBytes !== undefined
+            ? {
+                availableBytes: diskSpace.availableBytes,
+                requiredBytes: diskSpace.requiredBytes,
+              }
+            : {}),
         },
       ],
     };

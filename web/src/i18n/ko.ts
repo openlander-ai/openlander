@@ -756,6 +756,7 @@ export const translations = {
       disk_space: {
         pass: '백업과 이미지 저장 공간이 2 GiB 이상 남아 있습니다.',
         fail: '사용 가능한 공간이 2 GiB 이상 필요합니다.',
+        detail: '사용 가능 {available} GiB / 필요 {required} GiB',
       },
       compose_environment: {
         pass: '현재 Compose 환경을 안전하게 보존할 수 있습니다.',

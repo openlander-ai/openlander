@@ -536,6 +536,12 @@ export const deployToolDefs: ToolDef[] = [
             ? project
             : await appCtx.db.getProject(runtimeProjectId);
         const view = await resolveServiceView(runtimeProjectId, runtimeProject);
+        const runtimeContainerId = representativeService
+          ? (representativeService.container_id ?? undefined)
+          : view?.containerId;
+        const runtimeStatus = representativeService
+          ? (representativeService.status ?? undefined)
+          : view?.status;
         const assignedPort =
           representativeService?.assigned_port ?? view?.assignedPort ?? undefined;
         const routeService = representativeService
@@ -583,8 +589,8 @@ export const deployToolDefs: ToolDef[] = [
         const trafficFailure = representativeTrafficFailed(representativeTraffic);
         const trafficWarning = representativeTrafficWarning(representativeTraffic);
         const readiness =
-          phase === 'done' && view?.containerId
-            ? await inspectContainerReadiness(appCtx, view.containerId)
+          phase === 'done' && runtimeContainerId
+            ? await inspectContainerReadiness(appCtx, runtimeContainerId)
             : undefined;
         const readinessMessage =
           readiness?.message ?? (readiness ? readinessGuidance(readiness.readiness) : undefined);
@@ -595,7 +601,7 @@ export const deployToolDefs: ToolDef[] = [
         const health = trafficFailure
           ? 'unhealthy'
           : (readiness?.readiness ??
-            (view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown')));
+            (runtimeStatus === 'idle' ? 'unknown' : (runtimeStatus ?? 'unknown')));
         const completedAt = parseDBTimestamp(log.created_at);
         const durationMs =
           typeof log.duration_ms === 'number' && Number.isFinite(log.duration_ms)

@@ -620,6 +620,162 @@ describe('get_deploy_status structured fields (O1)', () => {
     });
   });
 
+  it('completed deploy status inspects the exact non-canonical service container', async () => {
+    const project = { id: 'group', name: 'group', status: 'running' };
+    const service = {
+      id: 'api__svc',
+      name: 'api',
+      project_id: 'group',
+      status: 'running',
+      container_id: 'container-green',
+      assigned_port: 10001,
+      public_url: null,
+    };
+    const staleCanonicalService = {
+      ...service,
+      id: 'group__svc',
+      container_id: 'container-blue',
+    };
+    const inspectContainer = vi.fn(async (containerId: string) => {
+      if (containerId === 'container-blue') {
+        throw new Error('Container not found: container-blue');
+      }
+      return {
+        RestartCount: 0,
+        State: {
+          Running: true,
+          Restarting: false,
+          ExitCode: 0,
+          StartedAt: new Date(Date.now() - 10_000).toISOString(),
+          Health: { Status: 'healthy' },
+        },
+      };
+    });
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'multi-service-deploy'
+            ? {
+                id: 'multi-service-deploy',
+                service_id: service.id,
+                project_id: project.id,
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: JSON.stringify({
+                  status: 'passed',
+                  severity: 'ok',
+                  path: '/',
+                  status_code: 200,
+                }),
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === project.id ? staleCanonicalService : null,
+        ),
+      },
+      docker: { inspectContainer },
+      pipeline: { verifyManagedTraefikRoute: vi.fn() },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'multi-service-deploy' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    expect(result.jobs[0]).toMatchObject({
+      deploy_id: 'multi-service-deploy',
+      service_id: service.id,
+      project_id: project.id,
+      phase: 'done',
+      status: 'success',
+      health: 'healthy',
+      readiness: 'healthy',
+    });
+    expect(inspectContainer).toHaveBeenCalledWith('container-green');
+    expect(inspectContainer).not.toHaveBeenCalledWith('container-blue');
+  });
+
+  it('does not fall back to a stale canonical container when the representative service has none', async () => {
+    const project = { id: 'group', name: 'group', status: 'running' };
+    const service = {
+      id: 'api__svc',
+      name: 'api',
+      project_id: 'group',
+      status: 'stopped',
+      container_id: null,
+      assigned_port: null,
+      public_url: null,
+    };
+    const staleCanonicalService = {
+      ...service,
+      id: 'group__svc',
+      status: 'running',
+      container_id: 'container-blue',
+    };
+    const inspectContainer = vi.fn();
+    const ctx = {
+      config: { traefik: { mode: 'managed' } },
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'multi-service-deploy'
+            ? {
+                id: 'multi-service-deploy',
+                service_id: service.id,
+                project_id: project.id,
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                representative_traffic_json: JSON.stringify({
+                  status: 'passed',
+                  severity: 'ok',
+                  path: '/',
+                  status_code: 200,
+                }),
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === project.id ? staleCanonicalService : null,
+        ),
+      },
+      docker: { inspectContainer },
+      pipeline: { verifyManagedTraefikRoute: vi.fn() },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'multi-service-deploy' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    expect(result.jobs[0]).toMatchObject({
+      deploy_id: 'multi-service-deploy',
+      service_id: service.id,
+      project_id: project.id,
+      phase: 'done',
+      status: 'success',
+      health: 'stopped',
+    });
+    expect(result.jobs[0]).not.toHaveProperty('readiness');
+    expect(inspectContainer).not.toHaveBeenCalled();
+  });
+
   it('completed deploy status persists representative traffic success when missing from log', async () => {
     const project = { id: 'app', name: 'app', status: 'running', container_id: 'container-1' };
     const service = {

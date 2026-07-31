@@ -18,9 +18,23 @@ const ACTIVE_PHASES = new Set([
   'verifying',
   'rolling_back',
 ]);
+const TERMINAL_PHASES = new Set(['completed', 'rolled_back', 'failed']);
 
 export function isPlatformUpdateActive(operation: PlatformUpdateOperation | null): boolean {
   return Boolean(operation && ACTIVE_PHASES.has(operation.phase));
+}
+
+export function hasNewerPlatformRelease(
+  status: Pick<PlatformUpdateStatus, 'release' | 'updateAvailable'>,
+  operation: PlatformUpdateOperation | null,
+): boolean {
+  return Boolean(
+    operation &&
+    TERMINAL_PHASES.has(operation.phase) &&
+    status.updateAvailable &&
+    status.release &&
+    operation.targetVersion !== status.release.version,
+  );
 }
 
 export interface UsePlatformUpdateReturn {
