@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.1] - 2026-07-31
+
+### Added
+
+- Add a configurable, collision-checked Project network pool with explicit
+  `/24` allocation, deployment preflight, and capacity reporting through
+  `list_docker_networks`.
+
+### Changed
+
+- Refresh release metadata every 30 minutes, retry stale checks sooner, and
+  keep a manual update check visible with the last successful check time.
+- Preserve existing Docker networks while allocating only new
+  OpenLander-managed networks from `docker.projectNetworkPoolCidr`.
+
+### Fixed
+
+- Count Docker network endpoints from all running and stopped container
+  attachments when Docker omits endpoint details from its network list.
+- Avoid suggesting active networks as cleanup candidates, and reject exhausted
+  Project network pools before an image build or pull begins.
+- Restore the missing English and Korean Compose environment preflight labels.
+
 ## [0.2.14] - 2026-07-31
 
 ### Added
