@@ -15,7 +15,13 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
   const failed = operation?.phase === 'failed';
   if (!status) return null;
 
-  const targetVersion = operation?.targetVersion ?? status.release?.version ?? '';
+  const completedHasNewerRelease =
+    operation?.phase === 'completed' &&
+    status.updateAvailable &&
+    operation.targetVersion !== status.release?.version;
+  const targetVersion = completedHasNewerRelease
+    ? (status.release?.version ?? '')
+    : (operation?.targetVersion ?? status.release?.version ?? '');
   const available = status.updateAvailable && !active && !rolledBack && !failed;
   const checkUnavailable =
     status.releaseCheckStale && !active && !rolledBack && !failed && !available;

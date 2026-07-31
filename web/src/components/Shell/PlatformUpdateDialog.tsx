@@ -52,7 +52,13 @@ export function PlatformUpdateDialog() {
 
   if (!status) return null;
   const active = isPlatformUpdateActive(operation) || platformUpdateState.reconnecting;
-  const targetVersion = operation?.targetVersion ?? status.release?.version ?? '';
+  const completedHasNewerRelease =
+    operation?.phase === 'completed' &&
+    status.updateAvailable &&
+    operation.targetVersion !== status.release?.version;
+  const targetVersion = completedHasNewerRelease
+    ? (status.release?.version ?? '')
+    : (operation?.targetVersion ?? status.release?.version ?? '');
   const currentPhaseIndex = operation
     ? PHASES.indexOf(operation.phase as (typeof PHASES)[number])
     : -1;
@@ -158,7 +164,7 @@ export function PlatformUpdateDialog() {
             </Button>
           </div>
 
-          {active || terminal ? (
+          {active || (terminal && !completedHasNewerRelease) ? (
             <div className="space-y-3" aria-live="polite">
               <div className="flex items-center gap-2 text-sm font-medium">
                 {active && (
@@ -271,7 +277,9 @@ export function PlatformUpdateDialog() {
                 <ExternalLink className="h-4 w-4" />
               </a>
             </Button>
-          ) : status.updateAvailable && !active && operation?.phase !== 'completed' ? (
+          ) : status.updateAvailable &&
+            !active &&
+            (operation?.phase !== 'completed' || completedHasNewerRelease) ? (
             <Button
               onClick={() => void onUpdate()}
               disabled={!status.canUpdate || platformUpdateState.submitting}

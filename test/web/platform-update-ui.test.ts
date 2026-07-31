@@ -71,6 +71,9 @@ describe('platform update sidebar and dialog contract', () => {
     expect(dialog).toContain("t('platformUpdate.dialog.checkNow')");
     expect(dialog).toContain("t('platformUpdate.dialog.releaseCheckStale')");
     expect(dialog).toContain("t('platformUpdate.dialog.statusUnavailable')");
+    expect(button).toContain('completedHasNewerRelease');
+    expect(dialog).toContain('completedHasNewerRelease');
+    expect(dialog).toContain("operation?.phase !== 'completed' || completedHasNewerRelease");
   });
 
   it('reserves the error color for rollback failure and keeps rollback as warning', () => {
