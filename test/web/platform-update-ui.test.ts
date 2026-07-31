@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { hasNewerPlatformRelease } from '../../web/src/hooks/use-platform-update.js';
+import type {
+  PlatformUpdateOperation,
+  PlatformUpdateStatus,
+} from '../../web/src/lib/api/system.js';
 
 function source(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8');
@@ -14,6 +19,51 @@ describe('platform update sidebar and dialog contract', () => {
   const appShell = source('web/src/components/Shell/AppShell.tsx');
   const en = source('web/src/i18n/en.ts');
   const ko = source('web/src/i18n/ko.ts');
+
+  it.each(['completed', 'rolled_back', 'failed'] as const)(
+    'offers a newer release after a %s operation',
+    (phase) => {
+      const status = {
+        updateAvailable: true,
+        release: { version: '0.2.15-rc.3' },
+      } as PlatformUpdateStatus;
+      const operation = {
+        phase,
+        targetVersion: '0.2.15-rc.2',
+      } as PlatformUpdateOperation;
+
+      expect(hasNewerPlatformRelease(status, operation)).toBe(true);
+    },
+  );
+
+  it('does not replace an active, current, or release-less update target', () => {
+    const status = {
+      updateAvailable: true,
+      release: { version: '0.2.15-rc.3' },
+    } as PlatformUpdateStatus;
+
+    expect(
+      hasNewerPlatformRelease(status, {
+        phase: 'verifying',
+        targetVersion: '0.2.15-rc.2',
+      } as PlatformUpdateOperation),
+    ).toBe(false);
+    expect(
+      hasNewerPlatformRelease(status, {
+        phase: 'completed',
+        targetVersion: '0.2.15-rc.3',
+      } as PlatformUpdateOperation),
+    ).toBe(false);
+    expect(
+      hasNewerPlatformRelease(
+        { ...status, release: null },
+        {
+          phase: 'completed',
+          targetVersion: '0.2.15-rc.2',
+        } as PlatformUpdateOperation,
+      ),
+    ).toBe(false);
+  });
 
   it('places the update affordance immediately above the account card', () => {
     expect(sidebar.indexOf('<PlatformUpdateButton')).toBeGreaterThan(-1);
@@ -71,9 +121,11 @@ describe('platform update sidebar and dialog contract', () => {
     expect(dialog).toContain("t('platformUpdate.dialog.checkNow')");
     expect(dialog).toContain("t('platformUpdate.dialog.releaseCheckStale')");
     expect(dialog).toContain("t('platformUpdate.dialog.statusUnavailable')");
-    expect(button).toContain('completedHasNewerRelease');
-    expect(dialog).toContain('completedHasNewerRelease');
-    expect(dialog).toContain("operation?.phase !== 'completed' || completedHasNewerRelease");
+    expect(button).toContain('terminalHasNewerRelease');
+    expect(button).toContain('hasNewerPlatformRelease(status, operation)');
+    expect(dialog).toContain('terminalHasNewerRelease');
+    expect(dialog).toContain('terminal && !terminalHasNewerRelease');
+    expect(dialog).toContain("operation?.phase !== 'completed' || terminalHasNewerRelease");
   });
 
   it('reserves the error color for rollback failure and keeps rollback as warning', () => {

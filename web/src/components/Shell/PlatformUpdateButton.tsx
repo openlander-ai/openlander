@@ -1,7 +1,7 @@
 import { AlertCircle, ArrowUpCircle, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAppData } from '@/hooks/use-app-data';
-import { isPlatformUpdateActive } from '@/hooks/use-platform-update';
+import { hasNewerPlatformRelease, isPlatformUpdateActive } from '@/hooks/use-platform-update';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
@@ -11,15 +11,12 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
   const status = platformUpdateState.status;
   const operation = status?.operation ?? null;
   const active = isPlatformUpdateActive(operation) || platformUpdateState.reconnecting;
-  const rolledBack = operation?.phase === 'rolled_back';
-  const failed = operation?.phase === 'failed';
   if (!status) return null;
 
-  const completedHasNewerRelease =
-    operation?.phase === 'completed' &&
-    status.updateAvailable &&
-    operation.targetVersion !== status.release?.version;
-  const targetVersion = completedHasNewerRelease
+  const terminalHasNewerRelease = hasNewerPlatformRelease(status, operation);
+  const rolledBack = operation?.phase === 'rolled_back' && !terminalHasNewerRelease;
+  const failed = operation?.phase === 'failed' && !terminalHasNewerRelease;
+  const targetVersion = terminalHasNewerRelease
     ? (status.release?.version ?? '')
     : (operation?.targetVersion ?? status.release?.version ?? '');
   const available = status.updateAvailable && !active && !rolledBack && !failed;

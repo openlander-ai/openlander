@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAppData } from '@/hooks/use-app-data';
-import { isPlatformUpdateActive } from '@/hooks/use-platform-update';
+import { hasNewerPlatformRelease, isPlatformUpdateActive } from '@/hooks/use-platform-update';
 import { useLanguage } from '@/i18n/context';
 import { ApiError } from '@/lib/api/client';
 import { formatDateTime } from '@/lib/time';
@@ -52,19 +52,18 @@ export function PlatformUpdateDialog() {
 
   if (!status) return null;
   const active = isPlatformUpdateActive(operation) || platformUpdateState.reconnecting;
-  const completedHasNewerRelease =
-    operation?.phase === 'completed' &&
-    status.updateAvailable &&
-    operation.targetVersion !== status.release?.version;
-  const targetVersion = completedHasNewerRelease
+  const terminalHasNewerRelease = hasNewerPlatformRelease(status, operation);
+  const targetVersion = terminalHasNewerRelease
     ? (status.release?.version ?? '')
     : (operation?.targetVersion ?? status.release?.version ?? '');
   const currentPhaseIndex = operation
     ? PHASES.indexOf(operation.phase as (typeof PHASES)[number])
     : -1;
-  const rolledBack = operation?.phase === 'rolled_back';
-  const failed = operation?.phase === 'failed';
-  const terminal = operation?.phase === 'completed' || rolledBack || failed;
+  const operationRolledBack = operation?.phase === 'rolled_back';
+  const operationFailed = operation?.phase === 'failed';
+  const rolledBack = operationRolledBack && !terminalHasNewerRelease;
+  const failed = operationFailed && !terminalHasNewerRelease;
+  const terminal = operation?.phase === 'completed' || operationRolledBack || operationFailed;
   const manualRequired =
     status.updateAvailable &&
     (status.support.mode === 'manual' || Boolean(status.release?.oneClickBlockReason));
@@ -164,7 +163,7 @@ export function PlatformUpdateDialog() {
             </Button>
           </div>
 
-          {active || (terminal && !completedHasNewerRelease) ? (
+          {active || (terminal && !terminalHasNewerRelease) ? (
             <div className="space-y-3" aria-live="polite">
               <div className="flex items-center gap-2 text-sm font-medium">
                 {active && (
@@ -279,7 +278,7 @@ export function PlatformUpdateDialog() {
             </Button>
           ) : status.updateAvailable &&
             !active &&
-            (operation?.phase !== 'completed' || completedHasNewerRelease) ? (
+            (operation?.phase !== 'completed' || terminalHasNewerRelease) ? (
             <Button
               onClick={() => void onUpdate()}
               disabled={!status.canUpdate || platformUpdateState.submitting}
