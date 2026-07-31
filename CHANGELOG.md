@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.14-rc.12] - 2026-07-31
+
+### Fixed
+
+- Decode BuildKit v2 progress messages for Dockerfile and Compose builds so
+  complete build output is retained in deployment history and live progress.
+
 ## [0.2.14-rc.11] - 2026-07-31
 
 ### Fixed
