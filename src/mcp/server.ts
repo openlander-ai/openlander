@@ -583,6 +583,10 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     };
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
+      // Tool results are finite request/response payloads. Returning them as
+      // JSON avoids proxy buffering and incomplete SSE termination while the
+      // separate GET stream remains available for server-initiated events.
+      enableJsonResponse: true,
       onsessioninitialized: (sid) => {
         httpSessionId = sid;
         const now = Date.now();
