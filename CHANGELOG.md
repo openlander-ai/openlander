@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.4] - 2026-07-31
+
+### Fixed
+
+- Complete finite MCP HTTP tool calls with JSON responses so reverse proxies do
+  not leave clients waiting on an open SSE response, while preserving the SSE
+  GET channel for server notifications.
+
 ## [0.2.15-rc.3] - 2026-07-31
 
 ### Fixed
