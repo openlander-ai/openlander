@@ -20,9 +20,10 @@ describe('platform update sidebar and dialog contract', () => {
     expect(sidebar.indexOf('<PlatformUpdateButton')).toBeLessThan(
       sidebar.indexOf('<AccountPopover'),
     );
-    expect(button).toContain('!status.updateAvailable && !active');
-    expect(button).toContain('&& !rolledBack && !failed');
+    expect(button).toContain('if (!status) return null');
     expect(button).toContain("t('platformUpdate.button.available'");
+    expect(button).toContain("t('platformUpdate.button.upToDate'");
+    expect(button).toContain("t('platformUpdate.button.checkUnavailable'");
   });
 
   it('supports expanded, collapsed, and mobile sidebars from one shared state', () => {
@@ -35,9 +36,12 @@ describe('platform update sidebar and dialog contract', () => {
     expect(appShell.match(/<PlatformUpdateDialog/g)).toHaveLength(1);
   });
 
-  it('keeps progress across a restart and retries status every two seconds', () => {
+  it('keeps progress across a restart and adapts polling to active and stale states', () => {
     expect(hook).toContain('const ACTIVE_POLL_MS = 2_000');
-    expect(hook).toContain('const IDLE_POLL_MS = 6 * 60 * 60 * 1000');
+    expect(hook).toContain('const STALE_POLL_MS = 2 * 60 * 1000');
+    expect(hook).toContain('const IDLE_POLL_MS = 30 * 60 * 1000');
+    expect(hook).toContain('status?.releaseCheckStale');
+    expect(hook).toContain('refreshRelease: true');
     expect(hook).toContain('Keep the last successful status visible');
     expect(hook).not.toContain('setStatus(null)');
     expect(dialog).toContain('aria-live="polite"');
@@ -53,6 +57,10 @@ describe('platform update sidebar and dialog contract', () => {
     expect(dialog).toContain('status.release?.oneClickBlockReason');
     expect(dialog).toContain('manualUpdateUrl');
     expect(dialog).toContain("t('platformUpdate.dialog.updateNow')");
+    expect(dialog).toContain("t('platformUpdate.dialog.checkedAt'");
+    expect(dialog).toContain("t('platformUpdate.dialog.checkNow')");
+    expect(dialog).toContain("t('platformUpdate.dialog.releaseCheckStale')");
+    expect(dialog).toContain("t('platformUpdate.dialog.statusUnavailable')");
   });
 
   it('reserves the error color for rollback failure and keeps rollback as warning', () => {
@@ -74,6 +82,7 @@ describe('platform update sidebar and dialog contract', () => {
       'release_manifest',
       'active_operations',
       'disk_space',
+      'compose_environment',
     ]) {
       expect(en).toContain(key);
       expect(ko).toContain(key);

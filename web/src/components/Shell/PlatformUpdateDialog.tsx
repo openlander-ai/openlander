@@ -1,5 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { Check, CircleAlert, ExternalLink, LoaderCircle, RotateCcw, X } from 'lucide-react';
+import {
+  Check,
+  CheckCircle2,
+  CircleAlert,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+  RotateCcw,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +23,7 @@ import { useAppData } from '@/hooks/use-app-data';
 import { isPlatformUpdateActive } from '@/hooks/use-platform-update';
 import { useLanguage } from '@/i18n/context';
 import { ApiError } from '@/lib/api/client';
+import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 const PHASES = ['preparing', 'backing_up', 'pulling', 'restarting', 'verifying'] as const;
@@ -45,7 +55,8 @@ export function PlatformUpdateDialog() {
   const failed = operation?.phase === 'failed';
   const terminal = operation?.phase === 'completed' || rolledBack || failed;
   const manualRequired =
-    status.support.mode === 'manual' || Boolean(status.release?.oneClickBlockReason);
+    status.updateAvailable &&
+    (status.support.mode === 'manual' || Boolean(status.release?.oneClickBlockReason));
 
   const onUpdate = async () => {
     if (!targetVersion) return;
@@ -53,6 +64,14 @@ export function PlatformUpdateDialog() {
       await platformUpdateState.startUpdate(targetVersion);
     } catch (error) {
       if (error instanceof ApiError) toast.error(t('platformUpdate.toast.startFailed'));
+    }
+  };
+
+  const onCheckNow = async () => {
+    try {
+      await platformUpdateState.checkNow();
+    } catch {
+      toast.error(t('platformUpdate.toast.checkFailed'));
     }
   };
 
@@ -72,15 +91,66 @@ export function PlatformUpdateDialog() {
               </div>
               <div className="font-mono text-sm">v{status.currentVersion}</div>
             </div>
-            <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
-              →
-            </span>
-            <div className="min-w-0 flex-1 text-right">
-              <div className="text-[11px] uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
-                {t('platformUpdate.dialog.targetVersion')}
+            {status.updateAvailable || operation ? (
+              <>
+                <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
+                  →
+                </span>
+                <div className="min-w-0 flex-1 text-right">
+                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--ol-fg-subtle)]">
+                    {t('platformUpdate.dialog.targetVersion')}
+                  </div>
+                  <div className="font-mono text-sm">v{targetVersion}</div>
+                </div>
+              </>
+            ) : (
+              <div
+                className={cn(
+                  'flex items-center gap-2 text-sm',
+                  status.releaseCheckStale
+                    ? 'text-[color:var(--ol-warning)]'
+                    : 'text-[color:var(--ol-success)]',
+                )}
+              >
+                {status.releaseCheckStale ? (
+                  <CircleAlert className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {status.releaseCheckStale
+                  ? t('platformUpdate.dialog.statusUnavailable')
+                  : t('platformUpdate.dialog.upToDate')}
               </div>
-              <div className="font-mono text-sm">v{targetVersion}</div>
+            )}
+          </div>
+
+          <div className="flex items-start justify-between gap-3 rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-2">
+            <div className="min-w-0 text-xs text-[color:var(--ol-fg-muted)]">
+              <p>
+                {t('platformUpdate.dialog.checkedAt', {
+                  time: formatDateTime(status.releaseCheckedAt),
+                })}
+              </p>
+              {status.releaseCheckStale && (
+                <p className="mt-1 text-[color:var(--ol-warning)]">
+                  {t('platformUpdate.dialog.releaseCheckStale')}
+                </p>
+              )}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onCheckNow()}
+              disabled={platformUpdateState.checking || active}
+            >
+              <RefreshCw
+                className={cn('h-3.5 w-3.5', platformUpdateState.checking && 'animate-spin')}
+              />
+              {platformUpdateState.checking
+                ? t('platformUpdate.dialog.checking')
+                : t('platformUpdate.dialog.checkNow')}
+            </Button>
           </div>
 
           {active || terminal ? (
@@ -127,7 +197,7 @@ export function PlatformUpdateDialog() {
                 </p>
               )}
             </div>
-          ) : (
+          ) : status.updateAvailable ? (
             <>
               {status.release && status.release.notes.length > 0 && (
                 <section>
@@ -169,6 +239,12 @@ export function PlatformUpdateDialog() {
                 {t('platformUpdate.dialog.reconnectNotice')}
               </p>
             </>
+          ) : (
+            <p className="text-sm text-[color:var(--ol-fg-muted)]">
+              {status.releaseCheckStale
+                ? t('platformUpdate.dialog.noFreshReleaseData')
+                : t('platformUpdate.dialog.noUpdateAvailable')}
+            </p>
           )}
         </div>
 
@@ -180,7 +256,7 @@ export function PlatformUpdateDialog() {
                 <ExternalLink className="h-4 w-4" />
               </a>
             </Button>
-          ) : !active && operation?.phase !== 'completed' ? (
+          ) : status.updateAvailable && !active && operation?.phase !== 'completed' ? (
             <Button
               onClick={() => void onUpdate()}
               disabled={!status.canUpdate || platformUpdateState.submitting}

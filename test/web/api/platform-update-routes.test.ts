@@ -17,6 +17,7 @@ function appHarness(options: { authenticated: boolean; startError?: OpenLanderEr
     checks: [],
     operation: null,
     releaseCheckStale: false,
+    releaseCheckedAt: '2026-07-31T00:00:00.000Z',
   }));
   const startUpdate = options.startError
     ? vi.fn(async () => Promise.reject(options.startError))
@@ -63,6 +64,15 @@ describe('platform update REST routes', () => {
     ).toBe(401);
     expect(getStatus).not.toHaveBeenCalled();
     expect(startUpdate).not.toHaveBeenCalled();
+  });
+
+  it('bypasses the release cache only for an explicit refresh query', async () => {
+    const { app, getStatus } = appHarness({ authenticated: true });
+    const headers = { cookie: 'ol_session=session-token' };
+
+    expect((await app.request('/api/system/update?refresh=true', { headers })).status).toBe(200);
+
+    expect(getStatus).toHaveBeenCalledWith({ refreshRelease: true });
   });
 
   it('returns the status contract and accepts an exact target with 202', async () => {

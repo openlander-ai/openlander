@@ -689,6 +689,8 @@ export const translations = {
       progress: 'Updating OpenLander',
       rolledBack: 'Update restored',
       failed: 'Update needs attention',
+      upToDate: 'v{version} is up to date',
+      checkUnavailable: 'Update check needs attention',
     },
     dialog: {
       title: 'Update OpenLander',
@@ -709,6 +711,16 @@ export const translations = {
         'The previous version is running again. Your database backup was kept for inspection; review the error before retrying.',
       failedHelp:
         'OpenLander could not complete the update or automatic rollback. Follow the manual recovery guide.',
+      upToDate: 'Up to date',
+      statusUnavailable: 'Status unavailable',
+      checkedAt: 'Release metadata checked {time}',
+      releaseCheckStale:
+        'The latest release metadata could not be loaded. Cached information may be shown.',
+      checkNow: 'Check now',
+      checking: 'Checking…',
+      noUpdateAvailable: 'No newer release is available for this update channel.',
+      noFreshReleaseData:
+        'OpenLander cannot confirm whether a newer release is available until the release check succeeds.',
     },
     phase: {
       preparing: 'Preparing update',
@@ -742,12 +754,17 @@ export const translations = {
         pass: 'At least 2 GiB is available for backup and image data.',
         fail: 'At least 2 GiB of free space is required.',
       },
+      compose_environment: {
+        pass: 'The current Compose environment can be preserved safely.',
+        fail: 'The current Compose environment cannot be preserved for one-click update.',
+      },
     },
     toast: {
       completed: 'OpenLander was updated successfully.',
       rolledBack: 'The update failed, so OpenLander restored the previous version.',
       failed: 'The update and automatic rollback failed.',
       startFailed: 'The update could not be started. Review the preflight checks and try again.',
+      checkFailed: 'OpenLander could not check for releases. Try again shortly.',
     },
   },
   topBar: {

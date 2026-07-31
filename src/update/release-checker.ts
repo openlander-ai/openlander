@@ -10,7 +10,7 @@ import {
 import type { OpenLanderUpdateManifest, PlatformReleaseSummary, ReleaseChannel } from './types.js';
 
 const log = createModuleLogger('platform-update:release-checker');
-const DEFAULT_CACHE_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_CACHE_MS = 30 * 60 * 1000;
 const RELEASES_URL = 'https://api.github.com/repos/openlander-ai/openlander/releases?per_page=30';
 const OFFICIAL_IMAGE_PREFIX = 'ghcr.io/openlander-ai/openlander:';
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
@@ -39,6 +39,7 @@ interface ReleaseCacheEntry {
 export interface ReleaseCheckResult {
   release: PlatformReleaseSummary | null;
   stale: boolean;
+  checkedAt: number;
 }
 
 export interface PlatformReleaseCheckerOptions {
@@ -121,23 +122,35 @@ export class PlatformReleaseChecker {
     this.currentVersion = options.currentVersion;
   }
 
-  async check(): Promise<ReleaseCheckResult> {
+  async check(options: { refresh?: boolean } = {}): Promise<ReleaseCheckResult> {
     const channel = inferReleaseChannel(this.currentVersion);
-    if (channel === 'development') return { release: null, stale: false };
-    if (this.cache && this.now() - this.cache.checkedAt < this.cacheMs) {
-      return { release: this.selectLatest(this.cache.releases, channel), stale: false };
+    if (channel === 'development') {
+      return { release: null, stale: false, checkedAt: this.now() };
+    }
+    if (!options.refresh && this.cache && this.now() - this.cache.checkedAt < this.cacheMs) {
+      return {
+        release: this.selectLatest(this.cache.releases, channel),
+        stale: false,
+        checkedAt: this.cache.checkedAt,
+      };
     }
     try {
       const releases = await this.fetchReleases(channel);
-      this.cache = { checkedAt: this.now(), releases };
-      return { release: this.selectLatest(releases, channel), stale: false };
+      const checkedAt = this.now();
+      this.cache = { checkedAt, releases };
+      return { release: this.selectLatest(releases, channel), stale: false, checkedAt };
     } catch (error) {
+      const checkedAt = this.now();
       if (this.cache) {
         log.warn({ error }, 'Release check failed; using the last successful result');
-        return { release: this.selectLatest(this.cache.releases, channel), stale: true };
+        return {
+          release: this.selectLatest(this.cache.releases, channel),
+          stale: true,
+          checkedAt,
+        };
       }
       log.warn({ error }, 'Release check failed without a cached result');
-      return { release: null, stale: true };
+      return { release: null, stale: true, checkedAt };
     }
   }
 

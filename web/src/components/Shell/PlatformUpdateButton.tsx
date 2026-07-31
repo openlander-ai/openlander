@@ -1,4 +1,11 @@
-import { AlertCircle, ArrowUpCircle, LoaderCircle, RotateCcw } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowUpCircle,
+  CheckCircle2,
+  LoaderCircle,
+  RefreshCw,
+  RotateCcw,
+} from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAppData } from '@/hooks/use-app-data';
 import { isPlatformUpdateActive } from '@/hooks/use-platform-update';
@@ -13,7 +20,7 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
   const active = isPlatformUpdateActive(operation) || platformUpdateState.reconnecting;
   const rolledBack = operation?.phase === 'rolled_back';
   const failed = operation?.phase === 'failed';
-  if (!status || (!status.updateAvailable && !active && !rolledBack && !failed)) return null;
+  if (!status) return null;
 
   const targetVersion = operation?.targetVersion ?? status.release?.version ?? '';
   const label = active
@@ -22,14 +29,24 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
       ? t('platformUpdate.button.rolledBack')
       : failed
         ? t('platformUpdate.button.failed')
-        : t('platformUpdate.button.available', { version: targetVersion });
+        : status.updateAvailable
+          ? t('platformUpdate.button.available', { version: targetVersion })
+          : status.releaseCheckStale
+            ? t('platformUpdate.button.checkUnavailable')
+            : t('platformUpdate.button.upToDate', { version: status.currentVersion });
   const Icon = active
     ? LoaderCircle
     : rolledBack
       ? RotateCcw
       : failed
         ? AlertCircle
-        : ArrowUpCircle;
+        : status.updateAvailable
+          ? ArrowUpCircle
+          : status.releaseCheckStale
+            ? RefreshCw
+            : CheckCircle2;
+  const attention =
+    active || rolledBack || failed || status.updateAvailable || status.releaseCheckStale;
   const button = (
     <button
       type="button"
@@ -39,7 +56,9 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
         'relative flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-[13px] font-medium transition-colors',
         failed
           ? 'border-[color:var(--ol-error)]/40 bg-[color:var(--ol-error)]/10 text-[color:var(--ol-error)]'
-          : 'border-[color:var(--ol-warning)]/40 bg-[color:var(--ol-warning)]/10 text-[color:var(--ol-fg)] hover:bg-[color:var(--ol-warning)]/15',
+          : attention
+            ? 'border-[color:var(--ol-warning)]/40 bg-[color:var(--ol-warning)]/10 text-[color:var(--ol-fg)] hover:bg-[color:var(--ol-warning)]/15'
+            : 'border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]',
         collapsed && 'justify-center px-2',
       )}
     >
@@ -50,7 +69,11 @@ export function PlatformUpdateButton({ collapsed }: { collapsed: boolean }) {
           aria-hidden
           className={cn(
             'absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full',
-            failed ? 'bg-[color:var(--ol-error)]' : 'bg-[color:var(--ol-warning)]',
+            failed
+              ? 'bg-[color:var(--ol-error)]'
+              : attention
+                ? 'bg-[color:var(--ol-warning)]'
+                : 'bg-[color:var(--ol-success)]',
           )}
         />
       )}

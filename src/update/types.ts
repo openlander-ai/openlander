@@ -64,6 +64,7 @@ export interface PlatformUpdateStatus {
   }>;
   operation: PlatformUpdateOperation | null;
   releaseCheckStale: boolean;
+  releaseCheckedAt: string;
 }
 
 export interface ComposeInstallation {

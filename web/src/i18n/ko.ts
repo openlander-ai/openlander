@@ -692,6 +692,8 @@ export const translations = {
       progress: 'OpenLander 업데이트 중',
       rolledBack: '이전 버전으로 복구됨',
       failed: '업데이트 확인 필요',
+      upToDate: 'v{version} 최신 상태',
+      checkUnavailable: '업데이트 확인 필요',
     },
     dialog: {
       title: 'OpenLander 업데이트',
@@ -711,6 +713,16 @@ export const translations = {
       rolledBackHelp:
         '이전 버전이 다시 실행 중입니다. 확인을 위해 DB 백업은 보존했습니다. 오류를 확인한 뒤 다시 시도하세요.',
       failedHelp: '업데이트와 자동 복구를 모두 완료하지 못했습니다. 수동 복구 안내를 따라 주세요.',
+      upToDate: '최신 상태',
+      statusUnavailable: '상태 확인 불가',
+      checkedAt: '릴리스 정보 확인: {time}',
+      releaseCheckStale:
+        '최신 릴리스 정보를 불러오지 못했습니다. 캐시된 정보가 표시될 수 있습니다.',
+      checkNow: '지금 확인',
+      checking: '확인 중…',
+      noUpdateAvailable: '현재 업데이트 채널에 더 새로운 릴리스가 없습니다.',
+      noFreshReleaseData:
+        '릴리스 확인에 성공하기 전에는 더 새로운 버전이 있는지 확정할 수 없습니다.',
     },
     phase: {
       preparing: '업데이트 준비 중',
@@ -744,12 +756,17 @@ export const translations = {
         pass: '백업과 이미지 저장 공간이 2 GiB 이상 남아 있습니다.',
         fail: '사용 가능한 공간이 2 GiB 이상 필요합니다.',
       },
+      compose_environment: {
+        pass: '현재 Compose 환경을 안전하게 보존할 수 있습니다.',
+        fail: '원클릭 업데이트에서 현재 Compose 환경을 보존할 수 없습니다.',
+      },
     },
     toast: {
       completed: 'OpenLander 업데이트를 완료했습니다.',
       rolledBack: '업데이트에 실패해 이전 버전으로 자동 복구했습니다.',
       failed: '업데이트와 자동 복구에 실패했습니다.',
       startFailed: '업데이트를 시작하지 못했습니다. 사전 점검 결과를 확인한 뒤 다시 시도하세요.',
+      checkFailed: '릴리스를 확인하지 못했습니다. 잠시 후 다시 시도하세요.',
     },
   },
   topBar: {
