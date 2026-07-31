@@ -247,6 +247,7 @@ export async function buildProject(
   deps: DeployOrchestrationDeps,
   params: {
     projectId: string;
+    projectName: string;
     environmentId: string;
     branch?: string;
     routeName: string;
@@ -276,6 +277,7 @@ export async function buildProject(
 > {
   const {
     projectId,
+    projectName,
     environmentId,
     branch,
     routeName,
@@ -514,6 +516,9 @@ export async function buildProject(
       buildLog += `[warning]   → To change: update_service_config(dockerfile_path="${changed}")\n`;
     }
   }
+
+  await deps.runtime.preflightProjectNetwork?.(config._networkProjectName ?? projectName);
+  buildLog += '[network] Project network capacity verified before image build\n';
 
   const buildTimeVars = await resolveEnvVarsForBuild(
     {

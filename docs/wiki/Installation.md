@@ -252,16 +252,21 @@ Config file: `~/.openlander/config.json`
 
 ### Key Settings
 
-| Section                             | Key     | Default      | Description                |
-| ----------------------------------- | ------- | ------------ | -------------------------- |
-| `server.port`                       | number  | `10114`      | Web UI port                |
-| `server.host`                       | string  | `0.0.0.0`    | Bind address               |
-| `docker.networkName`                | string  | `openlander` | Docker network             |
-| `docker.portRangeStart`             | number  | `10001`      | Container port range start |
-| `docker.portRangeEnd`               | number  | `10999`      | Container port range end   |
-| `traefik.mode`                      | string  | `managed`    | `managed` or `external`    |
-| `monitoring.healthcheckIntervalSec` | number  | `60`         | Health check interval      |
-| `mcp.enabled`                       | boolean | `false`      | MCP server                 |
+| Section                             | Key     | Default         | Description                         |
+| ----------------------------------- | ------- | --------------- | ----------------------------------- |
+| `server.port`                       | number  | `10114`         | Web UI port                         |
+| `server.host`                       | string  | `0.0.0.0`       | Bind address                        |
+| `docker.networkName`                | string  | `openlander`    | Docker network                      |
+| `docker.projectNetworkPoolCidr`     | string  | `10.240.0.0/12` | IPv4 pool split into `/24` networks |
+| `docker.portRangeStart`             | number  | `10001`         | Container port range start          |
+| `docker.portRangeEnd`               | number  | `10999`         | Container port range end            |
+| `traefik.mode`                      | string  | `managed`       | `managed` or `external`             |
+| `monitoring.healthcheckIntervalSec` | number  | `60`            | Health check interval               |
+| `mcp.enabled`                       | boolean | `false`         | MCP server                          |
+
+`docker.projectNetworkPoolCidr` must be a canonical IPv4 network between `/12`
+and `/24`. It affects only networks created after the setting changes; existing
+Project networks keep their current subnet.
 
 > Built-in LLM provider setup and AI Ops are disabled in OpenLander 0.1.
 > Use an external MCP-capable coding agent to inspect logs and operate deployments.

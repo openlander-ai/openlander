@@ -25,6 +25,17 @@ const compactNetworkSchema = z.object({
   cleanup_blocker: z.string().nullable(),
 });
 
+const projectNetworkPoolSchema = z
+  .object({
+    cidr: z.string(),
+    subnet_prefix: z.number().int().min(0).max(32),
+    total_subnets: z.number().int().nonnegative(),
+    unavailable_subnets: z.number().int().nonnegative(),
+    available_subnets: z.number().int().nonnegative(),
+    pressure: z.enum(['ok', 'low', 'exhausted']),
+  })
+  .strict();
+
 function compactNetwork(network: DockerNetworkSummary) {
   return {
     network_id: network.id,
@@ -42,7 +53,7 @@ function compactNetwork(network: DockerNetworkSummary) {
 
 export const listDockerNetworksOperation: ApplicationOperationDefinition = {
   name: 'list_docker_networks',
-  version: 1,
+  version: 2,
   description:
     'List Docker networks with OpenLander instance ownership, endpoint counts, subnets, and safe cleanup eligibility.',
   kind: 'query',
@@ -58,6 +69,7 @@ export const listDockerNetworksOperation: ApplicationOperationDefinition = {
       cleanup_eligible_count: z.number().int().nonnegative(),
       legacy_confirmation_count: z.number().int().nonnegative(),
       external_count: z.number().int().nonnegative(),
+      project_network_pool: projectNetworkPoolSchema,
       networks: z.array(compactNetworkSchema),
       suggested_call: z
         .object({
@@ -75,6 +87,7 @@ export const listDockerNetworksOperation: ApplicationOperationDefinition = {
   activity: { recordsActivity: false, recordsEvidence: false },
   execute: async (input, context) => {
     const networks = await context.appCtx.docker.listNetworks();
+    const projectNetworkPool = context.appCtx.docker.getProjectNetworkPoolStatus(networks);
     const includeExternal = input['include_external'] === true;
     const visible = includeExternal
       ? networks
@@ -94,6 +107,14 @@ export const listDockerNetworksOperation: ApplicationOperationDefinition = {
         (network) => network.cleanupBlocker === 'legacy_confirmation_required',
       ).length,
       external_count: networks.filter((network) => network.ownership === 'external').length,
+      project_network_pool: {
+        cidr: projectNetworkPool.cidr,
+        subnet_prefix: projectNetworkPool.subnetPrefix,
+        total_subnets: projectNetworkPool.totalSubnets,
+        unavailable_subnets: projectNetworkPool.unavailableSubnets,
+        available_subnets: projectNetworkPool.availableSubnets,
+        pressure: projectNetworkPool.pressure,
+      },
       networks: visible.map(compactNetwork),
       ...(cleanupCandidate
         ? {
@@ -111,13 +132,23 @@ export const listDockerNetworksOperation: ApplicationOperationDefinition = {
         : {}),
       _agent_guidance: {
         message:
-          'Network inventory is read-only. Cleanup requires the exact network name and id, zero endpoints, and human approval.',
-        next_steps: cleanupCandidate
-          ? [
-              'Review the selected network ownership and subnet before requesting cleanup.',
-              'Call the suggested operation once, then poll the returned approval status.',
-            ]
-          : ['Do not remove active, external, shared, or other-instance networks.'],
+          projectNetworkPool.pressure === 'exhausted'
+            ? 'The OpenLander Project network pool is exhausted. Existing networks were not changed.'
+            : projectNetworkPool.pressure === 'low'
+              ? 'The OpenLander Project network pool is low. Review unused networks before new deployments fail.'
+              : 'Network inventory is read-only. Cleanup requires the exact network name and id, zero endpoints, and human approval.',
+        next_steps:
+          projectNetworkPool.pressure !== 'ok'
+            ? [
+                'Review zero-endpoint cleanup candidates and confirm their ownership.',
+                'Reconfigure docker.projectNetworkPoolCidr if the current pool cannot be reclaimed.',
+              ]
+            : cleanupCandidate
+              ? [
+                  'Review the selected network ownership and subnet before requesting cleanup.',
+                  'Call the suggested operation once, then poll the returned approval status.',
+                ]
+              : ['Do not remove active, external, shared, or other-instance networks.'],
       },
     };
   },

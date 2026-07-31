@@ -397,12 +397,18 @@ export class NetworkNotFoundError extends OpenLanderError {
 }
 
 export class NetworkAddressPoolExhaustedError extends OpenLanderError {
-  constructor(networkName: string) {
+  constructor(networkName: string, poolCidr?: string) {
     super(
-      `Docker has no available address pool for network: ${networkName}`,
+      `Docker has no available OpenLander subnet for network: ${networkName}`,
       'NETWORK_ADDRESS_POOL_EXHAUSTED',
       503,
-      { networkName, retryable: true },
+      {
+        networkName,
+        ...(poolCidr ? { poolCidr } : {}),
+        subnetPrefix: 24,
+        retryable: false,
+        actionRequired: 'free_or_reconfigure_network_pool',
+      },
     );
     this.name = 'NetworkAddressPoolExhaustedError';
   }

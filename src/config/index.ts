@@ -28,6 +28,7 @@ const log = createModuleLogger('config');
 /** Supported deployment environment types. */
 export type OpenLanderEnv = 'production' | 'development';
 export const SHARED_NETWORK_NAME = 'openlander';
+export const DEFAULT_PROJECT_NETWORK_POOL_CIDR = '10.240.0.0/12';
 export const DOCKER_LABELS = {
   MANAGED: 'openlander.managed',
   INSTANCE: 'openlander.instance',
@@ -172,6 +173,8 @@ export interface DockerConfig {
   socketPath: string;
   /** Network name for Traefik routing (production default) */
   networkName: string;
+  /** IPv4 pool divided into /24 subnets for newly created OpenLander networks. */
+  projectNetworkPoolCidr?: string;
   /** Port range for managed containers (production defaults) */
   portRangeStart: number;
   portRangeEnd: number;
@@ -370,6 +373,7 @@ function buildDefaultConfig(): OpenLanderConfig {
     docker: {
       socketPath: '',
       networkName: prodPolicy.networkName,
+      projectNetworkPoolCidr: DEFAULT_PROJECT_NETWORK_POOL_CIDR,
       portRangeStart: prodPolicy.portRangeStart,
       portRangeEnd: prodPolicy.portRangeEnd,
     },

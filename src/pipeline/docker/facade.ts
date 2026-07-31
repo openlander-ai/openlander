@@ -24,8 +24,13 @@ export class Docker implements RuntimeBackend {
   private readonly streamOps: StreamOps;
   private readonly infraOps: InfraOps;
 
-  constructor(socketPath?: string, networkName?: string, instanceId?: string) {
-    this.ctx = createDockerContext(socketPath, networkName, instanceId);
+  constructor(
+    socketPath?: string,
+    networkName?: string,
+    instanceId?: string,
+    projectNetworkPoolCidr?: string,
+  ) {
+    this.ctx = createDockerContext(socketPath, networkName, instanceId, projectNetworkPoolCidr);
     this.networkOps = new NetworkOps(this.ctx);
     this.containerOps = new ContainerOps(this.ctx, {
       ensureSharedNetworkAttachment: (containerId, alias) =>
@@ -189,6 +194,14 @@ export class Docker implements RuntimeBackend {
 
   removeUnusedNetwork(...args: Parameters<NetworkOps['removeUnusedNetwork']>) {
     return this.networkOps.removeUnusedNetwork(...args);
+  }
+
+  preflightProjectNetwork(...args: Parameters<NetworkOps['preflightProjectNetwork']>) {
+    return this.networkOps.preflightProjectNetwork(...args);
+  }
+
+  getProjectNetworkPoolStatus(...args: Parameters<NetworkOps['getProjectNetworkPoolStatus']>) {
+    return this.networkOps.getProjectNetworkPoolStatus(...args);
   }
 
   ensureProjectNetwork(...args: Parameters<NetworkOps['ensureProjectNetwork']>) {

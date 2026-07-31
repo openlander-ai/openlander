@@ -349,6 +349,7 @@ export async function createAppContext(
     config.docker.socketPath || undefined,
     config.docker.networkName,
     instanceId,
+    config.docker.projectNetworkPoolCidr,
   );
   const deliveryQualityGateService = new DeliveryQualityGateService(
     db,

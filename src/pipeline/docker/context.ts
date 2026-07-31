@@ -1,18 +1,20 @@
 import { createRequire } from 'node:module';
 import type Dockerode from 'dockerode';
-import { getPolicy } from '../../config/index.js';
+import { DEFAULT_PROJECT_NETWORK_POOL_CIDR, getPolicy } from '../../config/index.js';
 import { resolveDockerSocket } from './helpers.js';
 
 export interface DockerContext {
   readonly client: Dockerode;
   readonly networkName: string;
   readonly instanceId?: string;
+  readonly projectNetworkPoolCidr: string;
 }
 
 export function createDockerContext(
   socketPath?: string,
   networkName?: string,
   instanceId?: string,
+  projectNetworkPoolCidr?: string,
 ): DockerContext {
   const require = createRequire(import.meta.url);
 
@@ -49,5 +51,6 @@ export function createDockerContext(
     client,
     networkName: resolvedNetworkName,
     instanceId,
+    projectNetworkPoolCidr: projectNetworkPoolCidr ?? DEFAULT_PROJECT_NETWORK_POOL_CIDR,
   };
 }
