@@ -76,7 +76,17 @@ describe('Docker network maintenance operations', () => {
         cleanupBlocker: 'unmanaged_network',
       },
     ]);
-    const ctx = { docker: { listNetworks } } as unknown as AppContext;
+    const getProjectNetworkPoolStatus = vi.fn().mockReturnValue({
+      cidr: '10.240.0.0/12',
+      subnetPrefix: 24,
+      totalSubnets: 4096,
+      unavailableSubnets: 2,
+      availableSubnets: 4094,
+      pressure: 'ok',
+    });
+    const ctx = {
+      docker: { listNetworks, getProjectNetworkPoolStatus },
+    } as unknown as AppContext;
     const result = await listDockerNetworksOperation.execute(
       { include_external: false },
       { appCtx: ctx, actor: actor(), operationId: null },
@@ -89,6 +99,14 @@ describe('Docker network maintenance operations', () => {
       cleanup_eligible_count: 1,
       legacy_confirmation_count: 1,
       external_count: 1,
+      project_network_pool: {
+        cidr: '10.240.0.0/12',
+        subnet_prefix: 24,
+        total_subnets: 4096,
+        unavailable_subnets: 2,
+        available_subnets: 4094,
+        pressure: 'ok',
+      },
       networks: [
         expect.objectContaining({
           network_id: 'current-id',
@@ -106,6 +124,9 @@ describe('Docker network maintenance operations', () => {
       },
     });
     expect(listDockerNetworksOperation.outputSchema.safeParse(result).success).toBe(true);
+    expect(getProjectNetworkPoolStatus).toHaveBeenCalledWith(
+      expect.arrayContaining([currentNetwork, legacyNetwork]),
+    );
   });
 
   it('allows an exact web-session cleanup but rejects raw REST API-token mutation', async () => {

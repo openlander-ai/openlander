@@ -1823,6 +1823,10 @@ export class DeployPipeline {
     let liveContainerRemovedForSwap = false;
     try {
       if (source === 'image') {
+        await this.runtime.preflightProjectNetwork?.(
+          deployConfig._networkProjectName ?? projectName,
+        );
+        buildLog += '[network] Project network capacity verified before image pull\n';
         const imageUrl = deployConfig.imageUrl;
         if (!imageUrl) {
           throw new MissingImageUrlError();
@@ -1875,6 +1879,7 @@ export class DeployPipeline {
         commitMessage = cloneResult.commitMessage;
         const buildResult = await buildProject(orchestrationDeps, {
           projectId,
+          projectName,
           environmentId,
           branch,
           routeName,
@@ -2943,6 +2948,7 @@ export class DeployPipeline {
       }
 
       if (view.source === 'image') {
+        await this.runtime.preflightProjectNetwork?.(networkProjectName);
         try {
           await this.runtime.pullImage(imageTag);
         } catch (error) {
@@ -3498,6 +3504,8 @@ export class DeployPipeline {
 
       const source: 'git' | 'image' =
         deployConfig.source === 'image' || blueView.source === 'image' ? 'image' : 'git';
+      await this.runtime.preflightProjectNetwork?.(networkProjectName);
+      buildLog += '[network] Project network capacity verified before image preparation\n';
       await eventBus.emit('deploy:start', { projectId, repoUrl: deployConfig.repoUrl });
 
       if (source === 'image') {

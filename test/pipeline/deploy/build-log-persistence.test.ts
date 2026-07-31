@@ -28,8 +28,12 @@ describe('successful Dockerfile build logging', () => {
 
     const jobManager = new JobManager();
     jobManager.trackJob('project-1', 'app');
+    const callOrder: string[] = [];
+    const preflightProjectNetwork = vi.fn(async () => {
+      callOrder.push('network');
+    });
     const deps = {
-      runtime: {} as RuntimeBackend,
+      runtime: { preflightProjectNetwork } as RuntimeBackend,
       db: {
         updateProject: vi.fn(async () => undefined),
         getService: vi.fn(async () => undefined),
@@ -42,6 +46,7 @@ describe('successful Dockerfile build logging', () => {
       } as unknown as EnvManager,
       buildExecutor: {
         build: vi.fn(async (_context, onProgress?: (line: string) => void) => {
+          callOrder.push('build');
           onProgress?.('#7 [2/4] RUN npm ci');
           onProgress?.('#7 DONE 12.4s');
         }),
@@ -51,6 +56,7 @@ describe('successful Dockerfile build logging', () => {
 
     const result = await buildProject(deps, {
       projectId: 'project-1',
+      projectName: 'app',
       environmentId: 'environment-1',
       routeName: 'app',
       trigger: 'api',
@@ -66,6 +72,8 @@ describe('successful Dockerfile build logging', () => {
     });
 
     expect(result.type).toBe('docker');
+    expect(preflightProjectNetwork).toHaveBeenCalledWith('app');
+    expect(callOrder).toEqual(['network', 'build']);
     expect(result.buildLog).toContain(
       '--- Docker build output ---\n#7 [2/4] RUN npm ci\n#7 DONE 12.4s\n',
     );
@@ -103,6 +111,7 @@ describe('successful Dockerfile build logging', () => {
 
     const error = await buildProject(deps, {
       projectId: 'project-1',
+      projectName: 'app',
       environmentId: 'environment-1',
       routeName: 'app',
       trigger: 'api',

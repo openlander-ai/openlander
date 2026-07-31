@@ -124,6 +124,8 @@ export async function deployMonorepoService(
   let dockerBuildOutput: string = '';
 
   try {
+    await deps.runtime.preflightProjectNetwork?.(childName.replace('/', '-'));
+    dockerBuildOutput += '[network] Project network capacity verified before image build\n';
     deps.jobManager?.updatePhase(childId, 'building');
     const envVars = await resolveEnvVars(
       {

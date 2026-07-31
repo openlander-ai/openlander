@@ -536,6 +536,7 @@ describe('ensureProjectNetwork', () => {
     expect(mockCreateNetwork).toHaveBeenCalledWith({
       Name: 'ol-demo',
       Driver: 'bridge',
+      IPAM: { Config: [{ Subnet: '10.240.0.0/24' }] },
       Labels: {
         'openlander.managed': 'true',
         'openlander.project': 'demo',
@@ -544,7 +545,7 @@ describe('ensureProjectNetwork', () => {
     });
   });
 
-  it('returns a typed retryable error when Docker address pools are exhausted', async () => {
+  it('returns a typed action-required error when the configured pool is exhausted', async () => {
     mockGetNetwork.mockReturnValueOnce({
       inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
     });
@@ -556,7 +557,131 @@ describe('ensureProjectNetwork', () => {
     await expect(docker.ensureProjectNetwork('demo')).rejects.toMatchObject({
       code: 'NETWORK_ADDRESS_POOL_EXHAUSTED',
       statusCode: 503,
-      details: { networkName: 'ol-demo', retryable: true },
+      details: {
+        networkName: 'ol-demo',
+        poolCidr: '10.240.0.0/12',
+        subnetPrefix: 24,
+        retryable: false,
+        actionRequired: 'free_or_reconfigure_network_pool',
+      },
+    });
+  });
+
+  it('skips every overlapping Docker CIDR when selecting a Project subnet', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockListNetworks.mockResolvedValueOnce([
+      { IPAM: { Config: [{ Subnet: '10.240.0.0/24' }] } },
+      { IPAM: { Config: [{ Subnet: '10.240.2.0/23' }] } },
+      { IPAM: { Config: [{ Subnet: '172.17.0.0/16' }] } },
+    ]);
+    mockCreateNetwork.mockResolvedValueOnce({ id: 'network-id' });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/22');
+    await expect(docker.ensureProjectNetwork('demo')).resolves.toBe('ol-demo');
+
+    expect(mockCreateNetwork).toHaveBeenCalledWith(
+      expect.objectContaining({
+        IPAM: { Config: [{ Subnet: '10.240.1.0/24' }] },
+      }),
+    );
+  });
+
+  it('re-lists networks and picks another subnet after a concurrent allocation collision', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockListNetworks.mockResolvedValue([]);
+    mockCreateNetwork
+      .mockRejectedValueOnce(new Error('Pool overlaps with other one on this address space'))
+      .mockResolvedValueOnce({ id: 'network-id' });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/22');
+    await expect(docker.ensureProjectNetwork('demo')).resolves.toBe('ol-demo');
+
+    expect(mockCreateNetwork).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ IPAM: { Config: [{ Subnet: '10.240.0.0/24' }] } }),
+    );
+    expect(mockCreateNetwork).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ IPAM: { Config: [{ Subnet: '10.240.1.0/24' }] } }),
+    );
+  });
+
+  it('does not reinterpret unrelated Docker address-space errors as allocation races', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockCreateNetwork.mockRejectedValueOnce(
+      new Error('custom driver address space is unavailable'),
+    );
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/22');
+    await expect(docker.ensureProjectNetwork('demo')).rejects.toThrow(
+      'custom driver address space is unavailable',
+    );
+
+    expect(mockCreateNetwork).toHaveBeenCalledOnce();
+  });
+
+  it('rejects non-canonical project pools before listing or mutating Docker networks', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.1.0/22');
+    await expect(docker.preflightProjectNetwork('demo')).rejects.toMatchObject({
+      code: 'SERVICE_CONFIG_INVALID',
+      statusCode: 400,
+    });
+
+    expect(mockListNetworks).not.toHaveBeenCalled();
+    expect(mockCreateNetwork).not.toHaveBeenCalled();
+  });
+
+  it('accepts an existing project network without consuming allocator capacity', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockResolvedValueOnce({ Id: 'existing-network' }),
+    });
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/24');
+    await expect(docker.preflightProjectNetwork('demo')).resolves.toBeUndefined();
+
+    expect(mockListNetworks).not.toHaveBeenCalled();
+    expect(mockCreateNetwork).not.toHaveBeenCalled();
+  });
+
+  it('preflights capacity without creating a network or mutating Docker', async () => {
+    mockGetNetwork.mockReturnValueOnce({
+      inspect: vi.fn().mockRejectedValueOnce(networkNotFoundError('ol-demo')),
+    });
+    mockListNetworks.mockResolvedValueOnce([{ IPAM: { Config: [{ Subnet: '10.240.0.0/24' }] } }]);
+
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/24');
+    await expect(docker.preflightProjectNetwork('demo')).rejects.toMatchObject({
+      code: 'NETWORK_ADDRESS_POOL_EXHAUSTED',
+      details: { poolCidr: '10.240.0.0/24' },
+    });
+    expect(mockCreateNetwork).not.toHaveBeenCalled();
+  });
+
+  it('reports configured pool capacity from the same network inventory', () => {
+    const docker = new Docker(undefined, undefined, 'olinst_a', '10.240.0.0/22');
+    expect(
+      docker.getProjectNetworkPoolStatus([
+        {
+          subnets: ['10.240.0.0/24', '10.240.2.0/23'],
+        } as Awaited<ReturnType<typeof docker.listNetworks>>[number],
+      ]),
+    ).toEqual({
+      cidr: '10.240.0.0/22',
+      subnetPrefix: 24,
+      totalSubnets: 4,
+      unavailableSubnets: 3,
+      availableSubnets: 1,
+      pressure: 'low',
     });
   });
 });

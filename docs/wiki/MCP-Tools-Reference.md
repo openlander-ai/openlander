@@ -1464,6 +1464,17 @@ attachments, instance ownership, `cleanup_eligible`, and a machine-readable
 `cleanup_blocker`. External and system networks are omitted by default; pass
 `include_external=true` to include them in the returned rows.
 Summary counts always cover the complete Docker network inventory.
+`project_network_pool` reports the configured CIDR, fixed `/24` subnet size,
+total and unavailable subnet counts, and `pressure` (`ok`, `low`, or
+`exhausted`). CIDRs owned by any Docker network count as unavailable, even when
+the network is external to OpenLander.
+
+New OpenLander-managed networks use an explicit, collision-checked subnet from
+`docker.projectNetworkPoolCidr` (default `10.240.0.0/12`). Existing networks are
+not renumbered or migrated. When no subnet is available,
+`NETWORK_ADDRESS_POOL_EXHAUSTED` is returned before image build or pull with
+`actionRequired=free_or_reconfigure_network_pool`; retrying unchanged input is
+not expected to help.
 
 `remove_unused_docker_network` removes one exact network only after all of these
 conditions are revalidated immediately before removal:
