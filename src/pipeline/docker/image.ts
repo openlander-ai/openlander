@@ -15,6 +15,26 @@ const log = createModuleLogger('docker:image');
 const IMAGE_INSPECT_TIMEOUT_MS = 15_000;
 const COMPOSE_BUILD_NETWORK_RETRY_DELAYS_MS = [500, 1_500] as const;
 
+type BuildProgressEvent = { stream?: string; error?: string };
+
+function followBuildProgress(
+  client: Dockerode,
+  stream: NodeJS.ReadableStream,
+  onFinished: (error: Error | null) => void,
+  onProgress: (event: BuildProgressEvent) => void,
+): void {
+  // Dockerode 5 exposes this client-level helper specifically for BuildKit v2.
+  // modem.followProgress cannot decode BuildKit's protobuf `aux` messages.
+  const buildKitClient = client as Dockerode & {
+    followProgress: (
+      progressStream: NodeJS.ReadableStream,
+      finished: (error: Error | null) => void,
+      progress?: (event: BuildProgressEvent) => void,
+    ) => void;
+  };
+  buildKitClient.followProgress(stream, onFinished, onProgress);
+}
+
 function isRetryableComposeBuildNetworkError(error: unknown): boolean {
   if (!(error instanceof DockerBuildError)) return false;
   const evidence = `${error.message}\n${error.buildLog}`;
@@ -62,7 +82,8 @@ export class ImageOps {
     let buildError = '';
     try {
       await new Promise<void>((resolve, reject) => {
-        this.ctx.client.modem.followProgress(
+        followBuildProgress(
+          this.ctx.client,
           stream,
           (err: Error | null) => {
             if (trackingId && this.cancelledBuilds.has(trackedStream)) {
@@ -87,7 +108,7 @@ export class ImageOps {
               resolve();
             }
           },
-          (event: { stream?: string; error?: string }) => {
+          (event) => {
             if (event.stream) buildLog += event.stream;
             if (event.error) {
               buildError += event.error + '\n';
@@ -172,7 +193,8 @@ export class ImageOps {
     let buildLog = '';
     let buildError = '';
     await new Promise<void>((resolve, reject) => {
-      this.ctx.client.modem.followProgress(
+      followBuildProgress(
+        this.ctx.client,
         stream,
         (err: Error | null) => {
           if (err) {
@@ -195,7 +217,7 @@ export class ImageOps {
             resolve();
           }
         },
-        (event: { stream?: string; error?: string }) => {
+        (event) => {
           if (event.stream) buildLog += event.stream;
           if (event.error) {
             buildError += event.error + '\n';
