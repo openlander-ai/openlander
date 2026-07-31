@@ -192,10 +192,17 @@ export interface PlatformUpdateStatus {
   checks: Array<{ id: string; ok: boolean; message: string }>;
   operation: PlatformUpdateOperation | null;
   releaseCheckStale: boolean;
+  releaseCheckedAt: string;
 }
 
-export async function getPlatformUpdateStatus(): Promise<PlatformUpdateStatus> {
-  return apiGet<PlatformUpdateStatus>('/api/system/update');
+export async function getPlatformUpdateStatus(
+  options: {
+    refreshRelease?: boolean;
+  } = {},
+): Promise<PlatformUpdateStatus> {
+  return apiGet<PlatformUpdateStatus>(
+    options.refreshRelease ? '/api/system/update?refresh=true' : '/api/system/update',
+  );
 }
 
 export async function startPlatformUpdate(

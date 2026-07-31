@@ -216,9 +216,9 @@ export class PlatformUpdater {
     }
   }
 
-  async getStatus(): Promise<PlatformUpdateStatus> {
+  async getStatus(options: { refreshRelease?: boolean } = {}): Promise<PlatformUpdateStatus> {
     const [releaseResult, installation, persistedOperation] = await Promise.all([
-      this.releaseChecker.check(),
+      this.releaseChecker.check({ refresh: options.refreshRelease }),
       detectComposeInstallation(this.docker, this.environment),
       this.store.readOperation(),
     ]);
@@ -253,6 +253,7 @@ export class PlatformUpdater {
       checks: preflight.checks,
       operation,
       releaseCheckStale: releaseResult.stale,
+      releaseCheckedAt: new Date(releaseResult.checkedAt).toISOString(),
     };
   }
 

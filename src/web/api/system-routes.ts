@@ -148,7 +148,11 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/system/update', async (c) => {
-    return c.json(await ctx.platformUpdater.getStatus());
+    return c.json(
+      await ctx.platformUpdater.getStatus({
+        refreshRelease: c.req.query('refresh') === 'true',
+      }),
+    );
   });
 
   api.post('/system/update', async (c) => {

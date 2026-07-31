@@ -80,7 +80,7 @@ describe('PlatformReleaseChecker', () => {
     });
   });
 
-  it('caches for six hours and uses the last success after a network failure', async () => {
+  it('caches for 30 minutes and uses the last success after a network failure', async () => {
     let now = 1_000;
     const fetchImpl = releaseFetch([release('0.2.14')]);
     const checker = new PlatformReleaseChecker({
@@ -88,15 +88,42 @@ describe('PlatformReleaseChecker', () => {
       fetchImpl,
       now: () => now,
     });
-    await expect(checker.check()).resolves.toMatchObject({ stale: false });
+    await expect(checker.check()).resolves.toMatchObject({ stale: false, checkedAt: 1_000 });
     await expect(checker.check()).resolves.toMatchObject({ stale: false });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
 
-    now += 6 * 60 * 60 * 1000 + 1;
+    now += 30 * 60 * 1000 + 1;
     fetchImpl.mockRejectedValueOnce(new TypeError('network unavailable'));
     await expect(checker.check()).resolves.toMatchObject({
       stale: true,
+      checkedAt: now,
       release: { version: '0.2.14' },
+    });
+  });
+
+  it('bypasses a warm cache when an operator explicitly refreshes', async () => {
+    let releases = [release('0.2.14-rc.2')];
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes('/releases?')) return Response.json(releases);
+      const version = /\/download\/v([^/]+)\//.exec(url)?.[1] ?? '0.2.14-rc.2';
+      return Response.json(manifest(version));
+    });
+    const checker = new PlatformReleaseChecker({
+      currentVersion: '0.2.14-rc.1',
+      fetchImpl,
+    });
+
+    await expect(checker.check()).resolves.toMatchObject({
+      release: { version: '0.2.14-rc.2' },
+    });
+    releases = [release('0.2.14')];
+    await expect(checker.check()).resolves.toMatchObject({
+      release: { version: '0.2.14-rc.2' },
+    });
+    await expect(checker.check({ refresh: true })).resolves.toMatchObject({
+      release: { version: '0.2.14' },
+      stale: false,
     });
   });
 

@@ -7,7 +7,8 @@ import {
   type PlatformUpdateStatus,
 } from '@/lib/api/system';
 
-const IDLE_POLL_MS = 6 * 60 * 60 * 1000;
+const IDLE_POLL_MS = 30 * 60 * 1000;
+const STALE_POLL_MS = 2 * 60 * 1000;
 const ACTIVE_POLL_MS = 2_000;
 const ACTIVE_PHASES = new Set([
   'preparing',
@@ -25,16 +26,19 @@ export function isPlatformUpdateActive(operation: PlatformUpdateOperation | null
 export interface UsePlatformUpdateReturn {
   status: PlatformUpdateStatus | null;
   loading: boolean;
+  checking: boolean;
   submitting: boolean;
   disconnected: boolean;
   reconnecting: boolean;
   refresh: () => Promise<void>;
+  checkNow: () => Promise<void>;
   startUpdate: (targetVersion: string) => Promise<void>;
 }
 
 export function usePlatformUpdate(): UsePlatformUpdateReturn {
   const [status, setStatus] = useState<PlatformUpdateStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [disconnected, setDisconnected] = useState(false);
   const [reconnectPending, setReconnectPending] = useState(false);
@@ -55,7 +59,28 @@ export function usePlatformUpdate(): UsePlatformUpdateReturn {
 
   const active =
     submitting || reconnectPending || isPlatformUpdateActive(status?.operation ?? null);
-  usePollingTask(refresh, { intervalMs: active ? ACTIVE_POLL_MS : IDLE_POLL_MS });
+  const pollInterval = active
+    ? ACTIVE_POLL_MS
+    : status?.releaseCheckStale
+      ? STALE_POLL_MS
+      : IDLE_POLL_MS;
+  usePollingTask(refresh, { intervalMs: pollInterval });
+
+  const checkNow = useCallback(async () => {
+    setChecking(true);
+    try {
+      const nextStatus = await getPlatformUpdateStatus({ refreshRelease: true });
+      setStatus(nextStatus);
+      setDisconnected(false);
+      setReconnectPending(false);
+    } catch (error) {
+      setDisconnected(true);
+      throw error;
+    } finally {
+      setLoading(false);
+      setChecking(false);
+    }
+  }, []);
 
   const startUpdate = useCallback(
     async (targetVersion: string) => {
@@ -83,10 +108,12 @@ export function usePlatformUpdate(): UsePlatformUpdateReturn {
   return {
     status,
     loading,
+    checking,
     submitting,
     disconnected,
     reconnecting: reconnectPending,
     refresh,
+    checkNow,
     startUpdate,
   };
 }

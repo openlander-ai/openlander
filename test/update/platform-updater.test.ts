@@ -105,6 +105,7 @@ async function harness(
     updateRunnerPresent?: boolean;
     composePassword?: string | null;
     ownershipRepairExitCode?: number;
+    releaseChecker?: PlatformReleaseChecker;
   } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-platform-updater-'));
@@ -170,7 +171,7 @@ async function harness(
     jobManager: { getActiveJobs: vi.fn(() => []) },
     currentVersion: '0.2.13-rc.7',
     dataDir,
-    releaseChecker: releaseChecker(),
+    releaseChecker: options.releaseChecker ?? releaseChecker(),
     environment: {
       OPENLANDER_CONTAINERIZED: options.containerized === false ? 'false' : 'true',
       HOSTNAME: 'openlander-container',
@@ -237,6 +238,7 @@ describe('PlatformUpdater', () => {
       canUpdate: true,
       release: { version: targetVersion },
       support: { mode: 'compose' },
+      releaseCheckedAt: expect.any(String),
     });
 
     const operation = await updater.startUpdate(targetVersion);
@@ -256,6 +258,16 @@ describe('PlatformUpdater', () => {
         }),
       }),
     );
+  });
+
+  it('forwards an explicit release refresh without changing update execution policy', async () => {
+    const checker = releaseChecker();
+    const check = vi.spyOn(checker, 'check');
+    const { updater } = await harness({ releaseChecker: checker });
+
+    await updater.getStatus({ refreshRelease: true });
+
+    expect(check).toHaveBeenCalledWith({ refresh: true });
   });
 
   it('shows an update but requires the manual guide outside official Compose', async () => {

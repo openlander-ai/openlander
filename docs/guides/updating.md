@@ -4,9 +4,11 @@ OpenLander never updates itself without an administrator confirming the exact re
 
 ## Official Docker Compose installation
 
-When a newer release is available, OpenLander shows **New version vX.Y.Z** above the account card
-in the sidebar. Open the dialog to review release notes and preflight checks, then choose **Update
-now**. The button remains available while the update is running so you can reopen progress.
+OpenLander shows its update status above the account card in the sidebar. Release metadata is
+refreshed at least every 30 minutes while the UI is open, and a stale check is retried every two
+minutes. Open the dialog and choose **Check now** to bypass the cache. When a newer release is
+available, review its release notes and preflight checks, then choose **Update now**. The button
+remains available while the update is running so you can reopen progress.
 
 The one-click updater:
 
