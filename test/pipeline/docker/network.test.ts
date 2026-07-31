@@ -246,6 +246,18 @@ describe('network cleanup inventory', () => {
         IPAM: { Config: [{ Subnet: '172.17.0.0/16' }] },
       },
     ]);
+    mockListContainers.mockResolvedValueOnce([
+      {
+        Id: 'container-1',
+        NetworkSettings: {
+          Networks: {
+            bridge: {
+              NetworkID: 'system-id',
+            },
+          },
+        },
+      },
+    ]);
 
     const docker = new Docker(undefined, undefined, 'olinst_a');
     await expect(docker.listNetworks()).resolves.toEqual([
@@ -278,6 +290,67 @@ describe('network cleanup inventory', () => {
         ownership: 'system',
         cleanupBlocker: 'system_network',
         endpointCount: 1,
+      }),
+    ]);
+    expect(mockListContainers).toHaveBeenCalledOnce();
+    expect(mockListContainers).toHaveBeenCalledWith({ all: true });
+  });
+
+  it('counts endpoints from all containers when NetworkList omits Containers', async () => {
+    mockListNetworks.mockResolvedValueOnce([
+      {
+        Id: 'active-id',
+        Name: 'ol-active',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.managed': 'true', 'openlander.instance': 'olinst_a' },
+        IPAM: { Config: [{ Subnet: '172.30.0.0/16' }] },
+      },
+      {
+        Id: 'unused-id',
+        Name: 'ol-unused',
+        Driver: 'bridge',
+        Scope: 'local',
+        Labels: { 'openlander.managed': 'true', 'openlander.instance': 'olinst_a' },
+        IPAM: { Config: [{ Subnet: '172.31.0.0/16' }] },
+      },
+    ]);
+    mockListContainers.mockResolvedValueOnce([
+      {
+        Id: 'running-container',
+        NetworkSettings: {
+          Networks: {
+            'ol-active': {
+              NetworkID: 'active-id',
+            },
+          },
+        },
+      },
+      {
+        Id: 'stopped-container',
+        NetworkSettings: {
+          Networks: {
+            'ol-active': {
+              NetworkID: 'active-id',
+            },
+          },
+        },
+      },
+    ]);
+
+    const docker = new Docker(undefined, undefined, 'olinst_a');
+    await expect(docker.listNetworks()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'active-id',
+        endpointCount: 2,
+        cleanupEligible: false,
+        cleanupBlocker: 'active_endpoints',
+      }),
+      expect.objectContaining({
+        id: 'unused-id',
+        endpointCount: 0,
+        cleanupEligible: true,
+        cleanupBlocker: null,
       }),
     ]);
   });
