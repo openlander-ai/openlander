@@ -27,6 +27,11 @@ import { formatDateTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 const PHASES = ['preparing', 'backing_up', 'pulling', 'restarting', 'verifying'] as const;
+const GIBIBYTE = 1024 * 1024 * 1024;
+
+function formatGiB(bytes: number): string {
+  return (bytes / GIBIBYTE).toFixed(2);
+}
 
 export function PlatformUpdateDialog() {
   const { t } = useLanguage();
@@ -229,6 +234,16 @@ export function PlatformUpdateDialog() {
                       )}
                       <span>
                         {t(`platformUpdate.checks.${check.id}.${check.ok ? 'pass' : 'fail'}`)}
+                        {check.id === 'disk_space' &&
+                          check.availableBytes !== undefined &&
+                          check.requiredBytes !== undefined && (
+                            <span className="mt-0.5 block text-xs text-[color:var(--ol-fg-subtle)]">
+                              {t('platformUpdate.checks.disk_space.detail', {
+                                available: formatGiB(check.availableBytes),
+                                required: formatGiB(check.requiredBytes),
+                              })}
+                            </span>
+                          )}
                       </span>
                     </li>
                   ))}

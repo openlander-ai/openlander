@@ -60,6 +60,9 @@ describe('platform update sidebar and dialog contract', () => {
     expect(dialog).toContain('<DialogDescription>');
     expect(dialog).toContain('status.release.notes.slice(0, 5)');
     expect(dialog).toContain('status.checks.map');
+    expect(dialog).toContain("check.id === 'disk_space'");
+    expect(dialog).toContain('check.availableBytes');
+    expect(dialog).toContain("t('platformUpdate.checks.disk_space.detail'");
     expect(dialog).toContain("status.support.mode === 'manual'");
     expect(dialog).toContain('status.release?.oneClickBlockReason');
     expect(dialog).toContain('manualUpdateUrl');

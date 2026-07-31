@@ -61,6 +61,8 @@ export interface PlatformUpdateStatus {
     id: string;
     ok: boolean;
     message: string;
+    availableBytes?: number;
+    requiredBytes?: number;
   }>;
   operation: PlatformUpdateOperation | null;
   releaseCheckStale: boolean;

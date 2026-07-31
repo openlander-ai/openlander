@@ -189,7 +189,13 @@ export interface PlatformUpdateStatus {
     reason: string | null;
     manualUpdateUrl: string;
   };
-  checks: Array<{ id: string; ok: boolean; message: string }>;
+  checks: Array<{
+    id: string;
+    ok: boolean;
+    message: string;
+    availableBytes?: number;
+    requiredBytes?: number;
+  }>;
   operation: PlatformUpdateOperation | null;
   releaseCheckStale: boolean;
   releaseCheckedAt: string;

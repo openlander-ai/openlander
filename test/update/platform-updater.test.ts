@@ -106,6 +106,13 @@ async function harness(
     composePassword?: string | null;
     ownershipRepairExitCode?: number;
     releaseChecker?: PlatformReleaseChecker;
+    diskSpaceCheck?:
+      | boolean
+      | {
+          ok: boolean;
+          availableBytes: number;
+          requiredBytes: number;
+        };
   } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'openlander-platform-updater-'));
@@ -176,12 +183,31 @@ async function harness(
       OPENLANDER_CONTAINERIZED: options.containerized === false ? 'false' : 'true',
       HOSTNAME: 'openlander-container',
     },
-    checkDiskSpace: async () => true,
+    checkDiskSpace: async () => options.diskSpaceCheck ?? true,
   });
   return { updater, docker, runUtilityContainer, dataDir };
 }
 
 describe('PlatformUpdater', () => {
+  it('blocks updates and reports measured free space when the host is below the threshold', async () => {
+    const availableBytes = 512 * 1024 * 1024;
+    const requiredBytes = 2 * 1024 * 1024 * 1024;
+    const { updater } = await harness({
+      diskSpaceCheck: { ok: false, availableBytes, requiredBytes },
+    });
+
+    const status = await updater.getStatus();
+
+    expect(status.canUpdate).toBe(false);
+    expect(status.checks).toContainEqual({
+      id: 'disk_space',
+      ok: false,
+      message: 'At least 2 GiB of free space is required.',
+      availableBytes,
+      requiredBytes,
+    });
+  });
+
   it('repairs legacy runner file ownership before accepting updated startup', async () => {
     const { updater, docker, runUtilityContainer, dataDir } = await harness({
       ownershipRepairExitCode: 0,

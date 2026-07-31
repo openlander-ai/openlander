@@ -529,13 +529,15 @@ export const deployToolDefs: ToolDef[] = [
           service?.project_id ?? log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
         const runtimeProjectId = representativeService
-          ? deployableServiceIdToProjectId(representativeService.id)
+          ? representativeService.project_id
           : inferredProjectId;
         const runtimeProject =
           runtimeProjectId === inferredProjectId
             ? project
             : await appCtx.db.getProject(runtimeProjectId);
         const view = await resolveServiceView(runtimeProjectId, runtimeProject);
+        const runtimeContainerId = representativeService?.container_id ?? view?.containerId;
+        const runtimeStatus = representativeService?.status ?? view?.status;
         const assignedPort =
           representativeService?.assigned_port ?? view?.assignedPort ?? undefined;
         const routeService = representativeService
@@ -583,8 +585,8 @@ export const deployToolDefs: ToolDef[] = [
         const trafficFailure = representativeTrafficFailed(representativeTraffic);
         const trafficWarning = representativeTrafficWarning(representativeTraffic);
         const readiness =
-          phase === 'done' && view?.containerId
-            ? await inspectContainerReadiness(appCtx, view.containerId)
+          phase === 'done' && runtimeContainerId
+            ? await inspectContainerReadiness(appCtx, runtimeContainerId)
             : undefined;
         const readinessMessage =
           readiness?.message ?? (readiness ? readinessGuidance(readiness.readiness) : undefined);
@@ -595,7 +597,7 @@ export const deployToolDefs: ToolDef[] = [
         const health = trafficFailure
           ? 'unhealthy'
           : (readiness?.readiness ??
-            (view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown')));
+            (runtimeStatus === 'idle' ? 'unknown' : (runtimeStatus ?? 'unknown')));
         const completedAt = parseDBTimestamp(log.created_at);
         const durationMs =
           typeof log.duration_ms === 'number' && Number.isFinite(log.duration_ms)
