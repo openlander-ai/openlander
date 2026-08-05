@@ -14,6 +14,7 @@ describe('Connected Publish UI', () => {
   const connectionCard = readRepoFile('web/src/components/settings/ConnectedPublishCard.tsx');
   const cloudflareApi = readRepoFile('web/src/lib/api/cloudflare.ts');
   const callback = readRepoFile('web/public/cloudflare-oauth-callback.html');
+  const callbackScript = readRepoFile('web/public/cloudflare-oauth-callback.js');
   const server = readRepoFile('src/web/server.ts');
   const connectedPublish = readRepoFile('src/pipeline/connected-publish.ts');
   const runtimeCompose = readRepoFile('docker-compose.runtime.yml');
@@ -31,7 +32,7 @@ describe('Connected Publish UI', () => {
 
   it('refreshes Project service links when publishing or stopping settles', () => {
     expect(publicControl).toContain('onAccessSettled?: () => void');
-    expect(publicControl).toContain("previousStatus !== nextAccess.status");
+    expect(publicControl).toContain('previousStatus !== nextAccess.status');
     expect(publicControl).toContain('onAccessSettled?.()');
     expect(projectView).toContain('onAccessSettled={handlePublicAccessSettled}');
     expect(projectView).toContain('void refetchGroupServices()');
@@ -93,39 +94,46 @@ describe('Connected Publish UI', () => {
   });
 
   it('completes OAuth inside the callback before notifying the opener', () => {
-    expect(callback).toContain("type: 'openlander:cloudflare-oauth'");
-    expect(callback).toContain("fetch('/api/setup/cloudflare/oauth/complete'");
-    expect(callback).toContain("credentials: 'same-origin'");
-    expect(callback).toContain("status: 'authorized'");
-    expect(callback).toContain("'openlander:cloudflare-oauth:ack'");
-    expect(callback).toContain('window.opener.postMessage');
+    expect(callback).toContain('<script src="/cloudflare-oauth-callback.js"></script>');
+    expect(callback).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+    expect(callbackScript).toContain("type: 'openlander:cloudflare-oauth'");
+    expect(callbackScript).toContain("fetch('/api/setup/cloudflare/oauth/complete'");
+    expect(callbackScript).toContain("credentials: 'same-origin'");
+    expect(callbackScript).toContain("status: 'authorized'");
+    expect(callbackScript).toContain("'openlander:cloudflare-oauth:ack'");
+    expect(callbackScript).toContain('window.opener.postMessage');
     expect(callback).toContain('Return to OpenLander');
-    expect(callback).not.toContain("postMessage(payload, '*')");
-    expect(callback).not.toMatch(/localStorage|sessionStorage/);
+    expect(callbackScript).not.toContain("postMessage(payload, '*')");
+    expect(callbackScript).not.toMatch(/localStorage|sessionStorage/);
     expect(connectionCard).toContain("type: 'openlander:cloudflare-oauth:ack'");
     expect(connectionCard).not.toContain('completeCloudflareOAuth');
   });
 
   it('serves the OAuth callback before the SPA fallback without caching it', () => {
+    const callbackScriptRoute = server.indexOf("app.get('/cloudflare-oauth-callback.js'");
     const callbackRoute = server.indexOf("app.get('/cloudflare-oauth-callback.html'");
     const spaFallback = server.indexOf("app.get('*'");
 
+    expect(callbackScriptRoute).toBeGreaterThan(-1);
+    expect(callbackScriptRoute).toBeLessThan(callbackRoute);
     expect(callbackRoute).toBeGreaterThan(-1);
     expect(callbackRoute).toBeLessThan(spaFallback);
+    expect(server.slice(callbackScriptRoute, callbackRoute)).toContain(
+      "'Cache-Control': 'no-store'",
+    );
+    expect(server.slice(callbackScriptRoute, callbackRoute)).toContain(
+      "'Content-Type': 'text/javascript; charset=UTF-8'",
+    );
     expect(server.slice(callbackRoute, spaFallback)).toContain("'Cache-Control': 'no-store'");
   });
 
   it('shares only the tunnel token volume with the containerized connector', () => {
     expect(runtimeCompose).toContain('openlander-cloudflare:/run/openlander/cloudflare');
-    expect(runtimeCompose).toContain(
-      'name: ${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare',
-    );
+    expect(runtimeCompose).toContain('name: ${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare');
     expect(connectedPublish).toContain("Type: 'volume' as const");
     expect(connectedPublish).toContain('Source: `${dataVolume}-cloudflare`');
     expect(connectedPublish).toContain('Target: CLOUDFLARED_TOKEN_DIR');
-    expect(connectedPublish).not.toContain(
-      'Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`],',
-    );
+    expect(connectedPublish).not.toContain('Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`],');
   });
 
   it('uses only the connected-publish setup and Project status endpoints', () => {

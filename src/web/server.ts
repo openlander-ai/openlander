@@ -410,6 +410,19 @@ function createApp(
     return c.notFound();
   });
 
+  app.get('/cloudflare-oauth-callback.js', () => {
+    const callbackScriptPath = join(WEB_DIST, 'cloudflare-oauth-callback.js');
+    if (!existsSync(callbackScriptPath)) {
+      return new Response('Cloudflare OAuth callback script is unavailable', { status: 404 });
+    }
+    return new Response(readFileSync(callbackScriptPath), {
+      headers: {
+        'Content-Type': 'text/javascript; charset=UTF-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  });
+
   app.get('/cloudflare-oauth-callback.html', () => {
     const callbackPath = join(WEB_DIST, 'cloudflare-oauth-callback.html');
     if (!existsSync(callbackPath)) {
