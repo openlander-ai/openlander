@@ -2557,7 +2557,7 @@ export const translations = {
     subtitle: 'Live view of routes and ports — read-only.',
     dockerUnavailable:
       'Docker is unreachable. Routes and port allocation may be stale until it recovers.',
-    footer: 'Read-only · route editing ships in v0.2.',
+    footer: 'Read-only host routing inventory.',
     publicAccess: {
       title: 'Project publishing',
       subtitle: 'Connect a Cloudflare domain once to create a stable URL for each Project.',

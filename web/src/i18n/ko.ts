@@ -2737,7 +2737,7 @@ export const translations = {
     // Content — descriptive copy.
     subtitle: '라우트와 포트 현황을 실시간으로 보여주는 읽기 전용 화면입니다.',
     dockerUnavailable: 'Docker가 응답하지 않습니다. 라우트와 포트 정보가 최신이 아닐 수 있습니다.',
-    footer: '읽기 전용 · 라우트 편집은 v0.2에서 제공됩니다.',
+    footer: '읽기 전용 호스트 라우팅 현황입니다.',
     publicAccess: {
       title: '프로젝트 공개',
       subtitle: 'Cloudflare 도메인을 한 번 연결하면 프로젝트마다 고정 URL을 만들 수 있습니다.',
