@@ -43,6 +43,7 @@ import {
 } from '@/lib/api/web-server';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { ConnectedPublishCard } from '@/components/settings/ConnectedPublishCard';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -225,6 +226,8 @@ export function WebServerSettings() {
           </div>
         </div>
       )}
+
+      <ConnectedPublishCard />
 
       {/* 2. Issue banner — only when there are issues */}
       {issueRows.length > 0 && (

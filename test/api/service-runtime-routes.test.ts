@@ -199,6 +199,7 @@ function makeDeleteRuntimeContext(
     ...overrides.docker,
   };
   const cloudflare = {
+    deleteConnectedPublishReservation: vi.fn(async () => undefined),
     removeTunnelForService: vi.fn(async () => undefined),
   };
   const coordinator = { suppressProject: vi.fn() };

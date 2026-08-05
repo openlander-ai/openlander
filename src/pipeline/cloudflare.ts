@@ -8,6 +8,16 @@ import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { CloudflareNotFoundError } from '../errors.js';
 import { targetIdentityResolver } from '../db/target-identity-resolver.js';
+import {
+  ConnectedPublishManager,
+  type CloudflareConnectionView,
+  type ConnectedPublishOptions,
+  type PublicAccessView,
+} from './connected-publish.js';
+import type {
+  CloudflareAccount,
+  CloudflareZone as ConnectedPublishZone,
+} from './cloudflare-api.js';
 
 interface CloudflareApiError {
   code?: number;
@@ -44,14 +54,72 @@ type TunnelIngressRule =
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 
 export class CloudflareTunnelManager {
+  private readonly connectedPublish: ConnectedPublishManager;
+
   constructor(
     private config: CloudflareConfig,
     private readonly db: Database,
     private readonly events: EventBus,
-  ) {}
+    connectedPublishOptions: ConnectedPublishOptions = {},
+  ) {
+    this.connectedPublish = new ConnectedPublishManager(
+      config,
+      db,
+      events,
+      connectedPublishOptions,
+    );
+  }
 
   reloadConfig(config: CloudflareConfig): void {
     this.config = config;
+    this.connectedPublish.reloadConfig(config);
+  }
+
+  getConnectedPublishConnection(): Promise<CloudflareConnectionView> {
+    return this.connectedPublish.getConnectionView();
+  }
+
+  listConnectedPublishAccounts(): Promise<CloudflareAccount[]> {
+    return this.connectedPublish.listAccounts();
+  }
+
+  listConnectedPublishZones(accountId: string): Promise<ConnectedPublishZone[]> {
+    return this.connectedPublish.listZones(accountId);
+  }
+
+  connectConnectedPublish(input: {
+    accountId: string;
+    zoneId: string;
+  }): Promise<CloudflareConnectionView> {
+    return this.connectedPublish.connect(input);
+  }
+
+  disconnectConnectedPublish(): Promise<CloudflareConnectionView> {
+    return this.connectedPublish.disconnect();
+  }
+
+  getPublicAccess(projectId: string): Promise<PublicAccessView> {
+    return this.connectedPublish.getPublicAccess(projectId);
+  }
+
+  requestPublicAccess(input: { projectId: string; serviceId?: string }): Promise<PublicAccessView> {
+    return this.connectedPublish.requestPublish(input);
+  }
+
+  requestPrivateAccess(projectId: string): Promise<PublicAccessView> {
+    return this.connectedPublish.requestUnpublish(projectId);
+  }
+
+  deleteConnectedPublishReservation(projectId: string, serviceId?: string): Promise<void> {
+    return this.connectedPublish.deleteProjectReservation(projectId, serviceId);
+  }
+
+  reconcileConnectedPublish(): Promise<void> {
+    return this.connectedPublish.reconcile();
+  }
+
+  waitForConnectedPublishOperations(): Promise<void> {
+    return this.connectedPublish.waitForPendingOperations();
   }
 
   async createTunnel(projectId: string, domain: string): Promise<void> {

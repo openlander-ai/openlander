@@ -106,8 +106,8 @@ Key actions: create_project, list_projects, bootstrap_engagement, link_project_t
 All actions: action="help"
 
 ## openlander_service
-Applications/Compose workloads: lifecycle, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id from list_projects.
-Key actions: update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public
+Applications/Compose workloads: lifecycle, config, env vars, domains, and stable Connected Publish URLs. Prefer compatibility field service_id from list_projects.
+Key actions: update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public, get_public_access, unexpose_public
 All actions: action="help"
 
 ## openlander_managed_service

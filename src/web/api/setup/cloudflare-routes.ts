@@ -1,137 +1,162 @@
-import { Hono } from 'hono';
+import { randomBytes } from 'node:crypto';
+
+import { Hono, type Context } from 'hono';
 
 import type { AppContext } from '../../../app.js';
-import { loadConfig, updateConfig } from '../../../config/index.js';
+import { exchangeCloudflareCode, getCloudflareAuthUrl } from '../../../auth/cloudflare-oauth.js';
+import { generatePkce } from '../../../auth/google-oauth.js';
+import { encryptAndStoreToken } from '../../../auth/token-store.js';
+import { CloudflareOAuthUnavailableError, OperationRequiresHumanUiError } from '../../../errors.js';
+
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_STATE_MAX_ENTRIES = 100;
+const pendingOAuthStates = new Map<string, { verifier: string; createdAt: number }>();
+
+function requireWebSession(c: Context): void {
+  if (c.get('authKind') !== 'session') {
+    throw new OperationRequiresHumanUiError(
+      'disconnect_cloudflare',
+      'Disconnecting Cloudflare requires confirmation in the OpenLander UI.',
+    );
+  }
+}
+
+function removeExpiredStates(now = Date.now()): void {
+  for (const [state, pending] of pendingOAuthStates) {
+    if (now - pending.createdAt > OAUTH_STATE_TTL_MS) pendingOAuthStates.delete(state);
+  }
+}
+
+function rememberOAuthState(state: string, verifier: string): void {
+  removeExpiredStates();
+  if (pendingOAuthStates.size >= OAUTH_STATE_MAX_ENTRIES) {
+    const oldest = pendingOAuthStates.keys().next().value;
+    if (oldest !== undefined) pendingOAuthStates.delete(oldest);
+  }
+  pendingOAuthStates.set(state, { verifier, createdAt: Date.now() });
+}
+
+function consumeOAuthState(state: string): string | null {
+  const pending = pendingOAuthStates.get(state);
+  pendingOAuthStates.delete(state);
+  if (!pending || Date.now() - pending.createdAt > OAUTH_STATE_TTL_MS) return null;
+  return pending.verifier;
+}
+
+export const __cloudflareOAuthStateTestHooks = {
+  clear(): void {
+    pendingOAuthStates.clear();
+  },
+  set(state: string, verifier: string, createdAt = Date.now()): void {
+    pendingOAuthStates.set(state, { verifier, createdAt });
+  },
+  consume: consumeOAuthState,
+  get size(): number {
+    return pendingOAuthStates.size;
+  },
+  maxEntries: OAUTH_STATE_MAX_ENTRIES,
+  ttlMs: OAUTH_STATE_TTL_MS,
+};
 
 export function createCloudflareSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  api.get('/setup/cloudflare', (c) => {
-    const config = loadConfig();
-    const cloudflare = config.cloudflare;
-    const configured =
-      cloudflare.apiToken.trim() !== '' &&
-      cloudflare.accountId.trim() !== '' &&
-      cloudflare.tunnelId.trim() !== '';
-
-    return c.json(
-      configured
-        ? {
-            configured: true,
-            accountId: cloudflare.accountId,
-          }
-        : {
-            configured: false,
-          },
-    );
+  api.get('/setup/cloudflare', async (c) => {
+    return c.json(await ctx.cloudflare.getConnectedPublishConnection());
   });
 
-  api.post('/setup/cloudflare/connect', async (c) => {
-    const body = await c.req.json<{ api_token?: string }>();
-    const apiToken = typeof body.api_token === 'string' ? body.api_token.trim() : '';
-
-    if (!apiToken) {
-      return c.json({ error: 'MISSING_FIELD', message: 'api_token is required' }, 400);
+  api.post('/setup/cloudflare/oauth/start', (c) => {
+    const config = ctx.config.cloudflare;
+    if (!config.oauthClientId.trim() || !config.oauthRedirectUri.trim()) {
+      throw new CloudflareOAuthUnavailableError();
     }
 
-    try {
-      const accountsResp = await fetch('https://api.cloudflare.com/client/v4/accounts', {
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    const { verifier, challenge } = generatePkce();
+    const state = randomBytes(24).toString('base64url');
+    rememberOAuthState(state, verifier);
+    const authUrl = getCloudflareAuthUrl({
+      clientId: config.oauthClientId,
+      redirectUri: config.oauthRedirectUri,
+      challenge,
+      state,
+      scopes: config.oauthScopes,
+    });
 
-      const accountsData = (await accountsResp.json()) as {
-        success?: boolean;
-        result?: Array<{ id?: string; name?: string }>;
-        errors?: Array<{ message?: string }>;
-      };
-
-      if (accountsResp.status === 401 || accountsResp.status === 403) {
-        const message = accountsData.errors?.[0]?.message || 'Invalid Cloudflare API token';
-        return c.json({ error: 'INVALID_TOKEN', message }, 401);
-      }
-
-      if (!accountsResp.ok || !accountsData.success) {
-        const message = accountsData.errors?.[0]?.message || 'Failed to list Cloudflare accounts';
-        return c.json({ error: 'CF_API_FAILED', message }, 500);
-      }
-
-      const account = accountsData.result?.[0];
-      const accountId = account?.id?.trim() || '';
-      const accountName = account?.name?.trim() || '';
-
-      if (!accountId || !accountName) {
-        return c.json({ error: 'CF_API_FAILED', message: 'No Cloudflare account found' }, 500);
-      }
-
-      const tunnelsResp = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/cfd_tunnel?is_deleted=false`,
-        {
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      const tunnelsData = (await tunnelsResp.json()) as {
-        success?: boolean;
-        result?: Array<{ id?: string; name?: string }>;
-        errors?: Array<{ message?: string }>;
-      };
-
-      if (!tunnelsResp.ok || !tunnelsData.success) {
-        const message = tunnelsData.errors?.[0]?.message || 'Failed to list Cloudflare tunnels';
-        return c.json({ error: 'CF_API_FAILED', message }, 500);
-      }
-
-      const tunnels = (tunnelsData.result ?? [])
-        .map((tunnel) => ({
-          id: tunnel.id?.trim() || '',
-          name: tunnel.name?.trim() || '',
-        }))
-        .filter((tunnel) => tunnel.id !== '');
-
-      return c.json({ accountId, accountName, tunnels });
-    } catch (error) {
-      return c.json(
-        {
-          error: 'CF_API_FAILED',
-          message: error instanceof Error ? error.message : 'Cloudflare API request failed',
-        },
-        500,
-      );
-    }
+    return c.json({
+      auth_url: authUrl,
+      state,
+      callback_origin: new URL(config.oauthRedirectUri).origin,
+      expires_in_seconds: OAUTH_STATE_TTL_MS / 1000,
+    });
   });
 
-  api.post('/setup/cloudflare', async (c) => {
-    const body = await c.req.json<{
-      api_token?: string;
-      account_id?: string;
-      tunnel_id?: string;
-    }>();
+  api.post('/setup/cloudflare/oauth/complete', async (c) => {
+    const body = await c.req.json<{ code?: unknown; state?: unknown }>();
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    const state = typeof body.state === 'string' ? body.state.trim() : '';
+    if (!code || !state) {
+      return c.json({ error: 'MISSING_FIELD', message: 'code and state are required' }, 400);
+    }
 
-    const apiToken = typeof body.api_token === 'string' ? body.api_token.trim() : '';
-    const accountId = typeof body.account_id === 'string' ? body.account_id.trim() : '';
-    const tunnelId = typeof body.tunnel_id === 'string' ? body.tunnel_id.trim() : '';
-
-    if (!apiToken || !accountId || !tunnelId) {
+    const verifier = consumeOAuthState(state);
+    if (!verifier) {
       return c.json(
-        {
-          error: 'MISSING_FIELD',
-          message: 'api_token, account_id, and tunnel_id are required',
-        },
+        { error: 'INVALID_OAUTH_STATE', message: 'OAuth state is invalid or expired' },
         400,
       );
     }
 
-    const cloudflareConfig = { apiToken, accountId, tunnelId };
-    updateConfig({ cloudflare: cloudflareConfig });
-    ctx.cloudflare.reloadConfig(cloudflareConfig);
+    const config = ctx.config.cloudflare;
+    if (!config.oauthClientId.trim() || !config.oauthRedirectUri.trim()) {
+      throw new CloudflareOAuthUnavailableError();
+    }
+    const token = await exchangeCloudflareCode({
+      clientId: config.oauthClientId,
+      redirectUri: config.oauthRedirectUri,
+      code,
+      verifier,
+    });
+    await encryptAndStoreToken(ctx.db, 'cloudflare', {
+      accessToken: token.accessToken,
+      refreshToken: token.refreshToken,
+      expiresAt: new Date(Date.now() + token.expiresIn * 1000).toISOString(),
+    });
 
-    return c.json({ status: 'configured' });
+    return c.json({
+      status: 'authorized',
+      accounts: await ctx.cloudflare.listConnectedPublishAccounts(),
+    });
+  });
+
+  api.get('/setup/cloudflare/accounts', async (c) => {
+    return c.json({ accounts: await ctx.cloudflare.listConnectedPublishAccounts() });
+  });
+
+  api.get('/setup/cloudflare/zones', async (c) => {
+    const accountId = c.req.query('account_id')?.trim() ?? '';
+    if (!accountId) {
+      return c.json({ error: 'MISSING_FIELD', message: 'account_id is required' }, 400);
+    }
+    return c.json({ zones: await ctx.cloudflare.listConnectedPublishZones(accountId) });
+  });
+
+  api.post('/setup/cloudflare/connect', async (c) => {
+    const body = await c.req.json<{ account_id?: unknown; zone_id?: unknown }>();
+    const accountId = typeof body.account_id === 'string' ? body.account_id.trim() : '';
+    const zoneId = typeof body.zone_id === 'string' ? body.zone_id.trim() : '';
+    if (!accountId || !zoneId) {
+      return c.json(
+        { error: 'MISSING_FIELD', message: 'account_id and zone_id are required' },
+        400,
+      );
+    }
+
+    return c.json(await ctx.cloudflare.connectConnectedPublish({ accountId, zoneId }));
+  });
+
+  api.post('/setup/cloudflare/disconnect', async (c) => {
+    requireWebSession(c);
+    return c.json(await ctx.cloudflare.disconnectConnectedPublish());
   });
 
   return api;

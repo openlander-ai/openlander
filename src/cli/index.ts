@@ -156,6 +156,35 @@ async function runMcpTokenRotate(options: McpTokenCommandOptions): Promise<void>
   printMcpTokenResult('rotate', result, options.json);
 }
 
+async function runAdminPasswordReset(): Promise<void> {
+  const [{ password }, { MIN_PASSWORD_LENGTH }] = await Promise.all([
+    import('@inquirer/prompts'),
+    import('../auth/auth-service.js'),
+  ]);
+
+  const newPassword = await password({
+    message: 'New password:',
+    validate: (value) =>
+      value.trim().length >= MIN_PASSWORD_LENGTH ||
+      `Password must be at least ${String(MIN_PASSWORD_LENGTH)} characters.`,
+  });
+  const confirmPassword = await password({ message: 'Confirm password:' });
+
+  if (newPassword !== confirmPassword) {
+    printCommandError('Passwords do not match.');
+    return;
+  }
+
+  const reset = await withAuthService(async (authService) => {
+    await authService.resetPassword(newPassword);
+    return true;
+  });
+  if (!reset) return;
+
+  console.log(pc.green('Password reset successfully.'));
+  console.log(pc.dim('Existing web sessions were signed out.'));
+}
+
 /**
  * 1.0 GA: shared unhandledRejection handler used by both `openlander` and
  * `openlander start`. Logs the reason but keeps the host process alive so a
@@ -219,6 +248,11 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      try {
+        await ctx.cloudflare.reconcileConnectedPublish();
+      } catch (error) {
+        log.warn({ err: error }, 'Connected Publish reconciliation failed during startup');
+      }
       await ctx.platformUpdater.repairActiveUpdateFileOwnership();
       await recordUpdateStartupResult(
         true,
@@ -335,6 +369,11 @@ program
     try {
       await ctx.traefik.start();
       await syncManagedTraefikProjectNetworks(ctx);
+      try {
+        await ctx.cloudflare.reconcileConnectedPublish();
+      } catch (error) {
+        log.warn({ err: error }, 'Connected Publish reconciliation failed during startup');
+      }
       await ctx.platformUpdater.repairActiveUpdateFileOwnership();
       await recordUpdateStartupResult(
         true,
@@ -459,6 +498,15 @@ program
     process.exit(0);
   });
 
+// ── openlander admin ────────────────────────────────────────────────────────
+
+const adminCommand = program.command('admin').description('Run local administrator recovery');
+
+adminCommand
+  .command('reset-password')
+  .description('Reset the admin password and sign out existing web sessions')
+  .action(runAdminPasswordReset);
+
 // ── openlander config ────────────────────────────────────────────────────────
 
 program
@@ -571,38 +619,7 @@ program
     }
 
     if (action === 'reset-password') {
-      const { getDatabaseUrl } = await import('../config/index.js');
-      const databaseUrl = getDatabaseUrl();
-
-      if (!databaseUrl) {
-        console.log(pc.red('No database URL configured. Set OPENLANDER_DATABASE_URL first.'));
-        return;
-      }
-
-      const { password } = await import('@inquirer/prompts');
-
-      const newPassword = await password({ message: 'New password:' });
-      const confirmPassword = await password({ message: 'Confirm password:' });
-
-      if (newPassword !== confirmPassword) {
-        console.log(pc.red('Passwords do not match.'));
-        return;
-      }
-
-      if (!newPassword) {
-        console.log(pc.red('Password cannot be empty.'));
-        return;
-      }
-
-      const { Database } = await import('../db/index.js');
-      const { AuthService } = await import('../auth/auth-service.js');
-
-      const db = await Database.connect(databaseUrl);
-      const authService = new AuthService(db);
-      await authService.resetPassword(newPassword);
-      await db.close();
-
-      console.log(pc.green('Password reset successfully.'));
+      await runAdminPasswordReset();
       return;
     }
 

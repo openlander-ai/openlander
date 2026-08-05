@@ -506,6 +506,62 @@ export class CloudflareNotFoundError extends OpenLanderError {
   }
 }
 
+export class CloudflareNotConnectedError extends OpenLanderError {
+  constructor() {
+    super(
+      'Connect Cloudflare and select a DNS Zone before publishing an application.',
+      'CLOUDFLARE_NOT_CONNECTED',
+      409,
+      {
+        suggested_call: {
+          method: 'GET',
+          path: '/api/setup/cloudflare',
+        },
+      },
+    );
+    this.name = 'CloudflareNotConnectedError';
+  }
+}
+
+export class CloudflareOAuthUnavailableError extends OpenLanderError {
+  constructor() {
+    super(
+      'Cloudflare OAuth is not configured for this OpenLander build.',
+      'CLOUDFLARE_OAUTH_UNAVAILABLE',
+      503,
+    );
+    this.name = 'CloudflareOAuthUnavailableError';
+  }
+}
+
+export class CloudflareApiError extends OpenLanderError {
+  constructor(status: number, detail: string, operation: string) {
+    super('Cloudflare API request failed.', 'CLOUDFLARE_API_FAILED', 502, {
+      status,
+      detail,
+      operation,
+    });
+    this.name = 'CloudflareApiError';
+  }
+}
+
+export class PublicAccessNotEligibleError extends OpenLanderError {
+  constructor(reason: string, details?: Record<string, unknown>) {
+    super(`Application cannot be published: ${reason}`, 'PUBLIC_ACCESS_NOT_ELIGIBLE', 409, details);
+    this.name = 'PublicAccessNotEligibleError';
+  }
+}
+
+export class PublicAccessBusyError extends OpenLanderError {
+  constructor(projectId: string, status: string) {
+    super('A public access change is already in progress.', 'PUBLIC_ACCESS_BUSY', 409, {
+      projectId,
+      status,
+    });
+    this.name = 'PublicAccessBusyError';
+  }
+}
+
 /**
  * Check if a raw error from dockerode is a "not found" error.
  * Use at boundaries where raw dockerode is called directly (not via Docker wrapper).

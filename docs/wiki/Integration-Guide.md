@@ -232,13 +232,13 @@ the same database.
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **137 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **138 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                                            |
 | ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 28      | Deploy lifecycle: plans, execution, rollback, build                                |
-| `openlander_project`         | 47      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure        |
-| `openlander_service`         | 25      | Application lifecycle, config, domains                                             |
+| `openlander_project`         | 48      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure        |
+| `openlander_service`         | 26      | Application lifecycle, config, domains                                             |
 | `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                  |
 | `openlander_monitor`         | 15      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, host/network diagnosis |
 
@@ -253,7 +253,7 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 | Env Vars       | `openlander_service` → `set_env_vars`                                                                                               | Save Application environment variables                                       |
 | Update         | `openlander_service` → `update_app`                                                                                                 | Ship latest stored source/config                                             |
 | Rollback       | `openlander_deploy` → `rollback_service`                                                                                            | Revert to previous Docker image only                                         |
-| Share          | `openlander_project` → `expose_public`                                                                                              | Generate temporary share URL                                                 |
+| Publish        | `openlander_service` → `expose_public`                                                                                              | Create a stable Connected Publish URL                                        |
 | Resource       | `openlander_managed_service` → `create_service`                                                                                     | Create Database/Cache resource                                               |
 | Inspect        | `openlander_managed_service` → `list_data_sources`                                                                                  | Discover Project data sources                                                |
 | Delivery       | `openlander_project` → `create_delivery`                                                                                            | Start an FDE delivery evidence record                                        |

@@ -534,28 +534,31 @@ export async function getProjectLogs(id: string): Promise<string> {
   return res.text();
 }
 
-export async function exposeProject(id: string): Promise<{ publicUrl: string }> {
-  const res = await fetch(`/api/projects/${id}/expose`, { method: 'POST' });
+export type PublicAccessStatus = 'private' | 'provisioning' | 'public' | 'unpublishing' | 'error';
+
+export interface ProjectPublicAccess {
+  project_id: string;
+  service_id: string | null;
+  status: PublicAccessStatus;
+  public_url: string | null;
+  hostname: string | null;
+  error: { code: string | null; message: string | null } | null;
+}
+
+export async function getProjectPublicAccess(id: string): Promise<ProjectPublicAccess> {
+  const res = await fetchWithAuth(`/api/projects/${id}/public-access`);
+  if (!res.ok) await throwApiError(res, 'Failed to load public access');
+  return res.json();
+}
+
+export async function exposeProject(id: string): Promise<ProjectPublicAccess> {
+  const res = await fetchWithAuth(`/api/projects/${id}/expose`, { method: 'POST' });
   if (!res.ok) await throwApiError(res, 'Failed to expose project');
   return res.json();
 }
 
-export async function unexposeProject(id: string): Promise<void> {
-  return apiPostVoid(`/api/projects/${id}/unexpose`);
-}
-
-export async function shareProject(id: string, accessCode: string): Promise<{ publicUrl: string }> {
-  const res = await fetch(`/api/projects/${id}/share`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accessCode }),
-  });
-  if (!res.ok) await throwApiError(res, 'Failed to share project');
-  return res.json();
-}
-
-export async function unshareProject(id: string): Promise<void> {
-  return apiDelete(`/api/projects/${id}/share`);
+export async function unexposeProject(id: string): Promise<ProjectPublicAccess> {
+  return apiPost<ProjectPublicAccess>(`/api/projects/${id}/unexpose`);
 }
 
 // Domain routing API moved to `./domains.ts` for the v0.1 manual-DNS +

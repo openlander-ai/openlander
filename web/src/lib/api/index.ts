@@ -11,5 +11,6 @@ export * from './ai-ops.js';
 export * from './ai-providers.js';
 export * from './data-access.js';
 export * from './git-credentials.js';
+export * from './cloudflare.js';
 export * from './deliveries.js';
 export * from './engagements.js';

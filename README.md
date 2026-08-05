@@ -65,6 +65,16 @@ Update later with:
 curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh | sudo bash -s update
 ```
 
+If the dashboard password is lost, installations created by the quick
+installer provide an interactive recovery command:
+
+```bash
+sudo openlanderctl admin reset-password
+```
+
+The password is entered through a hidden terminal prompt, never a command-line
+argument, and the reset signs out existing dashboard sessions.
+
 Prefer manual setup? Download
 [`docker-compose.runtime.yml`](docker-compose.runtime.yml) and run
 `docker compose -f docker-compose.runtime.yml up -d`.

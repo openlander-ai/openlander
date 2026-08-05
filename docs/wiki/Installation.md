@@ -30,7 +30,8 @@ This installer:
 - Installs Docker if it is missing
 - Installs the Docker Compose v2 plugin if it is missing
 - Creates `/opt/openlander`
-- Downloads `docker-compose.runtime.yml`
+- Downloads `docker-compose.runtime.yml` and `openlanderctl`
+- Links `openlanderctl` into `/usr/local/bin`
 - Creates `/opt/openlander/.env` with a generated Postgres password
 - Starts OpenLander and Postgres
 
@@ -59,6 +60,25 @@ Despite the environment variable name, this does not have to be an internet
 public IP. Use a domain such as `apps.example.com` for internet-facing installs,
 or a LAN IP such as `192.168.1.50` for internal-only installs. IP values are
 advertised through `sslip.io`.
+
+### Connected Publish OAuth
+
+Connected Publish uses a public Cloudflare OAuth client with the Authorization
+Code flow and PKCE. Official builds must provide the publisher-registered client values;
+self-built installations may register their own public client and set these in
+the Compose `.env` file:
+
+```dotenv
+OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID=your-public-client-id
+OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI=https://publisher.example/cloudflare-oauth-callback.html
+OPENLANDER_CLOUDFLARE_OAUTH_SCOPES=scope-id-1,scope-id-2
+```
+
+The redirect URI must be the fixed callback page registered with Cloudflare.
+The scope IDs must match that OAuth client and cover account/Zone reads, DNS
+writes, and Cloudflare Tunnel/connector writes. Restart the OpenLander
+container after changing these values. The Web Server page reports Connected
+Publish as unavailable when the client id or redirect URI is missing.
 
 ### Install A Specific Version
 
@@ -100,6 +120,20 @@ Manual updates:
 docker compose -f docker-compose.runtime.yml pull
 docker compose -f docker-compose.runtime.yml up -d
 ```
+
+For the same administrator recovery command used by the quick installer,
+download the matching wrapper beside the Compose file:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.3.0/openlanderctl
+chmod +x openlanderctl
+./openlanderctl admin reset-password
+```
+
+The reset requires an interactive terminal, does not accept a password as an
+argument, and invalidates existing dashboard sessions. Set
+`OPENLANDER_INSTALL_DIR` only when the wrapper is stored somewhere other than
+the directory containing `docker-compose.runtime.yml`.
 
 ---
 
@@ -234,8 +268,16 @@ brew install --cask docker
 | `openlander restart`               | Prints supervisor guidance (no built-in daemon)     |
 | `openlander config`                | Show current config                                 |
 | `openlander config reset`          | Reset config to defaults                            |
-| `openlander config reset-password` | Reset admin password                                |
+| `openlander admin reset-password`  | Reset admin password and invalidate web sessions    |
+| `openlander config reset-password` | Legacy alias for the administrator recovery command |
 | `openlander mcp`                   | Start MCP server (stdio mode)                       |
+
+Docker installations created by the quick installer expose the administrator
+command from the host:
+
+```bash
+sudo openlanderctl admin reset-password
+```
 
 > **0.1 change**: OpenLander runs in the foreground only when started directly.
 > Use Docker Compose for the default background lifecycle. systemd or PM2 are

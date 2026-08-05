@@ -21,7 +21,7 @@ export interface RefreshTokenOptions {
   tokenUrl: string;
   refreshToken: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
 }
 
 /**
@@ -42,8 +42,8 @@ export async function refreshOAuthToken(
     grant_type: 'refresh_token',
     refresh_token: opts.refreshToken,
     client_id: opts.clientId,
-    client_secret: opts.clientSecret,
   });
+  if (opts.clientSecret) body.set('client_secret', opts.clientSecret);
 
   let response: Response;
   try {

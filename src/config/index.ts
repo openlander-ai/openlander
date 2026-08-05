@@ -187,12 +187,18 @@ export interface GitConfig {
 }
 
 export interface CloudflareConfig {
-  /** API token for DNS + Tunnel management */
+  /** @deprecated Legacy manual API token; Connected Publish uses OAuth. */
   apiToken: string;
-  /** Tunnel ID for production domains */
+  /** @deprecated Legacy manually selected tunnel id. */
   tunnelId: string;
-  /** Account ID */
+  /** @deprecated Legacy manually selected account id. */
   accountId: string;
+  /** Public OAuth client id registered by the OpenLander publisher. */
+  oauthClientId: string;
+  /** Fixed public callback page registered on the Cloudflare OAuth client. */
+  oauthRedirectUri: string;
+  /** Dot-delimited Cloudflare OAuth scopes registered for this client. */
+  oauthScopes: string[];
 }
 
 export interface MonitoringConfig {
@@ -385,6 +391,12 @@ function buildDefaultConfig(): OpenLanderConfig {
       apiToken: '',
       tunnelId: '',
       accountId: '',
+      oauthClientId: process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ?? '',
+      oauthRedirectUri: process.env['OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI']?.trim() ?? '',
+      oauthScopes: (process.env['OPENLANDER_CLOUDFLARE_OAUTH_SCOPES'] ?? '')
+        .split(',')
+        .map((scope) => scope.trim())
+        .filter((scope) => scope.length > 0),
     },
     monitoring: {
       healthcheckIntervalSec: 60,

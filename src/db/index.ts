@@ -49,6 +49,7 @@ import { ProjectEnvironmentRepo } from './repos/project-environment.repo.js';
 import { ReleaseRepo } from './repos/release.repo.js';
 import { WeeklyReportRepo } from './repos/weekly-report.repo.js';
 import { ProjectUpdateRepo } from './repos/project-update.repo.js';
+import { PublicAccessRepo } from './repos/public-access.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -117,6 +118,8 @@ export type {
   ReleaseArtifactRow,
   ReleasePromotionRow,
   EngagementWeeklyReportRow,
+  CloudflareConnectionRow,
+  ProjectPublicAccessRow,
 } from './schema.drizzle.js';
 
 const log = createModuleLogger('db-migration');
@@ -337,6 +340,7 @@ export class Database implements AuthDatabase {
   private readonly releaseRepo: ReleaseRepo;
   private readonly weeklyReportRepo: WeeklyReportRepo;
   private readonly projectUpdateRepo: ProjectUpdateRepo;
+  private readonly publicAccessRepo: PublicAccessRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
     this.client = client;
@@ -384,6 +388,7 @@ export class Database implements AuthDatabase {
     this.releaseRepo = new ReleaseRepo(this.db, this.client);
     this.weeklyReportRepo = new WeeklyReportRepo(this.db, this.client);
     this.projectUpdateRepo = new ProjectUpdateRepo(this.db, this.client);
+    this.publicAccessRepo = new PublicAccessRepo(this.db, this.client);
   }
 
   static async connect(databaseUrl: string): Promise<Database> {
@@ -463,6 +468,16 @@ export class Database implements AuthDatabase {
     return this.projectRepo.ensureDeployableServiceForProject(projectId, input);
   }
   getProject(id: string) { return this.projectRepo.getProject(id); }
+  getCloudflareConnection() { return this.publicAccessRepo.getCloudflareConnection(); }
+  upsertCloudflareConnection(input: Parameters<PublicAccessRepo['upsertCloudflareConnection']>[0]) { return this.publicAccessRepo.upsertCloudflareConnection(input); }
+  updateCloudflareConnection(patch: Parameters<PublicAccessRepo['updateCloudflareConnection']>[0]) { return this.publicAccessRepo.updateCloudflareConnection(patch); }
+  deleteCloudflareConnection() { return this.publicAccessRepo.deleteCloudflareConnection(); }
+  getProjectPublicAccess(projectId: string) { return this.publicAccessRepo.getProjectPublicAccess(projectId); }
+  getProjectPublicAccessByHostname(hostname: string) { return this.publicAccessRepo.getProjectPublicAccessByHostname(hostname); }
+  listProjectPublicAccess() { return this.publicAccessRepo.listProjectPublicAccess(); }
+  upsertProjectPublicAccess(input: Parameters<PublicAccessRepo['upsertProjectPublicAccess']>[0]) { return this.publicAccessRepo.upsertProjectPublicAccess(input); }
+  updateProjectPublicAccess(projectId: string, patch: Parameters<PublicAccessRepo['updateProjectPublicAccess']>[1]) { return this.publicAccessRepo.updateProjectPublicAccess(projectId, patch); }
+  deleteProjectPublicAccess(projectId: string) { return this.publicAccessRepo.deleteProjectPublicAccess(projectId); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
   listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
   listRuntimeProjectsForReconciliation() { return this.projectRepo.listRuntimeProjectsForReconciliation(); }

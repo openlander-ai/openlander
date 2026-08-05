@@ -20,7 +20,6 @@ import {
   getProjectUrl,
 } from './traefik.js';
 import { resolveContainerUrl } from './url-resolver.js';
-import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
@@ -83,7 +82,6 @@ import {
 } from './deploy/helpers.js';
 import { ContainerLifecycle, type CoordinatorSuppressor } from './deploy/lifecycle.js';
 import { RollbackExecutor } from './deploy/rollback.js';
-import { TunnelManager } from './deploy/tunnel.js';
 import { createLocalProbeRunner } from '../health/probe-runner.js';
 import { resolveMonitoringProfile } from '../health/profile-resolver.js';
 import type { HealthCheckConfig, ProbeContext, ProbeResult } from '../health/types.js';
@@ -478,13 +476,12 @@ type RestoreLiveContainerResult =
  *   2. Verify Dockerfile exists
  *   3. docker build
  *   4. docker run (port + Traefik labels)
- *   5. expose (TryCloudflare if requested)
+ *   5. return the internal route; public access is an explicit post-deploy action
  *
  * The LLM agent calls this pipeline via tools — it never executes
  * Docker commands directly.
  */
 export class DeployPipeline {
-  private readonly tunnelManager: TunnelManager;
   private readonly lifecycle: ContainerLifecycle;
   private readonly rollbackExecutor: RollbackExecutor;
   private readonly buildExecutor: BuildExecutor;
@@ -527,7 +524,6 @@ export class DeployPipeline {
       ? coordinator
       : (autoDetectorOrCoordinator as CoordinatorSuppressor | undefined);
 
-    this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(
       this.runtime,
       this.db,
@@ -544,18 +540,7 @@ export class DeployPipeline {
     );
     this.buildExecutor = new BuildExecutor(this.runtime);
     this.containerRunner = new ContainerRunner(this.runtime, this.db, routeProvider);
-    void this.cleanupStaleTunnels().catch((err: unknown) => {
-      log.debug({ err }, 'Stale tunnel cleanup failed');
-    });
     void this.auditOrphanContainers();
-  }
-
-  /**
-   * On startup, any project with quick-share/shared visibility has a dead tunnel
-   * (the cloudflared child process doesn't survive restarts). Reset to internal.
-   */
-  private async cleanupStaleTunnels(): Promise<void> {
-    await this.tunnelManager.cleanupStale();
   }
 
   private async auditOrphanContainers(): Promise<void> {
@@ -2178,7 +2163,6 @@ export class DeployPipeline {
       jobManager: this.jobManager,
       applyPendingFix: (projectId: string, clonePath: string) =>
         this.applyPendingFix(projectId, clonePath),
-      exposeTunnel: (projectId: string, port: number) => this.exposeTunnel(projectId, port),
       secretScanEnabled: this.config.ai.secretScan.enabled,
     };
   }
@@ -4154,12 +4138,10 @@ export class DeployPipeline {
     const childProjects = await this.db.getComposeChildProjects(projectId);
     if (childProjects.length > 0) {
       await this.lifecycle.stop(projectId);
-      this.closeTunnel(projectId);
       return;
     }
 
     await this.lifecycle.stop(projectId);
-    this.closeTunnel(projectId);
   }
 
   /** Start a stopped project's container. */
@@ -4217,6 +4199,14 @@ export class DeployPipeline {
 
     if (cloudflare) {
       for (const targetId of descendants) {
+        try {
+          await cloudflare.deleteConnectedPublishReservation(targetId);
+        } catch (err) {
+          log.warn(
+            { err, projectId: targetId },
+            'Connected Publish cleanup during project delete failed; the public route now returns 404',
+          );
+        }
         const domains = await this.db.getDomainMappings(targetId);
         for (const mapping of domains) {
           try {
@@ -4231,13 +4221,13 @@ export class DeployPipeline {
       }
     }
 
-    await this.lifecycle.remove(projectId, this.tunnelManager);
+    await this.lifecycle.remove(projectId);
   }
 
   async archive(projectId: string): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) {
-      await this.lifecycle.archive(projectId, this.tunnelManager);
+      await this.lifecycle.archive(projectId);
       return;
     }
 
@@ -4246,15 +4236,13 @@ export class DeployPipeline {
     // one set so contention cannot leave a partially archived workload.
     const lockProjectIds = await this.collectArchiveLockProjectIds([projectId]);
     await this.assertNoActiveArchiveJobs(lockProjectIds);
-    await this.withArchiveLocks(lockProjectIds, () =>
-      this.lifecycle.archive(projectId, this.tunnelManager),
-    );
+    await this.withArchiveLocks(lockProjectIds, () => this.lifecycle.archive(projectId));
   }
 
   async archiveGroup(projectId: string): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) {
-      await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+      await this.lifecycle.archiveGroup(projectId);
       return;
     }
 
@@ -4267,9 +4255,7 @@ export class DeployPipeline {
       ...(runtimeProjectIds.length > 0 ? runtimeProjectIds : [projectId]),
     ]);
     await this.assertNoActiveArchiveJobs(lockProjectIds);
-    await this.withArchiveLocks(lockProjectIds, () =>
-      this.lifecycle.archiveGroup(projectId, this.tunnelManager),
-    );
+    await this.withArchiveLocks(lockProjectIds, () => this.lifecycle.archiveGroup(projectId));
   }
 
   private async collectArchiveLockProjectIds(rootProjectIds: readonly string[]): Promise<string[]> {
@@ -4364,20 +4350,6 @@ export class DeployPipeline {
 
   async unarchiveGroup(projectId: string): Promise<void> {
     await this.lifecycle.unarchiveGroup(projectId);
-  }
-
-  /** Create a TryCloudflare tunnel for a project. */
-  async exposeTunnel(projectId: string, _port: number): Promise<string> {
-    return this.tunnelManager.expose(projectId, _port);
-  }
-
-  /** Close a project's tunnel. */
-  closeTunnel(projectId: string): void {
-    this.tunnelManager.close(projectId);
-  }
-
-  getTunnel(projectId: string): CloudflareTunnel | undefined {
-    return this.tunnelManager.get(projectId);
   }
 
   /** Get container logs. */

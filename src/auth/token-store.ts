@@ -13,6 +13,7 @@ import type { Database } from '../db/index.js';
 const log = createModuleLogger('auth');
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const CLOUDFLARE_TOKEN_URL = 'https://dash.cloudflare.com/oauth2/token';
 
 // 60 second buffer before expiry to trigger refresh
 const EXPIRY_BUFFER_MS = 60 * 1000;
@@ -134,7 +135,8 @@ export async function deleteProviderToken(db: Database, provider: string): Promi
 /** Config needed to attempt token refresh for a provider. */
 export interface RefreshConfig {
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
+  tokenUrl?: string;
 }
 
 /**
@@ -174,7 +176,13 @@ export async function refreshIfExpired(
     return false;
   }
 
-  const tokenUrl = provider === 'google' ? GOOGLE_TOKEN_URL : null;
+  const tokenUrl =
+    config.tokenUrl ??
+    (provider === 'google'
+      ? GOOGLE_TOKEN_URL
+      : provider === 'cloudflare'
+        ? CLOUDFLARE_TOKEN_URL
+        : null);
   if (!tokenUrl) {
     log.info({ provider }, 'Token expired but no known token URL for provider');
     return false;
@@ -184,7 +192,7 @@ export async function refreshIfExpired(
     tokenUrl,
     refreshToken: token.refreshToken,
     clientId: config.clientId,
-    clientSecret: config.clientSecret,
+    ...(config.clientSecret ? { clientSecret: config.clientSecret } : {}),
   });
 
   if (!result) {

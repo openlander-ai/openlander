@@ -615,7 +615,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(db.getProject('p10')?.pending_fix).toBeNull();
   });
 
-  it('exposes quick-share tunnel for production environment deployments', async () => {
+  it('does not publish automatically when legacy quick-share visibility is supplied', async () => {
     db.createProject({
       id: 'p5',
       name: 'quick-share-app',
@@ -627,18 +627,15 @@ describe('DeployPipeline deployEnvironment', () => {
       .find((environment) => environment.type === 'production');
     expect(productionEnvironment).toBeDefined();
 
-    const exposeTunnelSpy = vi
-      .spyOn(pipeline, 'exposeTunnel')
-      .mockResolvedValue('https://quick-share.example.trycloudflare.com');
-
     const result = await pipeline.deployEnvironment('p5', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/quick-share-app',
       visibility: 'quick-share',
     });
 
     expect(result.success).toBe(true);
-    expect(result.publicUrl).toBe('https://quick-share.example.trycloudflare.com');
-    expect(exposeTunnelSpy).toHaveBeenCalledWith('p5', expect.any(Number));
+    expect(result.publicUrl).toBeUndefined();
+    expect(db.getProject('p5')?.visibility).toBe('internal');
+    expect(db.getProject('p5')?.public_url).toBeNull();
   });
 
   it('auto-detects and generates Dockerfile when missing', async () => {
@@ -830,7 +827,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
-  it('opens quick-share tunnel even when environment type is development', async () => {
+  it('does not publish a development environment from legacy visibility config', async () => {
     db.createProject({
       id: 'p12',
       name: 'development-share-app',
@@ -844,17 +841,14 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'develop',
     });
 
-    const exposeTunnelSpy = vi
-      .spyOn(pipeline, 'exposeTunnel')
-      .mockResolvedValue('https://should-not-be-used.example.trycloudflare.com');
-
     const result = await pipeline.deployEnvironment('p12', 'p12-development', {
       visibility: 'quick-share',
     });
 
     expect(result.success).toBe(true);
-    expect(result.publicUrl).toBe('https://should-not-be-used.example.trycloudflare.com');
-    expect(exposeTunnelSpy).toHaveBeenCalledWith('p12', expect.any(Number));
+    expect(result.publicUrl).toBeUndefined();
+    expect(db.getProject('p12')?.visibility).toBe('internal');
+    expect(db.getProject('p12')?.public_url).toBeNull();
   });
 
   it('stores env vars at project scope regardless of environment type', async () => {
@@ -883,69 +877,6 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(mergeEnvVarsSpy).toHaveBeenCalledWith('p13', {
       API_BASE_URL: 'https://dev.example.com',
     });
-  });
-
-  it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {
-    db.createProject({
-      id: 'p15',
-      name: 'quick-app',
-      repoUrl: 'https://github.com/openlander/quick-app',
-      branch: 'main',
-    });
-    db.createProject({
-      id: 'p16',
-      name: 'shared-app',
-      repoUrl: 'https://github.com/openlander/shared-app',
-      branch: 'main',
-    });
-    db.updateProject('p15', {
-      visibility: 'quick-share',
-      publicUrl: 'https://quick.example.com',
-    });
-    db.updateProject('p16', {
-      visibility: 'shared',
-      publicUrl: 'https://shared.example.com',
-    });
-
-    const startupPipeline = new DeployPipeline(docker, db, env as never, testConfig);
-
-    expect(startupPipeline).toBeDefined();
-    expect(db.getProject('p15')?.visibility).toBe('internal');
-    expect(db.getProject('p15')?.public_url).toBeNull();
-    expect(db.getProject('p16')?.visibility).toBe('internal');
-    expect(db.getProject('p16')?.public_url).toBeNull();
-  });
-
-  it('exposeTunnel throws when project does not exist', async () => {
-    await expect(pipeline.exposeTunnel('does-not-exist', 12000)).rejects.toThrow(
-      'Project not found: does-not-exist',
-    );
-  });
-
-  it('closeTunnel stops active tunnel and clears project public state', () => {
-    db.createProject({
-      id: 'p17',
-      name: 'close-tunnel-app',
-      repoUrl: 'https://github.com/openlander/close-tunnel-app',
-      branch: 'main',
-    });
-    db.updateProject('p17', {
-      visibility: 'quick-share',
-      publicUrl: 'https://close.example.com',
-    });
-
-    const tunnel = { stop: vi.fn() };
-    (
-      pipeline as unknown as {
-        tunnelManager: { tunnels: Map<string, { stop: () => void }> };
-      }
-    ).tunnelManager.tunnels.set('p17', tunnel);
-
-    pipeline.closeTunnel('p17');
-
-    expect(tunnel.stop).toHaveBeenCalledOnce();
-    expect(db.getProject('p17')?.visibility).toBe('internal');
-    expect(db.getProject('p17')?.public_url).toBeNull();
   });
 
   it('detectFailStep maps incomplete build logs to expected step', () => {

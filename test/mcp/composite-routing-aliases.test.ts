@@ -173,7 +173,7 @@ describe('openlander_service direct deployable runtime actions', () => {
     );
   });
 
-  it('help does not advertise TryCloudflare-specific public access wording', async () => {
+  it('help advertises stable Connected Publish semantics', async () => {
     const result = (await tool.execute({ action: 'help' }, mockContext)) as {
       actions: Array<{ name: string; description: string }>;
     };
@@ -181,9 +181,9 @@ describe('openlander_service direct deployable runtime actions', () => {
       (action) => action.name === 'expose_public',
     )?.description;
 
-    expect(exposeDescription).toContain('temporary public share URL');
-    expect(exposeDescription).toContain('configured tunnel backend');
-    expect(exposeDescription).not.toMatch(/TryCloudflare|Cloudflare/i);
+    expect(exposeDescription).toContain('stable Connected Publish URL');
+    expect(exposeDescription).toContain('get_public_access');
+    expect(exposeDescription).not.toContain('temporary public share URL');
   });
 
   it('routes deployable service actions directly and validates service target params', async () => {

@@ -1479,6 +1479,27 @@ export const translations = {
       error: 'Project action failed',
     },
     addResourceWithAgent: 'Ask agent to add Database/Cache',
+    publicAccess: {
+      title: 'Public access',
+      publish: 'Publish',
+      publishing: 'Publishing…',
+      stopping: 'Stopping…',
+      retry: 'Retry publish',
+      stop: 'Stop',
+      open: 'Open public URL',
+      copy: 'Copy public URL',
+      copied: 'Public URL copied',
+      copyFailed: 'Could not copy the public URL.',
+      connectFirst: 'Connect Cloudflare before publishing this Project.',
+      runningApplicationRequired: 'Start an HTTP Application to publish this Project.',
+      notEligible: 'A running HTTP Application with a detected port is required.',
+      publishFailed: 'Could not publish this Project.',
+      unpublishFailed: 'Could not stop public access.',
+      stopTitle: 'Stop public access?',
+      stopDescription:
+        '{hostname} will no longer be reachable. You can publish it again later with the same URL.',
+      stopConfirm: 'Stop public access',
+    },
     env: {
       title: 'Application environment variables',
       description:
@@ -2537,6 +2558,38 @@ export const translations = {
     dockerUnavailable:
       'Docker is unreachable. Routes and port allocation may be stale until it recovers.',
     footer: 'Read-only · route editing ships in v0.2.',
+    publicAccess: {
+      title: 'Project publishing',
+      subtitle: 'Connect a Cloudflare domain once to create a stable URL for each Project.',
+      connected: 'Connected',
+      disconnected:
+        'OpenLander manages the connection automatically and leaves existing DNS settings unchanged.',
+      unavailable:
+        'Cloudflare OAuth is unavailable in this build. Configure the published OAuth client before connecting.',
+      connect: 'Connect Cloudflare',
+      connecting: 'Connecting…',
+      finish: 'Finish connection',
+      account: 'Account',
+      zone: 'Domain',
+      connector: 'Connection',
+      running: 'Ready',
+      needsAttention: 'Needs attention',
+      selectAccount: 'Select an account',
+      selectZone: 'Select a domain',
+      connectedToast: 'Cloudflare is connected.',
+      connectFailed: 'Could not finish the Cloudflare connection.',
+      oauthFailed: 'Cloudflare sign-in did not complete.',
+      zonesFailed: 'Could not load Cloudflare DNS Zones.',
+      moreActions: 'Cloudflare connection actions',
+      reconnect: 'Reconnect',
+      disconnect: 'Disconnect',
+      disconnectTitle: 'Disconnect Cloudflare?',
+      disconnectDescription:
+        'All Project public URLs will stop. OpenLander-owned DNS records, Tunnel, connector, and stored token will be removed. Your Cloudflare OAuth app will remain.',
+      disconnectConfirm: 'Disconnect Cloudflare',
+      disconnectedToast: 'Cloudflare is disconnected.',
+      disconnectFailed: 'Could not safely disconnect Cloudflare.',
+    },
     strip: {
       proxy: 'Proxy',
       routes: 'Routes',
@@ -2581,7 +2634,7 @@ export const translations = {
       unknown: 'Review the web server configuration',
       codes: {
         advertised_host_missing:
-          'Advertised host is not configured. Set OPENLANDER_PUBLIC_HOST to a LAN IP or domain so generated service routes are reachable.',
+          'Direct and LAN access is not configured. Set OPENLANDER_PUBLIC_HOST to a LAN IP or domain for those routes. This does not block Cloudflare Project publishing.',
       },
     },
     routes: {

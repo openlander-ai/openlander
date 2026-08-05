@@ -1,113 +1,130 @@
 # Domains & Public Access
 
+OpenLander keeps applications private by default. Version 0.3 adds **Connected
+Publish** for a stable HTTPS URL through the user's own Cloudflare account and
+DNS Zone.
+
 ## Access Modes
 
-| Mode            | Use Case      | How                  | Domain Required |
-| --------------- | ------------- | -------------------- | --------------- |
-| **Internal**    | Same network  | Local IP + Traefik   | No              |
-| **Quick Share** | Demo / review | Temporary share URL  | No              |
-| **Production**  | Always-on     | Manual DNS + Traefik | Yes             |
+| Mode                  | Use case                  | Domain required |
+| --------------------- | ------------------------- | --------------- |
+| **Internal**          | Private/LAN/VPN access    | No              |
+| **Connected Publish** | Stable external HTTPS URL | Yes             |
+| **Manual domain**     | Custom Host/path routing  | Yes             |
 
-Default is **Internal** (safe).
-
-`OPENLANDER_PUBLIC_HOST` is the host OpenLander advertises in generated app
-URLs. It may be a LAN IP for internal-only installs, a VPN/MagicDNS name, or a
-public domain/IP for internet-facing installs.
-
----
+Connected Publish is not a temporary-link service. It does not add an access
+code, expiry, or Cloudflare Access policy. Anyone who knows the published URL
+can open it until the Project is unpublished.
 
 ## Internal Access
 
-Every deployed project gets an internal URL via Traefik:
+Every deployed HTTP application gets an internal route through OpenLander's
+managed Traefik instance. `OPENLANDER_PUBLIC_HOST` controls the host advertised
+in generated internal URLs; it may be a LAN IP, VPN/MagicDNS name, or another
+operator-selected host.
 
+The application container does not need an inbound VPS firewall port. Traefik
+and the application communicate on OpenLander-managed Docker networks.
+
+## Connected Publish
+
+### Requirements
+
+1. A Cloudflare account with an active DNS Zone
+2. OpenLander's managed Docker runtime and Traefik
+3. Cloudflare OAuth configured for the OpenLander build
+4. A running HTTP Application, or a Compose workload with a saved
+   `traffic_service`
+
+Connect once from **Web Server → Public access → Connect Cloudflare**. The
+browser completes Cloudflare OAuth, then OpenLander asks for an account and DNS
+Zone only when it cannot select the sole available option automatically.
+If the connection flow started from a Project's **Publish** action, OpenLander
+returns to that Project and resumes publication after the connection succeeds.
+
+OpenLander creates one remotely managed Named Tunnel for the OpenLander
+instance and runs one pinned `cloudflared` connector container. Applications
+do not receive Cloudflare credentials.
+
+### Publish from the dashboard
+
+Open a Project and click **Publish** in the Project header. While provisioning,
+the control shows progress. When ready, the same control provides:
+
+- The stable HTTPS URL, which opens in a new tab
+- Copy URL
+- Stop publishing
+
+Stopping publication removes the active route but retains the hostname and DNS
+reservation. Publishing the same Project again therefore reuses the same URL.
+Publication is always an explicit action; deploying or redeploying does not
+publish an application automatically.
+
+### Reconnect or disconnect Cloudflare
+
+The connected card's action menu can refresh Cloudflare authorization without
+changing the selected Zone. **Disconnect Cloudflare** requires confirmation in
+the web UI. It stops every Connected Publish URL and removes only resources
+owned by this OpenLander connection: its DNS records, Named Tunnel,
+`cloudflared` connector, and stored OAuth token. The Cloudflare OAuth
+application itself remains configured for a later reconnect.
+
+### Representative application
+
+Connected Publish exposes one representative HTTP Application per Project:
+
+- A Project with one top-level Application is selected automatically.
+- A Compose workload uses its persisted `traffic_service`.
+- A Project with multiple top-level Applications requires an explicit
+  `service_id` through MCP for the first publication. The selected service is
+  then persisted for later publication.
+- Workers, databases, caches, storage services, stopped applications, and
+  applications without a detected HTTP port are not eligible.
+
+The mechanism is framework-agnostic. Nginx static sites, React/Vite SPAs,
+Next.js full-stack applications, and Nuxt, Remix, or SvelteKit applications are
+supported when they run as an HTTP application. A separate frontend/backend
+pair should expose the frontend or BFF and proxy backend requests under the
+same public hostname.
+
+### Publish through MCP
+
+Prefer the Application id returned by `list_projects`:
+
+```json
+{
+  "action": "expose_public",
+  "params": { "service_id": "project__svc" }
+}
 ```
-http://project-name.your-server-ip.sslip.io
+
+Poll the returned `status_call`, or call `get_public_access`, until the status
+is `public` or `error`. To stop publishing while keeping the URL reservation:
+
+```json
+{
+  "action": "unexpose_public",
+  "params": { "service_id": "project__svc" }
+}
 ```
 
-Or by port:
+## Manual Domains
 
-```
-http://your-server-ip:assigned-port
-```
+Manual domain routes remain available on an Application's **Domains** tab.
+They register a Host/path route in managed Traefik for DNS that the operator
+has already configured. The manual domain API does not create DNS records or a
+Cloudflare Tunnel route.
 
-Port range: `10001-10999` (production).
-
----
-
-## Quick Share
-
-Generate a temporary public URL without changing DNS or app source code.
-
-### Via Web Dashboard
-
-Project Detail → **Share** button
-
-### Via MCP
-
-```
-expose_public(project_name: "my-app")
-```
-
-Returns a temporary public URL.
-
-### Stop Sharing
-
-```
-unexpose_public(project_name: "my-app")
-```
-
-> **Note**: temporary share URLs may change on restart.
-
----
-
-## Custom Domains
-
-For permanent public URLs with your own domain.
-
-### Prerequisites
-
-1. A domain you control
-2. OpenLander running in managed Traefik mode
-3. DNS pointed at the server that runs OpenLander
-
-### Configure
-
-Create an `A`, `AAAA`, or `CNAME` record for your domain that points to the
-server running OpenLander. OpenLander does not manage DNS records automatically
-in v0.1.
-
-### Register Domain Route
-
-#### Via Web Dashboard
-
-Application Detail → **Domains** tab → Add Domain
-
-This registers a Host/path route inside OpenLander's managed Traefik config.
-It does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints, or
-TLS certificates.
-
-#### Via API
-
-```
+```text
 POST /api/projects/:projectId/services/:serviceId/domains
 ```
 
-The REST endpoint remains `/domains`; "domain route" is the product vocabulary
-for the Host/path route that endpoint registers, not a separate
-`/domain-routes` API path.
+One Application may have multiple manual domain routes, such as
+`app.example.com` and `www.example.com`. These routes are independent of the
+single Connected Publish URL reserved for the Project.
 
-### List Domain Routes
+## Initial 0.3 Scope
 
-Use Application Detail → **Domains** tab for day-to-day management. The API returns
-the same service-scoped Host/path route registrations used by the dashboard.
-
----
-
-## Multi-Domain
-
-A service can have multiple domain routes registered:
-
-```
-app.example.com
-www.example.com
-```
+Connected Publish intentionally excludes multiple public routes per Project,
+temporary random URLs, access codes, expiry, Cloudflare Access policy setup,
+external Traefik installations, and multi-server connector placement.

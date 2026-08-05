@@ -706,7 +706,7 @@ describe('deploy MCP guidance', () => {
     );
   });
 
-  it('blocks target_project_id with expose=true before creating a temp project', async () => {
+  it('requires publishing to be a separate explicit action', async () => {
     const ctx = {
       db: {
         getProject: vi.fn(() => ({ id: 'target', name: 'target' })),
@@ -722,7 +722,6 @@ describe('deploy MCP guidance', () => {
       {
         repo_url: 'https://github.com/acme/new-app',
         name: 'new-app',
-        target_project_id: 'target',
         expose: true,
       },
       { target: 'mcp' },
@@ -730,10 +729,10 @@ describe('deploy MCP guidance', () => {
 
     expect(result).toMatchObject({
       status: 'blocked',
-      code: 'TARGET_PROJECT_EXPOSE_UNSUPPORTED',
-      invalid_params: ['target_project_id', 'expose'],
+      code: 'EXPLICIT_PUBLICATION_REQUIRED',
+      invalid_params: ['expose'],
       _agent_guidance: {
-        message: expect.stringContaining('did not create a temp project'),
+        message: expect.stringContaining('separate explicit action'),
       },
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();

@@ -512,7 +512,11 @@ export async function createAppContext(
   });
 
   // v0.2: Cloudflare production tunnels
-  const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
+  const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus, {
+    runtime,
+    instanceId,
+    networkName: config.docker.networkName,
+  });
 
   const serviceManager = new ServiceManager(runtime, db);
 

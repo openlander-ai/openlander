@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-05
+
+### Added
+
+- Add Cloudflare OAuth with PKCE, account/Zone selection, one remotely managed
+  Named Tunnel per OpenLander instance, and a hardened pinned `cloudflared`
+  connector container.
+- Add Connected Publish for one representative HTTP Application per Project,
+  with a stable HTTPS hostname, DNS conflict protection, durable status, and
+  restart reconciliation.
+- Add compact dashboard controls to connect Cloudflare, publish a Project,
+  open or copy its URL, and stop publication while retaining the hostname for
+  republish.
+- Add REST and MCP status contracts for publishing, polling, and unpublishing,
+  including scoped-token enforcement for mixed target selectors.
+- Add a Docker-host `openlanderctl admin reset-password` recovery command with
+  hidden terminal input and automatic invalidation of existing web sessions.
+
+### Changed
+
+- Make publication an explicit post-deploy action. Deploy and redeploy no
+  longer create a temporary Quick Tunnel from `expose=true` or legacy
+  quick-share visibility.
+- Route Connected Publish through managed Traefik so a Project can expose an
+  Nginx static site, SPA, or full-stack HTTP framework without framework-specific
+  deployment behavior.
+
+### Removed
+
+- Remove TryCloudflare Quick Tunnel runtime code, access-code sharing, and the
+  promise of automatic publication during deployment.
+
 ## [0.2.15-rc.4] - 2026-07-31
 
 ### Fixed

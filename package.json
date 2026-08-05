@@ -1,6 +1,6 @@
 {
   "name": "openlander",
-  "version": "0.2.15-rc.4",
+  "version": "0.3.0",
   "description": "Self-hosted deployment control plane for coding agents",
   "type": "module",
   "bin": {
@@ -23,6 +23,7 @@
     "docker-compose.yml",
     "docker-compose.runtime.yml",
     "install.sh",
+    "openlanderctl",
     "scripts/build-runtime-image.sh",
     "LICENSE",
     "README.md",

@@ -361,9 +361,8 @@ describe('createProjectCompatRoutes', () => {
         getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn(async () => undefined),
         getDeployablesByGroup: vi.fn(async () => [parent]),
-        getServices: vi.fn(
-          async (opts: { kindIn?: readonly string[] } = {}) =>
-            opts.kindIn?.includes('compose-child') ? children : [],
+        getServices: vi.fn(async (opts: { kindIn?: readonly string[] } = {}) =>
+          opts.kindIn?.includes('compose-child') ? children : [],
         ),
         getEnvironmentsByProject: vi.fn(async () => []),
         listDomainMappings: vi.fn(async () => []),
@@ -377,16 +376,17 @@ describe('createProjectCompatRoutes', () => {
             snapshot: { trafficService: 'web' },
           }),
         })),
-        getLastDeployLogsForServices: vi.fn(async () =>
-          new Map(
-            children.map((service) => [
-              service.id,
-              {
-                status: 'success' as const,
-                created_at: '2026-07-19T00:00:00.000Z',
-              },
-            ]),
-          ),
+        getLastDeployLogsForServices: vi.fn(
+          async () =>
+            new Map(
+              children.map((service) => [
+                service.id,
+                {
+                  status: 'success' as const,
+                  created_at: '2026-07-19T00:00:00.000Z',
+                },
+              ]),
+            ),
         ),
       },
     });
@@ -689,39 +689,66 @@ describe('createProjectCompatRoutes', () => {
     expect(removeContainer).not.toHaveBeenCalledWith('svc-current');
   });
 
-  it('share treats a services-row visibility of "shared" as already shared (canonical-first)', async () => {
+  it('publishes, reads, and unpublishes through the stable project contract', async () => {
     const project = {
       id: 'group-1',
       name: 'workspace',
-      // Deprecated project column is stale; the canonical services row wins.
-      visibility: 'internal',
-      assigned_port: 10001,
     };
     const getProject = vi.fn(async (id: string) => (id === project.id ? project : undefined));
     const getProjectByName = vi.fn(async () => undefined);
-    const getDeployableForProject = vi.fn(async () =>
-      makeServiceRow({ visibility: 'shared', assigned_port: 10001 }),
-    );
-    const updateProject = vi.fn(async () => undefined);
-    const exposeTunnel = vi.fn(async () => undefined);
-    const tunnel = { enableSharedMode: vi.fn(), disableSharedMode: vi.fn() };
-    const getTunnel = vi.fn(() => tunnel);
+    const getPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'public',
+      public_url: 'https://workspace.example.com',
+    });
+    const requestPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'provisioning',
+      public_url: null,
+    });
+    const requestPrivateAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'unpublishing',
+      public_url: null,
+    });
     const app = createApp({
-      db: { getProject, getProjectByName, getDeployableForProject, updateProject },
-      pipeline: { exposeTunnel, getTunnel },
+      db: { getProject, getProjectByName },
+      cloudflare: { getPublicAccess, requestPublicAccess, requestPrivateAccess },
     } as unknown as Partial<AppContext>);
 
-    const res = await app.request('/api/projects/group-1/share', {
+    const publish = await app.request('/api/projects/group-1/expose', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ accessCode: 'abcd' }),
+      body: JSON.stringify({ service_id: 'group-1__svc' }),
     });
+    const status = await app.request('/api/projects/group-1/public-access');
+    const unpublish = await app.request('/api/projects/group-1/unexpose', { method: 'POST' });
 
-    expect(res.status).toBe(200);
-    // Already shared per the canonical row + an existing tunnel ⇒ the gate
-    // never re-exposes. Reading project.visibility ('internal') instead
-    // would wrongly enter the expose-first branch.
-    expect(exposeTunnel).not.toHaveBeenCalled();
-    expect(tunnel.enableSharedMode).toHaveBeenCalledWith('workspace', 'abcd');
+    expect(publish.status).toBe(202);
+    expect(status.status).toBe(200);
+    expect(unpublish.status).toBe(202);
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: 'group-1__svc',
+    });
+    expect(requestPrivateAccess).toHaveBeenCalledWith(project.id);
+    await expect(status.json()).resolves.toMatchObject({
+      status: 'public',
+      public_url: 'https://workspace.example.com',
+    });
+  });
+
+  it('retires access-code sharing explicitly', async () => {
+    const app = createApp();
+
+    const post = await app.request('/api/projects/group-1/share', { method: 'POST' });
+    const remove = await app.request('/api/projects/group-1/share', { method: 'DELETE' });
+
+    expect(post.status).toBe(410);
+    expect(remove.status).toBe(410);
+    await expect(post.json()).resolves.toMatchObject({ error: 'FEATURE_REMOVED' });
   });
 });

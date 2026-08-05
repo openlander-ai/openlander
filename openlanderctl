@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+fail() {
+  printf '[openlanderctl] error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+OpenLander administrator CLI for Docker installations
+
+Usage:
+  openlanderctl admin reset-password
+  openlanderctl help
+
+The password reset runs inside the OpenLander container and prompts for the
+new password without placing it in shell history or environment variables.
+EOF
+}
+
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+resolve_script_dir() {
+  local source_path target
+  source_path="${BASH_SOURCE[0]}"
+
+  while [ -L "${source_path}" ]; do
+    target="$(readlink "${source_path}")"
+    case "${target}" in
+      /*) source_path="${target}" ;;
+      *) source_path="$(dirname "${source_path}")/${target}" ;;
+    esac
+  done
+
+  cd -P "$(dirname "${source_path}")" >/dev/null 2>&1
+  pwd
+}
+
+resolve_install_dir() {
+  local script_dir
+  if [ -n "${OPENLANDER_INSTALL_DIR:-}" ]; then
+    printf '%s' "${OPENLANDER_INSTALL_DIR}"
+    return
+  fi
+
+  script_dir="$(resolve_script_dir)"
+  if [ -f "${script_dir}/docker-compose.runtime.yml" ]; then
+    printf '%s' "${script_dir}"
+    return
+  fi
+
+  printf '/opt/openlander'
+}
+
+reset_password() {
+  local install_dir compose_file env_file container_id
+  local -a compose_command
+
+  [ -t 0 ] && [ -t 1 ] || fail 'password reset requires an interactive terminal.'
+  command_exists docker || fail 'Docker is not installed or is not on PATH.'
+  docker compose version >/dev/null 2>&1 || fail 'Docker Compose V2 is required.'
+
+  install_dir="$(resolve_install_dir)"
+  compose_file="${install_dir}/docker-compose.runtime.yml"
+  env_file="${install_dir}/.env"
+  [ -f "${compose_file}" ] || fail "runtime compose file not found: ${compose_file}"
+
+  compose_command=(docker compose --project-directory "${install_dir}")
+  if [ -f "${env_file}" ]; then
+    compose_command+=(--env-file "${env_file}")
+  fi
+  compose_command+=(-f "${compose_file}")
+
+  container_id="$("${compose_command[@]}" ps -q openlander 2>/dev/null || true)"
+  [ -n "${container_id}" ] || fail 'the OpenLander container is not running.'
+
+  exec "${compose_command[@]}" exec openlander \
+    node dist/cli/index.js admin reset-password
+}
+
+case "${1:-help}" in
+  admin)
+    [ "${2:-}" = 'reset-password' ] || fail "unknown admin command: ${2:-<missing>}"
+    [ "$#" -eq 2 ] || fail 'reset-password does not accept password arguments.'
+    reset_password
+    ;;
+  help | --help | -h)
+    usage
+    ;;
+  *)
+    fail "unknown command: ${1}. Use 'admin reset-password' or 'help'."
+    ;;
+esac

@@ -188,6 +188,8 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       async () => {
         ctx.coordinator.suppressProject(runtimeProject.id, 60_000);
 
+        await ctx.cloudflare.deleteConnectedPublishReservation(service.project_id, service.id);
+
         const removedDomains: string[] = [];
         for (const mapping of await ctx.db.getDomainMappingsForService(service.id)) {
           try {

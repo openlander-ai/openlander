@@ -1534,6 +1534,27 @@ export const translations = {
       error: '프로젝트 작업에 실패했습니다',
     },
     addResourceWithAgent: '에이전트에게 데이터베이스·캐시 추가 요청',
+    publicAccess: {
+      title: '외부 공개',
+      publish: '공개하기',
+      publishing: '공개 준비 중…',
+      stopping: '공개 중지 중…',
+      retry: '공개 다시 시도',
+      stop: '공개 중지',
+      open: '공개 URL 열기',
+      copy: '공개 URL 복사',
+      copied: '공개 URL을 복사했습니다',
+      copyFailed: '공개 URL을 복사하지 못했습니다.',
+      connectFirst: '이 프로젝트를 공개하려면 먼저 Cloudflare를 연결하세요.',
+      runningApplicationRequired: 'HTTP 애플리케이션을 실행하면 공개할 수 있습니다.',
+      notEligible: '실행 중이며 포트가 감지된 HTTP 애플리케이션이 필요합니다.',
+      publishFailed: '프로젝트를 공개하지 못했습니다.',
+      unpublishFailed: '공개를 중지하지 못했습니다.',
+      stopTitle: '외부 공개를 중지할까요?',
+      stopDescription:
+        '{hostname} 주소로 더 이상 접속할 수 없습니다. 나중에 같은 URL로 다시 공개할 수 있습니다.',
+      stopConfirm: '공개 중지',
+    },
     env: {
       // Chrome — form labels + buttons + status.
       add: '추가',
@@ -2717,6 +2738,37 @@ export const translations = {
     subtitle: '라우트와 포트 현황을 실시간으로 보여주는 읽기 전용 화면입니다.',
     dockerUnavailable: 'Docker가 응답하지 않습니다. 라우트와 포트 정보가 최신이 아닐 수 있습니다.',
     footer: '읽기 전용 · 라우트 편집은 v0.2에서 제공됩니다.',
+    publicAccess: {
+      title: '프로젝트 공개',
+      subtitle: 'Cloudflare 도메인을 한 번 연결하면 프로젝트마다 고정 URL을 만들 수 있습니다.',
+      connected: '연결됨',
+      disconnected: 'OpenLander가 연결을 자동으로 관리하며 기존 DNS 설정은 변경하지 않습니다.',
+      unavailable:
+        '이 빌드에는 Cloudflare OAuth 설정이 없습니다. 배포용 OAuth 클라이언트를 먼저 설정하세요.',
+      connect: 'Cloudflare 연결',
+      connecting: '연결 중…',
+      finish: '연결 완료',
+      account: '계정',
+      zone: '도메인',
+      connector: '연결 상태',
+      running: '정상',
+      needsAttention: '확인 필요',
+      selectAccount: '계정 선택',
+      selectZone: '도메인 선택',
+      connectedToast: 'Cloudflare를 연결했습니다.',
+      connectFailed: 'Cloudflare 연결을 완료하지 못했습니다.',
+      oauthFailed: 'Cloudflare 로그인을 완료하지 못했습니다.',
+      zonesFailed: 'Cloudflare DNS Zone을 불러오지 못했습니다.',
+      moreActions: 'Cloudflare 연결 작업',
+      reconnect: '다시 연결',
+      disconnect: '연결 해제',
+      disconnectTitle: 'Cloudflare 연결을 해제할까요?',
+      disconnectDescription:
+        '모든 프로젝트 공개 URL이 중지됩니다. OpenLander가 만든 DNS 레코드, Tunnel, 커넥터와 저장된 토큰을 정리하며 사용자가 만든 Cloudflare OAuth 앱은 유지합니다.',
+      disconnectConfirm: 'Cloudflare 연결 해제',
+      disconnectedToast: 'Cloudflare 연결을 해제했습니다.',
+      disconnectFailed: 'Cloudflare 연결을 안전하게 해제하지 못했습니다.',
+    },
     strip: {
       // Chrome — short labels + status pills.
       proxy: '프록시',
@@ -2763,7 +2815,7 @@ export const translations = {
       unknown: '웹 서버 설정을 확인하세요',
       codes: {
         advertised_host_missing:
-          '외부 접속 주소가 설정되지 않았습니다. 다른 기기에서도 서비스에 접속할 수 있도록 OPENLANDER_PUBLIC_HOST를 LAN IP나 도메인으로 설정하세요.',
+          '직접 접속과 LAN 접속 주소가 설정되지 않았습니다. 해당 경로가 필요하면 OPENLANDER_PUBLIC_HOST를 LAN IP나 도메인으로 설정하세요. Cloudflare 프로젝트 공개에는 영향이 없습니다.',
       },
     },
     routes: {

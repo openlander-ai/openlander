@@ -83,6 +83,7 @@ const EXPECTED_TOOLS = [
   'get_project_manifest',
   'get_project_stats',
   'get_project_update',
+  'get_public_access',
   'get_release',
   'get_service_credentials',
   'get_service_logs',
@@ -211,8 +212,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 137 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(137);
+  it('maintains exactly 138 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(138);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

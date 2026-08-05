@@ -173,7 +173,7 @@ Choose the right tool based on user intent:
 | Archive a service             | archive_service      | Confirm first. Preserves config/history. |
 | Restart a service             | restart_service      | Stops then starts same container.        |
 | View logs                     | get_logs             | Default 20 lines. User can request more. |
-| Make project public           | expose_public        | Creates temporary share URL.             |
+| Make project public           | expose_public        | Creates a stable Connected Publish URL.   |
 | Remove public access          | unexpose_public      | Reverts to internal-only.                |
 | Connect a custom domain       | add_domain_route     | Registers a Traefik Host/path route. DNS/tunnel/TLS are external. |
 | List domain routes            | list_domain_routes   | Shows registered custom domain routes.   |

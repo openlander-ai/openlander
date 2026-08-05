@@ -478,6 +478,51 @@ download_compose() {
   mv "${tmp}" "${compose_path}"
 }
 
+download_control_cli() {
+  local backup cli_path ref tmp url
+  ref="$(release_ref)"
+  url="https://raw.githubusercontent.com/${OPENLANDER_REPO}/${ref}/openlanderctl"
+  cli_path="${OPENLANDER_INSTALL_DIR}/openlanderctl"
+
+  mkdir -p "${OPENLANDER_INSTALL_DIR}"
+  log "Downloading openlanderctl from ${ref}..."
+  tmp="$(mktemp "${OPENLANDER_INSTALL_DIR}/openlanderctl.XXXXXX")"
+  curl -fsSL "${url}" -o "${tmp}"
+  chmod 755 "${tmp}"
+
+  if [ -f "${cli_path}" ]; then
+    if cmp -s "${tmp}" "${cli_path}"; then
+      rm -f "${tmp}"
+      chmod 755 "${cli_path}"
+      log "Existing openlanderctl is already current."
+      return
+    fi
+
+    backup="${cli_path}.bak.$(date +%Y%m%d%H%M%S)"
+    cp -p "${cli_path}" "${backup}"
+    mv "${tmp}" "${cli_path}"
+    log "Updated openlanderctl. Previous file saved to ${backup}."
+    return
+  fi
+
+  mv "${tmp}" "${cli_path}"
+}
+
+install_control_cli_link() {
+  local link_path
+  link_path="/usr/local/bin/openlanderctl"
+  mkdir -p "$(dirname "${link_path}")"
+
+  if [ -e "${link_path}" ] && [ ! -L "${link_path}" ]; then
+    log "warning: ${link_path} already exists and was not replaced."
+    log "  Run ${OPENLANDER_INSTALL_DIR}/openlanderctl directly."
+    return
+  fi
+
+  ln -sfn "${OPENLANDER_INSTALL_DIR}/openlanderctl" "${link_path}"
+  log "Installed ${link_path}."
+}
+
 run_compose() {
   log "Starting OpenLander..."
   (
@@ -537,6 +582,8 @@ install_openlander() {
   start_docker
   ensure_compose
   download_compose
+  download_control_cli
+  install_control_cli_link
   write_env_if_missing
   sync_runtime_env
   run_compose
@@ -555,6 +602,8 @@ update_openlander() {
   start_docker
   ensure_compose
   download_compose
+  download_control_cli
+  install_control_cli_link
   if [ -f "${OPENLANDER_INSTALL_DIR}/.env" ]; then
     cp -p "${OPENLANDER_INSTALL_DIR}/.env" "${OPENLANDER_INSTALL_DIR}/.env.bak.$(date +%Y%m%d%H%M%S)"
   fi

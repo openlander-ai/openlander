@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **137 unique default operations** surfaced through those composites
+- **138 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -139,8 +139,8 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                             |
 | ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git              |
-| `openlander_project`         | 47           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
-| `openlander_service`         | 25           | Application lifecycle, config, domain routes, and env vocabulary                    |
+| `openlander_project`         | 48           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
+| `openlander_service`         | 26           | Application lifecycle, config, domain routes, public access, and env vocabulary     |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
 
@@ -887,16 +887,21 @@ request.
 
 ### `expose_public` / `unexpose_public`
 
-Create or remove a temporary public share URL for a project. This is an optional public-access
-feature and requires a configured tunnel backend on the OpenLander host. If the tunnel backend is
-not installed/configured, use the normal service URL, custom domain routing, or configure the tunnel
-first. If the app already has a reachable public route, `expose_public` returns
-`status: "already_public"` with `publicUrl` / `preferred_url` and does not try to
-open a tunnel.
+Publish or unpublish one representative HTTP Application at a stable HTTPS URL through the
+connected Cloudflare account and selected DNS Zone. Publishing returns immediately with
+`provisioning` or `public`; poll `get_public_access` through the returned `status_call`.
+Unpublishing retains the hostname and DNS reservation so republishing reuses the same URL.
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
+| Parameter      | Type   | Required | Description                                             |
+| -------------- | ------ | -------- | ------------------------------------------------------- |
+| `service_id`   | string | No       | Preferred Application/Compose id                        |
+| `service_name` | string | No       | Application/Compose name                                |
+| `project_id`   | string | No       | Project id; initial publish must resolve one workload   |
+| `project_name` | string | No       | Project name; initial publish must resolve one workload |
+
+Provide at least one selector. Deploy and redeploy never publish automatically.
+Cloudflare account connection and full disconnection remain human UI workflows;
+there is no MCP action for deleting the shared Tunnel, DNS reservations, connector, or OAuth token.
 
 ### `update_service_config`
 
@@ -1068,14 +1073,17 @@ when no build-time env key is involved.
 
 ### `expose_public` / `unexpose_public`
 
-Project composite aliases for temporary public URLs. This is optional and depends on the configured
-tunnel backend; it is not required for normal deploy/redeploy flows. When a reachable public route
-already exists, `expose_public` returns `status: "already_public"` and the existing URL instead of
-calling the tunnel backend.
+Project composite aliases for the same stable Connected Publish workflow exposed by
+`openlander_service`. Prefer `service_id`; Project-only selectors work when one workload can be
+chosen unambiguously. `get_public_access` returns `private`, `provisioning`, `public`,
+`unpublishing`, or `error` plus the reserved hostname.
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
+| Parameter      | Type   | Required | Description                      |
+| -------------- | ------ | -------- | -------------------------------- |
+| `service_id`   | string | No       | Preferred Application/Compose id |
+| `service_name` | string | No       | Application/Compose name         |
+| `project_id`   | string | No       | Project id                       |
+| `project_name` | string | No       | Project name                     |
 
 ### `upload_secret_file` / `list_secret_files` / `remove_secret_file`
 
@@ -1297,8 +1305,9 @@ Provide `service_id`, `service_name`, `project_id`, or `project_name`. Multi-ser
 an explicit service target.
 
 Domain route = a Traefik Host/path route for a domain already pointed at OpenLander port 80.
-OpenLander v0.1 does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS
-certificates. Docker labels are not the source of truth for custom domains; check
+This manual route action does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints,
+or TLS certificates. Connected Publish is the separate workflow that owns one Cloudflare DNS
+record and stable URL per Project. Docker labels are not the source of truth for custom domains; check
 `/api/traefik/config` and Traefik loaded routers when debugging.
 
 The response includes `route_health` and `route_verification`. Verification is

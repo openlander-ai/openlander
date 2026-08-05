@@ -11,7 +11,6 @@ import {
   getDeployableServiceUrl,
   loadDomainMappingsByService,
 } from './helpers/project-route-shared.js';
-import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
 import {
@@ -178,28 +177,37 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
   api.post('/projects/:p/services/:s/expose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const outcome = await exposeProjectTunnel(ctx, project);
-      if (outcome.kind === 'not-running') {
-        return cx.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
-      }
-      if (outcome.kind === 'tunnel-failed') {
-        return cx.json(
-          {
-            error: 'TUNNEL_START_FAILED',
-            message: 'Cloudflare service is temporarily unavailable. Please try again.',
+      const result = await ctx.cloudflare.requestPublicAccess({
+        projectId: project.id,
+        serviceId: c.req.param('s'),
+      });
+      return cx.json(
+        {
+          ...result,
+          status_call: {
+            method: 'GET',
+            path: `/api/projects/${project.id}/public-access`,
           },
-          503,
-        );
-      }
-      return cx.json({ status: 'exposed', project: project.name, publicUrl: outcome.publicUrl });
+        },
+        202,
+      );
     });
   });
 
   api.post('/projects/:p/services/:s/unexpose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      ctx.pipeline.closeTunnel(project.id);
-      return cx.json({ status: 'unexposed', project: project.name });
+      const result = await ctx.cloudflare.requestPrivateAccess(project.id);
+      return cx.json(
+        {
+          ...result,
+          status_call: {
+            method: 'GET',
+            path: `/api/projects/${project.id}/public-access`,
+          },
+        },
+        202,
+      );
     });
   });
 

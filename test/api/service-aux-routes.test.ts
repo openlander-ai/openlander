@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../src/db/types.js';
 import { createServiceAuxRoutes } from '../../src/web/api/service-aux-routes.js';
-import { TunnelStartError } from '../../src/errors.js';
 
 function makeProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
   return {
@@ -154,20 +153,30 @@ describe('createServiceAuxRoutes', () => {
     });
   });
 
-  it('exposes and unexposes the service through the deployable service port', async () => {
+  it('publishes and unpublishes the exact service through Connected Publish', async () => {
     const project = makeProjectRow();
-    const service = makeServiceRow({ assigned_port: 10042 });
-    const pipeline = {
-      exposeTunnel: vi.fn(async () => 'https://workspace.trycloudflare.com'),
-      closeTunnel: vi.fn(),
+    const requestPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'provisioning',
+      public_url: null,
+    });
+    const requestPrivateAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'unpublishing',
+      public_url: null,
+    });
+    const cloudflare = {
+      requestPublicAccess,
+      requestPrivateAccess,
     };
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployableForProject: vi.fn(async () => service),
       },
-      pipeline,
+      cloudflare,
     });
 
     const expose = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
@@ -177,35 +186,44 @@ describe('createServiceAuxRoutes', () => {
       method: 'POST',
     });
 
-    expect(expose.status).toBe(200);
-    expect(pipeline.exposeTunnel).toHaveBeenCalledWith('group-1', 10042);
-    await expect(expose.json()).resolves.toMatchObject({
-      status: 'exposed',
-      project: 'workspace',
-      publicUrl: 'https://workspace.trycloudflare.com',
+    expect(expose.status).toBe(202);
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: 'group-1',
+      serviceId: 'group-1__svc',
     });
-    expect(unexpose.status).toBe(200);
-    expect(pipeline.closeTunnel).toHaveBeenCalledWith('group-1');
+    await expect(expose.json()).resolves.toMatchObject({
+      status: 'provisioning',
+      status_call: { path: '/api/projects/group-1/public-access' },
+    });
+    expect(unexpose.status).toBe(202);
+    expect(requestPrivateAccess).toHaveBeenCalledWith('group-1');
   });
 
-  it('maps tunnel startup failures to the legacy 503 response', async () => {
+  it('does not use the removed quick-tunnel pipeline for service aliases', async () => {
     const project = makeProjectRow();
-    const service = makeServiceRow({ assigned_port: 10042 });
+    const requestPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'public',
+      public_url: 'https://workspace.example.com',
+    });
+    const exposeTunnel = vi.fn();
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployableForProject: vi.fn(async () => service),
       },
-      pipeline: { exposeTunnel: vi.fn(async () => Promise.reject(new TunnelStartError('boom'))) },
+      cloudflare: { requestPublicAccess },
+      pipeline: { exposeTunnel },
     });
 
     const res = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
       method: 'POST',
     });
 
-    expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toMatchObject({ error: 'TUNNEL_START_FAILED' });
+    expect(res.status).toBe(202);
+    expect(requestPublicAccess).toHaveBeenCalledOnce();
+    expect(exposeTunnel).not.toHaveBeenCalled();
   });
 
   it('returns disabled responses for service webhook aliases', async () => {

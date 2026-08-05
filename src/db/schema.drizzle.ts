@@ -293,6 +293,88 @@ export const oauthTokens = pgTable(
   (table) => [index('idx_oauth_tokens_provider').on(table.provider)],
 );
 
+/**
+ * Single-tenant Cloudflare connection used by Connected Publish.
+ * OAuth access/refresh tokens remain in oauth_tokens; this row owns only
+ * selected account/Zone metadata and the encrypted Named Tunnel token.
+ */
+export const cloudflareConnections = pgTable(
+  'cloudflare_connections',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id').notNull(),
+    account_name: text('account_name'),
+    zone_id: text('zone_id').notNull(),
+    zone_name: text('zone_name').notNull(),
+    tunnel_id: text('tunnel_id').notNull().unique(),
+    tunnel_name: text('tunnel_name').notNull(),
+    encrypted_tunnel_token: text('encrypted_tunnel_token').notNull(),
+    tunnel_token_iv: text('tunnel_token_iv').notNull(),
+    status: text('status', { enum: ['connected', 'error'] })
+      .notNull()
+      .default('connected'),
+    connector_container_id: text('connector_container_id'),
+    last_error_code: text('last_error_code'),
+    last_error_message: text('last_error_message'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check('cloudflare_connections_status_check', sql`${table.status} IN ('connected', 'error')`),
+    index('idx_cloudflare_connections_zone').on(table.zone_id),
+  ],
+);
+
+/**
+ * One durable public hostname and one representative HTTP service per Project.
+ * The active Traefik rule continues to live in domain_mappings; this record
+ * survives unpublish so republishing reuses the same hostname.
+ */
+export const projectPublicAccess = pgTable(
+  'project_public_access',
+  {
+    project_id: text('project_id')
+      .primaryKey()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id').references(() => services.id, { onDelete: 'set null' }),
+    connection_id: text('connection_id').references(() => cloudflareConnections.id, {
+      onDelete: 'set null',
+    }),
+    hostname: text('hostname').notNull().unique(),
+    cloudflare_zone_id: text('cloudflare_zone_id').notNull(),
+    cloudflare_dns_record_id: text('cloudflare_dns_record_id'),
+    domain_mapping_id: text('domain_mapping_id').references(() => domainMappings.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status', {
+      enum: ['private', 'provisioning', 'public', 'unpublishing', 'error'],
+    })
+      .notNull()
+      .default('private'),
+    last_error_code: text('last_error_code'),
+    last_error_message: text('last_error_message'),
+    published_at: text('published_at'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`now()::text`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`now()::text`),
+  },
+  (table) => [
+    check(
+      'project_public_access_status_check',
+      sql`${table.status} IN ('private', 'provisioning', 'public', 'unpublishing', 'error')`,
+    ),
+    index('idx_project_public_access_service').on(table.service_id),
+    index('idx_project_public_access_status').on(table.status),
+  ],
+);
+
 export const webhookConfigs = pgTable(
   'webhook_configs',
   {
@@ -2380,6 +2462,8 @@ export const deliveryReceipts = pgTable(
 );
 
 export type ProjectDeliverySettingsRow = typeof projectDeliverySettings.$inferSelect;
+export type CloudflareConnectionRow = typeof cloudflareConnections.$inferSelect;
+export type ProjectPublicAccessRow = typeof projectPublicAccess.$inferSelect;
 export type ProjectEnvironmentRow = typeof projectEnvironments.$inferSelect;
 export type ProjectManifestStateRow = typeof projectManifestStates.$inferSelect;
 export type ArtifactBlobRow = typeof artifactBlobs.$inferSelect;
@@ -2441,6 +2525,8 @@ export const drizzleSchema = {
   timelineEvents,
   domainMappings,
   oauthTokens,
+  cloudflareConnections,
+  projectPublicAccess,
   webhookConfigs,
   globalSecrets,
   gitCredentials,

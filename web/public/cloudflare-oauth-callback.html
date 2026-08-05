@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Return to OpenLander</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #0b0d10;
+        color: #f4f4f5;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        max-width: 32rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      p {
+        color: #a1a1aa;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Returning to OpenLander…</h1>
+      <p id="status">You can close this window if it does not close automatically.</p>
+    </main>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const payload = {
+          type: 'openlander:cloudflare-oauth',
+          code: params.get('code'),
+          state: params.get('state'),
+          error: params.get('error'),
+          error_description: params.get('error_description'),
+        };
+        if (window.opener) {
+          window.opener.postMessage(payload, '*');
+          window.close();
+        } else {
+          document.querySelector('#status').textContent =
+            'The OpenLander window is unavailable. Return to OpenLander and try again.';
+        }
+      })();
+    </script>
+  </body>
+</html>

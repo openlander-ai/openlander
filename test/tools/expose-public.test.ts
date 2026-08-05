@@ -3,152 +3,134 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
 
-function getExposePublicTool(ctx: AppContext) {
+const project = { id: 'project-1', name: 'demo' };
+const service = {
+  id: 'project-1__svc',
+  project_id: project.id,
+  name: 'web',
+  kind: 'application',
+  source: 'repo',
+};
+
+function createContext(options: { deployables?: (typeof service)[] } = {}) {
+  const deployables = options.deployables ?? [service];
+  const requestPublicAccess = vi.fn().mockResolvedValue({
+    project_id: project.id,
+    service_id: service.id,
+    status: 'provisioning',
+    public_url: null,
+    hostname: 'demo.example.com',
+    error: null,
+  });
+  const getPublicAccess = vi.fn().mockResolvedValue({
+    project_id: project.id,
+    service_id: service.id,
+    status: 'public',
+    public_url: 'https://demo.example.com',
+    hostname: 'demo.example.com',
+    error: null,
+  });
+  const requestPrivateAccess = vi.fn().mockResolvedValue({
+    project_id: project.id,
+    service_id: service.id,
+    status: 'unpublishing',
+    public_url: null,
+    hostname: 'demo.example.com',
+    error: null,
+  });
+  const ctx = {
+    db: {
+      getProject: vi.fn(async (id: string) =>
+        id === project.id || id === project.name ? project : null,
+      ),
+      getProjectByName: vi.fn(async (name: string) => (name === project.name ? project : null)),
+      getDeployablesByGroup: vi.fn().mockResolvedValue(deployables),
+      getService: vi.fn(async (id: string) => deployables.find((entry) => entry.id === id) ?? null),
+      getProjectPublicAccess: vi.fn().mockResolvedValue({ service_id: service.id }),
+    },
+    cloudflare: { requestPublicAccess, getPublicAccess, requestPrivateAccess },
+  } as unknown as AppContext;
+  return { ctx, requestPublicAccess, getPublicAccess, requestPrivateAccess };
+}
+
+function getTool(ctx: AppContext, name: string) {
   const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
-    (entry) => entry.name === 'expose_public',
+    (entry) => entry.name === name,
   );
   expect(tool).toBeDefined();
   return tool!;
 }
 
-function createContext(opts: {
-  projectAssignedPort: number | null;
-  deployableAssignedPort: number | null | undefined;
-  deployablePublicUrl?: string | null;
-}) {
-  const project = { id: 'demo-1', name: 'demo', assigned_port: opts.projectAssignedPort };
-  const deployable =
-    opts.deployableAssignedPort === undefined
-      ? undefined
-      : {
-          id: 'demo-1__svc',
-          name: 'demo__svc',
-          assigned_port: opts.deployableAssignedPort,
-          public_url: opts.deployablePublicUrl ?? null,
-        };
+describe('Connected Publish MCP actions', () => {
+  it('prefers service_id and returns a compact polling contract', async () => {
+    const { ctx, requestPublicAccess } = createContext();
 
-  const exposeTunnel = vi.fn(async () => 'https://demo.tunnel.example');
-  const ctx = {
-    db: {
-      getProjectByName: vi.fn(async (name: string) => (name === project.name ? project : null)),
-      getDeployableForProject: vi.fn(async (id: string) =>
-        id === project.id ? deployable : undefined,
-      ),
-    },
-    pipeline: { exposeTunnel },
-  } as unknown as AppContext;
+    const result = await getTool(ctx, 'expose_public').execute(
+      { service_id: service.id },
+      { target: 'mcp' },
+    );
 
-  return { ctx, exposeTunnel };
-}
-
-async function withRouteEnv<T>(
-  overrides: Record<string, string | undefined>,
-  run: () => Promise<T>,
-): Promise<T> {
-  const keys = [
-    'OPENLANDER_PUBLIC_HOST',
-    'OPENLANDER_CONTAINERIZED',
-    'HOST_IP',
-    'HOST_VPN_IP',
-    'DOCKER_HOST',
-  ];
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-  try {
-    for (const key of keys) {
-      delete process.env[key];
-    }
-    for (const [key, value] of Object.entries(overrides)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-    return await run();
-  } finally {
-    for (const key of keys) {
-      const value = previous[key];
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
-}
-
-describe('expose_public assignedPort gate', () => {
-  it('returns already_public without opening a tunnel when the service has an external route', async () => {
-    await withRouteEnv({ OPENLANDER_PUBLIC_HOST: 'apps.example.com' }, async () => {
-      const { ctx, exposeTunnel } = createContext({
-        projectAssignedPort: null,
-        deployableAssignedPort: 10001,
-      });
-
-      const result = await getExposePublicTool(ctx).execute(
-        { project_name: 'demo' },
-        { target: 'mcp' },
-      );
-
-      expect(exposeTunnel).not.toHaveBeenCalled();
-      expect(result).toMatchObject({
-        status: 'already_public',
-        project: 'demo',
-        publicUrl: 'http://demo.apps.example.com',
-        preferred_url: 'http://demo.apps.example.com',
-        _agent_guidance: {
-          message: expect.stringContaining('already has a reachable public route'),
-          next_steps: expect.arrayContaining([
-            'Do not call expose_public again unless the user explicitly asks for a temporary tunnel URL.',
-          ]),
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: service.id,
+    });
+    expect(result).toMatchObject({
+      status: 'provisioning',
+      project_id: project.id,
+      service_id: service.id,
+      public_url: null,
+      status_call: {
+        tool: 'openlander_service',
+        arguments: {
+          action: 'get_public_access',
+          params: { service_id: service.id },
         },
-      });
+      },
     });
   });
 
-  it('uses the canonical services-row port when the project column is stale', async () => {
-    await withRouteEnv({ OPENLANDER_CONTAINERIZED: 'true' }, async () => {
-      const { ctx, exposeTunnel } = createContext({
-        projectAssignedPort: null,
-        deployableAssignedPort: 10001,
-      });
+  it('accepts project_name only when it resolves to one workload', async () => {
+    const { ctx, requestPublicAccess } = createContext();
 
-      const result = await getExposePublicTool(ctx).execute(
-        { project_name: 'demo' },
-        { target: 'mcp' },
-      );
+    await getTool(ctx, 'expose_public').execute({ project_name: project.name }, { target: 'mcp' });
 
-      expect(exposeTunnel).toHaveBeenCalledWith('demo-1', 10001);
-      expect(result).toMatchObject({
-        status: 'exposed',
-        project: 'demo',
-        publicUrl: 'https://demo.tunnel.example',
-      });
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: service.id,
     });
   });
 
-  it('falls back to the deprecated project column when no services row exists', async () => {
-    await withRouteEnv({ OPENLANDER_CONTAINERIZED: 'true' }, async () => {
-      const { ctx, exposeTunnel } = createContext({
-        projectAssignedPort: 10002,
-        deployableAssignedPort: undefined,
-      });
-
-      await getExposePublicTool(ctx).execute({ project_name: 'demo' }, { target: 'mcp' });
-
-      expect(exposeTunnel).toHaveBeenCalledWith('demo-1', 10002);
-    });
-  });
-
-  it('does not open a tunnel when neither row has a port', async () => {
-    const { ctx, exposeTunnel } = createContext({
-      projectAssignedPort: null,
-      deployableAssignedPort: null,
-    });
+  it('requires a service selector for a Project with multiple workloads', async () => {
+    const second = { ...service, id: 'project-1__api', name: 'api' };
+    const { ctx, requestPublicAccess } = createContext({ deployables: [service, second] });
 
     await expect(
-      getExposePublicTool(ctx).execute({ project_name: 'demo' }, { target: 'mcp' }),
-    ).rejects.toThrow(/not running/i);
-    expect(exposeTunnel).not.toHaveBeenCalled();
+      getTool(ctx, 'expose_public').execute({ project_name: project.name }, { target: 'mcp' }),
+    ).rejects.toMatchObject({ code: 'SERVICE_SELECTION_REQUIRED' });
+    expect(requestPublicAccess).not.toHaveBeenCalled();
+  });
+
+  it('reads status and unpublishes by Project while preserving status polling', async () => {
+    const { ctx, getPublicAccess, requestPrivateAccess } = createContext();
+
+    const status = await getTool(ctx, 'get_public_access').execute(
+      { project_id: project.id },
+      { target: 'mcp' },
+    );
+    const unpublish = await getTool(ctx, 'unexpose_public').execute(
+      { project_id: project.id },
+      { target: 'mcp' },
+    );
+
+    expect(getPublicAccess).toHaveBeenCalledWith(project.id);
+    expect(requestPrivateAccess).toHaveBeenCalledWith(project.id);
+    expect(status).toMatchObject({
+      status: 'public',
+      public_url: 'https://demo.example.com',
+    });
+    expect(unpublish).toMatchObject({
+      status: 'unpublishing',
+      status_call: { arguments: { action: 'get_public_access' } },
+    });
   });
 });

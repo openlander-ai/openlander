@@ -10,11 +10,6 @@ import {
 } from '../../errors.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
-import { loadServiceView } from '../../db/views/service-view.js';
-import {
-  getDeployableServiceUrls,
-  getPreferredDeployableServiceUrl,
-} from '../../pipeline/traefik.js';
 import {
   bulkDeleteEnvVarsSchema,
   deleteEnvVarSchema,
@@ -23,12 +18,13 @@ import {
   listEnvVarsSchema,
   listGlobalSecretsSchema,
   listSecretFilesSchema,
-  projectNameSchema,
+  publicAccessTargetSchema,
   removeSecretFileSchema,
   setEnvVarsSchema,
   setGlobalSecretSchema,
   uploadSecretFileSchema,
 } from './schemas.js';
+import { resolveDeployableTarget } from './deployable-target.js';
 import { deployTriggerForToolContext } from './helpers.js';
 import type { ToolDeployTrigger } from './helpers.js';
 import {
@@ -88,6 +84,34 @@ const ENV_WRITE_SCOPES: readonly EnvWriteScope[] = [
   'service',
   'service_environment',
 ];
+
+function publicAccessStatusCall(serviceId: string) {
+  return {
+    tool: 'openlander_service',
+    arguments: {
+      action: 'get_public_access',
+      params: { service_id: serviceId },
+    },
+  };
+}
+
+async function resolvePublicAccessProject(appCtx: AppCtx, args: Record<string, unknown>) {
+  const hasServiceTarget = Boolean(args['service_id'] || args['service_name']);
+  if (hasServiceTarget) {
+    const target = await resolveDeployableTarget(appCtx, args, 'get_public_access');
+    return { project: target.project, serviceId: target.service.id };
+  }
+
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+  const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+  const project = projectId
+    ? await appCtx.db.getProject(projectId)
+    : ((await appCtx.db.getProject(projectName)) ??
+      (await appCtx.db.getProjectByName(projectName)));
+  if (!project) throw new ProjectNotFoundError(projectId || projectName);
+  const access = await appCtx.db.getProjectPublicAccess(project.id);
+  return { project, serviceId: access?.service_id ?? null };
+}
 
 interface EnvTarget {
   project: ResolvedProjectRow;
@@ -1136,57 +1160,62 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Create a temporary public URL for a project using the configured tunnel backend. This optional feature requires tunnel infrastructure on the OpenLander host. Use when the user wants a quick external share URL without changing app source code. Returns { status, project, publicUrl }. The URL is temporary and may change on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For stable domains, use domain routing instead.',
+      'Publish one representative HTTP Application from a Project at a stable HTTPS URL through the connected Cloudflare account and selected DNS Zone. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. Returns immediately with provisioning/public status and status_call.',
     mcpDescription:
-      'Generate a temporary public share URL using the configured tunnel backend. Optional; requires tunnel infrastructure.',
-    inputSchema: projectNameSchema,
+      'Publish the selected Application/Compose workload at its stable Connected Publish URL. Prefer service_id; poll get_public_access while provisioning.',
+    inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
-      const projectName = args['project_name'] as string;
-      const project = await getProjectByName(appCtx, projectName);
-      // ServiceView keeps the service-row assigned_port authoritative while
-      // preserving the deprecated project-column fallback for legacy rows.
-      const view = await loadServiceView(appCtx.db, project);
-      if (!view.assignedPort) {
-        throw new Error('Project is not running — deploy it first');
-      }
-
-      const routeService = {
-        name: view.name,
-        assigned_port: view.assignedPort,
-        public_url: view.publicUrl,
-      };
-      const existingUrls = getDeployableServiceUrls(routeService);
-      const existingExternalUrl = existingUrls.find((entry) => entry.reachable === 'external');
-      if (existingExternalUrl) {
-        const preferredUrl =
-          getPreferredDeployableServiceUrl(routeService) ?? existingExternalUrl.url;
-        return {
-          status: 'already_public',
-          project: projectName,
-          publicUrl: preferredUrl,
-          preferred_url: preferredUrl,
-          urls: existingUrls,
-          _agent_guidance: {
-            message:
-              'This app already has a reachable public route. Use publicUrl/preferred_url; no tunnel creation is needed.',
-            next_steps: [
-              'Report the publicUrl/preferred_url above to the user.',
-              'Do not call expose_public again unless the user explicitly asks for a temporary tunnel URL.',
-            ],
-          },
-        };
-      }
-
-      const url = await appCtx.pipeline.exposeTunnel(project.id, view.assignedPort);
+      const target = await resolveDeployableTarget(appCtx, args, 'expose_public');
+      const result = await appCtx.cloudflare.requestPublicAccess({
+        projectId: target.project.id,
+        serviceId: target.service.id,
+      });
       return {
-        status: 'exposed',
-        project: projectName,
-        publicUrl: url,
+        ...result,
+        project_id: target.project.id,
+        service_id: target.service.id,
+        status_call: publicAccessStatusCall(target.service.id),
         _agent_guidance: {
+          message:
+            result.status === 'public'
+              ? 'The stable public URL is ready.'
+              : 'Connected Publish is provisioning the stable public URL.',
           next_steps: [
-            'Access the app via the publicUrl above',
-            'If expose_public fails because the tunnel backend is unavailable, use the normal service URL or configure public access first.',
+            result.status === 'public'
+              ? 'Return public_url to the user.'
+              : 'Poll status_call until status is public or error.',
           ],
+        },
+      };
+    },
+  },
+  {
+    name: 'get_public_access',
+    riskLevel: 'low',
+    description:
+      'Get Connected Publish status and the stable public URL for a Project or Application/Compose workload.',
+    mcpDescription:
+      'Get stable public access status. Returns private, provisioning, public, unpublishing, or error.',
+    inputSchema: publicAccessTargetSchema,
+    execute: async (args, { appCtx }) => {
+      const target = await resolvePublicAccessProject(appCtx, args);
+      const result = await appCtx.cloudflare.getPublicAccess(target.project.id);
+      return {
+        ...result,
+        ...(result.service_id ? { status_call: publicAccessStatusCall(result.service_id) } : {}),
+        _agent_guidance: {
+          message:
+            result.status === 'public'
+              ? 'The stable public URL is ready.'
+              : result.status === 'error'
+                ? 'Connected Publish needs operator attention.'
+                : `Public access is ${result.status}.`,
+          next_steps:
+            result.status === 'provisioning' || result.status === 'unpublishing'
+              ? ['Poll status_call again after a short delay.']
+              : result.status === 'public'
+                ? ['Return public_url to the user.']
+                : [],
         },
       };
     },
@@ -1195,14 +1224,27 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     riskLevel: 'medium',
     description:
-      'Remove the temporary public share URL for a project. Use when the user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Remove a temporary public share URL.',
-    inputSchema: projectNameSchema,
+      'Stop serving a Project through its stable Connected Publish URL. The hostname and DNS reservation are retained so a later expose_public reuses the same URL.',
+    mcpDescription:
+      'Make the Project private while preserving its stable hostname reservation for republish.',
+    inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
-      const projectName = args['project_name'] as string;
-      const project = await getProjectByName(appCtx, projectName);
-      appCtx.pipeline.closeTunnel(project.id);
-      return { status: 'unexposed', project: projectName };
+      const target = await resolvePublicAccessProject(appCtx, args);
+      const result = await appCtx.cloudflare.requestPrivateAccess(target.project.id);
+      return {
+        ...result,
+        ...(target.serviceId ? { status_call: publicAccessStatusCall(target.serviceId) } : {}),
+        _agent_guidance: {
+          message:
+            result.status === 'private'
+              ? 'The Project is private.'
+              : 'Connected Publish is removing the public route.',
+          next_steps:
+            result.status === 'private'
+              ? []
+              : ['Poll status_call until status is private or error.'],
+        },
+      };
     },
   },
   {

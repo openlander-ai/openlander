@@ -211,6 +211,24 @@ function createDeployComposite(execute = vi.fn(async () => ({ status: 'ok' }))) 
   };
 }
 
+function createPublicAccessComposite(execute = vi.fn(async () => ({ status: 'ok' }))) {
+  const toolDefs: ToolDef[] = [
+    {
+      name: 'expose_public',
+      description: 'Publish stable public access',
+      inputSchema: z.object({
+        service_id: z.string().min(1).optional(),
+        project_id: z.string().min(1).optional(),
+      }),
+      execute,
+    },
+  ];
+  return {
+    tool: createOpenLanderProjectCompositeTool(toolDefs),
+    execute,
+  };
+}
+
 describe('MCP scoped token enforcement', () => {
   it('returns SCOPE_VIOLATION when a project-scoped token targets another project', async () => {
     const { tool, execute } = createMonitorComposite();
@@ -265,6 +283,36 @@ describe('MCP scoped token enforcement', () => {
         tokenScopeProjectId: 'project-1',
         targetProjectId: 'project-2',
         targetServiceId: 'service-2',
+        reason: 'project_mismatch',
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects Connected Publish when a valid service_id is mixed with an out-of-scope project_id', async () => {
+    const { tool, execute } = createPublicAccessComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const result = (await tool.execute(
+      {
+        action: 'expose_public',
+        params: { service_id: 'service-1', project_id: 'project-2' },
+      },
+      context,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'SCOPE_VIOLATION',
+      code: 'SCOPE_VIOLATION',
+      details: {
+        tokenScopeKind: 'project',
+        tokenScopeProjectId: 'project-1',
+        targetProjectId: 'project-2',
         reason: 'project_mismatch',
       },
     });

@@ -8,7 +8,6 @@ import { Database } from '../src/db/index.js';
 import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { CloudflareTunnelManager } from '../src/pipeline/cloudflare.js';
-import { CloudflareTunnel } from '../src/pipeline/tunnel.js';
 import { ContainerNotFoundError, ProjectNotFoundError } from '../src/errors.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 
@@ -268,6 +267,7 @@ describe('DeployPipeline deploy controls', () => {
     });
 
     const cloudflare = {
+      deleteConnectedPublishReservation: vi.fn().mockResolvedValue(undefined),
       removeTunnel: vi.fn().mockResolvedValue(undefined),
     } as unknown as CloudflareTunnelManager;
 
@@ -279,6 +279,7 @@ describe('DeployPipeline deploy controls', () => {
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-parent',
     );
+    expect(cloudflare.deleteConnectedPublishReservation).toHaveBeenCalledWith('parent');
     expect(cloudflare.removeTunnel).toHaveBeenCalledWith('parent', 'mono.example.com');
     expect(db.getProject('child')).toBeUndefined();
     expect(db.getProject('parent')).toBeUndefined();
@@ -554,6 +555,7 @@ describe('DeployPipeline deploy controls', () => {
     });
 
     const cloudflare = {
+      deleteConnectedPublishReservation: vi.fn().mockRejectedValue(new Error('delete failed')),
       removeTunnel: vi.fn().mockRejectedValue(new Error('remove failed')),
     } as unknown as CloudflareTunnelManager;
 
@@ -561,53 +563,5 @@ describe('DeployPipeline deploy controls', () => {
 
     expect(cloudflare.removeTunnel).toHaveBeenCalledWith('p18', 'cleanup.example.com');
     expect(db.getProject('p18')).toBeUndefined();
-  });
-
-  it('exposeTunnel stores active tunnel and updates project public URL', async () => {
-    db.createProject({
-      id: 'p19',
-      name: 'public-tunnel-app',
-      repoUrl: 'https://github.com/openlander/public-tunnel-app',
-      branch: 'main',
-    });
-
-    const startSpy = vi
-      .spyOn(CloudflareTunnel.prototype, 'start')
-      .mockResolvedValueOnce('https://public-tunnel.example.trycloudflare.com');
-
-    const url = await pipeline.exposeTunnel('p19', 12000);
-
-    expect(url).toBe('https://public-tunnel.example.trycloudflare.com');
-    expect(startSpy).toHaveBeenCalledWith('public-tunnel-app');
-    expect(pipeline.getTunnel('p19')).toBeDefined();
-    expect(db.getProject('p19')?.visibility).toBe('quick-share');
-    expect(db.getProject('p19')?.public_url).toBe(
-      'https://public-tunnel.example.trycloudflare.com',
-    );
-  });
-
-  it('closeTunnel does nothing when tunnel is absent', () => {
-    db.createProject({
-      id: 'p17-no-tunnel',
-      name: 'no-tunnel-app',
-      repoUrl: 'https://github.com/openlander/no-tunnel-app',
-      branch: 'main',
-    });
-
-    pipeline.closeTunnel('p17-no-tunnel');
-
-    expect(db.getProject('p17-no-tunnel')?.visibility).toBe('internal');
-  });
-
-  it('getTunnel returns active tunnel reference when present', () => {
-    const tunnel = { stop: vi.fn() };
-    (
-      pipeline as unknown as {
-        tunnelManager: { tunnels: Map<string, unknown> };
-      }
-    ).tunnelManager.tunnels.set('p18', tunnel);
-
-    expect(pipeline.getTunnel('p18')).toBe(tunnel);
-    expect(pipeline.getTunnel('missing')).toBeUndefined();
   });
 });

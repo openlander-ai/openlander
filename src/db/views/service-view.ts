@@ -44,7 +44,7 @@ export type ServiceProjectType = 'web' | 'worker';
  * Projection used by every read-surface caller. Field set mirrors the
  * existing pre-v0.2 helpers (`mapProjectForApi`, `loadProjectRuntimeStats`,
  * `loadPreviewProjections`, `buildLegacyTopologyNode`,
- * `exposeProjectTunnel`) so the S1 / S2 / S3 migration is a pure
+ * service-first readers so the S1 / S2 / S3 migration is a pure
  * field-by-field consumer rewire.
  *
  * Raw rows only — no derived display fields (`url`, parsed
@@ -105,7 +105,7 @@ export interface ServiceView {
   // ── S1.3 additions for `mapProjectForApi` ──
   /** `'web' | 'worker'` — defaults to `null` when neither row carries one. */
   projectType: ServiceProjectType | null;
-  /** Encrypted quick-share / shared-access code. */
+  /** Legacy encrypted shared-access code retained for schema compatibility. */
   accessCode: string | null;
   accessCodeIv: string | null;
   /**

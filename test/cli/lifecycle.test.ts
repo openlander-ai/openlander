@@ -136,6 +136,20 @@ describe('CLI lifecycle commands (1.0 GA: foreground-only)', () => {
     );
   });
 
+  describe('openlander admin reset-password', () => {
+    it(
+      'documents the local administrator recovery command',
+      () => {
+        const result = runCli(['admin', 'reset-password', '--help'], tmpHome);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toMatch(/reset the admin password/i);
+        expect(result.stdout).toMatch(/sign out existing web sessions/i);
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
+  });
+
   describe('openlander mcp token', () => {
     it(
       'documents the local token ensure command',

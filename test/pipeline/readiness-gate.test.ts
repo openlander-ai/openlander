@@ -186,7 +186,6 @@ describe('Deploy runtime log capture', () => {
       },
       buildExecutor: {},
       applyPendingFix: vi.fn(),
-      exposeTunnel: vi.fn(),
       secretScanEnabled: false,
     } as unknown as DeployOrchestrationDeps;
 

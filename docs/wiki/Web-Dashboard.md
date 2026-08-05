@@ -86,8 +86,8 @@ Detailed view for a Project and its resources.
 
 **Actions** (header):
 
-- Share (public URL)
-- Delete
+- Publish, then open/copy/stop the stable Connected Publish URL
+- Add Application or resource
 
 **Tabs** (access via URL tab state such as `?tab=ai`):
 
@@ -178,7 +178,13 @@ endpoints are deferred.
 
 ### Web Server (`/settings/web-server`)
 
-Read-only observability page for the routing layer. Shows the proxy detection result + status (Traefik / external / none / Docker unavailable), the route table mapped to services, host port allocations, and external (non-OpenLander) containers running on the host. v0.2 adds inline route editing.
+Routing observability plus the one-time Connected Publish setup. The page shows proxy detection,
+the route table mapped to services, host port allocations, external containers, and a compact
+Cloudflare card. **Connect Cloudflare** opens OAuth and then selects the account and DNS Zone used
+for Project publication. A Publish-initiated connection returns to the Project and resumes the
+action. The connected card's menu supports reauthorization and a confirmed disconnect; disconnect
+stops all published URLs and removes only OpenLander-owned DNS, Tunnel, connector, and token
+resources. Route tables and proxy diagnostics remain read-only.
 
 ### Git Providers (`/settings/git-providers`)
 

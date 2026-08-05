@@ -170,7 +170,7 @@ describe('auth-service', () => {
     await expect(validateApiToken(db, apiToken)).resolves.toBe(true);
   });
 
-  it('regenerateToken replaces token and resetPassword updates hash without current password', async () => {
+  it('resetPassword updates the hash without the current password and invalidates web sessions', async () => {
     const initial = (await setupPassword(db, 'initial-password')).apiToken;
     const regenerated = (await regenerateToken(db)).apiToken;
 
@@ -178,8 +178,10 @@ describe('auth-service', () => {
     await expect(validateApiToken(db, initial)).resolves.toBe(false);
     await expect(validateApiToken(db, regenerated)).resolves.toBe(true);
 
+    const session = await createSession(db);
     await resetPassword(db, 'reset-password');
     expect(verifyPassword('reset-password', db.getAuth().password_hash)).toBe(true);
+    await expect(validateSession(db, session.token)).resolves.toBe(false);
   });
 
   it('AuthService instance methods provide end-to-end auth flow', async () => {

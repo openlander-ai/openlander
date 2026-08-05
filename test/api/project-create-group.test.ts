@@ -669,7 +669,7 @@ describe('DELETE /api/projects/:p/services/:s/instance', () => {
       createServiceRuntimeRoutes({
         db,
         docker: {},
-        cloudflare: {},
+        cloudflare: { deleteConnectedPublishReservation: vi.fn(async () => undefined) },
         coordinator: { suppressProject: vi.fn() },
       } as unknown as AppContext),
     );
@@ -724,6 +724,7 @@ describe('DELETE /api/projects/:p/services/:s/instance', () => {
       removeVolume: vi.fn(async () => undefined),
     };
     const cloudflare = {
+      deleteConnectedPublishReservation: vi.fn(async () => undefined),
       removeTunnelForService: vi.fn(async () => undefined),
     };
     const app = new Hono();
@@ -781,7 +782,7 @@ describe('DELETE /api/projects/:p/services/:s/instance', () => {
       createServiceRuntimeRoutes({
         db,
         docker,
-        cloudflare: {},
+        cloudflare: { deleteConnectedPublishReservation: vi.fn(async () => undefined) },
         coordinator: { suppressProject: vi.fn() },
       } as unknown as AppContext),
     );
@@ -827,7 +828,7 @@ describe('DELETE /api/projects/:p/services/:s/instance', () => {
       createServiceRuntimeRoutes({
         db,
         docker,
-        cloudflare: {},
+        cloudflare: { deleteConnectedPublishReservation: vi.fn(async () => undefined) },
         coordinator: { suppressProject: vi.fn() },
       } as unknown as AppContext),
     );

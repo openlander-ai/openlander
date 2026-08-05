@@ -97,7 +97,6 @@ function hasPatTokenDatabase(db: AuthDatabase): db is AuthDatabase & PatTokenDat
  * Hash a plaintext password for persistent auth storage.
  */
 export function hashPassword(plain: string): string {
-  // Salt rounds = 10 for auth (tunnel.ts uses 5 for quick share access codes)
   return hashSync(plain, AUTH_SALT_ROUNDS);
 }
 
@@ -379,11 +378,12 @@ export async function regenerateToken(db: AuthDatabase): Promise<{ apiToken: str
 }
 
 /**
- * Reset password without verifying old password (CLI recovery flow).
+ * Reset password without verifying the old password and invalidate web sessions (CLI recovery).
  */
 export async function resetPassword(db: AuthDatabase, newPassword: string): Promise<void> {
   assertPasswordMeetsPolicy(newPassword);
   await db.setPassword(hashPassword(newPassword));
+  await db.deleteSession();
 }
 
 /**

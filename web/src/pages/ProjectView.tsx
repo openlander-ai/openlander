@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils';
 import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
 import { localizeApiError } from '@/lib/localized-api-error';
+import { PublicAccessControl } from '@/components/project/PublicAccessControl';
 
 type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings';
 
@@ -405,6 +406,23 @@ export function ProjectView() {
     () => groupServiceNodes?.find((service) => service.aggregateStatus)?.aggregateStatus,
     [groupServiceNodes],
   );
+  const publicAccessDisabledReason = useMemo(() => {
+    if (groupServiceNodes === null) return undefined;
+    const hasRunningHttpApplication = groupServiceNodes.some(
+      (service) =>
+        !service.archivedAt &&
+        service.kind === 'Application' &&
+        service.runtimeRole === 'application' &&
+        service.health === 'healthy' &&
+        // `service` is the frontend ServiceNode display shape. Its `port` was
+        // normalized from canonical assigned_port in groupServiceToNode().
+        // eslint-disable-next-line openlander-internal/no-dropped-columns
+        (service.port != null || service.containerPort != null),
+    );
+    return hasRunningHttpApplication
+      ? undefined
+      : t('projectDetail.publicAccess.runningApplicationRequired');
+  }, [groupServiceNodes, t]);
   const resourceHealthById = useMemo(() => {
     const entries: Array<[string, ServiceHealth]> = [];
     for (const service of [...projectServiceRows, ...services]) {
@@ -619,6 +637,16 @@ export function ProjectView() {
         }
         bodyClassName="p-0"
       >
+        <div className="flex flex-col gap-2.5 border-b border-[color:var(--ol-border-subtle)] px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-[12px] font-medium text-[color:var(--ol-fg-muted)]">
+            {t('projectDetail.publicAccess.title')}
+          </span>
+          <PublicAccessControl
+            projectId={projectId}
+            disabled={isProjectArchived}
+            publishDisabledReason={publicAccessDisabledReason}
+          />
+        </div>
         <ProjectTabs
           tabs={tabs}
           active={activeTab}

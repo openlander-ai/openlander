@@ -60,7 +60,7 @@ describe('MCP Composite Tools', () => {
   it('returns 5 composite tools from 137 underlying default tool defs', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
-    expect(mcpDefs).toHaveLength(137);
+    expect(mcpDefs).toHaveLength(138);
 
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(5);

@@ -84,6 +84,10 @@ describe('public release tree hygiene', () => {
     const envExample = readFileSync('.env.example', 'utf8');
     const readme = readFileSync('README.md', 'utf8');
     const installScript = readFileSync('install.sh', 'utf8');
+    const controlCli = readFileSync('openlanderctl', 'utf8');
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      files: string[];
+    };
 
     expect(changelog).toContain('## [0.1.0] — 2026-05-09');
     expect(changelog).not.toContain('## [0.1.0] — TBD');
@@ -118,6 +122,11 @@ describe('public release tree hygiene', () => {
     expect(installScript).not.toContain("printf 'main'");
     expect(installScript).toContain('.bak.$(date +%Y%m%d%H%M%S)');
     expect(installScript).toContain('OPENLANDER_VERSION must be');
+    expect(installScript).toContain('/usr/local/bin/openlanderctl');
+    expect(installScript).toContain('/openlanderctl');
+    expect(controlCli).toContain('admin reset-password');
+    expect(controlCli).toContain('node dist/cli/index.js admin reset-password');
+    expect(packageJson.files).toContain('openlanderctl');
   });
 
   it('keeps first-run setup browser-only with no setup secret ceremony', () => {

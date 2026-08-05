@@ -28,11 +28,6 @@ export function createMockDocker() {
 }
 
 export function createMockPipeline() {
-  const tunnel = {
-    enableSharedMode: vi.fn(),
-    disableSharedMode: vi.fn(),
-  };
-
   return {
     deploy: vi
       .fn()
@@ -47,10 +42,7 @@ export function createMockPipeline() {
     unarchive: vi.fn().mockResolvedValue(undefined),
     unarchiveGroup: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('log output'),
-    exposeTunnel: vi.fn().mockResolvedValue('https://abc.trycloudflare.com'),
-    closeTunnel: vi.fn(),
     rollback: vi.fn().mockResolvedValue({ success: true }),
-    getTunnel: vi.fn().mockReturnValue(tunnel),
     deployPreview: vi
       .fn()
       .mockResolvedValue({ success: true, url: 'http://preview-app.localhost' }),

@@ -124,6 +124,7 @@ export const PROJECT_ACTIONS = [
   'list_secret_files',
   'remove_secret_file',
   'expose_public',
+  'get_public_access',
   'unexpose_public',
   'create_delivery',
   'list_deliveries',
@@ -210,6 +211,7 @@ export const SERVICE_ACTIONS = [
   'list_secret_files',
   'remove_secret_file',
   'expose_public',
+  'get_public_access',
   'unexpose_public',
   'add_domain_route',
   'list_domain_routes',
@@ -672,7 +674,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Applications/Compose workloads: redeploy, restart, rollback, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id.',
+    'Applications/Compose workloads: redeploy, restart, rollback, config, env vars, domains, and stable Connected Publish URLs. Prefer compatibility field service_id.',
     toolDefs,
   );
 }

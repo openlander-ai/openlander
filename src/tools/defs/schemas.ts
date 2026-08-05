@@ -50,6 +50,26 @@ export const projectNameSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
+export const publicAccessTargetSchema = z
+  .object({
+    service_id: z.string().min(1).optional().describe('Preferred Application/Compose service_id'),
+    service_name: z.string().min(1).optional().describe('Application/Compose workload name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Project name. Initial publish requires the Project to contain exactly one Application/Compose workload unless service_id/service_name is supplied.',
+      ),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
+    { message: 'service_id, service_name, project_id, or project_name is required' },
+  );
+
 const monitoringTargetFields = {
   service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
   service_name: z

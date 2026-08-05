@@ -35,7 +35,7 @@ Deploy Pipeline (deterministic — rule-based execution)
     ├─ git clone
     ├─ docker build (Dockerfile or auto-generated)
     ├─ docker run (auto port + Traefik labels)
-    ├─ expose (temporary share URL / custom domain)
+    ├─ explicit publish (stable Connected Publish URL / custom domain)
     └─ monitor (health checks + logs/status)
     ↓
 Infrastructure (Docker + Traefik + Postgres)
@@ -63,7 +63,7 @@ to read logs, change repo/config, and call deploy/redeploy explicitly.
 
 ### Integration
 
-- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 137 unique default operations)
+- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 138 unique default operations)
 - [[Integration Guide]] — Connect OpenClaw, Claude Code, Cursor, and more
 
 ---

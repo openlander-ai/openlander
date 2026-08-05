@@ -23,7 +23,6 @@ import type { ProjectStatus, StateTransitionOptions } from '../../monitor/projec
 import type { RuntimeBackend } from '../runtime/index.js';
 import { allocatePort, clearPortScanCache } from '../port.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
 
@@ -167,11 +166,11 @@ export class ContainerLifecycle {
     await eventBus.emit('container:stop', { projectId, containerId: stopContainerId });
   }
 
-  async remove(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+  async remove(projectId: string): Promise<void> {
     // PR 2: switch compose-child lookup to services.parent_service_id.
     const children = await this.db.getComposeChildProjects(projectId);
     if (children.length > 0) {
-      await Promise.all(children.map((child) => this.remove(child.id, tunnelManager)));
+      await Promise.all(children.map((child) => this.remove(child.id)));
     }
 
     const project = await this.db.getProject(projectId);
@@ -188,17 +187,16 @@ export class ContainerLifecycle {
       );
     }
 
-    tunnelManager?.close(projectId);
     const removeContainerId =
       (await loadServiceViewRecord(this.db, project)).view.containerId ?? '';
     await this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: removeContainerId });
   }
 
-  async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+  async archive(projectId: string): Promise<void> {
     const children = await this.db.getComposeChildProjects(projectId);
     if (children.length === 0) {
-      await this.archiveRuntimeProject(projectId, tunnelManager);
+      await this.archiveRuntimeProject(projectId);
       return;
     }
 
@@ -208,20 +206,20 @@ export class ContainerLifecycle {
     // One marker identifies the complete Compose restore set. Generating a
     // timestamp independently for every child makes a parent restore unable
     // to distinguish children archived by this operation from older archives.
-    await this.archiveRuntimeProject(projectId, tunnelManager, {
+    await this.archiveRuntimeProject(projectId, {
       archivedAt: new Date().toISOString(),
     });
     await this.clearPartialGroupArchiveMarkerAfterRuntimeArchive(root.service ?? undefined);
   }
 
-  async archiveGroup(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+  async archiveGroup(projectId: string): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) return;
 
     this.coordinator?.suppressProject(projectId, 60_000);
     const deployables = await this.db.getDeployablesByGroup(projectId);
     if (deployables.length === 0) {
-      await this.archiveRuntimeProject(projectId, tunnelManager);
+      await this.archiveRuntimeProject(projectId);
       return;
     }
 
@@ -240,7 +238,7 @@ export class ContainerLifecycle {
     for (const service of activeDeployables) {
       const runtimeProjectId = deployableServiceIdToProjectId(service.id);
       this.coordinator?.suppressProject(runtimeProjectId, 60_000);
-      await this.archiveRuntimeProject(runtimeProjectId, tunnelManager, {
+      await this.archiveRuntimeProject(runtimeProjectId, {
         archivedAt,
         emitEvent: false,
       });
@@ -271,7 +269,6 @@ export class ContainerLifecycle {
 
   private async archiveRuntimeProject(
     projectId: string,
-    tunnelManager?: TunnelManager,
     options: ArchiveRuntimeOptions = {},
   ): Promise<void> {
     const archiveState = await this.loadRuntimeProjectForArchive(projectId, {
@@ -295,7 +292,7 @@ export class ContainerLifecycle {
     // PR 2: switch compose-child lookup to services.parent_service_id.
     const children = await this.db.getComposeChildProjects(projectId);
     for (const child of children) {
-      await this.archiveRuntimeProject(child.id, tunnelManager, options);
+      await this.archiveRuntimeProject(child.id, options);
     }
 
     if (
@@ -361,7 +358,6 @@ export class ContainerLifecycle {
         throw error;
       }
 
-      tunnelManager?.close(projectId);
       clearPortScanCache();
       if (emitEvent) {
         await eventBus.emit('project:archive', { projectId });
@@ -398,7 +394,6 @@ export class ContainerLifecycle {
       }
     }
 
-    tunnelManager?.close(projectId);
     clearPortScanCache();
     if (emitEvent) {
       await eventBus.emit('project:archive', { projectId });

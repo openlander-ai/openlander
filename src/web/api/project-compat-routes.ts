@@ -2,9 +2,7 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
-import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import { encrypt } from '../../env/crypto.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceAutoRouteName,
@@ -12,7 +10,6 @@ import {
   getDeployableServiceUrl,
   loadDomainMappingsByService,
 } from './helpers/project-route-shared.js';
-import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
@@ -725,141 +722,51 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'dismissed' });
   });
 
+  api.get('/projects/:id/public-access', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    return c.json(await ctx.cloudflare.getPublicAccess(project.id));
+  });
+
   api.post('/projects/:id/expose', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const outcome = await exposeProjectTunnel(ctx, project);
-    if (outcome.kind === 'not-running') {
-      return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
-    }
-    if (outcome.kind === 'tunnel-failed') {
-      return c.json(
-        {
-          error: 'TUNNEL_START_FAILED',
-          message: 'Cloudflare service is temporarily unavailable. Please try again.',
-        },
-        503,
-      );
-    }
-    return c.json({ status: 'exposed', project: project.name, publicUrl: outcome.publicUrl });
+    const body: { service_id?: unknown } = await c.req
+      .json<{ service_id?: unknown }>()
+      .catch(() => ({}));
+    const serviceId = typeof body.service_id === 'string' ? body.service_id.trim() : '';
+    const result = await ctx.cloudflare.requestPublicAccess({
+      projectId: project.id,
+      ...(serviceId ? { serviceId } : {}),
+    });
+    return c.json(
+      {
+        ...result,
+        status_call: { method: 'GET', path: `/api/projects/${project.id}/public-access` },
+      },
+      202,
+    );
   });
 
   api.post('/projects/:id/unexpose', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-
-    ctx.pipeline.closeTunnel(project.id);
-    return c.json({ status: 'unexposed', project: project.name });
+    const result = await ctx.cloudflare.requestPrivateAccess(project.id);
+    return c.json(
+      {
+        ...result,
+        status_call: { method: 'GET', path: `/api/projects/${project.id}/public-access` },
+      },
+      202,
+    );
   });
 
-  api.post('/projects/:id/share', async (c) => {
-    const project = await getProjectOrThrow(c, ctx);
-
-    const body = await c.req.json<{ accessCode: string }>();
-    if (!body.accessCode || body.accessCode.length < 4) {
-      return c.json(
-        {
-          error: 'INVALID_ACCESS_CODE',
-          message: 'Access code must be at least 4 characters',
-        },
-        400,
-      );
-    }
-
-    const { encrypted, iv } = encrypt(body.accessCode);
-
-    // S2.3 canonical-first via the service-first read model: assigned_port
-    // and visibility both read from the canonical services row — the same
-    // row updateProject() routes these fields to — falling back to the
-    // deprecated project columns. Reading visibility through the view
-    // drops the prior direct `project.visibility` read (and its
-    // no-dropped-columns suppression).
-    const shareView = await loadServiceView(ctx.db, project);
-    const sharePort = shareView.assignedPort;
-    if (shareView.visibility !== 'quick-share' && shareView.visibility !== 'shared') {
-      if (!sharePort) {
-        return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
-      }
-      try {
-        await ctx.pipeline.exposeTunnel(project.id, sharePort);
-      } catch (error) {
-        if (error instanceof TunnelStartError) {
-          return c.json(
-            {
-              error: 'TUNNEL_START_FAILED',
-              message: 'Cloudflare service is temporarily unavailable. Please try again.',
-            },
-            503,
-          );
-        }
-        throw error;
-      }
-    }
-
-    let tunnel = ctx.pipeline.getTunnel(project.id);
-    if (!tunnel) {
-      const assignedPort = sharePort;
-      if (!assignedPort) {
-        return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
-      }
-      try {
-        await ctx.pipeline.exposeTunnel(project.id, assignedPort);
-      } catch (error) {
-        if (error instanceof TunnelStartError) {
-          return c.json(
-            {
-              error: 'TUNNEL_START_FAILED',
-              message: 'Cloudflare service is temporarily unavailable. Please try again.',
-            },
-            503,
-          );
-        }
-        throw error;
-      }
-      tunnel = ctx.pipeline.getTunnel(project.id);
-    }
-
-    if (!tunnel) {
-      return c.json(
-        {
-          error: 'TUNNEL_UNAVAILABLE',
-          message: 'Failed to initialize quick-share tunnel',
-        },
-        500,
-      );
-    }
-
-    tunnel.enableSharedMode(project.name, body.accessCode);
-
-    await ctx.db.updateProject(project.id, {
-      visibility: 'shared',
-      accessCode: encrypted,
-      accessCodeIv: iv,
-    });
-
-    const updatedProject = await ctx.db.getProject(project.id);
-    const updatedView = updatedProject ? await loadServiceView(ctx.db, updatedProject) : null;
-    return c.json({
-      status: 'shared',
-      project: project.name,
-      publicUrl: updatedView?.publicUrl ?? null,
-    });
-  });
-
-  api.delete('/projects/:id/share', async (c) => {
-    const project = await getProjectOrThrow(c, ctx);
-
-    const tunnel = ctx.pipeline.getTunnel(project.id);
-    if (tunnel) {
-      tunnel.disableSharedMode(project.name);
-    }
-
-    await ctx.db.updateProject(project.id, {
-      visibility: 'quick-share',
-      accessCode: null,
-      accessCodeIv: null,
-    });
-
-    return c.json({ status: 'unshared', project: project.name });
-  });
+  api.all('/projects/:id/share', (c) =>
+    c.json(
+      {
+        error: 'FEATURE_REMOVED',
+        message: 'Access-code sharing was removed. Use project public access instead.',
+      },
+      410,
+    ),
+  );
 
   api.get('/projects/:id/previews', async (c) => {
     const project = await getProjectOrThrow(c, ctx);

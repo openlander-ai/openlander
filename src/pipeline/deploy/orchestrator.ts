@@ -56,7 +56,6 @@ export interface DeployOrchestrationDeps {
   autoDetector?: AutoDetector;
   jobManager?: JobManager;
   applyPendingFix: (projectId: string, clonePath: string) => Promise<string | null>;
-  exposeTunnel: (projectId: string, port: number) => Promise<string>;
   secretScanEnabled: boolean;
 }
 
@@ -718,7 +717,6 @@ export async function runAndVerify(
         containerId,
         containerName: projectContainerName(routeName),
         imageTag,
-        visibility: config.visibility ?? 'internal',
       });
     }
 
@@ -784,7 +782,6 @@ export async function runAndVerify(
       containerName: projectContainerName(routeName),
       imageTag,
       ...(previousProjectImageTag != null ? { previousImageTag: previousProjectImageTag } : {}),
-      visibility: config.visibility ?? 'internal',
     });
   }
 
@@ -825,20 +822,12 @@ export async function handlePostDeploy(
     startTime,
     commitSha,
     commitMessage,
-    shouldSyncProjectState,
-    port,
     internalUrl,
     skipDeployLog,
     skipSuccessEvent,
     skipPhaseUpdate,
   } = params;
-  let { buildLog } = params;
-
-  let publicUrl: string | undefined;
-  if (config.visibility === 'quick-share' && shouldSyncProjectState && port !== undefined) {
-    publicUrl = await deps.exposeTunnel(projectId, port);
-    buildLog += `[tunnel] ${publicUrl}\n`;
-  }
+  const { buildLog } = params;
 
   const totalDuration = Date.now() - startTime;
 
@@ -874,7 +863,7 @@ export async function handlePostDeploy(
   }
 
   if (!skipSuccessEvent) {
-    const successUrl = publicUrl ?? internalUrl;
+    const successUrl = internalUrl;
     if (successUrl) {
       await eventBus.emit('deploy:success', {
         projectId,
@@ -885,5 +874,5 @@ export async function handlePostDeploy(
     }
   }
 
-  return { publicUrl, totalDuration, buildLog };
+  return { totalDuration, buildLog };
 }
