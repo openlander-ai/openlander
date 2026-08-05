@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-08-05
+
+### Fixed
+
+- Load the Cloudflare OAuth callback logic from a same-origin external script,
+  so the callback can complete authorization without weakening OpenLander's
+  Content Security Policy.
+
 ## [0.3.1] - 2026-08-05
 
 ### Fixed
