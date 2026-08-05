@@ -385,7 +385,14 @@ describe('createDeployableServiceRoutes', () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({
       count: 1,
-      services: [expect.objectContaining({ id: parent.id })],
+      services: [
+        expect.objectContaining({
+          id: parent.id,
+          runtime_role: 'application',
+          lifecycle: 'long_running',
+          health_strategy: 'http',
+        }),
+      ],
     });
     expect(getLastDeployLogsForServices).not.toHaveBeenCalled();
   });

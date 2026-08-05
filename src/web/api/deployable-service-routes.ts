@@ -103,12 +103,12 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
             domainMappings: domainMappingsByService.get(service.id),
             autoRouteName: getDeployableServiceAutoRouteName(project, service),
           }),
+          runtime_role: service.runtime_role,
+          lifecycle: serviceLifecycle(service),
+          health_strategy: serviceHealthStrategy(service),
           gitCredential: credential ? gitCredentialSummary(credential) : null,
           ...(includeComposeChildren && service.kind === 'compose-child'
             ? {
-                runtime_role: service.runtime_role,
-                lifecycle: serviceLifecycle(service),
-                health_strategy: serviceHealthStrategy(service),
                 is_traffic_target: service.id === trafficTargetId,
                 ...(lastDeploy
                   ? {
@@ -174,12 +174,12 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
               domainMappings: domainMappingsByService.get(service.id),
               autoRouteName: getDeployableServiceAutoRouteName(project, service),
             }),
+            runtime_role: service.runtime_role,
+            lifecycle: serviceLifecycle(service),
+            health_strategy: serviceHealthStrategy(service),
             gitCredential: gitCredential ? gitCredentialSummary(gitCredential) : null,
             ...(service.kind === 'compose-child'
               ? {
-                  runtime_role: service.runtime_role,
-                  lifecycle: serviceLifecycle(service),
-                  health_strategy: serviceHealthStrategy(service),
                   is_traffic_target: service.id === detailTrafficTargetId,
                   ...(deployLogs[0]
                     ? {

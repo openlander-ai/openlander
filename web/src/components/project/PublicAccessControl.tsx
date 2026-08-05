@@ -9,6 +9,7 @@ import {
   exposeProject,
   getProjectPublicAccess,
   type ProjectPublicAccess,
+  type PublicAccessStatus,
   unexposeProject,
 } from '@/lib/api/projects';
 import { ApiError } from '@/lib/api/client';
@@ -18,10 +19,12 @@ export function PublicAccessControl({
   projectId,
   disabled = false,
   publishDisabledReason,
+  onAccessSettled,
 }: {
   projectId: string;
   disabled?: boolean;
   publishDisabledReason?: string;
+  onAccessSettled?: () => void;
 }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -30,17 +33,30 @@ export function PublicAccessControl({
   const [pending, setPending] = useState(false);
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const resumeAttempted = useRef(false);
+  const lastStatus = useRef<PublicAccessStatus | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setAccess(await getProjectPublicAccess(projectId));
+      const nextAccess = await getProjectPublicAccess(projectId);
+      const previousStatus = lastStatus.current;
+      lastStatus.current = nextAccess.status;
+      setAccess(nextAccess);
+      if (
+        previousStatus !== null &&
+        previousStatus !== nextAccess.status &&
+        (nextAccess.status === 'private' ||
+          nextAccess.status === 'public' ||
+          nextAccess.status === 'error')
+      ) {
+        onAccessSettled?.();
+      }
     } catch (error) {
       if (import.meta.env.DEV) {
         console.warn('[PublicAccessControl] Failed to load public access', error);
       }
       setAccess(null);
     }
-  }, [projectId]);
+  }, [onAccessSettled, projectId]);
 
   useEffect(() => {
     void load();
@@ -59,7 +75,9 @@ export function PublicAccessControl({
     }
     setPending(true);
     try {
-      setAccess(await exposeProject(projectId));
+      const nextAccess = await exposeProject(projectId);
+      lastStatus.current = nextAccess.status;
+      setAccess(nextAccess);
     } catch (error) {
       if (error instanceof ApiError && error.code === 'CLOUDFLARE_NOT_CONNECTED') {
         toast.info(t('projectDetail.publicAccess.connectFirst'));
@@ -89,7 +107,9 @@ export function PublicAccessControl({
   const unpublish = async () => {
     setPending(true);
     try {
-      setAccess(await unexposeProject(projectId));
+      const nextAccess = await unexposeProject(projectId);
+      lastStatus.current = nextAccess.status;
+      setAccess(nextAccess);
     } catch {
       toast.error(t('projectDetail.publicAccess.unpublishFailed'));
     } finally {

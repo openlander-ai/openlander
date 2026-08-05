@@ -14,6 +14,9 @@ describe('Connected Publish UI', () => {
   const connectionCard = readRepoFile('web/src/components/settings/ConnectedPublishCard.tsx');
   const cloudflareApi = readRepoFile('web/src/lib/api/cloudflare.ts');
   const callback = readRepoFile('web/public/cloudflare-oauth-callback.html');
+  const server = readRepoFile('src/web/server.ts');
+  const connectedPublish = readRepoFile('src/pipeline/connected-publish.ts');
+  const runtimeCompose = readRepoFile('docker-compose.runtime.yml');
   const en = readRepoFile('web/src/i18n/en.ts');
   const ko = readRepoFile('web/src/i18n/ko.ts');
 
@@ -24,6 +27,15 @@ describe('Connected Publish UI', () => {
     expect(publicControl).toContain('copyToClipboard(access.public_url!)');
     expect(publicControl).toContain('target="_blank"');
     expect(publicControl).not.toMatch(/service selector|access code|expires|temporary link/i);
+  });
+
+  it('refreshes Project service links when publishing or stopping settles', () => {
+    expect(publicControl).toContain('onAccessSettled?: () => void');
+    expect(publicControl).toContain("previousStatus !== nextAccess.status");
+    expect(publicControl).toContain('onAccessSettled?.()');
+    expect(projectView).toContain('onAccessSettled={handlePublicAccessSettled}');
+    expect(projectView).toContain('void refetchGroupServices()');
+    expect(projectView).toContain('void refetchProjects()');
   });
 
   it('places one OAuth and Zone connection card on the existing Web Server page', () => {
@@ -75,6 +87,28 @@ describe('Connected Publish UI', () => {
     expect(callback).toContain("state: params.get('state')");
     expect(callback).toContain('window.opener.postMessage');
     expect(callback).not.toMatch(/fetch\(|localStorage|sessionStorage/);
+  });
+
+  it('serves the OAuth callback before the SPA fallback without caching it', () => {
+    const callbackRoute = server.indexOf("app.get('/cloudflare-oauth-callback.html'");
+    const spaFallback = server.indexOf("app.get('*'");
+
+    expect(callbackRoute).toBeGreaterThan(-1);
+    expect(callbackRoute).toBeLessThan(spaFallback);
+    expect(server.slice(callbackRoute, spaFallback)).toContain("'Cache-Control': 'no-store'");
+  });
+
+  it('shares only the tunnel token volume with the containerized connector', () => {
+    expect(runtimeCompose).toContain('openlander-cloudflare:/run/openlander/cloudflare');
+    expect(runtimeCompose).toContain(
+      'name: ${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare',
+    );
+    expect(connectedPublish).toContain("Type: 'volume' as const");
+    expect(connectedPublish).toContain('Source: `${dataVolume}-cloudflare`');
+    expect(connectedPublish).toContain('Target: CLOUDFLARED_TOKEN_DIR');
+    expect(connectedPublish).not.toContain(
+      'Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`],',
+    );
   });
 
   it('uses only the connected-publish setup and Project status endpoints', () => {

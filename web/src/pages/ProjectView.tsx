@@ -287,6 +287,11 @@ export function ProjectView() {
     }
   }, [projectId]);
 
+  const handlePublicAccessSettled = useCallback(() => {
+    void refetchGroupServices();
+    void refetchProjects();
+  }, [refetchGroupServices, refetchProjects]);
+
   useEffect(() => {
     void refetchGroupServices();
   }, [refetchGroupServices]);
@@ -645,6 +650,7 @@ export function ProjectView() {
             projectId={projectId}
             disabled={isProjectArchived}
             publishDisabledReason={publicAccessDisabledReason}
+            onAccessSettled={handlePublicAccessSettled}
           />
         </div>
         <ProjectTabs

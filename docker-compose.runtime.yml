@@ -34,6 +34,7 @@ services:
       - '${OPENLANDER_PORT:-10114}:10114'
     volumes:
       - openlander-data:/root/.openlander
+      - openlander-cloudflare:/run/openlander/cloudflare
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - 'host.docker.internal:host-gateway'
@@ -41,5 +42,7 @@ services:
 volumes:
   openlander-data:
     name: openlander-data
+  openlander-cloudflare:
+    name: ${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare
   openlander-postgres:
     name: openlander-postgres

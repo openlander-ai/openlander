@@ -39,7 +39,10 @@ import type { RuntimeBackend } from './runtime/backend.js';
 const log = createModuleLogger('connected-publish');
 const CLOUDFLARED_IMAGE = 'cloudflare/cloudflared:2026.7.2';
 const CLOUDFLARED_CONTAINER = 'cloudflared-ol';
-const CLOUDFLARED_TOKEN_PATH = '/run/secrets/openlander-cloudflare-tunnel-token';
+const CLOUDFLARED_TOKEN_DIR = '/run/secrets/openlander-cloudflare';
+const CLOUDFLARED_TOKEN_PATH = `${CLOUDFLARED_TOKEN_DIR}/tunnel-token`;
+const CONTAINERIZED_TOKEN_DIR = '/run/openlander/cloudflare';
+const DEFAULT_CONTAINERIZED_DATA_VOLUME = 'openlander-data';
 const TRAEFIK_ORIGIN = 'http://traefik-ol:80';
 const MAX_HOSTNAME_ATTEMPTS = 10;
 
@@ -754,7 +757,28 @@ export class ConnectedPublishManager {
   }
 
   private tokenFilePath(): string {
+    if (process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase() === 'true') {
+      return join(CONTAINERIZED_TOKEN_DIR, 'tunnel-token');
+    }
     return join(getDataDir(), 'cloudflare', 'tunnel-token');
+  }
+
+  private connectorTokenHostConfig(tokenPath: string) {
+    if (process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase() === 'true') {
+      const dataVolume =
+        process.env['OPENLANDER_DATA_VOLUME']?.trim() || DEFAULT_CONTAINERIZED_DATA_VOLUME;
+      return {
+        Mounts: [
+          {
+            Type: 'volume' as const,
+            Source: `${dataVolume}-cloudflare`,
+            Target: CLOUDFLARED_TOKEN_DIR,
+            ReadOnly: true,
+          },
+        ],
+      };
+    }
+    return { Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`] };
   }
 
   private async ensureConnector(connection: CloudflareConnectionRow): Promise<void> {
@@ -811,7 +835,7 @@ export class ConnectedPublishManager {
       },
       HostConfig: {
         AutoRemove: false,
-        Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`],
+        ...this.connectorTokenHostConfig(tokenPath),
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
         ReadonlyRootfs: true,
