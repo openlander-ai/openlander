@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-08-05
+
+### Fixed
+
+- Complete Cloudflare OAuth inside the fixed callback page before notifying the
+  opener, so authorization still finishes when the original OpenLander tab is
+  unavailable or no longer listening for the callback.
+- Reconnect an existing Connected Publish configuration during OAuth completion
+  and show an explicit result with a return action when the popup cannot hand
+  control back automatically.
+
 ## [0.3.0] - 2026-08-05
 
 ### Added
