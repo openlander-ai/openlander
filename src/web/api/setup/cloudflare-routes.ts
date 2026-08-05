@@ -122,6 +122,14 @@ export function createCloudflareSetupRoutes(ctx: AppContext): Hono {
       expiresAt: new Date(Date.now() + token.expiresIn * 1000).toISOString(),
     });
 
+    const existing = await ctx.cloudflare.getConnectedPublishConnection();
+    if (existing.configured && existing.account && existing.zone) {
+      await ctx.cloudflare.connectConnectedPublish({
+        accountId: existing.account.id,
+        zoneId: existing.zone.id,
+      });
+    }
+
     return c.json({
       status: 'authorized',
       accounts: await ctx.cloudflare.listConnectedPublishAccounts(),

@@ -41,7 +41,7 @@ describe('Connected Publish UI', () => {
   it('places one OAuth and Zone connection card on the existing Web Server page', () => {
     expect(webServer).toContain('<ConnectedPublishCard />');
     expect(connectionCard).toContain('startCloudflareOAuth()');
-    expect(connectionCard).toContain('completeCloudflareOAuth');
+    expect(connectionCard).toContain('getCloudflareConnection()');
     expect(connectionCard).toContain('connectCloudflare');
     expect(connectionCard).toContain('listCloudflareZones');
     expect(connectionCard).toContain('disconnectCloudflare');
@@ -89,15 +89,21 @@ describe('Connected Publish UI', () => {
 
     expect(listenerIndex).toBeGreaterThan(startRequestIndex);
     expect(navigationIndex).toBeGreaterThan(listenerIndex);
-    expect(connectionCard).toContain('const callback = await callbackPromise');
+    expect(connectionCard).toContain('const authorized = await callbackPromise');
   });
 
-  it('uses the fixed callback only as a code/state message bridge', () => {
+  it('completes OAuth inside the callback before notifying the opener', () => {
     expect(callback).toContain("type: 'openlander:cloudflare-oauth'");
-    expect(callback).toContain("code: params.get('code')");
-    expect(callback).toContain("state: params.get('state')");
+    expect(callback).toContain("fetch('/api/setup/cloudflare/oauth/complete'");
+    expect(callback).toContain("credentials: 'same-origin'");
+    expect(callback).toContain("status: 'authorized'");
+    expect(callback).toContain("'openlander:cloudflare-oauth:ack'");
     expect(callback).toContain('window.opener.postMessage');
-    expect(callback).not.toMatch(/fetch\(|localStorage|sessionStorage/);
+    expect(callback).toContain('Return to OpenLander');
+    expect(callback).not.toContain("postMessage(payload, '*')");
+    expect(callback).not.toMatch(/localStorage|sessionStorage/);
+    expect(connectionCard).toContain("type: 'openlander:cloudflare-oauth:ack'");
+    expect(connectionCard).not.toContain('completeCloudflareOAuth');
   });
 
   it('serves the OAuth callback before the SPA fallback without caching it', () => {

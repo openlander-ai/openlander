@@ -137,6 +137,30 @@ describe('Cloudflare setup routes', () => {
     expect(replay.status).toBe(400);
   });
 
+  it('repairs an existing connected-publish configuration during OAuth completion', async () => {
+    const { app, cloudflare } = createHarness();
+    cloudflare.getConnectedPublishConnection.mockResolvedValue({
+      configured: true,
+      oauthAvailable: true,
+      status: 'error',
+      account: { id: 'account-1', name: 'Account One' },
+      zone: { id: 'zone-1', name: 'example.com' },
+    });
+    __cloudflareOAuthStateTestHooks.set('state-1', 'verifier-1');
+
+    const response = await app.request('/api/setup/cloudflare/oauth/complete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'code-1', state: 'state-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(cloudflare.connectConnectedPublish).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      zoneId: 'zone-1',
+    });
+  });
+
   it('caps pending OAuth state and connects only after account and Zone selection', async () => {
     const { app, cloudflare } = createHarness();
     for (let index = 0; index <= __cloudflareOAuthStateTestHooks.maxEntries; index += 1) {

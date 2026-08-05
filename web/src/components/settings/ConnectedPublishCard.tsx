@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useLanguage } from '@/i18n/context';
 import {
-  completeCloudflareOAuth,
   connectCloudflare,
   disconnectCloudflare,
   getCloudflareConnection,
@@ -36,10 +35,17 @@ import { cn } from '@/lib/utils';
 
 interface OAuthMessage {
   type?: unknown;
-  code?: unknown;
+  status?: unknown;
+  accounts?: unknown;
   state?: unknown;
   error?: unknown;
   error_description?: unknown;
+}
+
+function isCloudflareAccountOption(value: unknown): value is CloudflareAccountOption {
+  if (!value || typeof value !== 'object') return false;
+  const account = value as Record<string, unknown>;
+  return typeof account.id === 'string' && typeof account.name === 'string';
 }
 
 function publishReturnTarget(search: string): string | null {
@@ -54,7 +60,7 @@ function waitForOAuthPopup(
   callbackOrigin: string,
   expectedState: string,
   timeoutMs: number,
-): Promise<{ code: string; state: string }> {
+): Promise<{ accounts: CloudflareAccountOption[]; state: string }> {
   return new Promise((resolve, reject) => {
     const finish = () => {
       window.removeEventListener('message', onMessage);
@@ -65,16 +71,23 @@ function waitForOAuthPopup(
       if (event.data?.type !== 'openlander:cloudflare-oauth') return;
       const state = typeof event.data.state === 'string' ? event.data.state : '';
       if (state !== expectedState) return;
+      popup.postMessage(
+        { type: 'openlander:cloudflare-oauth:ack', state: expectedState },
+        callbackOrigin,
+      );
       finish();
       if (typeof event.data.error === 'string' && event.data.error) {
         reject(new Error(String(event.data.error_description || event.data.error)));
         return;
       }
-      if (typeof event.data.code !== 'string' || !event.data.code) {
-        reject(new Error('Cloudflare OAuth returned no authorization code'));
+      if (event.data.status !== 'authorized') {
+        reject(new Error('Cloudflare OAuth did not complete authorization'));
         return;
       }
-      resolve({ code: event.data.code, state });
+      const accounts = Array.isArray(event.data.accounts)
+        ? event.data.accounts.filter(isCloudflareAccountOption)
+        : [];
+      resolve({ accounts, state });
     };
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', onMessage);
@@ -177,10 +190,17 @@ export function ConnectedPublishCard() {
         start.expires_in_seconds * 1000,
       );
       popup.location.replace(start.auth_url);
-      const callback = await callbackPromise;
-      const authorized = await completeCloudflareOAuth(callback.code, callback.state);
-      if (connection?.configured && connection.account && connection.zone) {
-        await finishConnection(connection.account.id, connection.zone.id);
+      const authorized = await callbackPromise;
+      const refreshedConnection = await getCloudflareConnection();
+      if (refreshedConnection.configured) {
+        setConnection(refreshedConnection);
+        setAccounts([]);
+        setZones([]);
+        toast.success(t('webServer.publicAccess.connectedToast'));
+        const returnTo = publishReturnTarget(location.search);
+        if (returnTo) {
+          navigate(returnTo, { replace: true, state: { resumePublicAccess: true } });
+        }
         return;
       }
       setAccounts(authorized.accounts);
