@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Route Connected Publish through managed Traefik so a Project can expose an
   Nginx static site, SPA, or full-stack HTTP framework without framework-specific
   deployment behavior.
+- Preserve the Connected Publish token volume and selected Zone across official
+  one-click updates so the Named Tunnel and reserved Project URLs survive an
+  OpenLander container replacement.
+
+### Fixed
+
+- Recreate a stopped OpenLander-owned `cloudflared` connector, persist
+  connection failures, and show an inline Repair or Reconnect action instead of
+  presenting a degraded connection as healthy.
+- Clear Cloudflare's tracked connector connections before deleting an
+  OpenLander-owned Named Tunnel, so a confirmed disconnect completes without
+  waiting several minutes for stale connections to expire.
+- Include Docker Compose in source-built runtime images as well as release
+  runtime images, keeping the next one-click update available after a local
+  source build.
 
 ### Removed
 

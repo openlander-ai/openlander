@@ -214,13 +214,18 @@ export class ConnectedPublishManager {
           { accountId: current.account_id, zoneId: current.zone_id },
         );
       }
-      await this.ensureConnector(current);
-      await this.syncIngress(await this.getApiClient(), current);
-      await this.db.updateCloudflareConnection({
-        status: 'connected',
-        lastErrorCode: null,
-        lastErrorMessage: null,
-      });
+      try {
+        await this.ensureConnector(current);
+        await this.syncIngress(await this.getApiClient(), current);
+        await this.db.updateCloudflareConnection({
+          status: 'connected',
+          lastErrorCode: null,
+          lastErrorMessage: null,
+        });
+      } catch (error) {
+        await this.recordConnectionError(error);
+        throw error;
+      }
       return this.getConnectionView();
     }
 
@@ -264,11 +269,7 @@ export class ConnectedPublishManager {
       connection = (await this.db.getCloudflareConnection()) ?? connection;
       await this.syncIngress(api, connection);
     } catch (error) {
-      await this.db.updateCloudflareConnection({
-        status: 'error',
-        lastErrorCode: errorCode(error),
-        lastErrorMessage: errorMessage(error),
-      });
+      await this.recordConnectionError(error);
       throw error;
     }
     return this.getConnectionView();
@@ -385,13 +386,19 @@ export class ConnectedPublishManager {
   async reconcile(): Promise<void> {
     const connection = await this.db.getCloudflareConnection();
     if (!connection) return;
-    await this.ensureConnector(connection);
-    const rows = await this.db.listProjectPublicAccess();
-    for (const row of rows) {
-      if (row.status === 'provisioning') this.enqueue(() => this.performPublish(row.project_id));
-      if (row.status === 'unpublishing') this.enqueue(() => this.performUnpublish(row.project_id));
+    try {
+      await this.ensureConnector(connection);
+      const rows = await this.db.listProjectPublicAccess();
+      for (const row of rows) {
+        if (row.status === 'provisioning') this.enqueue(() => this.performPublish(row.project_id));
+        if (row.status === 'unpublishing')
+          this.enqueue(() => this.performUnpublish(row.project_id));
+      }
+      await this.syncIngress(await this.getApiClient(), connection);
+    } catch (error) {
+      await this.recordConnectionError(error);
+      throw error;
     }
-    await this.syncIngress(await this.getApiClient(), connection);
   }
 
   waitForPendingOperations(): Promise<void> {
@@ -557,7 +564,10 @@ export class ConnectedPublishManager {
     for (const owned of ownedDnsRecords) {
       await api.deleteDnsRecord(owned.zoneId, owned.record.id);
     }
-    if (remoteTunnel) await api.deleteTunnel(connection.account_id, connection.tunnel_id);
+    if (remoteTunnel) {
+      await api.cleanupTunnelConnections(connection.account_id, connection.tunnel_id);
+      await api.deleteTunnel(connection.account_id, connection.tunnel_id);
+    }
 
     await this.removeTokenFile();
     await deleteProviderToken(this.db, 'cloudflare');
@@ -749,6 +759,14 @@ export class ConnectedPublishManager {
     });
     if (!token) throw new CloudflareNotConnectedError();
     return this.apiFactory(token);
+  }
+
+  private async recordConnectionError(error: unknown): Promise<void> {
+    await this.db.updateCloudflareConnection({
+      status: 'error',
+      lastErrorCode: errorCode(error),
+      lastErrorMessage: errorMessage(error),
+    });
   }
 
   private tunnelName(): string {

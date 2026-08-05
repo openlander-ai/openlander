@@ -80,11 +80,17 @@ writes, and Cloudflare Tunnel/connector writes. Restart the OpenLander
 container after changing these values. The Web Server page reports Connected
 Publish as unavailable when the client id or redirect URI is missing.
 
+The official Compose files mount a sibling volume named
+`${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare` at
+`/run/openlander/cloudflare`. It holds only the local connector token file and
+is preserved across normal container recreation and one-click updates. Do not
+remove it while a Connected Publish connection is active.
+
 ### Install A Specific Version
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
-  | sudo env OPENLANDER_VERSION=v0.1.0 bash
+  | sudo env OPENLANDER_VERSION=v0.3.0 bash
 ```
 
 ### Update
@@ -102,7 +108,7 @@ Use this if you prefer to install Docker and Compose yourself.
 ```bash
 mkdir openlander
 cd openlander
-curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/docker-compose.runtime.yml
+curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.3.0/docker-compose.runtime.yml
 docker compose -f docker-compose.runtime.yml up -d
 ```
 
@@ -112,7 +118,7 @@ it with Postgres:
 `docker-compose.runtime.yml` defaults to
 `ghcr.io/openlander-ai/openlander:latest`, so updates do not require editing
 the image URL. Pin a release by setting
-`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0` in `.env`.
+`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.3.0` in `.env`.
 
 Manual updates:
 

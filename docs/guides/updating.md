@@ -14,8 +14,9 @@ The one-click updater:
 
 1. accepts only the current official GitHub release and its `openlander-update.json` asset;
 2. creates a custom-format PostgreSQL dump and backs up `.env` and the Compose file;
-3. pulls the exact GHCR image digest, changes `OPENLANDER_IMAGE`, and persists the current
-   effective official Compose interpolation settings in `.env`;
+3. downloads and validates the target release's official Compose file, pulls the exact GHCR image
+   digest, changes `OPENLANDER_IMAGE`, and persists the current effective official Compose
+   interpolation settings in `.env`;
 4. recreates only the `openlander` service;
 5. verifies the reported version, database startup, and Traefik network synchronization; and
 6. restores the previous image and Compose configuration if verification fails.
@@ -23,6 +24,12 @@ The one-click updater:
 The database dump is retained for operator recovery and is never restored automatically. Recent
 backup data is stored under the `openlander-data` volume in `updates/`; the latest three backups
 are retained. Update status JSON contains no credentials.
+
+Starting with 0.3, the official Compose file also mounts
+`${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare`. The updater preserves that volume and the
+database-backed Cloudflare connection, so the Named Tunnel, selected Zone, and reserved Project
+hostnames remain stable while the OpenLander container is recreated. A running connector is not
+replaced by the update unless reconciliation detects that the owned connector needs repair.
 
 Before starting, OpenLander verifies that the running database password, published port, public
 host, and data-volume name can be preserved safely. If those settings cannot be reconstructed from

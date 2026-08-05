@@ -54,6 +54,7 @@ describe('platform update release artifacts', () => {
 
   it('publishes a multi-architecture digest and manifest asset and ships Compose in runtime', async () => {
     const workflow = await readFile('.github/workflows/release-publish.yml', 'utf8');
+    const sourceDockerfile = await readFile('Dockerfile', 'utf8');
     const dockerfile = await readFile('Dockerfile.runtime', 'utf8');
     const releaseGate = await readFile('.github/workflows/release-gate.yml', 'utf8');
     expect(workflow).toContain('--platform linux/amd64,linux/arm64');
@@ -62,6 +63,7 @@ describe('platform update release artifacts', () => {
     expect(workflow).toContain('docker buildx imagetools inspect');
     expect(workflow).toContain('scripts/compose-self-update-smoke.sh');
     expect(dockerfile).toContain('/usr/local/libexec/docker/cli-plugins/docker-compose');
+    expect(sourceDockerfile).toContain('/usr/local/libexec/docker/cli-plugins/docker-compose');
     expect(releaseGate).toContain('one_click_update');
     expect(releaseGate).toContain('rc-upgrade-state-smoke.mjs update');
   });

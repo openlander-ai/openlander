@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Cloud, Loader2, MoreHorizontal, RefreshCw, Unplug } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleAlert,
+  Cloud,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Unplug,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
@@ -24,6 +32,7 @@ import {
   type CloudflareConnection,
   type CloudflareZoneOption,
 } from '@/lib/api/cloudflare';
+import { cn } from '@/lib/utils';
 
 interface OAuthMessage {
   type?: unknown;
@@ -208,7 +217,24 @@ export function ConnectedPublishCard() {
     }
   };
 
-  const connected = connection?.configured && connection.status === 'connected';
+  const repairConnection = async () => {
+    if (!connection?.account || !connection.zone) return;
+    setBusy(true);
+    try {
+      setConnection(await connectCloudflare(connection.account.id, connection.zone.id));
+      toast.success(t('webServer.publicAccess.repairedToast'));
+    } catch {
+      await loadConnection();
+      toast.error(t('webServer.publicAccess.repairFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const configured = connection?.configured === true;
+  const connectionHealthy =
+    configured && connection.status === 'connected' && connection.connector?.status === 'running';
+  const connectionNeedsOAuth = connection?.error?.code === 'CLOUDFLARE_NOT_CONNECTED';
 
   return (
     <OuterCard
@@ -221,11 +247,24 @@ export function ConnectedPublishCard() {
       }
       subtitle={t('webServer.publicAccess.subtitle')}
       actions={
-        connected ? (
+        configured ? (
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--ol-success-soft)] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--ol-success)]">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {t('webServer.publicAccess.connected')}
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium',
+                connectionHealthy
+                  ? 'bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]'
+                  : 'bg-[color:var(--ol-warning-soft)] text-[color:var(--ol-warning)]',
+              )}
+            >
+              {connectionHealthy ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <CircleAlert className="h-3.5 w-3.5" />
+              )}
+              {connectionHealthy
+                ? t('webServer.publicAccess.connected')
+                : t('webServer.publicAccess.needsAttention')}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -262,22 +301,41 @@ export function ConnectedPublishCard() {
         ) : null
       }
     >
-      {connected ? (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[12.5px]">
-          <span className="text-[color:var(--ol-fg-muted)]">
-            {t('webServer.publicAccess.zone')}{' '}
-            <strong className="font-medium text-[color:var(--ol-fg)]">
-              {connection.zone?.name}
-            </strong>
-          </span>
-          <span className="text-[color:var(--ol-fg-muted)]">
-            {t('webServer.publicAccess.connector')}{' '}
-            <strong className="font-medium text-[color:var(--ol-fg)]">
-              {connection.connector?.status === 'running'
-                ? t('webServer.publicAccess.running')
-                : t('webServer.publicAccess.needsAttention')}
-            </strong>
-          </span>
+      {configured ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[12.5px]">
+            <span className="text-[color:var(--ol-fg-muted)]">
+              {t('webServer.publicAccess.zone')}{' '}
+              <strong className="font-medium text-[color:var(--ol-fg)]">
+                {connection.zone?.name}
+              </strong>
+            </span>
+            <span className="text-[color:var(--ol-fg-muted)]">
+              {t('webServer.publicAccess.connector')}{' '}
+              <strong className="font-medium text-[color:var(--ol-fg)]">
+                {connection.connector?.status === 'running'
+                  ? t('webServer.publicAccess.running')
+                  : t('webServer.publicAccess.needsAttention')}
+              </strong>
+            </span>
+          </div>
+          {!connectionHealthy && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void (connectionNeedsOAuth ? beginOAuth() : repairConnection())}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] font-medium text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:opacity-50"
+            >
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              {connectionNeedsOAuth
+                ? t('webServer.publicAccess.reconnect')
+                : t('webServer.publicAccess.repair')}
+            </button>
+          )}
         </div>
       ) : accounts.length === 0 ? (
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">

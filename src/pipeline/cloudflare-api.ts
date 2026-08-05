@@ -126,6 +126,14 @@ export class CloudflareApiClient {
     );
   }
 
+  async cleanupTunnelConnections(accountId: string, tunnelId: string): Promise<void> {
+    await this.request(
+      `accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/connections`,
+      'cleanup_tunnel_connections',
+      { method: 'DELETE' },
+    );
+  }
+
   listDnsRecords(zoneId: string, hostname: string): Promise<CloudflareDnsRecord[]> {
     const query = new URLSearchParams({ name: hostname, per_page: '100' });
     return this.listPaginated<CloudflareDnsRecord>(

@@ -153,8 +153,13 @@ Before tagging a final release:
    `npm run test:coverage`, and `npm pack --dry-run --json --ignore-scripts`.
    Inspect the pack output for unexpected files, secrets, test artifacts, or a
    size jump from the previous accepted RC.
-5. Run `npm run release:final`.
-6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
+5. For 0.3 and later, update an existing official Compose installation that has
+   an active Connected Publish connection. Confirm login and Project data
+   survive, the selected Zone and Tunnel ID are unchanged, a previously public
+   URL still returns 200, and a later unpublish returns 404 without replacing
+   the connector.
+6. Run `npm run release:final`.
+7. Confirm the GitHub Release is not marked prerelease and that GHCR moved
    `<major>.<minor>` and `latest` to the final image.
 
 ## Cold-Agent RC Dry-Run

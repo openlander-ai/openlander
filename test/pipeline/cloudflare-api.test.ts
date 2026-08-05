@@ -52,6 +52,18 @@ describe('CloudflareApiClient', () => {
     });
   });
 
+  it('cleans up tracked connector connections before tunnel deletion', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({}));
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await client.cleanupTunnelConnections('account-1', 'tunnel-1');
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.cloudflare.com/client/v4/accounts/account-1/cfd_tunnel/tunnel-1/connections',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
   it('returns a typed error without exposing the access token', async () => {
     const fetcher = vi
       .fn<typeof fetch>()

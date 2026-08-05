@@ -182,9 +182,11 @@ Routing observability plus the one-time Connected Publish setup. The page shows 
 the route table mapped to services, host port allocations, external containers, and a compact
 Cloudflare card. **Connect Cloudflare** opens OAuth and then selects the account and DNS Zone used
 for Project publication. A Publish-initiated connection returns to the Project and resumes the
-action. The connected card's menu supports reauthorization and a confirmed disconnect; disconnect
-stops all published URLs and removes only OpenLander-owned DNS, Tunnel, connector, and token
-resources. Route tables and proxy diagnostics remain read-only.
+action. A degraded connector is shown as **Needs attention** with an inline **Repair** action, or
+**Reconnect** when Cloudflare authorization is required. The connected card's menu supports
+reauthorization and a confirmed disconnect; disconnect stops all published URLs and removes only
+OpenLander-owned DNS, Tunnel, connector, and token resources. Route tables and proxy diagnostics
+remain read-only.
 
 ### Git Providers (`/settings/git-providers`)
 

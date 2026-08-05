@@ -50,6 +50,17 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('id="public-access"');
   });
 
+  it('offers an in-place repair without forcing OAuth when the connector stops', () => {
+    expect(connectionCard).toContain('const repairConnection = async () =>');
+    expect(connectionCard).toContain(
+      'connectCloudflare(connection.account.id, connection.zone.id)',
+    );
+    expect(connectionCard).toContain("t('webServer.publicAccess.repair')");
+    expect(connectionCard).toContain('!connectionHealthy');
+    expect(connectionCard).toContain("connection?.error?.code === 'CLOUDFLARE_NOT_CONNECTED'");
+    expect(connectionCard).toContain('connectionNeedsOAuth ? beginOAuth() : repairConnection()');
+  });
+
   it('returns to the Project and resumes the publish intent after connecting', () => {
     expect(publicControl).toContain("intent: 'publish'");
     expect(publicControl).toContain('returnTo: `/projects/${encodeURIComponent(projectId)}`');

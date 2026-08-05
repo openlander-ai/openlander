@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteProviderToken } from '../../src/auth/token-store.js';
+import { deleteProviderToken, getValidToken } from '../../src/auth/token-store.js';
 import type {
   CloudflareConnectionRow,
   Database,
@@ -21,6 +21,22 @@ vi.mock('../../src/auth/token-store.js', () => ({
   getValidToken: vi.fn().mockResolvedValue('access-token'),
   deleteProviderToken: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('../../src/env/crypto.js', () => ({
+  decrypt: vi.fn(() => 'tunnel-token'),
+  encrypt: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+afterEach(() => {
+  vi.mocked(getValidToken).mockResolvedValue('access-token');
+});
 
 const project = {
   id: 'p1',
@@ -55,7 +71,9 @@ const connection = {
   last_error_message: null,
 } as CloudflareConnectionRow;
 
-function createHarness(options: { existingDns?: CloudflareDnsRecord[] } = {}) {
+function createHarness(
+  options: { existingDns?: CloudflareDnsRecord[]; connectorState?: string } = {},
+) {
   let connectionState: CloudflareConnectionRow | null = connection;
   let access: ProjectPublicAccessRow | null = null;
   let mapping: DomainMappingRow | null = null;
@@ -83,6 +101,7 @@ function createHarness(options: { existingDns?: CloudflareDnsRecord[] } = {}) {
       .mockResolvedValue([
         { id: connection.tunnel_id, name: connection.tunnel_name, status: 'healthy' },
       ]),
+    cleanupTunnelConnections: vi.fn().mockResolvedValue(undefined),
     deleteTunnel: vi.fn().mockResolvedValue(undefined),
     deleteDnsRecord: vi.fn(async (_zoneId: string, recordId: string) => {
       const index = dnsRecords.findIndex((record) => record.id === recordId);
@@ -92,7 +111,23 @@ function createHarness(options: { existingDns?: CloudflareDnsRecord[] } = {}) {
 
   const db = {
     getCloudflareConnection: vi.fn(async () => connectionState),
-    updateCloudflareConnection: vi.fn().mockResolvedValue(connection),
+    updateCloudflareConnection: vi.fn(async (patch: Record<string, unknown>) => {
+      if (!connectionState) return null;
+      connectionState = {
+        ...connectionState,
+        ...(patch['status'] ? { status: patch['status'] } : {}),
+        ...(patch['connectorContainerId'] !== undefined
+          ? { connector_container_id: patch['connectorContainerId'] }
+          : {}),
+        ...(patch['lastErrorCode'] !== undefined
+          ? { last_error_code: patch['lastErrorCode'] }
+          : {}),
+        ...(patch['lastErrorMessage'] !== undefined
+          ? { last_error_message: patch['lastErrorMessage'] }
+          : {}),
+      } as CloudflareConnectionRow;
+      return connectionState;
+    }),
     deleteCloudflareConnection: vi.fn(async () => {
       connectionState = null;
       return true;
@@ -177,22 +212,37 @@ function createHarness(options: { existingDns?: CloudflareDnsRecord[] } = {}) {
     ),
   } as unknown as Database;
 
+  let connectorContainer: Record<string, unknown> | null = {
+    id: 'connector-1',
+    name: 'cloudflared-ol',
+    state: options.connectorState ?? 'running',
+    status: options.connectorState === 'running' || options.connectorState === undefined ? 'Up' : 'Exited',
+    labels: {
+      'openlander.managed': 'true',
+      'openlander.role': 'cloudflared',
+      'openlander.instance': 'instance-1',
+      'openlander.cloudflare.tunnel_id': connection.tunnel_id,
+    },
+  };
   const runtime = {
-    listAllContainers: vi.fn().mockResolvedValue([
-      {
-        id: 'connector-1',
+    listAllContainers: vi.fn(async () => (connectorContainer ? [connectorContainer] : [])),
+    safeRemoveContainer: vi.fn(async () => {
+      connectorContainer = null;
+    }),
+    pullImage: vi.fn().mockResolvedValue(undefined),
+    runInfraContainer: vi.fn(async (config: Record<string, unknown>) => {
+      connectorContainer = {
+        id: 'connector-2',
         name: 'cloudflared-ol',
         state: 'running',
         status: 'Up',
         labels: {
           'openlander.managed': 'true',
-          'openlander.role': 'cloudflared',
-          'openlander.instance': 'instance-1',
-          'openlander.cloudflare.tunnel_id': connection.tunnel_id,
+          ...(config['Labels'] as Record<string, string>),
         },
-      },
-    ]),
-    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      return 'connector-2';
+    }),
   } as unknown as RuntimeBackend;
 
   const manager = new ConnectedPublishManager(
@@ -221,6 +271,36 @@ function createHarness(options: { existingDns?: CloudflareDnsRecord[] } = {}) {
 }
 
 describe('ConnectedPublishManager', () => {
+  it('repairs a stopped owned connector without requiring another OAuth roundtrip', async () => {
+    const harness = createHarness({ connectorState: 'exited' });
+
+    await expect(
+      harness.manager.connect({ accountId: connection.account_id, zoneId: connection.zone_id }),
+    ).resolves.toMatchObject({
+      status: 'connected',
+      connector: { status: 'running' },
+    });
+
+    expect(harness.runtime.safeRemoveContainer).toHaveBeenCalledWith('connector-1');
+    expect(harness.runtime.pullImage).toHaveBeenCalledOnce();
+    expect(harness.runtime.runInfraContainer).toHaveBeenCalledOnce();
+  });
+
+  it('records an expired OAuth token as a connection error during reconciliation', async () => {
+    const harness = createHarness();
+    vi.mocked(getValidToken).mockResolvedValueOnce(null);
+
+    await expect(harness.manager.reconcile()).rejects.toMatchObject({
+      code: 'CLOUDFLARE_NOT_CONNECTED',
+    });
+    expect(harness.db.updateCloudflareConnection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'error',
+        lastErrorCode: 'CLOUDFLARE_NOT_CONNECTED',
+      }),
+    );
+  });
+
   it('publishes asynchronously and preserves the hostname across unpublish and republish', async () => {
     const harness = createHarness();
 
@@ -331,10 +411,17 @@ describe('ConnectedPublishManager', () => {
       [{ service: 'http_status:404' }],
     );
     expect(harness.api.deleteDnsRecord).toHaveBeenCalledWith(connection.zone_id, 'dns-1');
+    expect(harness.api.cleanupTunnelConnections).toHaveBeenCalledWith(
+      connection.account_id,
+      connection.tunnel_id,
+    );
     expect(harness.api.deleteTunnel).toHaveBeenCalledWith(
       connection.account_id,
       connection.tunnel_id,
     );
+    expect(
+      vi.mocked(harness.api.cleanupTunnelConnections).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(harness.api.deleteTunnel).mock.invocationCallOrder[0] ?? 0);
     expect(harness.runtime.safeRemoveContainer).toHaveBeenCalledWith('connector-1');
     expect(harness.db.deleteCloudflareConnection).toHaveBeenCalledOnce();
     expect(deleteProviderToken).toHaveBeenCalledWith(harness.db, 'cloudflare');

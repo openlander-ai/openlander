@@ -63,11 +63,19 @@ publish an application automatically.
 ### Reconnect or disconnect Cloudflare
 
 The connected card's action menu can refresh Cloudflare authorization without
-changing the selected Zone. **Disconnect Cloudflare** requires confirmation in
-the web UI. It stops every Connected Publish URL and removes only resources
-owned by this OpenLander connection: its DNS records, Named Tunnel,
-`cloudflared` connector, and stored OAuth token. The Cloudflare OAuth
-application itself remains configured for a later reconnect.
+changing the selected Zone. If the owned connector stops or its runtime state
+drifts, the card changes to **Needs attention** and offers **Repair**. If the
+OAuth grant has expired and cannot be refreshed, that action changes to
+**Reconnect** so the operator can authorize Cloudflare again without changing
+the selected Zone.
+
+**Disconnect Cloudflare** requires confirmation in the web UI. It stops every
+Connected Publish URL and removes only resources owned by this OpenLander
+connection: its DNS records, Named Tunnel, `cloudflared` connector, and stored
+OAuth token. OpenLander clears Cloudflare's tracked connector connections before
+deleting the Tunnel, so recently stopped replicas do not leave a partial
+disconnect. The Cloudflare OAuth application itself remains configured for a
+later reconnect.
 
 ### Representative application
 
