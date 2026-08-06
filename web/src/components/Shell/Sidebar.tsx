@@ -23,6 +23,7 @@ import {
   Activity,
   BarChart3,
   Server,
+  ShieldCheck,
   Bot,
   Code2,
   BrainCircuit,
@@ -124,6 +125,13 @@ const SECTIONS: NavSection[] = [
     id: 'settings',
     labelKey: 'sidebar.sections.settings',
     items: [
+      {
+        id: 'security',
+        labelKey: 'sidebar.items.security',
+        icon: ShieldCheck,
+        to: '/settings/security',
+        matches: startsWith('/settings/security'),
+      },
       {
         id: 'git',
         labelKey: 'sidebar.items.gitProviders',

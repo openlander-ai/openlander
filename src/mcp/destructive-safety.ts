@@ -1,6 +1,7 @@
 import { OperationRequiresHumanUiError } from '../errors.js';
 import { HUMAN_UI_ONLY_TOOL_SET, APPROVAL_HOLD_TOOL_SET } from './mcp-restricted-actions.js';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
+import { getOperationPermissionSnapshot } from '../security/operation-permissions.js';
 import { assertMcpActiveScope, resolveMcpScopeTarget } from './scope-policy.js';
 import {
   afterApprovalGuidanceForTool,
@@ -17,6 +18,18 @@ export { assertMcpActiveScope, resolveMcpTargetProjectId } from './scope-policy.
 // HUMAN_UI_ONLY_ALIASES and are intercepted by the composite, not blocked here.
 const GROUP_A_HUMAN_UI_ONLY = HUMAN_UI_ONLY_TOOL_SET;
 const GROUP_B_APPROVAL_HOLD = APPROVAL_HOLD_TOOL_SET;
+const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
+  'remove_service',
+  'remove_volume',
+  'delete_bucket',
+]);
+const DATABASE_ACCESS_TOOLS = new Set([
+  'describe_data_source',
+  'read_data_source',
+  'get_service_credentials',
+  'create_service_user',
+  'exec_service_container',
+]);
 
 interface SafetyResult {
   error?: string;
@@ -61,6 +74,36 @@ function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
   };
 }
 
+function buildPermissionBlockedResponse(
+  toolName: string,
+  permission: 'destructive_actions' | 'database_access',
+  targetProjectId: string | null,
+  targetServiceId: string | null,
+): SafetyResult {
+  return {
+    status: 'blocked',
+    error: 'OPERATION_PERMISSION_DENIED',
+    code: 'OPERATION_PERMISSION_DENIED',
+    message: 'This operation is blocked by the effective OpenLander permission policy.',
+    tool: toolName,
+    projectId: targetProjectId ?? undefined,
+    project_id: targetProjectId ?? undefined,
+    details: {
+      permission,
+      project_id: targetProjectId,
+      service_id: targetServiceId,
+    },
+    _agent_guidance: {
+      message:
+        'The operator disabled this capability in OpenLander Security settings. Do not retry or substitute another action.',
+      next_steps: [
+        'Report which permission blocked the action.',
+        'Ask the operator to change the global, Project, or service override if this action is intended.',
+      ],
+    },
+  };
+}
+
 function isAllowedMcpPreview(def: ToolDef, args: Record<string, unknown>): boolean {
   // Keep this narrow: only read-only previews may bypass the human-UI-only MCP gate.
   if (def.name !== 'platform_cleanup_orphans') return false;
@@ -85,11 +128,45 @@ export async function maybeHandleMcpSafety(
     targetServiceId,
   );
 
+  const needsPermissionPolicy =
+    DATABASE_ACCESS_TOOLS.has(def.name) || POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name);
+  const targetPermissions = needsPermissionPolicy
+    ? await getOperationPermissionSnapshot(context.appCtx.db, {
+        projectId: targetProjectId,
+        serviceId: targetServiceId,
+      })
+    : null;
+
+  if (
+    DATABASE_ACCESS_TOOLS.has(def.name) &&
+    targetPermissions?.effective.database_access === 'block'
+  ) {
+    return buildPermissionBlockedResponse(
+      def.name,
+      'database_access',
+      targetProjectId,
+      targetServiceId,
+    );
+  }
+
+  const destructivePermission = POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name)
+    ? (targetPermissions?.effective.destructive_actions ?? 'allow')
+    : null;
+  if (destructivePermission === 'block') {
+    return buildPermissionBlockedResponse(
+      def.name,
+      'destructive_actions',
+      targetProjectId,
+      targetServiceId,
+    );
+  }
+
   if (GROUP_A_HUMAN_UI_ONLY.has(def.name) && !isAllowedMcpPreview(def, args)) {
     return buildHumanUiOnlyResponse(def.name);
   }
 
   const shouldHold =
+    destructivePermission === 'approval_required' ||
     def.name === 'archive_project' ||
     def.name === 'unarchive_project' ||
     def.name === 'archive_service' ||

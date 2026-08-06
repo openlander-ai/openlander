@@ -7,6 +7,7 @@ import {
   listProjectDataSources,
 } from '../../data-inspector/index.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
+import { assertDatabaseAccessAllowed } from '../../security/operation-permissions.js';
 
 export function createDataAccessRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -33,6 +34,13 @@ export function createDataAccessRoutes(ctx: AppContext): Hono {
         },
         400,
       );
+    }
+
+    if (mode === 'read') {
+      await assertDatabaseAccessAllowed(ctx.db, {
+        projectId: project.id,
+        serviceId,
+      });
     }
 
     const result =

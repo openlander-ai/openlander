@@ -4,15 +4,39 @@ import type { AppContext } from '../../app.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
-import { ServiceInUseError, ServiceNotFoundError } from '../../errors.js';
+import {
+  OperationPermissionDeniedError,
+  ServiceInUseError,
+  ServiceNotFoundError,
+} from '../../errors.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
 import { detectReverseProxy, getProxyStatus, getLanIp, getAllIps } from '../../pipeline/traefik.js';
 import { SERVICE_TEMPLATES, AVAILABLE_VERSIONS } from '../../pipeline/service-manager.js';
+import {
+  assertDatabaseAccessAllowed,
+  assertDestructiveActionAllowed,
+  type OperationPermissionTarget,
+} from '../../security/operation-permissions.js';
 
 const log = createModuleLogger('api');
 const MAX_SERVICE_LOG_LINES = 1_000;
+
+async function operationTargetForService(
+  ctx: AppContext,
+  serviceId: string,
+): Promise<OperationPermissionTarget> {
+  const getService: unknown = Reflect.get(ctx.db, 'getService');
+  const service =
+    typeof getService === 'function'
+      ? await (getService as (id: string) => ReturnType<AppContext['db']['getService']>).call(
+          ctx.db,
+          serviceId,
+        )
+      : undefined;
+  return { projectId: service?.project_id, serviceId };
+}
 
 function serviceNotFoundBody(id: string): { error: 'NOT_FOUND'; message: string } {
   return { error: 'NOT_FOUND', message: `Service not found: ${id}` };
@@ -409,6 +433,10 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
     try {
       const service = await ctx.serviceManager.getDetail(id);
+      await assertDatabaseAccessAllowed(ctx.db, {
+        projectId: service.project_id,
+        serviceId: service.id,
+      });
       const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
       await ctx.db.insertActivityLog({
         event_type: 'credential:reveal',
@@ -429,6 +457,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Reveal service credentials failed');
+      if (err instanceof OperationPermissionDeniedError) throw err;
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
       }
@@ -665,10 +694,12 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   api.get('/services/:id/databases', async (c) => {
     const id = c.req.param('id');
     try {
+      await assertDatabaseAccessAllowed(ctx.db, await operationTargetForService(ctx, id));
       const databases = await ctx.serviceManager.listDatabases(id);
       return c.json({ databases });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'List service databases failed');
+      if (err instanceof OperationPermissionDeniedError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -691,10 +722,12 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
 
     try {
+      await assertDatabaseAccessAllowed(ctx.db, await operationTargetForService(ctx, id));
       const result = await ctx.serviceManager.createDatabase(id, body.name);
       return c.json(result);
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Create resource database failed');
+      if (err instanceof OperationPermissionDeniedError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -718,10 +751,12 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   api.get('/services/:id/users', async (c) => {
     const id = c.req.param('id');
     try {
+      await assertDatabaseAccessAllowed(ctx.db, await operationTargetForService(ctx, id));
       const users = await ctx.serviceManager.listUsers(id);
       return c.json({ users });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'List service users failed');
+      if (err instanceof OperationPermissionDeniedError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -744,6 +779,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
 
     try {
+      await assertDatabaseAccessAllowed(ctx.db, await operationTargetForService(ctx, id));
       const result = await ctx.serviceManager.createUser(
         id,
         body.username,
@@ -753,6 +789,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json(result);
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Create resource user failed');
+      if (err instanceof OperationPermissionDeniedError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -772,6 +809,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.delete('/services/:id', async (c) => {
     const id = c.req.param('id');
+    await assertDestructiveActionAllowed(ctx.db, await operationTargetForService(ctx, id));
     const force = c.req.query('force') === 'true' || c.req.query('force') === '1';
     if (force && c.req.query('confirm') !== 'true') {
       return c.json(

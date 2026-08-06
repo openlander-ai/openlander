@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { assertDestructiveActionAllowed } from '../../security/operation-permissions.js';
 import { DOCKER_LABELS } from '../../config/index.js';
 import type { ProjectRow } from '../../db/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
@@ -123,6 +124,11 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         400,
       );
     }
+
+    await assertDestructiveActionAllowed(ctx.db, {
+      projectId: project.id,
+      serviceId: service.id,
+    });
 
     const body: { confirmation?: unknown; typedSlug?: unknown; deleteVolumes?: unknown } =
       await c.req

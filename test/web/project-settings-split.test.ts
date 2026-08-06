@@ -17,9 +17,10 @@ describe('Project Settings split contract', () => {
 
   it('keeps Project Settings group-owned only', () => {
     expect(projectSettingsSource).toContain(
-      "type SettingsSection = 'general' | 'delivery' | 'ai' | 'data' | 'danger'",
+      "type SettingsSection = 'general' | 'permissions' | 'delivery' | 'ai' | 'data' | 'danger'",
     );
     expect(projectSettingsSource).toContain("id: 'general'");
+    expect(projectSettingsSource).toContain("id: 'permissions'");
     expect(projectSettingsSource).toContain("id: 'delivery'");
     expect(projectSettingsSource).toContain("id: 'ai'");
     expect(projectSettingsSource).toContain("id: 'data'");
@@ -28,6 +29,7 @@ describe('Project Settings split contract', () => {
     expect(projectSettingsSource).not.toMatch(
       /id: 'env'|id: 'source'|id: 'domains'|id: 'resources'/,
     );
+    expect(projectSettingsSource).toContain('<OperationPermissionsPanel scope="project"');
     expect(projectSettingsSource).not.toMatch(/EnvVarsTable|projectDetail\.env\.shared/);
     expect(projectSettingsSource).not.toMatch(
       /DeploymentSourcePanel|DomainsPanel|ResourceLimitsPanel|ServiceResourceLimitsPanel|SourceSettingsPanel/,

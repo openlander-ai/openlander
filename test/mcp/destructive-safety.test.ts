@@ -19,6 +19,7 @@ function createTool(name: string): ToolDef {
 function createContext(overrides?: {
   activeScopeProjectId?: string | null;
   projectId?: string | null;
+  settings?: Record<string, string>;
 }): ToolContext {
   const db = {
     getActiveScopeProjectId: vi.fn().mockResolvedValue(overrides?.activeScopeProjectId ?? null),
@@ -39,18 +40,18 @@ function createContext(overrides?: {
       ),
     getService: vi.fn(),
     listServices: vi.fn().mockResolvedValue([]),
+    getSetting: vi.fn(async (key: string) => {
+      const value = overrides?.settings?.[key];
+      return value === undefined ? null : { value };
+    }),
   };
   return { target: 'mcp', appCtx: { db } as unknown as AppContext };
 }
 
 describe('MCP destructive safety', () => {
-  it('blocks Group A destructive tools at the MCP boundary', async () => {
+  it('keeps host cleanup tools human-UI-only at the MCP boundary', async () => {
     const context = createContext();
-    const result = await maybeHandleMcpSafety(
-      createTool('remove_service'),
-      { service_name: 'db' },
-      context,
-    );
+    const result = await maybeHandleMcpSafety(createTool('cleanup_docker'), {}, context);
 
     expect(result).toMatchObject({
       error: 'OPERATION_REQUIRES_HUMAN_UI',
@@ -62,6 +63,62 @@ describe('MCP destructive safety', () => {
       do_not_substitute: expect.arrayContaining(['cleanup_docker', 'remove_service']),
     });
     expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
+  });
+
+  it('executes policy-controlled resource deletion immediately when allowed by default', async () => {
+    const context = createContext();
+    const result = await maybeHandleMcpSafety(
+      createTool('remove_service'),
+      { service_name: 'db' },
+      context,
+    );
+
+    expect(result).toBeUndefined();
+    expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
+  });
+
+  it('holds policy-controlled resource deletion when approval is required', async () => {
+    const context = createContext({
+      settings: {
+        'security.operation_permissions.global': JSON.stringify({
+          destructive_actions: 'approval_required',
+          database_access: 'allow',
+        }),
+      },
+    });
+    const result = await maybeHandleMcpSafety(
+      createTool('remove_service'),
+      { service_name: 'db' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'pending_approval',
+      tool: 'remove_service',
+      action_run_id: 'action-run-1',
+    });
+  });
+
+  it('blocks database tools when database access is disabled', async () => {
+    const context = createContext({
+      settings: {
+        'security.operation_permissions.global': JSON.stringify({
+          destructive_actions: 'allow',
+          database_access: 'block',
+        }),
+      },
+    });
+    const result = await maybeHandleMcpSafety(
+      createTool('get_service_credentials'),
+      { service_name: 'db' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      error: 'OPERATION_PERMISSION_DENIED',
+      details: { permission: 'database_access' },
+    });
   });
 
   it('lets platform_cleanup_orphans dry-run preview execute through MCP', async () => {

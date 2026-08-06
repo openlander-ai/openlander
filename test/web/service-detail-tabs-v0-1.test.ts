@@ -120,7 +120,7 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain("{ id: 'ai', label: t('services.detail.tabs.ai'), icon: Bot }");
     expect(source).not.toContain('panelId="servicepanel-ai"');
     expect(source).not.toContain('labelledBy="service-ai"');
-    expect(source).not.toContain('scope="service"');
+    expect(source).toContain('<OperationPermissionsPanel scope="service"');
     expect(overviewSource).not.toContain('AiOpsBriefingPanel');
   });
 

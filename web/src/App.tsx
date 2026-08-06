@@ -21,6 +21,7 @@ import { GitProvidersSettings } from '@/pages/settings/GitProviders';
 import { AiProvidersSettings } from '@/pages/settings/AiProviders';
 import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
 import { NotificationsSettings } from '@/pages/settings/Notifications';
+import { SecuritySettings } from '@/pages/settings/Security';
 import { LoginPage } from '@/pages/LoginPage';
 import { AuthProvider, useAuth } from '@/contexts/auth';
 import './App.css';
@@ -334,6 +335,7 @@ function App() {
                       working. */}
                   <Route path="/settings/ssh-keys" element={<SSHKeysSettings />} />
                   <Route path="/settings/notifications" element={<NotificationsSettings />} />
+                  <Route path="/settings/security" element={<SecuritySettings />} />
 
                   {/* Legacy pages — kept under V2 chrome until each is
                       individually rewritten. The visual mismatch is the

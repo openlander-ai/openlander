@@ -51,6 +51,7 @@ import { OuterCard } from '@/components/Shell/OuterCard';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer as ConsoleLogViewer } from '@/components/logs/LogViewer';
 import { ServiceResourceLimitsPanel } from '@/components/service/ServiceResourceLimitsPanel';
+import { OperationPermissionsPanel } from '@/components/security/OperationPermissionsPanel';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
@@ -603,6 +604,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
                   serviceId={resolvedService.id}
                   isCompose={resolvedService.buildMethod === 'compose'}
                 />
+                <ServiceOperationPermissions serviceId={resolvedService.id} />
                 <ServiceDangerZone
                   service={resolvedService}
                   projectId={projectId}
@@ -850,6 +852,23 @@ function GeneralTab({
         />
       )}
     </div>
+  );
+}
+
+function ServiceOperationPermissions({ serviceId }: { serviceId: string }) {
+  const { t } = useLanguage();
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-[13px] font-semibold text-[color:var(--ol-fg)]">
+          {t('securityPermissions.serviceTitle')}
+        </h3>
+        <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+          {t('securityPermissions.serviceDescription')}
+        </p>
+      </div>
+      <OperationPermissionsPanel scope="service" targetId={serviceId} />
+    </section>
   );
 }
 
@@ -2808,6 +2827,7 @@ function ManagedOverviewTab({
           <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
         </SubCard>
       </div>
+      <ServiceOperationPermissions serviceId={service.id} />
       <ManagedCredentialCard serviceId={service.id} />
       <ManagedOperationsSection
         service={service}

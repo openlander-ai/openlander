@@ -681,6 +681,7 @@ export const translations = {
       activity: '활동',
       monitoring: '모니터링',
       webServer: '웹 서버',
+      security: '보안',
       gitProviders: 'Git 연결',
       repositoryKeys: '저장소 키',
       aiProviders: 'AI 모델 연결',
@@ -1875,6 +1876,7 @@ export const translations = {
     nav: {
       // Chrome — sub-nav label.
       general: '일반',
+      permissions: '권한',
       ai: 'AI',
       data: '데이터',
     },
@@ -3920,6 +3922,36 @@ export const translations = {
         PROJECT_NOT_FOUND: '프로젝트를 찾을 수 없습니다.',
       },
     },
+  },
+  securityPermissions: {
+    title: '보안',
+    description:
+      '파괴적 작업과 데이터베이스 접근의 기본값을 정합니다. 별도로 제한하기 전에는 모두 허용됩니다.',
+    projectTitle: '프로젝트 권한',
+    projectDescription: '글로벌 설정을 상속하거나 이 프로젝트만 제한합니다.',
+    serviceTitle: '서비스 권한',
+    serviceDescription: '프로젝트 설정을 상속하거나 이 서비스만 제한합니다.',
+    destructive: {
+      title: '파괴적 작업',
+      description: '프로젝트, 애플리케이션, DB 리소스, 버킷 및 볼륨 삭제입니다.',
+    },
+    database: {
+      title: '데이터베이스 접근',
+      description: '접속 정보 공개, 데이터베이스 도구 및 에이전트 데이터 조회입니다.',
+    },
+    options: {
+      allow: '허용',
+      approval_required: '승인 필요',
+      block: '차단',
+    },
+    inherit: '상위 설정 사용',
+    effective: '현재 적용값: {value}',
+    loading: '권한을 불러오는 중…',
+    save: '권한 저장',
+    saving: '저장 중…',
+    saved: '권한을 저장했습니다.',
+    loadFailed: '권한을 불러오지 못했습니다.',
+    saveFailed: '권한을 저장하지 못했습니다.',
   },
   // 사용자에게 보이는 OpenLander 기본 용어. 내부 API/DB 식별자는 영어를
   // 유지하지만 화면에서는 선택한 언어로 표시합니다.

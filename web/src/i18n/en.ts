@@ -678,6 +678,7 @@ export const translations = {
       activity: 'Activity',
       monitoring: 'Monitoring',
       webServer: 'Web Server',
+      security: 'Security',
       gitProviders: 'Git Providers',
       repositoryKeys: 'Repository Keys',
       aiProviders: 'AI Providers',
@@ -1789,6 +1790,7 @@ export const translations = {
   settings: {
     nav: {
       general: 'General',
+      permissions: 'Permissions',
       ai: 'AI',
       data: 'Data',
     },
@@ -3720,6 +3722,36 @@ export const translations = {
         PROJECT_NOT_FOUND: 'The Project could not be found.',
       },
     },
+  },
+  securityPermissions: {
+    title: 'Security',
+    description:
+      'Set the default for destructive operations and database access. Everything is allowed until you restrict it.',
+    projectTitle: 'Project permissions',
+    projectDescription: 'Inherit the global setting or restrict this Project only.',
+    serviceTitle: 'Service permissions',
+    serviceDescription: 'Inherit the Project setting or restrict this service only.',
+    destructive: {
+      title: 'Destructive actions',
+      description: 'Project, Application, database resource, bucket, and volume deletion.',
+    },
+    database: {
+      title: 'Database access',
+      description: 'Credential reveal, database tools, and agent data inspection.',
+    },
+    options: {
+      allow: 'Allowed',
+      approval_required: 'Approval required',
+      block: 'Blocked',
+    },
+    inherit: 'Use inherited setting',
+    effective: 'Effective: {value}',
+    loading: 'Loading permissions…',
+    save: 'Save permissions',
+    saving: 'Saving…',
+    saved: 'Permissions saved.',
+    loadFailed: 'Failed to load permissions.',
+    saveFailed: 'Failed to save permissions.',
   },
   // Canonical user-facing OpenLander vocabulary. Internal API and database
   // identifiers remain unchanged when display terminology changes.

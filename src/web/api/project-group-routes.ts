@@ -12,6 +12,7 @@ import {
   ProjectSourceRemovedError,
 } from '../../errors.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
+import { assertDestructiveActionAllowed } from '../../security/operation-permissions.js';
 import {
   assertProjectHasNoActiveServices,
   assertProjectLifecycleMutableForRoute,
@@ -374,6 +375,8 @@ async function handleProjectHardDelete(
   if (!project) {
     throw new OpenLanderError('Project not found', 'PROJECT_NOT_FOUND', 404);
   }
+
+  await assertDestructiveActionAllowed(ctx.db, { projectId: project.id });
 
   try {
     await assertProjectLifecycleMutableForRoute(project, 'purge', ctx);

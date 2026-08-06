@@ -12,6 +12,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { AiOpsBriefingPanel } from '@/components/ai-ops/AiOpsBriefingPanel';
+import { OperationPermissionsPanel } from '@/components/security/OperationPermissionsPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -42,7 +43,7 @@ import {
   type DeliverySettings,
 } from '@/lib/api/deliveries';
 
-export type SettingsSection = 'general' | 'delivery' | 'ai' | 'data' | 'danger';
+export type SettingsSection = 'general' | 'permissions' | 'delivery' | 'ai' | 'data' | 'danger';
 type ProjectDangerAction = 'archive' | 'unarchive' | 'purge';
 type SettingsDeliveryType = 'software_release' | 'artifact_delivery';
 type SettingsGateType = 'review' | 'qa' | 'data' | 'custom';
@@ -129,6 +130,7 @@ export function SettingsTab({
 
   const navItems: { id: SettingsSection; label: string }[] = [
     { id: 'general', label: t('settings.nav.general') },
+    { id: 'permissions', label: t('settings.nav.permissions') },
     { id: 'delivery', label: t('delivery.settings.nav') },
     { id: 'ai', label: t('settings.nav.ai') },
     { id: 'data', label: t('settings.nav.data') },
@@ -239,6 +241,19 @@ export function SettingsTab({
       <div className="flex-1 min-w-0 overflow-auto p-4">
         {activeSection === 'general' && (
           <ProjectGeneralPanel project={project} onProjectChanged={onProjectChanged} />
+        )}
+        {activeSection === 'permissions' && (
+          <div className="flex max-w-2xl flex-col gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                {t('securityPermissions.projectTitle')}
+              </h3>
+              <p className="mt-1 text-xs text-foreground/70">
+                {t('securityPermissions.projectDescription')}
+              </p>
+            </div>
+            <OperationPermissionsPanel scope="project" targetId={projectId} />
+          </div>
         )}
         {activeSection === 'delivery' && <DeliverySettingsPanel projectId={projectId} />}
         {activeSection === 'ai' && (

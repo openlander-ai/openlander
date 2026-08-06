@@ -40,6 +40,37 @@ export class FeatureDisabledError extends OpenLanderError {
   }
 }
 
+export class OperationPermissionDeniedError extends OpenLanderError {
+  constructor(
+    permission: 'destructive_actions' | 'database_access',
+    target: { projectId?: string | null; serviceId?: string | null },
+  ) {
+    super(
+      'This operation is blocked by the effective OpenLander permission policy.',
+      'OPERATION_PERMISSION_DENIED',
+      403,
+      {
+        permission,
+        project_id: target.projectId ?? null,
+        service_id: target.serviceId ?? null,
+      },
+    );
+    this.name = 'OperationPermissionDeniedError';
+  }
+}
+
+export class OperationPermissionConfigurationError extends OpenLanderError {
+  constructor(settingKey: string, details?: Record<string, unknown>) {
+    super(
+      'The stored OpenLander operation permission policy is invalid.',
+      'OPERATION_PERMISSION_CONFIG_INVALID',
+      500,
+      { setting_key: settingKey, ...details },
+    );
+    this.name = 'OperationPermissionConfigurationError';
+  }
+}
+
 export class ApplicationOperationNotFoundError extends OpenLanderError {
   constructor(operationName: string) {
     super(`Application operation not found: ${operationName}`, 'OPERATION_NOT_FOUND', 404, {

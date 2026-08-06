@@ -107,7 +107,6 @@ async function targetFromServiceName(
   const projectScopeId = projectName ? await resolveProjectIdByName(appCtx, projectName) : null;
   const services = await appCtx.db.listServices();
   const matches = services
-    .filter((service) => !isManagedKind(service.kind))
     .filter((service) => matchesServiceAlias(service, serviceName))
     .filter((service) => !projectScopeId || service.project_id === projectScopeId);
 

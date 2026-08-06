@@ -4,11 +4,20 @@ import { deployableServiceToolDefs } from '../tools/defs/deployable-service.js';
 import { envToolDefs } from '../tools/defs/env.js';
 import { networkOperationToolDefs } from '../tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
+import { serviceToolDefs } from '../tools/defs/service.js';
+import { volumeToolDefs } from '../tools/defs/volume.js';
 import type { ToolDef } from '../tools/defs/types.js';
 import type { EventPayload } from '../events/index.js';
 import { assertMcpActiveScope, isGroupBMcpHoldTool } from './destructive-safety.js';
 import { parseStatefulComposeApprovalPlan } from './stateful-compose-approval.js';
 import type { RequestIdentity } from '../types/identity.js';
+import { assertDestructiveActionAllowed } from '../security/operation-permissions.js';
+
+const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
+  'remove_service',
+  'remove_volume',
+  'delete_bucket',
+]);
 
 interface DestructiveMcpPlan {
   type: 'destructive_mcp';
@@ -64,6 +73,8 @@ function findExecutableTool(toolName: string): ToolDef | undefined {
     ...deployableServiceToolDefs,
     ...envToolDefs,
     ...networkOperationToolDefs,
+    ...serviceToolDefs,
+    ...volumeToolDefs,
   ].find((def) => def.name === toolName);
 }
 
@@ -128,6 +139,12 @@ export async function handleDestructiveMcpApproval(
       plan.identity,
       plan.targetServiceId,
     );
+    if (POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(plan.tool)) {
+      await assertDestructiveActionAllowed(ctx.db, {
+        projectId: plan.targetProjectId,
+        serviceId: plan.targetServiceId,
+      });
+    }
     await ctx.db.updateActionRunStatus(actionRun.id, 'running');
     const result = await def.execute(plan.args, {
       target: 'mcp',

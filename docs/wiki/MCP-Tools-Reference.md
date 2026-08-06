@@ -82,11 +82,16 @@ instead of asking the model to call OpenLander's HTTP API directly.
 If the same token is sent to `/api`, OpenLander returns `MCP_TOKEN_USED_ON_REST_API`
 with the correct `/mcp` endpoint and a registration example.
 
-Destructive MCP operations are intentionally gated. Some real ToolDefs appear in the action catalog
-but are blocked at the MCP boundary because they delete Database/Cache/Storage resources or perform
-host-wide cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
-`recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
-`OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead.
+Destructive MCP operations are intentionally gated. Host-maintenance actions
+`platform_force_remove`, `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`
+remain human-UI-only and return `OPERATION_REQUIRES_HUMAN_UI`.
+
+Database/Cache/Storage deletion actions `remove_service`, `remove_volume`, and `delete_bucket`
+follow the effective Security permission instead. The default is `allow`; an operator can change the
+global, Project, or service setting to `approval_required` (returns a pollable `action_run_id`) or
+`block` (returns `OPERATION_PERMISSION_DENIED`). Service overrides win over Project overrides, which
+win over the global default. Database credential, container-exec, and data-inspection actions follow
+the separate `database_access` allow/block permission.
 
 Application cleanup and restore use softer paths. `archive_project`,
 `unarchive_project`, `archive_service`, and `unarchive_service` are exposed
@@ -1154,9 +1159,10 @@ Provide either `service_id` or `service_name`. Applications are intentionally re
 `command` must be an argv array such as `["psql", "-U", "openlander", "-c", "SELECT 1"]`.
 Shell strings like `"psql -U openlander"` are intentionally rejected.
 
-`remove_service` is human-only in OpenLander 0.1 and returns
-`OPERATION_REQUIRES_HUMAN_UI` from MCP. Use the service page delete action for
-typed-confirm deletion with the managed-volume opt-in checkbox.
+`remove_service` follows the effective destructive-action permission. It executes when allowed,
+enters the human approval queue when approval is required, and returns
+`OPERATION_PERMISSION_DENIED` when blocked. Project/Application hard delete remains a separate
+human-UI-only flow.
 
 ### `get_service_credentials`
 
@@ -1268,9 +1274,8 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 | `service_name` | string | Yes      | MinIO service name |
 | `bucket_name`  | string | Yes      | Bucket name        |
 
-`create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` is human-only in OpenLander
-0.1 and returns `OPERATION_REQUIRES_HUMAN_UI` from MCP; delete buckets from the web UI after
-confirming the data-loss impact.
+`create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` follows the effective
+destructive-action permission: allow, approval hold, or block.
 
 ### Backup Operations
 
@@ -1734,9 +1739,8 @@ apply config/repo changes and call `update_app`.
 | `project_name` | string | Yes      | Project name |
 | `volume_name`  | string | Yes      | Volume name  |
 
-`remove_volume` is human-only in OpenLander 0.1 and returns
-`OPERATION_REQUIRES_HUMAN_UI` from MCP. Remove persistent volumes from the web UI after confirming
-the data-loss impact.
+`remove_volume` follows the effective destructive-action permission: allow, approval hold, or
+block. The action permanently deletes the selected volume data.
 
 ### `get_disk_usage`
 
