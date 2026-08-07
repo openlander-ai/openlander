@@ -52,6 +52,8 @@ describe('Connected Publish UI', () => {
     expect(protectedShareCard).toContain('getProtectedShareSettings()');
     expect(protectedShareCard).toContain('saveProtectedShareSettings');
     expect(protectedShareCard).toContain('settings.detectedPublicIp');
+    expect(protectedShareCard).toContain('<Collapsible');
+    expect(protectedShareCard).toContain('certificateSettingsOpen');
     expect(protectedShareCard).toContain('id="public-access"');
     expect(connectionCard).toContain('startCloudflareOAuth()');
     expect(connectionCard).toContain('getCloudflareConnection()');
@@ -155,8 +157,20 @@ describe('Connected Publish UI', () => {
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/connect'");
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/disconnect'");
     expect(publicControl).toContain("error.code === 'PROTECTED_SHARE_SETUP_REQUIRED'");
-    expect(publicControl).toContain("navigate('/settings/web-server#public-access')");
+    expect(publicControl).toContain('showProtectedShareSetup()');
+    expect(publicControl).toContain('getProtectedShareSettings()');
+    expect(publicControl).toContain('saveProtectedShareSettings({');
+    expect(publicControl).toContain('setupDialogOpen');
+    expect(publicControl).not.toContain("navigate('/settings/web-server#public-access')");
     expect(publicControl).toContain("navigate('/settings/web-server#connected-publish')");
+  });
+
+  it('collects direct-share setup only at first use and reuses the global settings', () => {
+    expect(publicControl).toContain("t('projectDetail.publicAccess.setupTitle')");
+    expect(publicControl).toContain('next.publicHost || next.detectedPublicIp');
+    expect(publicControl).toContain("await publish('protected_share')");
+    expect(publicControl).toContain('id="public-share-setup-email"');
+    expect(protectedShareCard).toContain("t('webServer.protectedShare.certificateSettings')");
   });
 
   it('ships the public access copy in English and Korean together', () => {

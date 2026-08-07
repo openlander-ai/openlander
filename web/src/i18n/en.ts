@@ -1493,6 +1493,21 @@ export const translations = {
       copyFailed: 'Could not copy the public URL.',
       connectFirst: 'Configure protected sharing before publishing this Application.',
       setupFirst: 'Set the public address and certificate email in Web Server settings first.',
+      setupTitle: 'Set up secure sharing',
+      setupDescription:
+        'This is required only once for this OpenLander server. The settings will be reused for every Application you share directly.',
+      setupPublicHost: 'Public IPv4 or base domain',
+      setupDetectedHost:
+        'We detected {ip} on this GCP server. Confirm that it is a reserved static address.',
+      setupPublicHostHelp:
+        'Use a reserved public IPv4 address or a base domain that points to this server.',
+      setupAcmeEmail: 'ACME contact email',
+      setupAcmeEmailHelp:
+        'Use a reachable shared inbox. It is sent to Let’s Encrypt for certificate registration and is never shown to visitors.',
+      setupLoadFailed: 'Could not load secure sharing setup.',
+      setupSaveFailed: 'Could not save secure sharing setup.',
+      setupSaving: 'Saving…',
+      setupConfirm: 'Save and share',
       runningApplicationRequired: 'Start an HTTP Application to publish this Project.',
       notEligible: 'A running HTTP Application with a detected port is required.',
       publishFailed: 'Could not share this Application.',
@@ -2599,8 +2614,12 @@ export const translations = {
       publicHostPlaceholder: '34.64.12.34 or share.example.com',
       publicHostHelp:
         'An IPv4 address creates a free sslip.io hostname. Use a reserved static IP so links stay valid.',
-      acmeEmail: 'Certificate email',
-      acmeEmailHelp: 'Used only to register and renew Let’s Encrypt certificates.',
+      acmeEmail: 'ACME contact email',
+      acmeEmailHelp:
+        'Stored once for this OpenLander server and used for Let’s Encrypt registration. It is not included in certificates or shown to visitors.',
+      certificateSettings: 'Advanced certificate settings',
+      certificateSettingsMissing: 'Contact email not set',
+      certificateSettingsRequired: 'Enter an ACME contact email before applying these settings.',
       useDetectedIp: 'Use detected GCP address {ip}',
       securityNote:
         'Only ports 80 and 443 need to be open. Application ports remain private, and each shared Application gets its own access-code gate.',

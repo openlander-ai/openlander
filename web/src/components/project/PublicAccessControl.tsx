@@ -16,11 +16,16 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/i18n/context';
 import {
   exposeService,
@@ -32,6 +37,11 @@ import {
 } from '@/lib/api/projects';
 import { ApiError } from '@/lib/api/client';
 import { getCloudflareConnection, type CloudflareConnection } from '@/lib/api/cloudflare';
+import {
+  getProtectedShareSettings,
+  saveProtectedShareSettings,
+  type ProtectedShareSettings,
+} from '@/lib/api/web-server';
 import { cn, copyToClipboard } from '@/lib/utils';
 
 export function PublicAccessControl({
@@ -59,6 +69,12 @@ export function PublicAccessControl({
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [methodDialogOpen, setMethodDialogOpen] = useState(false);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [setupSettings, setSetupSettings] = useState<ProtectedShareSettings | null>(null);
+  const [setupPublicHost, setSetupPublicHost] = useState('');
+  const [setupAcmeEmail, setSetupAcmeEmail] = useState('');
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [setupSaving, setSetupSaving] = useState(false);
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
   const lastStatus = useRef<`${PublicAccessProvider}:${PublicAccessStatus}` | null>(null);
@@ -126,6 +142,23 @@ export function PublicAccessControl({
     return () => window.clearInterval(timer);
   }, [access?.status, load]);
 
+  const showProtectedShareSetup = useCallback(async () => {
+    setMethodDialogOpen(false);
+    setSetupDialogOpen(true);
+    setSetupLoading(true);
+    try {
+      const next = await getProtectedShareSettings();
+      setSetupSettings(next);
+      setSetupPublicHost(next.publicHost || next.detectedPublicIp || '');
+      setSetupAcmeEmail(next.acmeEmail);
+    } catch {
+      setSetupDialogOpen(false);
+      toast.error(t('projectDetail.publicAccess.setupLoadFailed'));
+    } finally {
+      setSetupLoading(false);
+    }
+  }, [t]);
+
   const publish = useCallback(
     async (provider: PublicAccessProvider = 'protected_share', rotateAccessCode = false) => {
       if (disabled || publishDisabledReason) {
@@ -152,8 +185,7 @@ export function PublicAccessControl({
         onAccessSettled?.();
       } catch (error) {
         if (error instanceof ApiError && error.code === 'PROTECTED_SHARE_SETUP_REQUIRED') {
-          toast.info(t('projectDetail.publicAccess.setupFirst'));
-          navigate('/settings/web-server#public-access');
+          await showProtectedShareSetup();
         } else if (error instanceof ApiError && error.code === 'CLOUDFLARE_NOT_CONNECTED') {
           toast.info(t('projectDetail.publicAccess.connectCloudflareFirst'));
           navigate('/settings/web-server#connected-publish');
@@ -170,8 +202,35 @@ export function PublicAccessControl({
         setPending(false);
       }
     },
-    [disabled, navigate, onAccessSettled, projectId, publishDisabledReason, serviceId, t],
+    [
+      disabled,
+      navigate,
+      onAccessSettled,
+      projectId,
+      publishDisabledReason,
+      serviceId,
+      showProtectedShareSetup,
+      t,
+    ],
   );
+
+  const saveSetupAndPublish = async () => {
+    setSetupSaving(true);
+    try {
+      await saveProtectedShareSettings({
+        publicHost: setupPublicHost,
+        acmeEmail: setupAcmeEmail,
+      });
+      setSetupDialogOpen(false);
+      await publish('protected_share');
+    } catch (error) {
+      if (!(error instanceof ApiError && error.code === 'PROTECTED_SHARE_SETUP_REQUIRED')) {
+        toast.error(t('projectDetail.publicAccess.setupSaveFailed'));
+      }
+    } finally {
+      setSetupSaving(false);
+    }
+  };
 
   const unpublish = async () => {
     const provider = access?.provider ?? 'protected_share';
@@ -420,6 +479,95 @@ export function PublicAccessControl({
             >
               {t('projectDetail.publicAccess.openCloudflareSettings')}
             </button>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={setupDialogOpen} onOpenChange={setSetupDialogOpen}>
+        <DialogContent className="max-w-md border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]">
+          <DialogHeader>
+            <DialogTitle>{t('projectDetail.publicAccess.setupTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('projectDetail.publicAccess.setupDescription')}
+            </DialogDescription>
+          </DialogHeader>
+
+          {setupLoading ? (
+            <div className="mt-3 grid gap-3" aria-busy="true">
+              <div className="h-14 animate-pulse rounded-md bg-[color:var(--ol-panel-2)]" />
+              <div className="h-14 animate-pulse rounded-md bg-[color:var(--ol-panel-2)]" />
+            </div>
+          ) : (
+            <form
+              className="mt-3 grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveSetupAndPublish();
+              }}
+            >
+              <div className="grid gap-1.5">
+                <Label htmlFor="public-share-setup-host">
+                  {t('projectDetail.publicAccess.setupPublicHost')}
+                </Label>
+                <Input
+                  id="public-share-setup-host"
+                  value={setupPublicHost}
+                  onChange={(event) => setSetupPublicHost(event.target.value)}
+                  placeholder={t('webServer.protectedShare.publicHostPlaceholder')}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                />
+                <p className="text-[11.5px] leading-relaxed text-[color:var(--ol-fg-subtle)]">
+                  {setupSettings?.detectedPublicIp
+                    ? t('projectDetail.publicAccess.setupDetectedHost', {
+                        ip: setupSettings.detectedPublicIp,
+                      })
+                    : t('projectDetail.publicAccess.setupPublicHostHelp')}
+                </p>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="public-share-setup-email">
+                  {t('projectDetail.publicAccess.setupAcmeEmail')}
+                </Label>
+                <Input
+                  id="public-share-setup-email"
+                  type="email"
+                  value={setupAcmeEmail}
+                  onChange={(event) => setSetupAcmeEmail(event.target.value)}
+                  placeholder="openlander.ops@gmail.com"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                />
+                <p className="text-[11.5px] leading-relaxed text-[color:var(--ol-fg-subtle)]">
+                  {t('projectDetail.publicAccess.setupAcmeEmailHelp')}
+                </p>
+              </div>
+
+              {setupSettings?.traefikMode === 'external' && (
+                <p className="rounded-md border border-[color:var(--ol-warning)]/30 bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[11.5px] text-[color:var(--ol-warning)]">
+                  {t('webServer.protectedShare.managedRequired')}
+                </p>
+              )}
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" disabled={setupSaving}>
+                    {t('common.cancel')}
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="submit"
+                  disabled={setupSaving || setupSettings?.traefikMode === 'external'}
+                >
+                  {setupSaving
+                    ? t('projectDetail.publicAccess.setupSaving')
+                    : t('projectDetail.publicAccess.setupConfirm')}
+                </Button>
+              </DialogFooter>
+            </form>
           )}
         </DialogContent>
       </Dialog>

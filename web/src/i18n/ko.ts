@@ -1548,6 +1548,19 @@ export const translations = {
       copyFailed: '공개 URL을 복사하지 못했습니다.',
       connectFirst: '이 애플리케이션을 공개하려면 먼저 보호 공유를 설정하세요.',
       setupFirst: '웹 서버 설정에서 공개 주소와 인증서 이메일을 먼저 입력하세요.',
+      setupTitle: '안전한 외부 공유 설정',
+      setupDescription:
+        '이 OpenLander 서버에서 한 번만 설정합니다. 이후 직접 공유하는 모든 애플리케이션에 공통으로 사용합니다.',
+      setupPublicHost: '공개 IPv4 또는 기본 도메인',
+      setupDetectedHost: '이 GCP 서버에서 {ip} 주소를 감지했습니다. 고정 외부 IP인지 확인하세요.',
+      setupPublicHostHelp: '이 서버를 가리키는 고정 공인 IPv4 또는 기본 도메인을 입력하세요.',
+      setupAcmeEmail: 'ACME 연락처 이메일',
+      setupAcmeEmailHelp:
+        '수신 가능한 공용 메일을 사용하세요. 인증서 등록을 위해 Let’s Encrypt에 전달되며 방문자에게는 공개되지 않습니다.',
+      setupLoadFailed: '외부 공유 설정을 불러오지 못했습니다.',
+      setupSaveFailed: '외부 공유 설정을 저장하지 못했습니다.',
+      setupSaving: '저장 중…',
+      setupConfirm: '저장하고 공유',
       runningApplicationRequired: 'HTTP 애플리케이션을 실행하면 공개할 수 있습니다.',
       notEligible: '실행 중이며 포트가 감지된 HTTP 애플리케이션이 필요합니다.',
       publishFailed: '애플리케이션을 외부 공유하지 못했습니다.',
@@ -2778,8 +2791,12 @@ export const translations = {
       publicHostPlaceholder: '34.64.12.34 또는 share.example.com',
       publicHostHelp:
         'IPv4를 입력하면 무료 sslip.io 주소를 만듭니다. 링크가 유지되도록 고정 외부 IP를 사용하세요.',
-      acmeEmail: '인증서 이메일',
-      acmeEmailHelp: 'Let’s Encrypt 인증서 발급과 갱신 등록에만 사용합니다.',
+      acmeEmail: 'ACME 연락처 이메일',
+      acmeEmailHelp:
+        '이 OpenLander 서버에 한 번 저장하고 Let’s Encrypt 등록에 사용합니다. 인증서나 방문자 화면에는 표시되지 않습니다.',
+      certificateSettings: '고급 인증서 설정',
+      certificateSettingsMissing: '연락처 이메일이 설정되지 않음',
+      certificateSettingsRequired: '설정을 적용하려면 ACME 연락처 이메일을 입력하세요.',
       useDetectedIp: '감지된 GCP 주소 {ip} 사용',
       securityNote:
         '방화벽에서는 80·443 포트만 열면 됩니다. 애플리케이션 포트는 비공개로 유지되고 공유한 앱마다 접근코드 화면이 생깁니다.',
