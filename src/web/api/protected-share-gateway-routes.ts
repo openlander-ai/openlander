@@ -58,6 +58,30 @@ function koreanRequested(acceptLanguage: string | undefined): boolean {
   );
 }
 
+function sameHostFormOrigin(c: Context, hostname: string): boolean {
+  const origin = c.req.header('origin');
+  if (!origin) return true;
+
+  // Some embedded browsers serialize a top-level form navigation from an
+  // HTTP 401 document with an opaque `Origin: null`. Fetch Metadata remains
+  // browser-controlled, so accept only an explicitly same-site user
+  // navigation and keep rejecting cross-site form posts.
+  if (origin === 'null') {
+    const site = c.req.header('sec-fetch-site');
+    return (
+      (site === 'same-origin' || site === 'none') &&
+      c.req.header('sec-fetch-mode') === 'navigate' &&
+      c.req.header('sec-fetch-dest') === 'document'
+    );
+  }
+
+  try {
+    return new URL(origin).hostname.toLowerCase() === hostname;
+  } catch {
+    return false;
+  }
+}
+
 function accessPage(params: {
   target: ProtectedShareTarget;
   nextPath: string;
@@ -174,20 +198,19 @@ export function createProtectedShareGatewayRoutes(ctx: AppContext): Hono {
     );
   });
 
+  gateway.get('/__openlander/share/verify', (c) => {
+    const response = c.redirect('/', 303);
+    for (const [name, value] of Object.entries(noStoreHeaders())) response.headers.set(name, value);
+    return response;
+  });
+
   gateway.post('/__openlander/share/verify', async (c) => {
     const hostname = requestHostname(c);
     const target = await ctx.publicShare.resolveActiveShareByHostname(hostname);
     if (!target) return c.text('Not found', 404, noStoreHeaders());
 
-    const origin = c.req.header('origin');
-    if (origin) {
-      try {
-        if (new URL(origin).hostname.toLowerCase() !== hostname) {
-          return c.text('Forbidden', 403, noStoreHeaders());
-        }
-      } catch {
-        return c.text('Forbidden', 403, noStoreHeaders());
-      }
+    if (!sameHostFormOrigin(c, hostname)) {
+      return c.text('Forbidden', 403, noStoreHeaders());
     }
 
     const form = await c.req.parseBody().catch((): Record<string, string | File> => ({}));

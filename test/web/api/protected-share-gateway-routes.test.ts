@@ -78,6 +78,49 @@ describe('protected share visitor gateway', () => {
     expect(html).toContain('That share code is not valid.');
   });
 
+  it('redirects direct visits to the internal verification endpoint back to the gate', async () => {
+    const { app } = harness();
+    const response = await app.request('/__openlander/share/verify', {
+      headers: { Host: 'demo.34-64-12-34.sslip.io' },
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('accepts an opaque origin only for a browser-controlled same-origin navigation', async () => {
+    const { app } = harness({ validCode: false });
+    const sameOriginNavigation = await app.request('/__openlander/share/verify', {
+      method: 'POST',
+      headers: {
+        Host: 'demo.34-64-12-34.sslip.io',
+        Origin: 'null',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Dest': 'document',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'access_code=AAAA-BBBB',
+    });
+    const crossSiteNavigation = await app.request('/__openlander/share/verify', {
+      method: 'POST',
+      headers: {
+        Host: 'demo.34-64-12-34.sslip.io',
+        Origin: 'null',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Dest': 'document',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'access_code=AAAA-BBBB',
+    });
+
+    expect(sameOriginNavigation.status).toBe(401);
+    expect(await sameOriginNavigation.text()).toContain('That share code is not valid.');
+    expect(crossSiteNavigation.status).toBe(403);
+  });
+
   it('allows on-demand TLS only for an active protected-share hostname', async () => {
     const { app, publicShare } = harness();
 
