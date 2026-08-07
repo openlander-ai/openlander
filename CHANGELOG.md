@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Let protected shares run behind an existing Caddy, Nginx, or other TLS
+  terminator without competing for host port 443, restrict on-demand
+  certificate issuance to active share hostnames, and preserve the mode across
+  one-click updates.
+
 ## [0.3.3-rc.2] - 2026-08-07
 
 ### Fixed
