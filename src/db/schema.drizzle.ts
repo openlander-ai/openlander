@@ -256,8 +256,8 @@ export const domainMappings = pgTable(
     strip_prefix: boolean('strip_prefix').notNull().default(false),
     upstream_path_prefix: text('upstream_path_prefix'),
     target_port: integer('target_port'),
-    // v0.1 does not enable ACME routing. NULL means "unspecified until the
-    // v0.2 TLS model lands"; true/false remain reserved for that contract.
+    // Protected public shares set these fields for ACME-backed HTTPS routing.
+    // NULL remains valid for legacy/manual domain mappings with unspecified TLS.
     tls_enabled: boolean('tls_enabled'),
     tls_resolver: text('tls_resolver'),
     created_at: text('created_at').default(sql`now()::text`),

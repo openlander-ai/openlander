@@ -43,6 +43,7 @@ import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
 import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
+import { PROTECTED_SHARE_MAPPING_PREFIX } from '../../pipeline/protected-public-share.js';
 
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
@@ -54,6 +55,7 @@ type TraefikHttpRouter = {
   service: string;
   priority?: number;
   middlewares?: string[];
+  tls?: { certResolver: string };
 };
 
 const TRAEFIK_HTTP_PROVIDER_PRIORITY_BASE = 100_000;
@@ -81,7 +83,10 @@ function readApprovalActionName(actionRun: { approval_tool: string | null; plan:
 }
 type TraefikHttpService = { loadBalancer: { servers: Array<{ url: string }> } };
 type TraefikHttpMiddleware =
-  { stripPrefix: { prefixes: string[] } } | { addPrefix: { prefix: string } };
+  | { stripPrefix: { prefixes: string[] } }
+  | { addPrefix: { prefix: string } }
+  | { redirectScheme: { scheme: string; permanent: boolean } }
+  | { forwardAuth: { address: string; trustForwardHeader: boolean } };
 
 const MANAGED_SERVICE_KINDS = new Set(['postgres', 'mysql', 'redis', 'mongo', 'minio']);
 
@@ -125,6 +130,13 @@ function serviceIsHttpProviderRoutable(service: ServiceRow): boolean {
   const status = service.status;
   if (status === 'running') return true;
   return status === 'building' && Boolean(service.container_id);
+}
+
+function openLanderTraefikOrigin(port: number): string {
+  const containerized = ['1', 'true', 'yes'].includes(
+    (process.env['OPENLANDER_CONTAINERIZED'] ?? '').trim().toLowerCase(),
+  );
+  return `http://${containerized ? 'openlander' : 'host.docker.internal'}:${String(port)}`;
 }
 
 export function createApiRoutes(ctx: AppContext): Hono {
@@ -280,6 +292,10 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const routers: Record<string, TraefikHttpRouter> = {};
     const traefikServices: Record<string, TraefikHttpService> = {};
     const middlewares: Record<string, TraefikHttpMiddleware> = {};
+    const protectedShareSettings = ctx.config.traefik.protectedShare;
+    const protectedShareConfigured = Boolean(
+      protectedShareSettings.publicHost.trim() && protectedShareSettings.acmeEmail.trim(),
+    );
 
     // Build self-contained services for projects with an active container.
     // Uses Docker DNS (container name) + container port — no @docker dependency.
@@ -319,6 +335,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     };
     const addAutoHostRouters = (routeName: string, serviceName: string): void => {
       for (const route of getProjectUrls(routeName)) {
+        if (protectedShareConfigured && route.type === 'public') continue;
         const host = new URL(route.url).hostname;
         if (!host) continue;
         const rule = `Host(\`${host}\`)`;
@@ -422,6 +439,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const project = projectsById.get(service.project_id);
       if (!project) continue;
 
+      const isProtectedShare = mapping.id.startsWith(PROTECTED_SHARE_MAPPING_PREFIX);
+      if (isProtectedShare && service.visibility !== 'shared') continue;
+
       if (
         mapping.target_port !== null &&
         (!Number.isInteger(mapping.target_port) ||
@@ -492,13 +512,56 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
       }
 
-      routers[routerName] = {
-        rule,
-        entryPoints: ['web'],
-        service: svcName,
-        priority: httpProviderPriority(rule),
-        ...(routerMiddlewares.length > 0 ? { middlewares: routerMiddlewares } : {}),
-      };
+      if (isProtectedShare) {
+        const authMiddleware = 'protected-share-auth';
+        const redirectMiddleware = 'protected-share-https-redirect';
+        middlewares[authMiddleware] = {
+          forwardAuth: {
+            address: `${openLanderTraefikOrigin(ctx.config.server.port)}/__openlander/share/auth`,
+            trustForwardHeader: false,
+          },
+        };
+        middlewares[redirectMiddleware] = {
+          redirectScheme: { scheme: 'https', permanent: true },
+        };
+        const gatewayService = 'protected-share-gateway';
+        traefikServices[gatewayService] ??= {
+          loadBalancer: {
+            servers: [{ url: openLanderTraefikOrigin(ctx.config.server.port) }],
+          },
+        };
+        routers[`${routerName}-http`] = {
+          rule,
+          entryPoints: ['web'],
+          service: svcName,
+          priority: httpProviderPriority(rule),
+          middlewares: [redirectMiddleware],
+        };
+        routers[routerName] = {
+          rule,
+          entryPoints: ['websecure'],
+          service: svcName,
+          priority: httpProviderPriority(rule),
+          middlewares: [authMiddleware, ...routerMiddlewares],
+          tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
+        };
+        const gatewayRule = `${rule} && PathPrefix(\`/__openlander/share/\`)`;
+        routers[`${routerName}-gateway`] = {
+          rule: gatewayRule,
+          entryPoints: ['websecure'],
+          service: gatewayService,
+          priority: httpProviderPriority(gatewayRule) + 1,
+          tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
+        };
+      } else {
+        routers[routerName] = {
+          rule,
+          entryPoints: ['web'],
+          service: svcName,
+          priority: httpProviderPriority(rule),
+          ...(routerMiddlewares.length > 0 ? { middlewares: routerMiddlewares } : {}),
+        };
+      }
     }
 
     for (const project of allProjects) {

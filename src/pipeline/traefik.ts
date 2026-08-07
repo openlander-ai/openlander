@@ -23,8 +23,10 @@ export interface TraefikManagerOptions {
   containerName?: string;
   networkName?: string;
   httpPort?: number;
+  httpsPort?: number;
   dashboardPort?: number;
   instanceId?: string;
+  protectedShareConfig?: () => { publicHost: string; acmeEmail: string };
 }
 
 /** Get the dynamic config directory for the current environment. */
@@ -45,8 +47,10 @@ export class TraefikManager {
   private readonly containerName: string;
   private readonly networkName: string;
   private readonly httpPort: number;
+  private readonly httpsPort: number;
   private readonly dashboardPort: number;
   private readonly instanceId?: string;
+  private readonly protectedShareConfig?: () => { publicHost: string; acmeEmail: string };
 
   constructor(
     private readonly runtime: RuntimeBackend,
@@ -57,8 +61,20 @@ export class TraefikManager {
     this.containerName = options?.containerName ?? 'traefik-ol';
     this.networkName = options?.networkName ?? defaultPolicy.networkName;
     this.httpPort = options?.httpPort ?? 80;
+    this.httpsPort = options?.httpsPort ?? 443;
     this.dashboardPort = options?.dashboardPort ?? 8080;
     this.instanceId = options?.instanceId;
+    this.protectedShareConfig = options?.protectedShareConfig;
+  }
+
+  private protectedShareTlsEnabled(): boolean {
+    const config = this.protectedShareConfig?.();
+    return Boolean(config?.publicHost.trim() && config.acmeEmail.trim());
+  }
+
+  private acmeVolumeName(): string {
+    const suffix = this.instanceId?.replace(/[^A-Za-z0-9_.-]+/g, '-');
+    return suffix ? `openlander-traefik-acme-${suffix}` : 'openlander-traefik-acme';
   }
 
   private ownsContainer(container: { labels: Record<string, string> }): boolean {
@@ -112,7 +128,23 @@ export class TraefikManager {
       const expectedHttpEndpoint = `--providers.http.endpoint=${this.getHttpProviderEndpoint()}`;
       const hasHttpProvider = cmd.some((arg: string) => arg === expectedHttpEndpoint);
       const hasDockerProvider = cmd.some((arg: string) => arg === '--providers.docker=true');
-      return hasHttpProvider && !hasDockerProvider;
+      const expectsTls = this.protectedShareTlsEnabled();
+      const hasTlsEntrypoint = cmd.some(
+        (arg: string) => arg === '--entrypoints.websecure.address=:443',
+      );
+      const hasAcmeResolver = cmd.some(
+        (arg: string) => arg === '--certificatesresolvers.openlander.acme.httpchallenge=true',
+      );
+      const currentAcmeEmail = this.protectedShareConfig?.().acmeEmail.trim() ?? '';
+      const hasCurrentAcmeEmail = cmd.some(
+        (arg: string) =>
+          arg === `--certificatesresolvers.openlander.acme.email=${currentAcmeEmail}`,
+      );
+      return (
+        hasHttpProvider &&
+        !hasDockerProvider &&
+        (expectsTls ? hasTlsEntrypoint && hasAcmeResolver && hasCurrentAcmeEmail : !hasAcmeResolver)
+      );
     } catch (_err) {
       return false;
     }
@@ -300,26 +332,42 @@ export class TraefikManager {
     }
 
     const httpPortStr = String(this.httpPort);
+    const httpsPortStr = String(this.httpsPort);
     const dashboardPortStr = String(this.dashboardPort);
+    const protectedShare = this.protectedShareConfig?.();
+    const tlsEnabled = this.protectedShareTlsEnabled();
+    const cmd = [
+      '--api.insecure=true',
+      `--providers.http.endpoint=${this.getHttpProviderEndpoint()}`,
+      '--providers.http.pollInterval=5s',
+      '--entrypoints.web.address=:80',
+    ];
+    if (tlsEnabled && protectedShare) {
+      cmd.push(
+        '--entrypoints.websecure.address=:443',
+        `--certificatesresolvers.openlander.acme.email=${protectedShare.acmeEmail.trim()}`,
+        '--certificatesresolvers.openlander.acme.storage=/data/acme.json',
+        '--certificatesresolvers.openlander.acme.httpchallenge=true',
+        '--certificatesresolvers.openlander.acme.httpchallenge.entrypoint=web',
+      );
+    }
 
     await this.runtime.runInfraContainer({
       Image: TRAEFIK_IMAGE,
       name: this.containerName,
-      Cmd: [
-        '--api.insecure=true',
-        `--providers.http.endpoint=${this.getHttpProviderEndpoint()}`,
-        '--providers.http.pollInterval=5s',
-        '--entrypoints.web.address=:80',
-      ],
+      Cmd: cmd,
       ExposedPorts: {
         '80/tcp': {},
+        ...(tlsEnabled ? { '443/tcp': {} } : {}),
         '8080/tcp': {},
       },
       HostConfig: {
         PortBindings: {
           '80/tcp': [{ HostPort: httpPortStr }],
+          ...(tlsEnabled ? { '443/tcp': [{ HostPort: httpsPortStr }] } : {}),
           '8080/tcp': [{ HostPort: dashboardPortStr }],
         },
+        ...(tlsEnabled ? { Binds: [`${this.acmeVolumeName()}:/data`] } : {}),
         ...(platform() !== 'darwin' ? { ExtraHosts: ['host.docker.internal:host-gateway'] } : {}),
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },

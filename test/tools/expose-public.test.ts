@@ -48,6 +48,11 @@ function createContext(options: { deployables?: (typeof service)[] } = {}) {
       getService: vi.fn(async (id: string) => deployables.find((entry) => entry.id === id) ?? null),
       getProjectPublicAccess: vi.fn().mockResolvedValue({ service_id: service.id }),
     },
+    publicShare: {
+      expose: requestPublicAccess,
+      getPublicAccess,
+      unexpose: requestPrivateAccess,
+    },
     cloudflare: { requestPublicAccess, getPublicAccess, requestPrivateAccess },
   } as unknown as AppContext;
   return { ctx, requestPublicAccess, getPublicAccess, requestPrivateAccess };
@@ -61,7 +66,7 @@ function getTool(ctx: AppContext, name: string) {
   return tool!;
 }
 
-describe('Connected Publish MCP actions', () => {
+describe('Protected public share MCP actions', () => {
   it('prefers service_id and returns a compact polling contract', async () => {
     const { ctx, requestPublicAccess } = createContext();
 
@@ -73,6 +78,7 @@ describe('Connected Publish MCP actions', () => {
     expect(requestPublicAccess).toHaveBeenCalledWith({
       projectId: project.id,
       serviceId: service.id,
+      rotateAccessCode: false,
     });
     expect(result).toMatchObject({
       status: 'provisioning',
@@ -97,6 +103,31 @@ describe('Connected Publish MCP actions', () => {
     expect(requestPublicAccess).toHaveBeenCalledWith({
       projectId: project.id,
       serviceId: service.id,
+      rotateAccessCode: false,
+    });
+  });
+
+  it('keeps Cloudflare Connected Publish available as an explicit provider', async () => {
+    const { ctx, requestPublicAccess } = createContext();
+
+    const result = await getTool(ctx, 'expose_public').execute(
+      { service_id: service.id, provider: 'cloudflare' },
+      { target: 'mcp' },
+    );
+
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: service.id,
+    });
+    expect(result).toMatchObject({
+      provider: 'cloudflare',
+      status: 'provisioning',
+      status_call: {
+        arguments: {
+          action: 'get_public_access',
+          params: { service_id: service.id, provider: 'cloudflare' },
+        },
+      },
     });
   });
 
@@ -122,8 +153,14 @@ describe('Connected Publish MCP actions', () => {
       { target: 'mcp' },
     );
 
-    expect(getPublicAccess).toHaveBeenCalledWith(project.id);
-    expect(requestPrivateAccess).toHaveBeenCalledWith(project.id);
+    expect(getPublicAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: service.id,
+    });
+    expect(requestPrivateAccess).toHaveBeenCalledWith({
+      projectId: project.id,
+      serviceId: service.id,
+    });
     expect(status).toMatchObject({
       status: 'public',
       public_url: 'https://demo.example.com',

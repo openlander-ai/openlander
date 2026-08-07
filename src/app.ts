@@ -15,6 +15,7 @@ import { ModelRegistry } from './llm/model-registry.js';
 import { LlmCircuitBreaker } from './llm/llm-circuit-breaker.js';
 import { ProviderHealthMonitor } from './llm/provider-health-monitor.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
+import { ProtectedPublicShareManager } from './pipeline/protected-public-share.js';
 import type { RuntimeBackend } from './pipeline/runtime/index.js';
 
 import { ServiceManager } from './pipeline/service-manager.js';
@@ -207,6 +208,7 @@ export interface AppContext {
   dockerEventListener?: DockerEventListener;
   opsAgent?: OpsAgent;
   cloudflare: CloudflareTunnelManager;
+  publicShare: ProtectedPublicShareManager;
   // v0.3 modules
   buildDebugger: BuildDebugger | null;
   // v0.4 modules
@@ -386,7 +388,9 @@ export async function createAppContext(
   const traefik = new TraefikManager(runtime, config.server.port, {
     networkName: config.docker.networkName,
     instanceId,
+    protectedShareConfig: () => config.traefik.protectedShare,
   });
+  const publicShare = new ProtectedPublicShareManager(db, config, traefik);
 
   const llmCircuitBreaker = new LlmCircuitBreaker();
 
@@ -614,6 +618,7 @@ export async function createAppContext(
     serviceHealthMonitor,
     systemMaintenanceMonitor,
     cloudflare,
+    publicShare,
     buildDebugger,
     previewDeployer,
     jobManager,

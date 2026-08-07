@@ -705,18 +705,22 @@ describe('createProjectCompatRoutes', () => {
     const requestPublicAccess = vi.fn().mockResolvedValue({
       project_id: project.id,
       service_id: 'group-1__svc',
-      status: 'provisioning',
-      public_url: null,
+      status: 'public',
+      public_url: 'https://workspace.example.com',
     });
     const requestPrivateAccess = vi.fn().mockResolvedValue({
       project_id: project.id,
       service_id: 'group-1__svc',
-      status: 'unpublishing',
+      status: 'private',
       public_url: null,
     });
     const app = createApp({
       db: { getProject, getProjectByName },
-      cloudflare: { getPublicAccess, requestPublicAccess, requestPrivateAccess },
+      publicShare: {
+        getPublicAccess,
+        expose: requestPublicAccess,
+        unexpose: requestPrivateAccess,
+      },
     } as unknown as Partial<AppContext>);
 
     const publish = await app.request('/api/projects/group-1/expose', {
@@ -727,21 +731,22 @@ describe('createProjectCompatRoutes', () => {
     const status = await app.request('/api/projects/group-1/public-access');
     const unpublish = await app.request('/api/projects/group-1/unexpose', { method: 'POST' });
 
-    expect(publish.status).toBe(202);
+    expect(publish.status).toBe(200);
     expect(status.status).toBe(200);
-    expect(unpublish.status).toBe(202);
+    expect(unpublish.status).toBe(200);
     expect(requestPublicAccess).toHaveBeenCalledWith({
       projectId: project.id,
       serviceId: 'group-1__svc',
+      rotateAccessCode: false,
     });
-    expect(requestPrivateAccess).toHaveBeenCalledWith(project.id);
+    expect(requestPrivateAccess).toHaveBeenCalledWith({ projectId: project.id });
     await expect(status.json()).resolves.toMatchObject({
       status: 'public',
       public_url: 'https://workspace.example.com',
     });
   });
 
-  it('retires access-code sharing explicitly', async () => {
+  it('retires the legacy share endpoint explicitly', async () => {
     const app = createApp();
 
     const post = await app.request('/api/projects/group-1/share', { method: 'POST' });
@@ -749,6 +754,9 @@ describe('createProjectCompatRoutes', () => {
 
     expect(post.status).toBe(410);
     expect(remove.status).toBe(410);
-    await expect(post.json()).resolves.toMatchObject({ error: 'FEATURE_REMOVED' });
+    await expect(post.json()).resolves.toMatchObject({
+      error: 'FEATURE_REMOVED',
+      message: expect.stringContaining('service-scoped protected public access'),
+    });
   });
 });

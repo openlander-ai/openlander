@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
-import type { AppContext } from '../../app.js';
-import { getPolicy, type OpenLanderEnv } from '../../config/index.js';
+import { syncManagedTraefikProjectNetworks, type AppContext } from '../../app.js';
+import { getPolicy, saveConfig, type OpenLanderEnv } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../db/types.js';
 import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
@@ -15,11 +15,18 @@ import {
   type NetworkIp,
   type ProxyDetection,
 } from '../../pipeline/traefik.js';
+import {
+  PROTECTED_SHARE_MAPPING_PREFIX,
+  isValidProtectedShareAcmeEmail,
+  normalizeProtectedSharePublicHost,
+} from '../../pipeline/protected-public-share.js';
 
 const log = createModuleLogger('web-server-routes');
+const GCP_METADATA_EXTERNAL_IP_URL =
+  'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip';
 
 type WebRouteStatus = 'healthy' | 'warning' | 'error' | 'inactive';
-type WebRouteSource = 'sslip' | 'domain' | 'quick_share';
+type WebRouteSource = 'sslip' | 'domain' | 'quick_share' | 'protected_share';
 type PortEnvironment = OpenLanderEnv | 'outside';
 type WebRouteTlsStatus = 'ok' | 'expiring' | 'invalid' | 'absent' | 'unknown';
 type ProxyStatusCode =
@@ -87,6 +94,20 @@ interface CustomDomainCoverage {
 function isContainerizedRuntime(): boolean {
   const raw = process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+async function detectGcpPublicIp(): Promise<string | null> {
+  try {
+    const response = await fetch(GCP_METADATA_EXTERNAL_IP_URL, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(800),
+    });
+    if (!response.ok || response.headers.get('metadata-flavor') !== 'Google') return null;
+    const value = normalizeProtectedSharePublicHost(await response.text());
+    return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function hasFullCustomDomainCoverage(coverage?: CustomDomainCoverage): boolean {
@@ -264,6 +285,7 @@ function createRoute(params: {
   container: AllContainerInfo | null;
   domainStatus?: DomainMappingRow['status'];
   domainTargetPort?: DomainMappingRow['target_port'];
+  tlsEnabled?: boolean;
 }): WebServerRoute {
   const targetPort = routeTargetPort(params.service, params.domainTargetPort);
   const issues = buildIssues(
@@ -276,7 +298,7 @@ function createRoute(params: {
     id: params.id,
     source: params.source,
     host: params.host,
-    entryPoints: ['web'],
+    entryPoints: params.tlsEnabled ? ['websecure'] : ['web'],
     serviceId: params.service.id,
     serviceName: serviceDisplayName(params.service),
     projectId: params.project.id,
@@ -286,8 +308,8 @@ function createRoute(params: {
     targetPort,
     containerName: params.service.container_name,
     tls: {
-      enabled: false,
-      status: params.source === 'domain' ? 'unknown' : 'absent',
+      enabled: params.tlsEnabled === true,
+      status: params.tlsEnabled ? 'unknown' : params.source === 'domain' ? 'unknown' : 'absent',
     },
     status: routeStatusFor(params.service, params.container, issues),
     issues,
@@ -358,6 +380,11 @@ async function buildRoutes(ctx: AppContext): Promise<{
     await loadRouteInputs(ctx);
   const { containersById, containersByName } = containerIndexes(containers);
   const servicesById = new Map(services.map((service) => [service.id, service]));
+  const protectedShareServiceIds = new Set(
+    domainMappings
+      .filter((mapping) => mapping.id.startsWith(PROTECTED_SHARE_MAPPING_PREFIX))
+      .map((mapping) => mapping.service_id),
+  );
   const routes: WebServerRoute[] = [];
   const routeTargetServiceIds = new Set<string>();
   const customDomainServiceIds = new Set<string>();
@@ -390,7 +417,8 @@ async function buildRoutes(ctx: AppContext): Promise<{
 
     if (
       (service.visibility === 'quick-share' || service.visibility === 'shared') &&
-      service.public_url
+      service.public_url &&
+      !protectedShareServiceIds.has(service.id)
     ) {
       try {
         const host = new URL(service.public_url).hostname;
@@ -416,21 +444,24 @@ async function buildRoutes(ctx: AppContext): Promise<{
     if (!isHttpRoutableRuntimeService(service)) continue;
     const project = projectsById.get(service.project_id);
     if (!project || project.archived_at || service.archived_at) continue;
+    const isProtectedShare = mapping.id.startsWith(PROTECTED_SHARE_MAPPING_PREFIX);
+    if (isProtectedShare && service.visibility !== 'shared') continue;
     const container = findContainerForService(service, containersById, containersByName);
     if (mapping.status === 'active' && routeTargetPort(service, mapping.target_port) !== null) {
       routeTargetServiceIds.add(service.id);
-      customDomainServiceIds.add(service.id);
+      if (!isProtectedShare) customDomainServiceIds.add(service.id);
     }
     routes.push(
       createRoute({
         id: `domain:${mapping.id}`,
-        source: 'domain',
+        source: isProtectedShare ? 'protected_share' : 'domain',
         host: mapping.domain,
         service,
         project,
         container,
         domainStatus: mapping.status,
         domainTargetPort: mapping.target_port,
+        tlsEnabled: isProtectedShare && mapping.tls_enabled === true,
       }),
     );
   }
@@ -685,6 +716,70 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
       count: externalContainers.length,
       dockerUnavailable,
       containers: externalContainers,
+    });
+  });
+
+  api.get('/web-server/protected-share-settings', async (c) => {
+    const configured = ctx.config.traefik.protectedShare;
+    return c.json({
+      publicHost: configured.publicHost,
+      acmeEmail: configured.acmeEmail,
+      detectedPublicIp: await detectGcpPublicIp(),
+      ready:
+        Boolean(normalizeProtectedSharePublicHost(configured.publicHost)) &&
+        isValidProtectedShareAcmeEmail(configured.acmeEmail) &&
+        ctx.config.traefik.mode === 'managed',
+      traefikMode: ctx.config.traefik.mode,
+    });
+  });
+
+  api.put('/web-server/protected-share-settings', async (c) => {
+    const body = await c.req
+      .json<{ publicHost?: unknown; acmeEmail?: unknown }>()
+      .catch((): { publicHost?: unknown; acmeEmail?: unknown } => ({}));
+    const publicHost =
+      typeof body.publicHost === 'string' ? normalizeProtectedSharePublicHost(body.publicHost) : '';
+    const acmeEmail = typeof body.acmeEmail === 'string' ? body.acmeEmail.trim().toLowerCase() : '';
+    if (!publicHost) {
+      return c.json(
+        {
+          error: 'INVALID_PUBLIC_HOST',
+          message: 'Enter a valid public IPv4 address or base domain.',
+        },
+        400,
+      );
+    }
+    if (!isValidProtectedShareAcmeEmail(acmeEmail)) {
+      return c.json(
+        {
+          error: 'INVALID_ACME_EMAIL',
+          message: 'Enter a valid certificate registration email.',
+        },
+        400,
+      );
+    }
+
+    ctx.config.traefik.protectedShare = { publicHost, acmeEmail };
+    saveConfig(ctx.config);
+
+    let proxyApplied = false;
+    if (ctx.config.traefik.mode === 'managed') {
+      try {
+        await ctx.traefik.start();
+        await syncManagedTraefikProjectNetworks(ctx);
+        proxyApplied = true;
+      } catch (err) {
+        log.warn({ err }, 'Protected public share settings saved; Traefik restart is pending');
+      }
+    }
+
+    return c.json({
+      status: 'saved',
+      publicHost,
+      acmeEmail,
+      ready: proxyApplied,
+      proxyApplied,
+      traefikMode: ctx.config.traefik.mode,
     });
   });
 

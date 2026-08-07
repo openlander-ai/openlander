@@ -628,6 +628,64 @@ describe('TraefikManager', () => {
     );
   });
 
+  it('opens HTTPS and persists ACME state when protected sharing is configured', async () => {
+    let created = false;
+    const runtime = {
+      listAllContainers: vi.fn(async () =>
+        created
+          ? [
+              createMockContainer('traefik-ol', {
+                labels: {
+                  'openlander.managed': 'true',
+                  'openlander.role': 'traefik',
+                  'openlander.instance': 'olinst-test',
+                },
+                state: 'running',
+              }),
+            ]
+          : [],
+      ),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      removeContainer: vi.fn(async () => undefined),
+      renameContainer: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => {
+        created = true;
+        return 'new-traefik';
+      }),
+    } as unknown as Docker;
+
+    const manager = new TraefikManager(runtime, 10114, {
+      networkName: 'openlander',
+      instanceId: 'olinst-test',
+      protectedShareConfig: () => ({
+        publicHost: '34.64.12.34',
+        acmeEmail: 'owner@example.com',
+      }),
+    });
+
+    await manager.start();
+
+    expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: expect.arrayContaining([
+          '--entrypoints.websecure.address=:443',
+          '--certificatesresolvers.openlander.acme.email=owner@example.com',
+          '--certificatesresolvers.openlander.acme.storage=/data/acme.json',
+          '--certificatesresolvers.openlander.acme.httpchallenge=true',
+          '--certificatesresolvers.openlander.acme.httpchallenge.entrypoint=web',
+        ]),
+        ExposedPorts: expect.objectContaining({ '443/tcp': {} }),
+        HostConfig: expect.objectContaining({
+          PortBindings: expect.objectContaining({ '443/tcp': [{ HostPort: '443' }] }),
+          Binds: ['openlander-traefik-acme-olinst-test:/data'],
+        }),
+      }),
+    );
+  });
+
   it('recreates containerized Traefik when its HTTP provider still points at host.docker.internal', async () => {
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const legacy = createMockContainer('traefik-ol', {

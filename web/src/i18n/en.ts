@@ -1481,9 +1481,9 @@ export const translations = {
     },
     addResourceWithAgent: 'Ask agent to add Database/Cache',
     publicAccess: {
-      title: 'Public access',
-      publish: 'Publish',
-      publishing: 'Publishing…',
+      title: 'Protected public share',
+      publish: 'Share externally',
+      publishing: 'Preparing share…',
       stopping: 'Stopping…',
       retry: 'Retry publish',
       stop: 'Stop',
@@ -1491,15 +1491,45 @@ export const translations = {
       copy: 'Copy public URL',
       copied: 'Public URL copied',
       copyFailed: 'Could not copy the public URL.',
-      connectFirst: 'Connect Cloudflare before publishing this Project.',
+      connectFirst: 'Configure protected sharing before publishing this Application.',
+      setupFirst: 'Set the public address and certificate email in Web Server settings first.',
       runningApplicationRequired: 'Start an HTTP Application to publish this Project.',
       notEligible: 'A running HTTP Application with a detected port is required.',
-      publishFailed: 'Could not publish this Project.',
+      publishFailed: 'Could not share this Application.',
       unpublishFailed: 'Could not stop public access.',
       stopTitle: 'Stop public access?',
       stopDescription:
         '{hostname} will no longer be reachable. You can publish it again later with the same URL.',
       stopConfirm: 'Stop public access',
+      publishReady: 'Protected public sharing is ready.',
+      codeSet: 'Code set',
+      copyCode: 'Copy access code',
+      codeCopied: 'Access code copied',
+      rotateCode: 'Generate a new access code',
+      rotateTitle: 'Generate a new access code?',
+      rotateDescription:
+        'The current code and every signed-in visitor session will stop working immediately.',
+      rotateConfirm: 'Generate new code',
+      codeRotated: 'A new access code was generated. Existing sessions were signed out.',
+      methodTitle: 'Choose a sharing method',
+      methodDescription: 'Choose how this Application should be reachable from the internet.',
+      methodProtected: 'Direct protected share',
+      methodProtectedShort: 'Access code',
+      methodProtectedDescription:
+        'Connect through ports 80 and 443 on this server with a free HTTPS address and OpenLander access code.',
+      methodCloudflare: 'Cloudflare Tunnel',
+      methodCloudflareShort: 'Cloudflare',
+      methodCloudflareDescription:
+        'Publish through the connected Cloudflare domain without opening inbound ports. The access-code gate is not applied.',
+      recommended: 'Recommended',
+      cloudflareStarted: 'Cloudflare Tunnel publishing started.',
+      connectCloudflareFirst: 'Connect Cloudflare in Web Server settings first.',
+      cloudflareNotEligible:
+        'Another Application in this Project may already use Cloudflare Tunnel, or the connection needs attention.',
+      cloudflareBusyElsewhere:
+        'Another Application in this Project is using it. Stop that Cloudflare share first.',
+      cloudflareNeedsAttention: 'Repair the Cloudflare connection before selecting this method.',
+      openCloudflareSettings: 'Open Cloudflare settings',
     },
     env: {
       title: 'Application environment variables',
@@ -2556,16 +2586,42 @@ export const translations = {
   },
   webServer: {
     title: 'Web Server',
-    subtitle: 'Live view of routes and ports — read-only.',
+    subtitle: 'Public sharing, routes, and ports for this server.',
     dockerUnavailable:
       'Docker is unreachable. Routes and port allocation may be stale until it recovers.',
-    footer: 'Read-only host routing inventory.',
+    footer: 'Host routing inventory.',
+    protectedShare: {
+      title: 'Direct protected share',
+      subtitle:
+        'The default method. Connect through this server’s public IP with an HTTPS URL and one access code.',
+      recommended: 'Default · Recommended',
+      publicHost: 'Public IPv4 or base domain',
+      publicHostPlaceholder: '34.64.12.34 or share.example.com',
+      publicHostHelp:
+        'An IPv4 address creates a free sslip.io hostname. Use a reserved static IP so links stay valid.',
+      acmeEmail: 'Certificate email',
+      acmeEmailHelp: 'Used only to register and renew Let’s Encrypt certificates.',
+      useDetectedIp: 'Use detected GCP address {ip}',
+      securityNote:
+        'Only ports 80 and 443 need to be open. Application ports remain private, and each shared Application gets its own access-code gate.',
+      managedRequired: 'Protected sharing currently requires OpenLander-managed Traefik.',
+      save: 'Save and apply',
+      saving: 'Applying…',
+      saved: 'Protected sharing settings were applied.',
+      savedRestartPending: 'Settings were saved. Traefik will retry when Docker is available.',
+      loadFailed: 'Could not load protected sharing settings.',
+      saveFailed: 'Could not save protected sharing settings.',
+    },
     publicAccess: {
-      title: 'Project publishing',
-      subtitle: 'Connect a Cloudflare domain once to create a stable URL for each Project.',
+      title: 'Cloudflare Tunnel',
+      subtitle:
+        'Optional. Use it when ports 80 and 443 cannot be opened or you want to share through your own domain.',
+      optional: 'Optional',
       connected: 'Connected',
       disconnected:
-        'OpenLander manages the connection automatically and leaves existing DNS settings unchanged.',
+        'Publish Applications through the connected Cloudflare domain without opening inbound ports.',
+      securityNote:
+        'OpenLander’s access-code gate is not applied to Cloudflare publishing. Configure Cloudflare Access separately when authentication is required.',
       unavailable:
         'Cloudflare OAuth is unavailable in this build. Configure the published OAuth client before connecting.',
       connect: 'Connect Cloudflare',

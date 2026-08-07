@@ -1,5 +1,5 @@
 /**
- * Web Server (read-only) API client.
+ * Web Server settings and observability API client.
  *
  * Wraps the four read-model endpoints PR #209 added:
  *   - GET /api/web-server/summary
@@ -7,13 +7,13 @@
  *   - GET /api/web-server/ports
  *   - GET /api/web-server/external-containers
  *
- * The page surface is intentionally read-only in v0.1 — there are no
- * write helpers here. Route editing ships in v0.2.
+ * Protected-share settings are the only write surface here; routing inventory
+ * remains observational.
  */
-import { apiGet } from './client';
+import { apiGet, apiPut } from './client';
 
 export type WebRouteStatus = 'healthy' | 'warning' | 'error' | 'inactive';
-export type WebRouteSource = 'sslip' | 'domain' | 'quick_share';
+export type WebRouteSource = 'sslip' | 'domain' | 'quick_share' | 'protected_share';
 export type WebRouteTlsStatus = 'ok' | 'expiring' | 'invalid' | 'absent' | 'unknown';
 
 export interface WebRouteIssue {
@@ -177,6 +177,19 @@ export interface WebServerExternalContainersResponse {
   containers: ExternalContainer[];
 }
 
+export interface ProtectedShareSettings {
+  publicHost: string;
+  acmeEmail: string;
+  detectedPublicIp: string | null;
+  ready: boolean;
+  traefikMode: 'managed' | 'external';
+}
+
+export interface SaveProtectedShareSettingsResponse extends ProtectedShareSettings {
+  status: 'saved';
+  proxyApplied: boolean;
+}
+
 export async function getWebServerSummary(): Promise<WebServerSummary> {
   return apiGet<WebServerSummary>('/api/web-server/summary');
 }
@@ -191,4 +204,18 @@ export async function getWebServerPorts(): Promise<WebServerPortsResponse> {
 
 export async function getWebServerExternalContainers(): Promise<WebServerExternalContainersResponse> {
   return apiGet<WebServerExternalContainersResponse>('/api/web-server/external-containers');
+}
+
+export async function getProtectedShareSettings(): Promise<ProtectedShareSettings> {
+  return apiGet<ProtectedShareSettings>('/api/web-server/protected-share-settings');
+}
+
+export async function saveProtectedShareSettings(input: {
+  publicHost: string;
+  acmeEmail: string;
+}): Promise<SaveProtectedShareSettingsResponse> {
+  return apiPut<SaveProtectedShareSettingsResponse>(
+    '/api/web-server/protected-share-settings',
+    input,
+  );
 }

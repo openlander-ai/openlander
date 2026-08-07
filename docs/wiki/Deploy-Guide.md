@@ -120,10 +120,10 @@ After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
 - **Traefik**: `http://service-name.your-server`
-- **Public**: an explicit stable Connected Publish URL or a custom domain route
+- **Public**: an explicit access-code-protected share URL, Connected Publish URL, or custom domain
 
-Deploying does not publish the Application automatically. Use the Project
-header or `expose_public` after the deploy succeeds.
+Deploying does not publish the Application automatically. Use the Application
+detail action or `expose_public` after the deploy succeeds.
 
 ---
 

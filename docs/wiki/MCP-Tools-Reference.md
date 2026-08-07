@@ -1083,17 +1083,19 @@ when no build-time env key is involved.
 
 ### `expose_public` / `unexpose_public`
 
-Project composite aliases for the same stable Connected Publish workflow exposed by
+Project composite aliases for the protected public share workflow exposed by
 `openlander_service`. Prefer `service_id`; Project-only selectors work when one workload can be
-chosen unambiguously. `get_public_access` returns `private`, `provisioning`, `public`,
-`unpublishing`, or `error` plus the reserved hostname.
+chosen unambiguously. `get_public_access` returns `private` or `public` plus the reserved hostname.
+The first expose returns a generated `access_code`; later status reads never return its plaintext.
 
-| Parameter      | Type   | Required | Description                      |
-| -------------- | ------ | -------- | -------------------------------- |
-| `service_id`   | string | No       | Preferred Application/Compose id |
-| `service_name` | string | No       | Application/Compose name         |
-| `project_id`   | string | No       | Project id                       |
-| `project_name` | string | No       | Project name                     |
+| Parameter            | Type    | Required | Description                                            |
+| -------------------- | ------- | -------- | ------------------------------------------------------ |
+| `service_id`         | string  | No       | Preferred Application/Compose id                       |
+| `service_name`       | string  | No       | Application/Compose name                               |
+| `project_id`         | string  | No       | Project id                                             |
+| `project_name`       | string  | No       | Project name                                           |
+| `rotate_access_code` | boolean | No       | Replace the code and invalidate current share sessions |
+| `provider`           | string  | No       | `protected_share` (default) or `cloudflare`            |
 
 ### `upload_secret_file` / `list_secret_files` / `remove_secret_file`
 
@@ -1316,8 +1318,9 @@ an explicit service target.
 
 Domain route = a Traefik Host/path route for a domain already pointed at OpenLander port 80.
 This manual route action does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints,
-or TLS certificates. Connected Publish is the separate workflow that owns one Cloudflare DNS
-record and stable URL per Project. Docker labels are not the source of truth for custom domains; check
+or TLS certificates. Protected public share is the separate managed-Traefik workflow that owns an
+HTTPS hostname and access-code gate per Application; Connected Publish remains the optional
+Cloudflare workflow. Docker labels are not the source of truth for custom domains; check
 `/api/traefik/config` and Traefik loaded routers when debugging.
 
 The response includes `route_health` and `route_verification`. Verification is

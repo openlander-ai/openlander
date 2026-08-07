@@ -15,12 +15,18 @@ interface TraefikConfigResponse {
         service: string;
         priority?: number;
         middlewares?: string[];
+        tls?: { certResolver: string };
       }
     >;
     services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }>;
     middlewares?: Record<
       string,
-      { stripPrefix?: { prefixes: string[] }; addPrefix?: { prefix: string } }
+      {
+        stripPrefix?: { prefixes: string[] };
+        addPrefix?: { prefix: string };
+        redirectScheme?: { scheme: string; permanent: boolean };
+        forwardAuth?: { address: string; trustForwardHeader: boolean };
+      }
     >;
   };
 }
@@ -153,7 +159,17 @@ function createTraefikConfigApp(params: {
   };
 
   const app = new Hono();
-  app.route('/api', createApiRoutes({ db, previewDeployer: db.previewDeployer } as unknown as AppContext));
+  app.route(
+    '/api',
+    createApiRoutes({
+      db,
+      previewDeployer: db.previewDeployer,
+      config: {
+        server: { port: 10114 },
+        traefik: { protectedShare: { publicHost: '', acmeEmail: '' } },
+      },
+    } as unknown as AppContext),
+  );
   return { app, db };
 }
 
@@ -228,8 +244,9 @@ describe('GET /api/traefik/config domain routing', () => {
     expect(config.http.services['svc-stack-web']?.loadBalancer.servers[0]?.url).toBe(
       'http://ol-stack-web:3000',
     );
-    expect(Object.values(config.http.routers).some((router) => router.service === 'svc-stack-web'))
-      .toBe(true);
+    expect(
+      Object.values(config.http.routers).some((router) => router.service === 'svc-stack-web'),
+    ).toBe(true);
   });
 
   it('does not create automatic or custom HTTP routes for Compose jobs and resources', async () => {
@@ -304,9 +321,7 @@ describe('GET /api/traefik/config domain routing', () => {
       'http://ol-preview-feature:4173',
     );
     expect(
-      Object.values(config.http.routers).some(
-        (router) => router.service === 'svc-preview-feature',
-      ),
+      Object.values(config.http.routers).some((router) => router.service === 'svc-preview-feature'),
     ).toBe(true);
   });
 
@@ -645,6 +660,74 @@ describe('GET /api/traefik/config domain routing', () => {
 
     expect(findRouterForDomain(config, 'api.example.com')).toBeUndefined();
     expect(config.http.services['svc-domain-bad-port']).toBeUndefined();
+  });
+});
+
+describe('GET /api/traefik/config protected public sharing', () => {
+  it('adds HTTPS, ForwardAuth, redirect, and gateway routers for an active protected share', async () => {
+    const service = makeService({
+      visibility: 'shared',
+      public_url: 'https://stack-ab12cd.34-64-12-34.sslip.io',
+      access_code: 'hash',
+      access_code_iv: 'secret',
+    });
+    const mapping = makeMapping({
+      id: 'protected-share-ab12cd',
+      service_id: service.id,
+      domain: 'stack-ab12cd.34-64-12-34.sslip.io',
+      tls_enabled: true,
+      tls_resolver: 'openlander',
+    });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({
+        projects: [makeProject()],
+        services: [service],
+        mappings: [mapping],
+      }).app,
+    );
+
+    expect(config.http.routers['domain-protected-share-ab12cd']).toMatchObject({
+      entryPoints: ['websecure'],
+      middlewares: ['protected-share-auth'],
+      tls: { certResolver: 'openlander' },
+    });
+    expect(config.http.routers['domain-protected-share-ab12cd-http']).toMatchObject({
+      entryPoints: ['web'],
+      middlewares: ['protected-share-https-redirect'],
+    });
+    expect(config.http.routers['domain-protected-share-ab12cd-gateway']).toMatchObject({
+      entryPoints: ['websecure'],
+      service: 'protected-share-gateway',
+      tls: { certResolver: 'openlander' },
+    });
+    expect(config.http.middlewares?.['protected-share-auth']?.forwardAuth?.address).toBe(
+      'http://host.docker.internal:10114/__openlander/share/auth',
+    );
+    expect(config.http.middlewares?.['protected-share-https-redirect']?.redirectScheme).toEqual({
+      scheme: 'https',
+      permanent: true,
+    });
+  });
+
+  it('does not materialize a retained protected hostname after sharing is disabled', async () => {
+    const service = makeService({ visibility: 'internal' });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({
+        projects: [makeProject()],
+        services: [service],
+        mappings: [
+          makeMapping({
+            id: 'protected-share-disabled',
+            service_id: service.id,
+            domain: 'disabled.34-64-12-34.sslip.io',
+            tls_enabled: true,
+            tls_resolver: 'openlander',
+          }),
+        ],
+      }).app,
+    );
+
+    expect(config.http.routers['domain-protected-share-disabled']).toBeUndefined();
   });
 });
 

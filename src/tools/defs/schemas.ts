@@ -62,6 +62,14 @@ export const publicAccessTargetSchema = z
       .describe(
         'Project name. Initial publish requires the Project to contain exactly one Application/Compose workload unless service_id/service_name is supplied.',
       ),
+    rotate_access_code: z
+      .boolean()
+      .optional()
+      .describe('When true, replace the access code and invalidate existing share sessions.'),
+    provider: z
+      .enum(['protected_share', 'cloudflare'])
+      .optional()
+      .describe('Ingress provider. Defaults to protected_share.'),
   })
   .strict()
   .refine(

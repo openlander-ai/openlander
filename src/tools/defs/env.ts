@@ -85,32 +85,22 @@ const ENV_WRITE_SCOPES: readonly EnvWriteScope[] = [
   'service_environment',
 ];
 
-function publicAccessStatusCall(serviceId: string) {
+function publicAccessStatusCall(serviceId: string, provider: 'protected_share' | 'cloudflare') {
   return {
     tool: 'openlander_service',
     arguments: {
       action: 'get_public_access',
-      params: { service_id: serviceId },
+      params: {
+        service_id: serviceId,
+        ...(provider === 'cloudflare' ? { provider } : {}),
+      },
     },
   };
 }
 
 async function resolvePublicAccessProject(appCtx: AppCtx, args: Record<string, unknown>) {
-  const hasServiceTarget = Boolean(args['service_id'] || args['service_name']);
-  if (hasServiceTarget) {
-    const target = await resolveDeployableTarget(appCtx, args, 'get_public_access');
-    return { project: target.project, serviceId: target.service.id };
-  }
-
-  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
-  const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
-  const project = projectId
-    ? await appCtx.db.getProject(projectId)
-    : ((await appCtx.db.getProject(projectName)) ??
-      (await appCtx.db.getProjectByName(projectName)));
-  if (!project) throw new ProjectNotFoundError(projectId || projectName);
-  const access = await appCtx.db.getProjectPublicAccess(project.id);
-  return { project, serviceId: access?.service_id ?? null };
+  const target = await resolveDeployableTarget(appCtx, args, 'get_public_access');
+  return { project: target.project, serviceId: target.service.id };
 }
 
 interface EnvTarget {
@@ -1160,30 +1150,50 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Publish one representative HTTP Application from a Project at a stable HTTPS URL through the connected Cloudflare account and selected DNS Zone. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. Returns immediately with provisioning/public status and status_call.',
+      'Publish one HTTP Application at a stable HTTPS URL protected by an access code. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. Set rotate_access_code=true to replace the code and invalidate existing sessions.',
     mcpDescription:
-      'Publish the selected Application/Compose workload at its stable Connected Publish URL. Prefer service_id; poll get_public_access while provisioning.',
+      'Enable protected public sharing at a stable HTTPS URL for an Application/Compose workload. Returns the generated access_code once when created or rotated; call get_public_access for later status. Set provider=cloudflare for optional Connected Publish.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveDeployableTarget(appCtx, args, 'expose_public');
-      const result = await appCtx.cloudflare.requestPublicAccess({
-        projectId: target.project.id,
-        serviceId: target.service.id,
-      });
+      const provider = args['provider'] === 'cloudflare' ? 'cloudflare' : 'protected_share';
+      if (provider === 'cloudflare' && args['rotate_access_code'] === true) {
+        throw new OpenLanderError(
+          'rotate_access_code is only supported by provider=protected_share.',
+          'INVALID_FIELD',
+          400,
+        );
+      }
+      const result =
+        provider === 'cloudflare'
+          ? await appCtx.cloudflare.requestPublicAccess({
+              projectId: target.project.id,
+              serviceId: target.service.id,
+            })
+          : await appCtx.publicShare.expose({
+              projectId: target.project.id,
+              serviceId: target.service.id,
+              rotateAccessCode: args['rotate_access_code'] === true,
+            });
       return {
         ...result,
         project_id: target.project.id,
         service_id: target.service.id,
-        status_call: publicAccessStatusCall(target.service.id),
+        provider,
+        status_call: publicAccessStatusCall(target.service.id, provider),
         _agent_guidance: {
           message:
-            result.status === 'public'
-              ? 'The stable public URL is ready.'
-              : 'Connected Publish is provisioning the stable public URL.',
+            provider === 'cloudflare'
+              ? 'Cloudflare Connected Publish is provisioning or serving the stable URL.'
+              : 'access_code' in result && result.access_code
+                ? 'Protected public sharing is ready. The access code is shown only in this response.'
+                : 'Protected public sharing is ready. Rotate the code if the operator no longer has it.',
           next_steps: [
-            result.status === 'public'
-              ? 'Return public_url to the user.'
-              : 'Poll status_call until status is public or error.',
+            provider === 'cloudflare'
+              ? 'Poll status_call until status is public or error.'
+              : 'access_code' in result && result.access_code
+                ? 'Return public_url and access_code to the user through a secure channel.'
+                : 'Return public_url to the user.',
           ],
         },
       };
@@ -1193,28 +1203,37 @@ export const envToolDefs: ToolDef[] = [
     name: 'get_public_access',
     riskLevel: 'low',
     description:
-      'Get Connected Publish status and the stable public URL for a Project or Application/Compose workload.',
-    mcpDescription:
-      'Get stable public access status. Returns private, provisioning, public, unpublishing, or error.',
+      'Get protected public sharing status and the stable URL for an Application/Compose workload.',
+    mcpDescription: 'Get protected public access status. Returns private or public.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolvePublicAccessProject(appCtx, args);
-      const result = await appCtx.cloudflare.getPublicAccess(target.project.id);
+      const provider = args['provider'] === 'cloudflare' ? 'cloudflare' : 'protected_share';
+      const result =
+        provider === 'cloudflare'
+          ? await appCtx.cloudflare.getPublicAccess(target.project.id)
+          : await appCtx.publicShare.getPublicAccess({
+              projectId: target.project.id,
+              ...(target.serviceId ? { serviceId: target.serviceId } : {}),
+            });
       return {
         ...result,
-        ...(result.service_id ? { status_call: publicAccessStatusCall(result.service_id) } : {}),
+        provider,
+        ...(result.service_id
+          ? { status_call: publicAccessStatusCall(result.service_id, provider) }
+          : {}),
         _agent_guidance: {
           message:
             result.status === 'public'
               ? 'The stable public URL is ready.'
-              : result.status === 'error'
-                ? 'Connected Publish needs operator attention.'
-                : `Public access is ${result.status}.`,
+              : result.status === 'private'
+                ? 'The Application is private.'
+                : `Cloudflare Connected Publish is ${result.status}.`,
           next_steps:
-            result.status === 'provisioning' || result.status === 'unpublishing'
-              ? ['Poll status_call again after a short delay.']
-              : result.status === 'public'
-                ? ['Return public_url to the user.']
+            result.status === 'public'
+              ? ['Return public_url to the user.']
+              : provider === 'cloudflare' && result.status !== 'private'
+                ? ['Poll status_call until status is public, private, or error.']
                 : [],
         },
       };
@@ -1224,21 +1243,31 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     riskLevel: 'medium',
     description:
-      'Stop serving a Project through its stable Connected Publish URL. The hostname and DNS reservation are retained so a later expose_public reuses the same URL.',
+      'Disable protected public sharing. The hostname is retained for reuse and all existing share sessions are invalidated.',
     mcpDescription:
-      'Make the Project private while preserving its stable hostname reservation for republish.',
+      'Make the Application private while preserving its stable hostname reservation for republish.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolvePublicAccessProject(appCtx, args);
-      const result = await appCtx.cloudflare.requestPrivateAccess(target.project.id);
+      const provider = args['provider'] === 'cloudflare' ? 'cloudflare' : 'protected_share';
+      const result =
+        provider === 'cloudflare'
+          ? await appCtx.cloudflare.requestPrivateAccess(target.project.id)
+          : await appCtx.publicShare.unexpose({
+              projectId: target.project.id,
+              ...(target.serviceId ? { serviceId: target.serviceId } : {}),
+            });
       return {
         ...result,
-        ...(target.serviceId ? { status_call: publicAccessStatusCall(target.serviceId) } : {}),
+        provider,
+        ...(target.serviceId
+          ? { status_call: publicAccessStatusCall(target.serviceId, provider) }
+          : {}),
         _agent_guidance: {
           message:
             result.status === 'private'
-              ? 'The Project is private.'
-              : 'Connected Publish is removing the public route.',
+              ? 'The Application is private.'
+              : 'Protected public sharing is being disabled.',
           next_steps:
             result.status === 'private'
               ? []

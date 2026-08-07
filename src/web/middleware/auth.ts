@@ -10,6 +10,7 @@ const EXEMPT_PREFIXES = [
   '/api/traefik/',
   '/api/evidence-uploads/',
   '/api/review-package-uploads/',
+  '/__openlander/share/',
 ];
 
 // Auth endpoints that intentionally bypass session validation.

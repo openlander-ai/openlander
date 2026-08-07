@@ -52,6 +52,7 @@ import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTa
 import { LogViewer as ConsoleLogViewer } from '@/components/logs/LogViewer';
 import { ServiceResourceLimitsPanel } from '@/components/service/ServiceResourceLimitsPanel';
 import { OperationPermissionsPanel } from '@/components/security/OperationPermissionsPanel';
+import { PublicAccessControl } from '@/components/project/PublicAccessControl';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
@@ -308,6 +309,9 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : baseService.archivedAt,
       image: serviceDetail.image ?? baseService.image,
       port: serviceDetail.port ?? baseService.port,
+      // `null` is meaningful here: after protected sharing stops, do not
+      // fall back to a stale topology URL that no longer routes publicly.
+      url: serviceDetail.url,
     };
   }, [service, serviceDetail]);
 
@@ -505,7 +509,16 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         }
         actions={
           <>
-            {resolvedService.url && (
+            {!resolvedService.isComposeChild && supportsHttpRuntime && (
+              <PublicAccessControl
+                projectId={project.id}
+                serviceId={resolvedService.id}
+                runtimeUrl={resolvedService.url}
+                disabled={Boolean(resolvedService.archivedAt)}
+                onAccessSettled={loadServiceDetail}
+              />
+            )}
+            {resolvedService.url && (resolvedService.isComposeChild || !supportsHttpRuntime) && (
               <a
                 href={resolvedService.url}
                 target="_blank"

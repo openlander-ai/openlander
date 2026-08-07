@@ -173,7 +173,7 @@ describe('openlander_service direct deployable runtime actions', () => {
     );
   });
 
-  it('help advertises stable Connected Publish semantics', async () => {
+  it('help advertises protected sharing by default and Cloudflare explicitly', async () => {
     const result = (await tool.execute({ action: 'help' }, mockContext)) as {
       actions: Array<{ name: string; description: string }>;
     };
@@ -181,8 +181,10 @@ describe('openlander_service direct deployable runtime actions', () => {
       (action) => action.name === 'expose_public',
     )?.description;
 
-    expect(exposeDescription).toContain('stable Connected Publish URL');
+    expect(exposeDescription).toContain('protected public sharing');
+    expect(exposeDescription).toContain('stable HTTPS URL');
     expect(exposeDescription).toContain('get_public_access');
+    expect(exposeDescription).toContain('provider=cloudflare');
     expect(exposeDescription).not.toContain('temporary public share URL');
   });
 

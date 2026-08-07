@@ -1,18 +1,18 @@
 /**
- * Web Server — v0.1 read-only observability page.
+ * Web Server settings and routing observability.
  *
- * Implements the v0.1 Web Server surface against the four read-model
- * endpoints PR #209 added (`/api/web-server/{summary,routes,ports,external-containers}`).
+ * Combines protected-share setup with the existing route, port, and external
+ * container read models.
  *
  * Layout (top → bottom):
  *
  *   1. Health summary stat strip — Proxy · Routes (+ issues) · Entrypoints
- *   2. Configuration warning — only when runtime URL settings need attention
- *   3. Issue banner — only when any route reports an issue
- *   4. Routes table — always expanded; issue rows marked with red bar
- *   5. Port allocation — collapsible, closed by default
- *   6. External containers — collapsible, closed by default; disabled empty
- *   7. Footer — "Read-only · route editing ships in v0.2"
+ *   2. Protected share settings and optional Cloudflare connection
+ *   3. Configuration warning — only when runtime URL settings need attention
+ *   4. Issue banner — only when any route reports an issue
+ *   5. Routes table — always expanded; issue rows marked with red bar
+ *   6. Port allocation — collapsible, closed by default
+ *   7. External containers — collapsible, closed by default; disabled empty
  *
  * v0.1 cuts (per spec): the request-rate stat cell and the matching
  * per-route metric column. Both restore in v0.2 when Traefik metrics
@@ -44,6 +44,7 @@ import {
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { ConnectedPublishCard } from '@/components/settings/ConnectedPublishCard';
+import { ProtectedShareSettingsCard } from '@/components/settings/ProtectedShareSettingsCard';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -227,6 +228,8 @@ export function WebServerSettings() {
         </div>
       )}
 
+      <ProtectedShareSettingsCard />
+
       <ConnectedPublishCard />
 
       {/* 2. Issue banner — only when there are issues */}
@@ -307,7 +310,7 @@ export function WebServerSettings() {
         <ExternalContainersTable state={external} t={t} />
       </CollapsibleCard>
 
-      {/* 6. Footer */}
+      {/* 7. Footer */}
       <p className="mt-1 text-[11.5px] text-[color:var(--ol-fg-muted)]">{t('webServer.footer')}</p>
     </div>
   );

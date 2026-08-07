@@ -724,16 +724,36 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/public-access', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    return c.json(await ctx.cloudflare.getPublicAccess(project.id));
+    return c.json(await ctx.publicShare.getPublicAccess({ projectId: project.id }));
   });
 
   api.post('/projects/:id/expose', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const body: { service_id?: unknown } = await c.req
-      .json<{ service_id?: unknown }>()
+    const body: { service_id?: unknown; rotate_access_code?: unknown } = await c.req
+      .json<{ service_id?: unknown; rotate_access_code?: unknown }>()
       .catch(() => ({}));
     const serviceId = typeof body.service_id === 'string' ? body.service_id.trim() : '';
-    const result = await ctx.cloudflare.requestPublicAccess({
+    const result = await ctx.publicShare.expose({
+      projectId: project.id,
+      ...(serviceId ? { serviceId } : {}),
+      rotateAccessCode: body.rotate_access_code === true,
+    });
+    return c.json(
+      {
+        ...result,
+        status_call: { method: 'GET', path: `/api/projects/${project.id}/public-access` },
+      },
+      200,
+    );
+  });
+
+  api.post('/projects/:id/unexpose', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    const body = await c.req
+      .json<{ service_id?: unknown }>()
+      .catch((): { service_id?: unknown } => ({}));
+    const serviceId = typeof body.service_id === 'string' ? body.service_id.trim() : '';
+    const result = await ctx.publicShare.unexpose({
       projectId: project.id,
       ...(serviceId ? { serviceId } : {}),
     });
@@ -742,19 +762,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
         ...result,
         status_call: { method: 'GET', path: `/api/projects/${project.id}/public-access` },
       },
-      202,
-    );
-  });
-
-  api.post('/projects/:id/unexpose', async (c) => {
-    const project = await getProjectOrThrow(c, ctx);
-    const result = await ctx.cloudflare.requestPrivateAccess(project.id);
-    return c.json(
-      {
-        ...result,
-        status_call: { method: 'GET', path: `/api/projects/${project.id}/public-access` },
-      },
-      202,
+      200,
     );
   });
 
@@ -762,7 +770,8 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
     c.json(
       {
         error: 'FEATURE_REMOVED',
-        message: 'Access-code sharing was removed. Use project public access instead.',
+        message:
+          'The legacy /share endpoint was removed. Use service-scoped protected public access instead.',
       },
       410,
     ),

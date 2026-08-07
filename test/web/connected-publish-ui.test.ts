@@ -9,8 +9,12 @@ function readRepoFile(relativePath: string): string {
 
 describe('Connected Publish UI', () => {
   const projectView = readRepoFile('web/src/pages/ProjectView.tsx');
+  const serviceDetail = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
   const publicControl = readRepoFile('web/src/components/project/PublicAccessControl.tsx');
   const webServer = readRepoFile('web/src/pages/settings/WebServer.tsx');
+  const protectedShareCard = readRepoFile(
+    'web/src/components/settings/ProtectedShareSettingsCard.tsx',
+  );
   const connectionCard = readRepoFile('web/src/components/settings/ConnectedPublishCard.tsx');
   const cloudflareApi = readRepoFile('web/src/lib/api/cloudflare.ts');
   const callback = readRepoFile('web/public/cloudflare-oauth-callback.html');
@@ -21,26 +25,34 @@ describe('Connected Publish UI', () => {
   const en = readRepoFile('web/src/i18n/en.ts');
   const ko = readRepoFile('web/src/i18n/ko.ts');
 
-  it('keeps the Project action to publish, open/copy, and stop only', () => {
-    expect(projectView).toContain('<PublicAccessControl');
-    expect(publicControl).toContain('exposeProject(projectId)');
-    expect(publicControl).toContain('unexposeProject(projectId)');
-    expect(publicControl).toContain('copyToClipboard(access.public_url!)');
+  it('places protected sharing on each Application and supports URL, code rotation, and stop', () => {
+    expect(projectView).not.toContain('<PublicAccessControl');
+    expect(serviceDetail).toContain('<PublicAccessControl');
+    expect(serviceDetail).toContain('serviceId={resolvedService.id}');
+    expect(publicControl).toContain('exposeService(projectId, serviceId');
+    expect(publicControl).toContain('unexposeService(projectId, serviceId, provider)');
+    expect(publicControl).toContain('nextAccess.access_code ?? null');
+    expect(publicControl).toContain('rotateAccessCode');
     expect(publicControl).toContain('target="_blank"');
-    expect(publicControl).not.toMatch(/service selector|access code|expires|temporary link/i);
   });
 
-  it('refreshes Project service links when publishing or stopping settles', () => {
+  it('refreshes Application metadata when sharing or stopping settles', () => {
     expect(publicControl).toContain('onAccessSettled?: () => void');
-    expect(publicControl).toContain('previousStatus !== nextAccess.status');
+    expect(publicControl).toContain('previousStatus !== nextStatus');
     expect(publicControl).toContain('onAccessSettled?.()');
-    expect(projectView).toContain('onAccessSettled={handlePublicAccessSettled}');
-    expect(projectView).toContain('void refetchGroupServices()');
-    expect(projectView).toContain('void refetchProjects()');
+    expect(serviceDetail).toContain('onAccessSettled={loadServiceDetail}');
   });
 
-  it('places one OAuth and Zone connection card on the existing Web Server page', () => {
+  it('places protected share setup before the optional Cloudflare card', () => {
+    expect(webServer).toContain('<ProtectedShareSettingsCard />');
     expect(webServer).toContain('<ConnectedPublishCard />');
+    expect(webServer.indexOf('<ProtectedShareSettingsCard />')).toBeLessThan(
+      webServer.indexOf('<ConnectedPublishCard />'),
+    );
+    expect(protectedShareCard).toContain('getProtectedShareSettings()');
+    expect(protectedShareCard).toContain('saveProtectedShareSettings');
+    expect(protectedShareCard).toContain('settings.detectedPublicIp');
+    expect(protectedShareCard).toContain('id="public-access"');
     expect(connectionCard).toContain('startCloudflareOAuth()');
     expect(connectionCard).toContain('getCloudflareConnection()');
     expect(connectionCard).toContain('connectCloudflare');
@@ -48,7 +60,7 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('disconnectCloudflare');
     expect(connectionCard).toContain('<DropdownMenu');
     expect(connectionCard).toContain('<ConfirmDialog');
-    expect(connectionCard).toContain('id="public-access"');
+    expect(connectionCard).toContain('id="connected-publish"');
   });
 
   it('offers an in-place repair without forcing OAuth when the connector stops', () => {
@@ -62,21 +74,22 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('connectionNeedsOAuth ? beginOAuth() : repairConnection()');
   });
 
-  it('returns to the Project and resumes the publish intent after connecting', () => {
-    expect(publicControl).toContain("intent: 'publish'");
-    expect(publicControl).toContain('returnTo: `/projects/${encodeURIComponent(projectId)}`');
+  it('offers Cloudflare only as an explicit method when the connection exists', () => {
     expect(connectionCard).toContain('publishReturnTarget(location.search)');
     expect(connectionCard).toContain('state: { resumePublicAccess: true }');
-    expect(publicControl).toContain('state?.resumePublicAccess !== true');
-    expect(publicControl).toContain('void publish()');
+    expect(publicControl).not.toContain('resumePublicAccess');
+    expect(publicControl).toContain('getCloudflareConnection()');
+    expect(publicControl).toContain("publish('cloudflare')");
+    expect(publicControl).toContain('methodDialogOpen');
+    expect(publicControl).toContain('cloudflareBusyElsewhere');
   });
 
-  it('explains an ineligible Project and confirms destructive stop actions', () => {
-    expect(projectView).toContain('publicAccessDisabledReason');
+  it('explains an ineligible Application and confirms session-invalidating actions', () => {
     expect(publicControl).toContain('publishDisabledReason');
     expect(publicControl).toContain('setStopConfirmOpen(true)');
+    expect(publicControl).toContain('setRotateConfirmOpen(true)');
     expect(publicControl).toContain('variant="destructive"');
-    expect(publicControl).toContain('max-w-[45vw]');
+    expect(publicControl).toContain("t('projectDetail.publicAccess.rotateDescription')");
   });
 
   it('opens the OAuth popup synchronously before awaiting the start request', () => {
@@ -136,14 +149,14 @@ describe('Connected Publish UI', () => {
     expect(connectedPublish).not.toContain('Binds: [`${tokenPath}:${CLOUDFLARED_TOKEN_PATH}:ro`],');
   });
 
-  it('uses only the connected-publish setup and Project status endpoints', () => {
+  it('keeps Cloudflare setup endpoints separate from service publishing', () => {
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/oauth/start'");
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/oauth/complete'");
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/connect'");
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/disconnect'");
-    expect(publicControl).toContain(
-      'navigate(`/settings/web-server?${params.toString()}#public-access`)',
-    );
+    expect(publicControl).toContain("error.code === 'PROTECTED_SHARE_SETUP_REQUIRED'");
+    expect(publicControl).toContain("navigate('/settings/web-server#public-access')");
+    expect(publicControl).toContain("navigate('/settings/web-server#connected-publish')");
   });
 
   it('ships the public access copy in English and Korean together', () => {
@@ -152,6 +165,11 @@ describe('Connected Publish UI', () => {
       expect(locale).toMatch(/publish:/);
       expect(locale).toMatch(/copy:/);
       expect(locale).toMatch(/stop:/);
+      expect(locale).toMatch(/rotateCode:/);
+      expect(locale).toMatch(/methodProtected:/);
+      expect(locale).toMatch(/methodCloudflare:/);
+      expect(locale).toMatch(/protectedShare:\s*\{/);
+      expect(locale).toMatch(/securityNote:/);
       expect(locale).toMatch(/connectedToast:/);
     }
   });

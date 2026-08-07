@@ -317,6 +317,21 @@ export class ConnectedPublishManager {
       input.projectId,
       input.serviceId ?? current?.service_id ?? undefined,
     );
+    if (
+      current &&
+      current.status !== 'private' &&
+      current.service_id &&
+      current.service_id !== target.service.id
+    ) {
+      throw new PublicAccessNotEligibleError(
+        'Another Application in this Project already uses Cloudflare Connected Publish. Unpublish it before switching Applications.',
+        {
+          projectId: target.project.id,
+          activeServiceId: current.service_id,
+          requestedServiceId: target.service.id,
+        },
+      );
+    }
     if (current?.status === 'public' && current.service_id === target.service.id) {
       return publicAccessView(target.project.id, current);
     }
@@ -712,6 +727,13 @@ export class ConnectedPublishManager {
           { projectId: project.id, trafficService },
         );
       }
+    }
+
+    if (service.visibility === 'shared' && service.access_code && service.access_code_iv) {
+      throw new PublicAccessNotEligibleError(
+        'This Application already uses protected public sharing. Stop that share before publishing through Cloudflare.',
+        { projectId: project.id, serviceId: service.id },
+      );
     }
 
     if (service.runtime_role !== 'application') {

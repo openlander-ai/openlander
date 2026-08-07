@@ -35,7 +35,7 @@ Deploy Pipeline (deterministic — rule-based execution)
     ├─ git clone
     ├─ docker build (Dockerfile or auto-generated)
     ├─ docker run (auto port + Traefik labels)
-    ├─ explicit publish (stable Connected Publish URL / custom domain)
+    ├─ explicit publish (protected share / Connected Publish / custom domain)
     └─ monitor (health checks + logs/status)
     ↓
 Infrastructure (Docker + Traefik + Postgres)

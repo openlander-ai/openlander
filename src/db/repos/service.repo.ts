@@ -333,6 +333,8 @@ export class ServiceRepo {
       previousImageTag: string | null;
       publicUrl: string | null;
       visibility: ServiceRow['visibility'];
+      accessCode: string | null;
+      accessCodeIv: string | null;
       repoUrl: string | null;
       branch: string | null;
       kind: ServiceRow['kind'];
@@ -377,6 +379,12 @@ export class ServiceRepo {
     }
     if (updates.visibility !== undefined) {
       setValues.visibility = updates.visibility;
+    }
+    if (updates.accessCode !== undefined) {
+      setValues.access_code = updates.accessCode;
+    }
+    if (updates.accessCodeIv !== undefined) {
+      setValues.access_code_iv = updates.accessCodeIv;
     }
     if (updates.repoUrl !== undefined) {
       setValues.repo_url = updates.repoUrl;

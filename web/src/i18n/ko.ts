@@ -1536,9 +1536,9 @@ export const translations = {
     },
     addResourceWithAgent: '에이전트에게 데이터베이스·캐시 추가 요청',
     publicAccess: {
-      title: '외부 공개',
-      publish: '공개하기',
-      publishing: '공개 준비 중…',
+      title: '보호된 외부 공유',
+      publish: '외부 공유',
+      publishing: '공유 준비 중…',
       stopping: '공개 중지 중…',
       retry: '공개 다시 시도',
       stop: '공개 중지',
@@ -1546,15 +1546,44 @@ export const translations = {
       copy: '공개 URL 복사',
       copied: '공개 URL을 복사했습니다',
       copyFailed: '공개 URL을 복사하지 못했습니다.',
-      connectFirst: '이 프로젝트를 공개하려면 먼저 Cloudflare를 연결하세요.',
+      connectFirst: '이 애플리케이션을 공개하려면 먼저 보호 공유를 설정하세요.',
+      setupFirst: '웹 서버 설정에서 공개 주소와 인증서 이메일을 먼저 입력하세요.',
       runningApplicationRequired: 'HTTP 애플리케이션을 실행하면 공개할 수 있습니다.',
       notEligible: '실행 중이며 포트가 감지된 HTTP 애플리케이션이 필요합니다.',
-      publishFailed: '프로젝트를 공개하지 못했습니다.',
+      publishFailed: '애플리케이션을 외부 공유하지 못했습니다.',
       unpublishFailed: '공개를 중지하지 못했습니다.',
       stopTitle: '외부 공개를 중지할까요?',
       stopDescription:
         '{hostname} 주소로 더 이상 접속할 수 없습니다. 나중에 같은 URL로 다시 공개할 수 있습니다.',
       stopConfirm: '공개 중지',
+      publishReady: '보호된 외부 공유를 시작했습니다.',
+      codeSet: '코드 설정됨',
+      copyCode: '접근 코드 복사',
+      codeCopied: '접근 코드를 복사했습니다',
+      rotateCode: '새 접근 코드 만들기',
+      rotateTitle: '새 접근 코드를 만들까요?',
+      rotateDescription: '현재 접근 코드와 이미 인증된 모든 방문자 세션이 즉시 무효화됩니다.',
+      rotateConfirm: '새 코드 만들기',
+      codeRotated: '새 접근 코드를 만들었습니다. 기존 방문자는 모두 로그아웃되었습니다.',
+      methodTitle: '외부 공유 방식 선택',
+      methodDescription: '이 애플리케이션에 사용할 접속 방식을 선택하세요.',
+      methodProtected: '직접 보호 공유',
+      methodProtectedShort: '접근 코드',
+      methodProtectedDescription:
+        '서버의 80·443 포트로 연결하고 무료 HTTPS 주소와 OpenLander 접근 코드를 사용합니다.',
+      methodCloudflare: 'Cloudflare 터널',
+      methodCloudflareShort: 'Cloudflare 방식',
+      methodCloudflareDescription:
+        '인바운드 포트를 열지 않고 연결된 Cloudflare 도메인으로 공개합니다. 접근 코드는 적용되지 않습니다.',
+      recommended: '권장',
+      cloudflareStarted: 'Cloudflare Tunnel 게시를 시작했습니다.',
+      connectCloudflareFirst: '웹 서버 설정에서 Cloudflare를 먼저 연결하세요.',
+      cloudflareNotEligible:
+        '이 프로젝트의 다른 애플리케이션이 Cloudflare Tunnel을 사용 중이거나 연결을 확인해야 합니다.',
+      cloudflareBusyElsewhere:
+        '이 프로젝트의 다른 애플리케이션이 사용 중입니다. 기존 Cloudflare 공유를 먼저 중지하세요.',
+      cloudflareNeedsAttention: 'Cloudflare 연결을 복구한 뒤 선택할 수 있습니다.',
+      openCloudflareSettings: 'Cloudflare 설정 열기',
     },
     env: {
       // Chrome — form labels + buttons + status.
@@ -2737,14 +2766,41 @@ export const translations = {
     // Chrome — section title.
     title: '웹 서버',
     // Content — descriptive copy.
-    subtitle: '라우트와 포트 현황을 실시간으로 보여주는 읽기 전용 화면입니다.',
+    subtitle: '이 서버의 외부 공유, 라우트와 포트를 관리합니다.',
     dockerUnavailable: 'Docker가 응답하지 않습니다. 라우트와 포트 정보가 최신이 아닐 수 있습니다.',
-    footer: '읽기 전용 호스트 라우팅 현황입니다.',
+    footer: '호스트 라우팅 현황입니다.',
+    protectedShare: {
+      title: '직접 보호 공유',
+      subtitle:
+        '기본 방식입니다. 이 서버의 공인 IP로 연결해 HTTPS URL과 접근 코드 하나로 공유합니다.',
+      recommended: '기본 · 권장',
+      publicHost: '공개 IPv4 또는 기본 도메인',
+      publicHostPlaceholder: '34.64.12.34 또는 share.example.com',
+      publicHostHelp:
+        'IPv4를 입력하면 무료 sslip.io 주소를 만듭니다. 링크가 유지되도록 고정 외부 IP를 사용하세요.',
+      acmeEmail: '인증서 이메일',
+      acmeEmailHelp: 'Let’s Encrypt 인증서 발급과 갱신 등록에만 사용합니다.',
+      useDetectedIp: '감지된 GCP 주소 {ip} 사용',
+      securityNote:
+        '방화벽에서는 80·443 포트만 열면 됩니다. 애플리케이션 포트는 비공개로 유지되고 공유한 앱마다 접근코드 화면이 생깁니다.',
+      managedRequired: '보호된 외부 공유는 현재 OpenLander 관리형 Traefik에서만 지원합니다.',
+      save: '저장하고 적용',
+      saving: '적용 중…',
+      saved: '보호 공유 설정을 적용했습니다.',
+      savedRestartPending: '설정은 저장했습니다. Docker가 연결되면 Traefik 적용을 다시 시도합니다.',
+      loadFailed: '보호 공유 설정을 불러오지 못했습니다.',
+      saveFailed: '보호 공유 설정을 저장하지 못했습니다.',
+    },
     publicAccess: {
-      title: '프로젝트 공개',
-      subtitle: 'Cloudflare 도메인을 한 번 연결하면 프로젝트마다 고정 URL을 만들 수 있습니다.',
+      title: 'Cloudflare 터널',
+      subtitle:
+        '선택 사항입니다. 80·443 포트를 열기 어렵거나 보유 도메인으로 공유할 때 사용합니다.',
+      optional: '선택 사항',
       connected: '연결됨',
-      disconnected: 'OpenLander가 연결을 자동으로 관리하며 기존 DNS 설정은 변경하지 않습니다.',
+      disconnected:
+        '인바운드 포트를 열지 않고 연결된 Cloudflare 도메인으로 애플리케이션을 공개할 수 있습니다.',
+      securityNote:
+        'Cloudflare 방식에는 OpenLander 접근 코드 화면이 적용되지 않습니다. 인증이 필요하면 Cloudflare Access를 별도로 구성하세요.',
       unavailable:
         '이 빌드에는 Cloudflare OAuth 설정이 없습니다. 배포용 OAuth 클라이언트를 먼저 설정하세요.',
       connect: 'Cloudflare 연결',

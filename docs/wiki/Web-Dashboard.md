@@ -86,8 +86,11 @@ Detailed view for a Project and its resources.
 
 **Actions** (header):
 
-- Publish, then open/copy/stop the stable Connected Publish URL
 - Add Application or resource
+
+Protected public sharing lives on each Application detail so Projects with several HTTP
+Applications can share any subset independently. The control opens/copies the HTTPS URL, shows a
+newly generated access code, rotates the code, and stops sharing.
 
 **Tabs** (access via URL tab state such as `?tab=ai`):
 
@@ -178,9 +181,10 @@ endpoints are deferred.
 
 ### Web Server (`/settings/web-server`)
 
-Routing observability plus the one-time Connected Publish setup. The page shows proxy detection,
-the route table mapped to services, host port allocations, external containers, and a compact
-Cloudflare card. **Connect Cloudflare** opens OAuth and then selects the account and DNS Zone used
+Routing observability plus the one-time Protected public share setup. The page shows proxy
+detection, the route table mapped to services, host port allocations, external containers, and the
+public IPv4/base-domain + certificate-email fields. A detected GCP external IP can be applied with
+one click. The optional Cloudflare card remains below it. **Connect Cloudflare** opens OAuth and then selects the account and DNS Zone used
 for Project publication. A Publish-initiated connection returns to the Project and resumes the
 action. A degraded connector is shown as **Needs attention** with an inline **Repair** action, or
 **Reconnect** when Cloudflare authorization is required. The connected card's menu supports

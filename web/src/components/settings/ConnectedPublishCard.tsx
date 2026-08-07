@@ -260,7 +260,7 @@ export function ConnectedPublishCard() {
     <OuterCard
       className="scroll-mt-4"
       title={
-        <span id="public-access" className="flex items-center gap-2">
+        <span id="connected-publish" className="flex items-center gap-2">
           <Cloud className="h-4 w-4 text-[color:var(--ol-fg-muted)]" />
           {t('webServer.publicAccess.title')}
         </span>
@@ -318,7 +318,11 @@ export function ConnectedPublishCard() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        ) : null
+        ) : (
+          <span className="rounded-full bg-[color:var(--ol-panel-2)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--ol-fg-muted)]">
+            {t('webServer.publicAccess.optional')}
+          </span>
+        )
       }
     >
       {configured ? (
@@ -419,6 +423,9 @@ export function ConnectedPublishCard() {
           </button>
         </div>
       )}
+      <p className="mt-3 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] leading-relaxed text-[color:var(--ol-fg-subtle)]">
+        {t('webServer.publicAccess.securityNote')}
+      </p>
       <ConfirmDialog
         open={disconnectConfirmOpen}
         onOpenChange={setDisconnectConfirmOpen}

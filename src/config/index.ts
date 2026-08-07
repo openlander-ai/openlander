@@ -285,6 +285,15 @@ export interface TraefikConfig {
   mode: 'managed' | 'external';
   /** External mode: Name of the Docker network to connect containers to. */
   externalNetwork?: string;
+  /** Managed, access-code-protected public sharing through this OpenLander host. */
+  protectedShare: ProtectedShareConfig;
+}
+
+export interface ProtectedShareConfig {
+  /** Public IPv4 address or operator-owned base domain used to mint share hostnames. */
+  publicHost: string;
+  /** ACME registration email used by managed Traefik for HTTPS certificates. */
+  acmeEmail: string;
 }
 
 export interface AIFeatureToggle {
@@ -442,6 +451,10 @@ function buildDefaultConfig(): OpenLanderConfig {
     traefik: {
       mode: 'managed',
       externalNetwork: undefined,
+      protectedShare: {
+        publicHost: '',
+        acmeEmail: '',
+      },
     },
     ai: { ...DISABLED_AI_FEATURES },
     google: {

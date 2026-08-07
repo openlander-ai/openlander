@@ -153,30 +153,30 @@ describe('createServiceAuxRoutes', () => {
     });
   });
 
-  it('publishes and unpublishes the exact service through Connected Publish', async () => {
+  it('publishes and unpublishes the exact service through protected sharing', async () => {
     const project = makeProjectRow();
     const requestPublicAccess = vi.fn().mockResolvedValue({
       project_id: project.id,
       service_id: 'group-1__svc',
-      status: 'provisioning',
-      public_url: null,
+      status: 'public',
+      public_url: 'https://workspace.example.com',
     });
     const requestPrivateAccess = vi.fn().mockResolvedValue({
       project_id: project.id,
       service_id: 'group-1__svc',
-      status: 'unpublishing',
+      status: 'private',
       public_url: null,
     });
-    const cloudflare = {
-      requestPublicAccess,
-      requestPrivateAccess,
+    const publicShare = {
+      expose: requestPublicAccess,
+      unexpose: requestPrivateAccess,
     };
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
       },
-      cloudflare,
+      publicShare,
     });
 
     const expose = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
@@ -186,14 +186,89 @@ describe('createServiceAuxRoutes', () => {
       method: 'POST',
     });
 
+    expect(expose.status).toBe(200);
+    expect(requestPublicAccess).toHaveBeenCalledWith({
+      projectId: 'group-1',
+      serviceId: 'group-1__svc',
+      rotateAccessCode: false,
+    });
+    await expect(expose.json()).resolves.toMatchObject({
+      status: 'public',
+      status_call: {
+        path: '/api/projects/group-1/services/group-1__svc/public-access',
+      },
+    });
+    expect(unexpose.status).toBe(200);
+    expect(requestPrivateAccess).toHaveBeenCalledWith({
+      projectId: 'group-1',
+      serviceId: 'group-1__svc',
+    });
+  });
+
+  it('keeps Cloudflare Tunnel available as an explicit service sharing method', async () => {
+    const project = makeProjectRow();
+    const getPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'public',
+      public_url: 'https://workspace.example.com',
+      hostname: 'workspace.example.com',
+      error: null,
+    });
+    const requestPublicAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'provisioning',
+      public_url: null,
+      hostname: 'workspace.example.com',
+      error: null,
+    });
+    const requestPrivateAccess = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      status: 'unpublishing',
+      public_url: null,
+      hostname: 'workspace.example.com',
+      error: null,
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+      },
+      cloudflare: { getPublicAccess, requestPublicAccess, requestPrivateAccess },
+    });
+
+    const status = await app.request(
+      '/api/projects/group-1/services/group-1__svc/public-access?provider=cloudflare',
+    );
+    const expose = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'cloudflare' }),
+    });
+    const unexpose = await app.request('/api/projects/group-1/services/group-1__svc/unexpose', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'cloudflare' }),
+    });
+
+    expect(status.status).toBe(200);
+    await expect(status.json()).resolves.toMatchObject({
+      provider: 'cloudflare',
+      status: 'public',
+    });
     expect(expose.status).toBe(202);
     expect(requestPublicAccess).toHaveBeenCalledWith({
       projectId: 'group-1',
       serviceId: 'group-1__svc',
     });
     await expect(expose.json()).resolves.toMatchObject({
+      provider: 'cloudflare',
       status: 'provisioning',
-      status_call: { path: '/api/projects/group-1/public-access' },
+      status_call: {
+        path: '/api/projects/group-1/services/group-1__svc/public-access?provider=cloudflare',
+      },
     });
     expect(unexpose.status).toBe(202);
     expect(requestPrivateAccess).toHaveBeenCalledWith('group-1');
@@ -213,7 +288,7 @@ describe('createServiceAuxRoutes', () => {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
       },
-      cloudflare: { requestPublicAccess },
+      publicShare: { expose: requestPublicAccess },
       pipeline: { exposeTunnel },
     });
 
@@ -221,7 +296,7 @@ describe('createServiceAuxRoutes', () => {
       method: 'POST',
     });
 
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     expect(requestPublicAccess).toHaveBeenCalledOnce();
     expect(exposeTunnel).not.toHaveBeenCalled();
   });

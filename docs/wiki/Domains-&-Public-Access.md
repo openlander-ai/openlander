@@ -1,101 +1,94 @@
 # Domains & Public Access
 
-OpenLander keeps applications private by default. Version 0.3 adds **Connected
-Publish** for a stable HTTPS URL through the user's own Cloudflare account and
-DNS Zone.
+OpenLander keeps applications private by default. Version 0.3 adds **Protected
+public share**: a service-scoped HTTPS URL with an OpenLander access-code gate.
+It works on a public VPS or cloud VM without requiring a purchased domain or a
+Cloudflare account.
 
 ## Access Modes
 
-| Mode                  | Use case                  | Domain required |
-| --------------------- | ------------------------- | --------------- |
-| **Internal**          | Private/LAN/VPN access    | No              |
-| **Connected Publish** | Stable external HTTPS URL | Yes             |
-| **Manual domain**     | Custom Host/path routing  | Yes             |
+| Mode                       | Use case                                 | Inbound ports | Built-in auth | Domain required |
+| -------------------------- | ---------------------------------------- | ------------- | ------------- | --------------- |
+| **Internal**               | Private/LAN/VPN access                   | No            | OpenLander    | No              |
+| **Direct protected share** | External review behind an access code    | 80 and 443    | Access code   | No              |
+| **Cloudflare Tunnel**      | Custom domain or a host behind NAT       | No            | No            | Yes             |
+| **Manual domain**          | Custom Host/path routing through Traefik | 80 and 443    | No            | Yes             |
 
-Connected Publish is not a temporary-link service. It does not add an access
-code, expiry, or Cloudflare Access policy. Anyone who knows the published URL
-can open it until the Project is unpublished.
+## Protected Public Share
 
-## Internal Access
+### How it works
 
-Every deployed HTTP application gets an internal route through OpenLander's
-managed Traefik instance. `OPENLANDER_PUBLIC_HOST` controls the host advertised
-in generated internal URLs; it may be a LAN IP, VPN/MagicDNS name, or another
-operator-selected host.
+The VM remains the origin server. OpenLander does not relay application traffic
+through `sslip.io`: that service supplies DNS only. When the configured public
+host is an IPv4 address, OpenLander creates a hostname such as:
 
-The application container does not need an inbound VPS firewall port. Traefik
-and the application communicate on OpenLander-managed Docker networks.
+```text
+web-a1b2c3.34-64-12-34.sslip.io
+```
 
-## Connected Publish
+The hostname resolves to `34.64.12.34`, and the browser connects directly to
+the VM. If the operator later supplies a base domain, OpenLander instead creates
+`web-a1b2c3.share.example.com`.
 
-### Requirements
+Managed Traefik owns ports 80 and 443, obtains an individual Let's Encrypt
+certificate with HTTP-01, and routes each hostname to the selected Application.
+Application container ports remain private. Traefik ForwardAuth asks
+OpenLander to validate the visitor before forwarding HTTP or WebSocket traffic.
 
-1. A Cloudflare account with an active DNS Zone
-2. OpenLander's managed Docker runtime and Traefik
-3. Cloudflare OAuth configured for the OpenLander build
-4. A running HTTP Application, or a Compose workload with a saved
-   `traffic_service`
+### One-time server setup
 
-Connect once from **Web Server → Public access → Connect Cloudflare**. The
-browser completes Cloudflare OAuth, then OpenLander asks for an account and DNS
-Zone only when it cannot select the sole available option automatically.
-If the connection flow started from a Project's **Publish** action, OpenLander
-returns to that Project and resumes publication after the connection succeeds.
+Open **Settings → Web Server → Direct protected share** and enter:
 
-OpenLander creates one remotely managed Named Tunnel for the OpenLander
-instance and runs one pinned `cloudflared` connector container. Applications
-do not receive Cloudflare credentials.
+1. The VM's reserved public IPv4 address, or an operator-owned base domain
+2. An email address for Let's Encrypt certificate registration
 
-### Publish from the dashboard
+On Google Compute Engine, OpenLander attempts to detect the external IPv4 from
+the metadata server and offers it as a one-click value. Reserve a static IP
+before sharing; an ephemeral IP change invalidates any `sslip.io` hostname that
+contains the old address.
 
-Open a Project and click **Publish** in the Project header. While provisioning,
-the control shows progress. When ready, the same control provides:
+The VM firewall must allow inbound TCP 80 and 443. Do not open each
+Application's assigned port.
 
-- The stable HTTPS URL, which opens in a new tab
-- Copy URL
-- Stop publishing
+### Share an Application
 
-Stopping publication removes the active route but retains the hostname and DNS
-reservation. Publishing the same Project again therefore reuses the same URL.
-Publication is always an explicit action; deploying or redeploying does not
-publish an application automatically.
+Open an Application detail page and click **Share externally**. OpenLander
+creates a stable hostname and an eight-character access code. The code is shown
+only when it is generated; copy it and deliver it to the reviewer through a
+separate secure channel.
 
-### Reconnect or disconnect Cloudflare
+Several Applications can be shared at the same time. Each receives its own
+hostname, access-code hash, signing secret, and host-only browser cookie. Nginx
+static sites, React/Vite SPAs, Next.js full-stack applications, and Nuxt, Remix,
+or SvelteKit applications work without framework-specific configuration as long
+as the workload exposes HTTP. A Compose workload uses its saved
+`traffic_service`.
 
-The connected card's action menu can refresh Cloudflare authorization without
-changing the selected Zone. If the owned connector stops or its runtime state
-drifts, the card changes to **Needs attention** and offers **Repair**. If the
-OAuth grant has expired and cannot be refreshed, that action changes to
-**Reconnect** so the operator can authorize Cloudflare again without changing
-the selected Zone.
+The same control can:
 
-**Disconnect Cloudflare** requires confirmation in the web UI. It stops every
-Connected Publish URL and removes only resources owned by this OpenLander
-connection: its DNS records, Named Tunnel, `cloudflared` connector, and stored
-OAuth token. OpenLander clears Cloudflare's tracked connector connections before
-deleting the Tunnel, so recently stopped replicas do not leave a partial
-disconnect. The Cloudflare OAuth application itself remains configured for a
-later reconnect.
+- Open or copy the public URL
+- Generate a new access code
+- Stop public sharing
 
-### Representative application
+Generating a new code and stopping sharing both invalidate every existing
+visitor session immediately. Stopping retains the hostname reservation so a
+later share reuses the same URL.
 
-Connected Publish exposes one representative HTTP Application per Project:
+### Security boundary
 
-- A Project with one top-level Application is selected automatically.
-- A Compose workload uses its persisted `traffic_service`.
-- A Project with multiple top-level Applications requires an explicit
-  `service_id` through MCP for the first publication. The selected service is
-  then persisted for later publication.
-- Workers, databases, caches, storage services, stopped applications, and
-  applications without a detected HTTP port are not eligible.
+- Access codes are stored as bcrypt hashes, never plaintext.
+- Session tokens are signed with a per-Application secret and bound to the exact
+  hostname.
+- Cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, and host-only.
+- Code verification is rate-limited by caller IP and Application.
+- Codes never appear in URLs or request logs.
+- Deployment and redeployment never enable public sharing automatically.
 
-The mechanism is framework-agnostic. Nginx static sites, React/Vite SPAs,
-Next.js full-stack applications, and Nuxt, Remix, or SvelteKit applications are
-supported when they run as an HTTP application. A separate frontend/backend
-pair should expose the frontend or BFF and proxy backend requests under the
-same public hostname.
+This initial flow intentionally does not add expiry controls, named users, team
+ACLs, path-based frontend/backend fan-out, wildcard certificates, or an
+OpenLander-hosted relay.
 
-### Publish through MCP
+### Share through MCP
 
 Prefer the Application id returned by `list_projects`:
 
@@ -106,33 +99,53 @@ Prefer the Application id returned by `list_projects`:
 }
 ```
 
-Poll the returned `status_call`, or call `get_public_access`, until the status
-is `public` or `error`. To stop publishing while keeping the URL reservation:
+The response contains `public_url` and, on first enablement, `access_code`. The
+plaintext code is not returned by later status calls. Generate a replacement and
+invalidate current sessions with:
 
 ```json
 {
-  "action": "unexpose_public",
-  "params": { "service_id": "project__svc" }
+  "action": "expose_public",
+  "params": {
+    "service_id": "project__svc",
+    "rotate_access_code": true
+  }
 }
 ```
 
+Use `get_public_access` to read status and `unexpose_public` to stop sharing.
+Project selectors remain shorthand only when the Project contains one eligible
+deployable workload.
+
+## Cloudflare Connected Publish
+
+Cloudflare remains an optional path for operators who own a DNS Zone or need a
+Named Tunnel because the OpenLander host is behind NAT. Connect it from **Web
+Server → Cloudflare Tunnel**. OpenLander manages one Named Tunnel and one
+`cloudflared` connector without giving Cloudflare credentials to Applications.
+
+Connected Publish and Protected public share are separate ingress choices. A
+Cloudflare connection is not required for a public GCP VM with ports 80 and 443
+open. When Cloudflare is connected, **Share externally** shows a two-choice
+dialog; Direct protected share remains the recommended default. Only one method
+can be active for the same Application, and a Project can have only one active
+Cloudflare-published Application.
+
+Cloudflare publishing does not use OpenLander's access-code gate. Add Cloudflare
+Access separately when authentication is required. Agents can explicitly select
+Cloudflare with `provider: "cloudflare"` on `expose_public`, `get_public_access`,
+and `unexpose_public`.
+
 ## Manual Domains
 
-Manual domain routes remain available on an Application's **Domains** tab.
-They register a Host/path route in managed Traefik for DNS that the operator
-has already configured. The manual domain API does not create DNS records or a
-Cloudflare Tunnel route.
+Manual domain routes remain available on an Application's **Domains** tab. They
+register a Host/path route in managed Traefik for DNS that the operator has
+already configured. The manual domain API does not create DNS records.
 
 ```text
 POST /api/projects/:projectId/services/:serviceId/domains
 ```
 
 One Application may have multiple manual domain routes, such as
-`app.example.com` and `www.example.com`. These routes are independent of the
-single Connected Publish URL reserved for the Project.
-
-## Initial 0.3 Scope
-
-Connected Publish intentionally excludes multiple public routes per Project,
-temporary random URLs, access codes, expiry, Cloudflare Access policy setup,
-external Traefik installations, and multi-server connector placement.
+`app.example.com` and `www.example.com`. Manual routes do not inherit the
+Protected public share access-code gate.

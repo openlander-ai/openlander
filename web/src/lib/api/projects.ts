@@ -535,6 +535,7 @@ export async function getProjectLogs(id: string): Promise<string> {
 }
 
 export type PublicAccessStatus = 'private' | 'provisioning' | 'public' | 'unpublishing' | 'error';
+export type PublicAccessProvider = 'protected_share' | 'cloudflare';
 
 export interface ProjectPublicAccess {
   project_id: string;
@@ -542,6 +543,9 @@ export interface ProjectPublicAccess {
   status: PublicAccessStatus;
   public_url: string | null;
   hostname: string | null;
+  provider?: PublicAccessProvider;
+  access_code_configured?: boolean;
+  access_code?: string;
   error: { code: string | null; message: string | null } | null;
 }
 
@@ -559,6 +563,50 @@ export async function exposeProject(id: string): Promise<ProjectPublicAccess> {
 
 export async function unexposeProject(id: string): Promise<ProjectPublicAccess> {
   return apiPost<ProjectPublicAccess>(`/api/projects/${id}/unexpose`);
+}
+
+export async function getServicePublicAccess(
+  projectId: string,
+  serviceId: string,
+  provider: PublicAccessProvider = 'protected_share',
+): Promise<ProjectPublicAccess> {
+  const providerQuery = provider === 'cloudflare' ? '?provider=cloudflare' : '';
+  const res = await fetchWithAuth(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/public-access${providerQuery}`,
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to load public access');
+  return res.json();
+}
+
+export async function exposeService(
+  projectId: string,
+  serviceId: string,
+  options?: { provider?: PublicAccessProvider; rotateAccessCode?: boolean },
+): Promise<ProjectPublicAccess> {
+  const res = await fetchWithAuth(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/expose`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: options?.provider ?? 'protected_share',
+        rotate_access_code: options?.rotateAccessCode === true,
+      }),
+    },
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to expose service');
+  return res.json();
+}
+
+export async function unexposeService(
+  projectId: string,
+  serviceId: string,
+  provider: PublicAccessProvider = 'protected_share',
+): Promise<ProjectPublicAccess> {
+  return apiPost<ProjectPublicAccess>(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/unexpose`,
+    { provider },
+  );
 }
 
 // Domain routing API moved to `./domains.ts` for the v0.1 manual-DNS +

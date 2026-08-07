@@ -16,6 +16,7 @@ import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
 import { createLlmRoutes } from './api/llm-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
+import { createProtectedShareGatewayRoutes } from './api/protected-share-gateway-routes.js';
 import { createAuthMiddleware, isAuthenticated } from './middleware/auth.js';
 import { createCorsOriginPolicy } from './middleware/cors-policy.js';
 import { AuthService } from '../auth/auth-service.js';
@@ -264,6 +265,8 @@ function createApp(
 
   const authRoutes = createAuthRoutes(authService, ctx);
   app.route('/api', authRoutes);
+
+  app.route('/', createProtectedShareGatewayRoutes(ctx));
 
   const apiRoutes = createApiRoutes(ctx);
   app.route('/api', apiRoutes);

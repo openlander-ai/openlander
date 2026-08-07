@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import type { AppContext } from '../../app.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { OpenLanderError, PublicAccessNotEligibleError } from '../../errors.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceAutoRouteName,
@@ -25,6 +26,21 @@ import {
 import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api:service-aux');
+
+type PublicAccessProvider = 'protected_share' | 'cloudflare';
+
+function publicAccessProvider(value: unknown): PublicAccessProvider {
+  return value === 'cloudflare' ? 'cloudflare' : 'protected_share';
+}
+
+function publicAccessStatusPath(
+  projectId: string,
+  serviceId: string,
+  provider: PublicAccessProvider,
+) {
+  const path = `/api/projects/${projectId}/services/${encodeURIComponent(serviceId)}/public-access`;
+  return provider === 'cloudflare' ? `${path}?provider=cloudflare` : path;
+}
 
 function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
   const origParam = c.req.param.bind(c.req);
@@ -174,22 +190,56 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
     });
   });
 
+  api.get('/projects/:p/services/:s/public-access', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
+      const provider = publicAccessProvider(c.req.query('provider'));
+      const result =
+        provider === 'cloudflare'
+          ? await ctx.cloudflare.getPublicAccess(project.id)
+          : await ctx.publicShare.getPublicAccess({
+              projectId: project.id,
+              serviceId: c.req.param('s'),
+            });
+      return cx.json({ ...result, provider });
+    });
+  });
+
   api.post('/projects/:p/services/:s/expose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const result = await ctx.cloudflare.requestPublicAccess({
-        projectId: project.id,
-        serviceId: c.req.param('s'),
-      });
+      const body = await c.req
+        .json<{ provider?: unknown; rotate_access_code?: unknown }>()
+        .catch((): { provider?: unknown; rotate_access_code?: unknown } => ({}));
+      const provider = publicAccessProvider(body.provider);
+      if (provider === 'cloudflare' && body.rotate_access_code === true) {
+        throw new OpenLanderError(
+          'rotate_access_code is only supported by provider=protected_share.',
+          'INVALID_FIELD',
+          400,
+        );
+      }
+      const result =
+        provider === 'cloudflare'
+          ? await ctx.cloudflare.requestPublicAccess({
+              projectId: project.id,
+              serviceId: c.req.param('s'),
+            })
+          : await ctx.publicShare.expose({
+              projectId: project.id,
+              serviceId: c.req.param('s'),
+              rotateAccessCode: body.rotate_access_code === true,
+            });
       return cx.json(
         {
           ...result,
+          provider,
           status_call: {
             method: 'GET',
-            path: `/api/projects/${project.id}/public-access`,
+            path: publicAccessStatusPath(project.id, c.req.param('s'), provider),
           },
         },
-        202,
+        provider === 'cloudflare' && result.status !== 'public' ? 202 : 200,
       );
     });
   });
@@ -197,16 +247,40 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
   api.post('/projects/:p/services/:s/unexpose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const result = await ctx.cloudflare.requestPrivateAccess(project.id);
+      const body = await c.req
+        .json<{ provider?: unknown }>()
+        .catch((): { provider?: unknown } => ({}));
+      const provider = publicAccessProvider(body.provider);
+      if (provider === 'cloudflare') {
+        const current = await ctx.cloudflare.getPublicAccess(project.id);
+        if (
+          current.status !== 'private' &&
+          current.service_id &&
+          current.service_id !== c.req.param('s')
+        ) {
+          throw new PublicAccessNotEligibleError(
+            'The active Cloudflare route belongs to another Application in this Project.',
+            { projectId: project.id, serviceId: current.service_id },
+          );
+        }
+      }
+      const result =
+        provider === 'cloudflare'
+          ? await ctx.cloudflare.requestPrivateAccess(project.id)
+          : await ctx.publicShare.unexpose({
+              projectId: project.id,
+              serviceId: c.req.param('s'),
+            });
       return cx.json(
         {
           ...result,
+          provider,
           status_call: {
             method: 'GET',
-            path: `/api/projects/${project.id}/public-access`,
+            path: publicAccessStatusPath(project.id, c.req.param('s'), provider),
           },
         },
-        202,
+        provider === 'cloudflare' && result.status !== 'private' ? 202 : 200,
       );
     });
   });

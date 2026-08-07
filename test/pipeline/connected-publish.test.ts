@@ -72,12 +72,17 @@ const connection = {
 } as CloudflareConnectionRow;
 
 function createHarness(
-  options: { existingDns?: CloudflareDnsRecord[]; connectorState?: string } = {},
+  options: {
+    existingDns?: CloudflareDnsRecord[];
+    existingAccess?: ProjectPublicAccessRow;
+    connectorState?: string;
+    serviceOverrides?: Partial<ServiceRow>;
+  } = {},
 ) {
   let connectionState: CloudflareConnectionRow | null = connection;
-  let access: ProjectPublicAccessRow | null = null;
+  let access: ProjectPublicAccessRow | null = options.existingAccess ?? null;
   let mapping: DomainMappingRow | null = null;
-  let serviceState = service;
+  let serviceState = { ...service, ...options.serviceOverrides } as ServiceRow;
   const dnsRecords = [...(options.existingDns ?? [])];
 
   const api = {
@@ -216,7 +221,10 @@ function createHarness(
     id: 'connector-1',
     name: 'cloudflared-ol',
     state: options.connectorState ?? 'running',
-    status: options.connectorState === 'running' || options.connectorState === undefined ? 'Up' : 'Exited',
+    status:
+      options.connectorState === 'running' || options.connectorState === undefined
+        ? 'Up'
+        : 'Exited',
     labels: {
       'openlander.managed': 'true',
       'openlander.role': 'cloudflared',
@@ -331,6 +339,45 @@ describe('ConnectedPublishManager', () => {
       public_url: 'https://demo-app.example.com',
     });
     expect(harness.api.createTunnelDnsRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects Cloudflare publishing while the protected access-code route is active', async () => {
+    const harness = createHarness({
+      serviceOverrides: {
+        visibility: 'shared',
+        access_code: 'bcrypt-hash',
+        access_code_iv: 'session-secret',
+      },
+    });
+
+    await expect(
+      harness.manager.requestPublish({ projectId: project.id, serviceId: service.id }),
+    ).rejects.toMatchObject({ code: 'PUBLIC_ACCESS_NOT_ELIGIBLE' });
+    expect(harness.api.createTunnelDnsRecord).not.toHaveBeenCalled();
+  });
+
+  it('does not silently move an active Cloudflare route to another Application', async () => {
+    const harness = createHarness({
+      existingAccess: {
+        project_id: project.id,
+        service_id: 'svc-other',
+        connection_id: connection.id,
+        hostname: 'other.example.com',
+        cloudflare_zone_id: connection.zone_id,
+        cloudflare_dns_record_id: 'dns-other',
+        domain_mapping_id: 'domain-other',
+        status: 'public',
+        last_error_code: null,
+        last_error_message: null,
+        published_at: '2026-08-07T00:00:00.000Z',
+      } as ProjectPublicAccessRow,
+    });
+
+    await expect(
+      harness.manager.requestPublish({ projectId: project.id, serviceId: service.id }),
+    ).rejects.toMatchObject({ code: 'PUBLIC_ACCESS_NOT_ELIGIBLE' });
+    expect(harness.getAccess()?.service_id).toBe('svc-other');
+    expect(harness.api.createTunnelDnsRecord).not.toHaveBeenCalled();
   });
 
   it('never overwrites an existing DNS record and selects a safe hostname', async () => {
