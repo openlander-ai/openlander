@@ -96,6 +96,7 @@ interface RunnerComposeEnvironment {
   OPENLANDER_POSTGRES_PASSWORD: string;
   OPENLANDER_PORT: string;
   OPENLANDER_PUBLIC_HOST: string;
+  OPENLANDER_PROTECTED_SHARE_TLS_MODE: string;
   OPENLANDER_DATA_VOLUME: string;
 }
 
@@ -103,6 +104,7 @@ const RUNNER_COMPOSE_ENVIRONMENT_KEYS = [
   'OPENLANDER_POSTGRES_PASSWORD',
   'OPENLANDER_PORT',
   'OPENLANDER_PUBLIC_HOST',
+  'OPENLANDER_PROTECTED_SHARE_TLS_MODE',
   'OPENLANDER_DATA_VOLUME',
 ] as const satisfies readonly (keyof RunnerComposeEnvironment)[];
 
@@ -548,6 +550,8 @@ export class PlatformUpdater {
       OPENLANDER_PORT: port,
       OPENLANDER_PUBLIC_HOST:
         containerEnvironmentValue(application, 'OPENLANDER_PUBLIC_HOST') ?? '',
+      OPENLANDER_PROTECTED_SHARE_TLS_MODE:
+        containerEnvironmentValue(application, 'OPENLANDER_PROTECTED_SHARE_TLS_MODE') ?? 'managed',
       OPENLANDER_DATA_VOLUME: installation.dataVolumeName,
     };
     assertSafeComposeEnvironment(environment);

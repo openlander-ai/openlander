@@ -356,6 +356,7 @@ describe('PlatformUpdater', () => {
         envVars: expect.objectContaining({
           OPENLANDER_POSTGRES_PASSWORD: 'openlander-test-password',
           OPENLANDER_PORT: '10114',
+          OPENLANDER_PROTECTED_SHARE_TLS_MODE: 'managed',
           OPENLANDER_DATA_VOLUME: 'openlander-data',
         }),
       }),

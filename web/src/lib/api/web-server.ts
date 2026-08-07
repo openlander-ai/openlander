@@ -183,6 +183,7 @@ export interface ProtectedShareSettings {
   detectedPublicIp: string | null;
   ready: boolean;
   traefikMode: 'managed' | 'external';
+  tlsMode: 'managed' | 'external';
 }
 
 export interface SaveProtectedShareSettingsResponse extends ProtectedShareSettings {

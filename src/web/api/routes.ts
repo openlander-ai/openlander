@@ -44,6 +44,7 @@ import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
 import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
 import { PROTECTED_SHARE_MAPPING_PREFIX } from '../../pipeline/protected-public-share.js';
+import { getProtectedShareTlsMode } from '../../config/index.js';
 
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
@@ -296,6 +297,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const protectedShareConfigured = Boolean(
       protectedShareSettings.publicHost.trim() && protectedShareSettings.acmeEmail.trim(),
     );
+    const protectedShareTlsMode = getProtectedShareTlsMode();
 
     // Build self-contained services for projects with an active container.
     // Uses Docker DNS (container name) + container port — no @docker dependency.
@@ -514,15 +516,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
       if (isProtectedShare) {
         const authMiddleware = 'protected-share-auth';
-        const redirectMiddleware = 'protected-share-https-redirect';
         middlewares[authMiddleware] = {
           forwardAuth: {
             address: `${openLanderTraefikOrigin(ctx.config.server.port)}/__openlander/share/auth`,
             trustForwardHeader: false,
           },
-        };
-        middlewares[redirectMiddleware] = {
-          redirectScheme: { scheme: 'https', permanent: true },
         };
         const gatewayService = 'protected-share-gateway';
         traefikServices[gatewayService] ??= {
@@ -530,29 +528,49 @@ export function createApiRoutes(ctx: AppContext): Hono {
             servers: [{ url: openLanderTraefikOrigin(ctx.config.server.port) }],
           },
         };
-        routers[`${routerName}-http`] = {
-          rule,
-          entryPoints: ['web'],
-          service: svcName,
-          priority: httpProviderPriority(rule),
-          middlewares: [redirectMiddleware],
-        };
-        routers[routerName] = {
-          rule,
-          entryPoints: ['websecure'],
-          service: svcName,
-          priority: httpProviderPriority(rule),
-          middlewares: [authMiddleware, ...routerMiddlewares],
-          tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
-        };
         const gatewayRule = `${rule} && PathPrefix(\`/__openlander/share/\`)`;
-        routers[`${routerName}-gateway`] = {
-          rule: gatewayRule,
-          entryPoints: ['websecure'],
-          service: gatewayService,
-          priority: httpProviderPriority(gatewayRule) + 1,
-          tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
-        };
+        if (protectedShareTlsMode === 'external') {
+          routers[routerName] = {
+            rule,
+            entryPoints: ['web'],
+            service: svcName,
+            priority: httpProviderPriority(rule),
+            middlewares: [authMiddleware, ...routerMiddlewares],
+          };
+          routers[`${routerName}-gateway`] = {
+            rule: gatewayRule,
+            entryPoints: ['web'],
+            service: gatewayService,
+            priority: httpProviderPriority(gatewayRule) + 1,
+          };
+        } else {
+          const redirectMiddleware = 'protected-share-https-redirect';
+          middlewares[redirectMiddleware] = {
+            redirectScheme: { scheme: 'https', permanent: true },
+          };
+          routers[`${routerName}-http`] = {
+            rule,
+            entryPoints: ['web'],
+            service: svcName,
+            priority: httpProviderPriority(rule),
+            middlewares: [redirectMiddleware],
+          };
+          routers[routerName] = {
+            rule,
+            entryPoints: ['websecure'],
+            service: svcName,
+            priority: httpProviderPriority(rule),
+            middlewares: [authMiddleware, ...routerMiddlewares],
+            tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
+          };
+          routers[`${routerName}-gateway`] = {
+            rule: gatewayRule,
+            entryPoints: ['websecure'],
+            service: gatewayService,
+            priority: httpProviderPriority(gatewayRule) + 1,
+            tls: { certResolver: mapping.tls_resolver ?? 'openlander' },
+          };
+        }
       } else {
         routers[routerName] = {
           rule,

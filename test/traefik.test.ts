@@ -737,6 +737,66 @@ describe('TraefikManager', () => {
     );
   });
 
+  it('keeps HTTPS on the external proxy when protected sharing is active', async () => {
+    const previousTlsMode = process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'];
+    process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'] = 'external';
+    let created = false;
+    const runtime = {
+      listAllContainers: vi.fn(async () =>
+        created
+          ? [
+              createMockContainer('traefik-ol', {
+                labels: {
+                  'openlander.managed': 'true',
+                  'openlander.role': 'traefik',
+                  'openlander.instance': 'olinst-test',
+                },
+                state: 'running',
+              }),
+            ]
+          : [],
+      ),
+      getNetworkInfo: vi.fn(async () => ({})),
+      ensureNetwork: vi.fn(async () => undefined),
+      connectContainerToNetwork: vi.fn(async () => undefined),
+      pullImage: vi.fn(async () => undefined),
+      runInfraContainer: vi.fn(async () => {
+        created = true;
+        return 'new-traefik';
+      }),
+    } as unknown as Docker;
+
+    try {
+      const manager = new TraefikManager(runtime, 10114, {
+        networkName: 'openlander',
+        instanceId: 'olinst-test',
+        protectedShareConfig: () => ({
+          enabled: true,
+          publicHost: '34.64.12.34',
+          acmeEmail: 'owner@example.com',
+        }),
+      });
+
+      await manager.start();
+
+      expect(runtime.runInfraContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Cmd: expect.not.arrayContaining(['--entrypoints.websecure.address=:443']),
+          ExposedPorts: expect.not.objectContaining({ '443/tcp': {} }),
+          HostConfig: expect.objectContaining({
+            PortBindings: expect.not.objectContaining({ '443/tcp': [{ HostPort: '443' }] }),
+          }),
+        }),
+      );
+    } finally {
+      if (previousTlsMode === undefined) {
+        delete process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'];
+      } else {
+        process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'] = previousTlsMode;
+      }
+    }
+  });
+
   it('recreates containerized Traefik when its HTTP provider still points at host.docker.internal', async () => {
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const legacy = createMockContainer('traefik-ol', {

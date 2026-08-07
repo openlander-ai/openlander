@@ -126,6 +126,18 @@ function noStoreHeaders(): Record<string, string> {
 export function createProtectedShareGatewayRoutes(ctx: AppContext): Hono {
   const gateway = new Hono();
 
+  // Caddy's on-demand TLS allowlist calls this endpoint with `?domain=`
+  // before provisioning a certificate. Only active protected-share hostnames
+  // are accepted, preventing an external TLS terminator from becoming an
+  // unbounded certificate-issuance oracle.
+  gateway.get('/__openlander/share/tls-allow', async (c) => {
+    const hostname = c.req.query('domain') ?? '';
+    const target = await ctx.publicShare.resolveActiveShareByHostname(hostname);
+    return target
+      ? c.body(null, 204, noStoreHeaders())
+      : c.text('Not found', 404, noStoreHeaders());
+  });
+
   gateway.all('/__openlander/share/auth', async (c) => {
     const hostname = requestHostname(c);
     const target = await ctx.publicShare.resolveActiveShareByHostname(hostname);

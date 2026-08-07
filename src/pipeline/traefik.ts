@@ -8,6 +8,7 @@ import {
   DOCKER_LABELS,
   getDataDir,
   getPolicy,
+  getProtectedShareTlsMode,
   SHARED_NETWORK_NAME,
   type ProtectedShareConfig,
 } from '../config/index.js';
@@ -75,7 +76,12 @@ export class TraefikManager {
 
   private protectedShareTlsEnabled(): boolean {
     const config = this.protectedShareConfig?.();
-    return Boolean(config?.enabled && config.publicHost.trim() && config.acmeEmail.trim());
+    return Boolean(
+      getProtectedShareTlsMode() === 'managed' &&
+      config?.enabled &&
+      config.publicHost.trim() &&
+      config.acmeEmail.trim(),
+    );
   }
 
   private acmeVolumeName(): string {

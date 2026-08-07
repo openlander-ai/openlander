@@ -99,6 +99,9 @@ describe('public release tree hygiene', () => {
     expect(compose).toContain('OPENLANDER_IMAGE:-ghcr.io/openlander-ai/openlander:latest');
     expect(compose).toContain('${OPENLANDER_PORT:-10114}:10114');
     expect(compose).toContain('OPENLANDER_PUBLIC_HOST: ${OPENLANDER_PUBLIC_HOST:-}');
+    expect(compose).toContain(
+      'OPENLANDER_PROTECTED_SHARE_TLS_MODE: ${OPENLANDER_PROTECTED_SHARE_TLS_MODE:-managed}',
+    );
     expect(readme).toContain(
       'https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh',
     );

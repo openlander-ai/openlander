@@ -65,6 +65,7 @@ describe('Web Server protected share settings', () => {
       detectedPublicIp: '34.64.12.34',
       ready: false,
       traefikMode: 'managed',
+      tlsMode: 'managed',
     });
     expect(saveConfig).not.toHaveBeenCalled();
   });
@@ -87,6 +88,7 @@ describe('Web Server protected share settings', () => {
       acmeEmail: 'admin@example.com',
       ready: true,
       proxyApplied: true,
+      tlsMode: 'managed',
     });
     expect(config.traefik.protectedShare).toEqual({
       enabled: false,

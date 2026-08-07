@@ -298,6 +298,21 @@ export interface ProtectedShareConfig {
   acmeEmail: string;
 }
 
+export type ProtectedShareTlsMode = 'managed' | 'external';
+
+/**
+ * Selects which process terminates HTTPS for protected-share hostnames.
+ *
+ * Managed is the default: OpenLander's Traefik binds host port 443 and
+ * provisions certificates. External keeps Traefik on HTTP so an existing
+ * host proxy such as Caddy can terminate TLS and forward requests to port 80.
+ */
+export function getProtectedShareTlsMode(): ProtectedShareTlsMode {
+  return process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE']?.trim().toLowerCase() === 'external'
+    ? 'external'
+    : 'managed';
+}
+
 export interface AIFeatureToggle {
   enabled: boolean;
   /** v1.1: Which registered provider to use for this feature. Falls back to defaultRoute. */

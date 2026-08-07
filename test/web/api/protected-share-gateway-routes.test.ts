@@ -54,6 +54,25 @@ describe('protected share visitor gateway', () => {
     expect(html).not.toContain('hash');
   });
 
+  it('allows on-demand TLS only for an active protected-share hostname', async () => {
+    const { app, publicShare } = harness();
+
+    const allowed = await app.request(
+      '/__openlander/share/tls-allow?domain=demo.34-64-12-34.sslip.io',
+    );
+    const denied = await app.request(
+      '/__openlander/share/tls-allow?domain=unknown.34-64-12-34.sslip.io',
+    );
+
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get('cache-control')).toBe('no-store');
+    expect(denied.status).toBe(404);
+    expect(publicShare.resolveActiveShareByHostname).toHaveBeenNthCalledWith(
+      1,
+      'demo.34-64-12-34.sslip.io',
+    );
+  });
+
   it('sets a Secure host-only cookie and redirects to a safe same-host path', async () => {
     const { app, publicShare } = harness({ validCode: true });
     const response = await app.request('/__openlander/share/verify', {

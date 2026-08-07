@@ -709,6 +709,53 @@ describe('GET /api/traefik/config protected public sharing', () => {
     });
   });
 
+  it('routes protected shares over HTTP behind an external TLS terminator', async () => {
+    const previousTlsMode = process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'];
+    process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'] = 'external';
+    const service = makeService({
+      visibility: 'shared',
+      public_url: 'https://stack-ab12cd.34-64-12-34.sslip.io',
+      access_code: 'hash',
+      access_code_iv: 'secret',
+    });
+    const mapping = makeMapping({
+      id: 'protected-share-ab12cd',
+      service_id: service.id,
+      domain: 'stack-ab12cd.34-64-12-34.sslip.io',
+      tls_enabled: true,
+      tls_resolver: 'openlander',
+    });
+
+    try {
+      const config = await requestTraefikConfig(
+        createTraefikConfigApp({
+          projects: [makeProject()],
+          services: [service],
+          mappings: [mapping],
+        }).app,
+      );
+
+      expect(config.http.routers['domain-protected-share-ab12cd']).toMatchObject({
+        entryPoints: ['web'],
+        middlewares: ['protected-share-auth'],
+      });
+      expect(config.http.routers['domain-protected-share-ab12cd']?.tls).toBeUndefined();
+      expect(config.http.routers['domain-protected-share-ab12cd-http']).toBeUndefined();
+      expect(config.http.routers['domain-protected-share-ab12cd-gateway']).toMatchObject({
+        entryPoints: ['web'],
+        service: 'protected-share-gateway',
+      });
+      expect(config.http.routers['domain-protected-share-ab12cd-gateway']?.tls).toBeUndefined();
+      expect(config.http.middlewares?.['protected-share-https-redirect']).toBeUndefined();
+    } finally {
+      if (previousTlsMode === undefined) {
+        delete process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'];
+      } else {
+        process.env['OPENLANDER_PROTECTED_SHARE_TLS_MODE'] = previousTlsMode;
+      }
+    }
+  });
+
   it('does not materialize a retained protected hostname after sharing is disabled', async () => {
     const service = makeService({ visibility: 'internal' });
     const config = await requestTraefikConfig(

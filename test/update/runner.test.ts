@@ -25,6 +25,7 @@ const runnerEnvironment = {
   OPENLANDER_POSTGRES_PASSWORD: 'preserved-password',
   OPENLANDER_PORT: '10114',
   OPENLANDER_PUBLIC_HOST: 'openlander.example.com',
+  OPENLANDER_PROTECTED_SHARE_TLS_MODE: 'external',
   OPENLANDER_DATA_VOLUME: 'openlander-data',
 };
 
@@ -136,7 +137,7 @@ describe('platform update runner', () => {
 
     await expect(context.store.readOperation()).resolves.toMatchObject({ phase: 'completed' });
     expect(await readFile(context.environmentPath, 'utf8')).toBe(
-      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
+      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_PROTECTED_SHARE_TLS_MODE=external\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
     expect(await readFile(context.composePath, 'utf8')).toBe(targetCompose);
     expect((await stat(context.environmentPath)).mode & 0o777).toBe(0o640);
@@ -203,7 +204,7 @@ describe('platform update runner', () => {
       errorCode: 'UPDATE_VERIFICATION_FAILED',
     });
     expect(await readFile(context.environmentPath, 'utf8')).toBe(
-      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.sourceImage}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
+      `OPENLANDER_PORT=10114\nCUSTOM_VALUE=kept\nOPENLANDER_IMAGE=${context.input.sourceImage}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_PROTECTED_SHARE_TLS_MODE=external\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
     expect(await readFile(context.composePath, 'utf8')).toBe(originalCompose);
     expect(
@@ -307,7 +308,7 @@ describe('platform update runner', () => {
 
     await expect(context.store.readOperation()).resolves.toMatchObject({ phase: 'completed' });
     expect(await readFile(context.environmentPath, 'utf8')).toBe(
-      `OPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PORT=10114\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
+      `OPENLANDER_IMAGE=${context.input.targetImage}@${targetDigest}\nOPENLANDER_POSTGRES_PASSWORD=preserved-password\nOPENLANDER_PORT=10114\nOPENLANDER_PUBLIC_HOST=openlander.example.com\nOPENLANDER_PROTECTED_SHARE_TLS_MODE=external\nOPENLANDER_DATA_VOLUME=openlander-data\n`,
     );
     expect((await stat(context.environmentPath)).mode & 0o777).toBe(0o600);
   });

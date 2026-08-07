@@ -1,7 +1,12 @@
 import { Hono } from 'hono';
 
 import { syncManagedTraefikProjectNetworks, type AppContext } from '../../app.js';
-import { getPolicy, saveConfig, type OpenLanderEnv } from '../../config/index.js';
+import {
+  getPolicy,
+  getProtectedShareTlsMode,
+  saveConfig,
+  type OpenLanderEnv,
+} from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../db/types.js';
 import { OpenLanderError } from '../../errors.js';
@@ -732,6 +737,7 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
         isValidProtectedShareAcmeEmail(configured.acmeEmail) &&
         ctx.config.traefik.mode === 'managed',
       traefikMode: ctx.config.traefik.mode,
+      tlsMode: getProtectedShareTlsMode(),
     });
   });
 
@@ -799,6 +805,7 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
       ready: ctx.config.traefik.mode === 'managed',
       proxyApplied: ctx.config.traefik.mode === 'managed',
       traefikMode: ctx.config.traefik.mode,
+      tlsMode: getProtectedShareTlsMode(),
     });
   });
 

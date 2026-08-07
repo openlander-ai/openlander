@@ -50,6 +50,45 @@ contains the old address.
 The VM firewall must allow inbound TCP 80 and 443. Do not open each
 Application's assigned port.
 
+#### Existing HTTPS proxy on port 443
+
+If Caddy, Nginx, or another host proxy already owns port 443, keep that proxy
+as the TLS terminator and run protected sharing in external TLS mode:
+
+```dotenv
+OPENLANDER_PROTECTED_SHARE_TLS_MODE=external
+```
+
+The external proxy must preserve the requested `Host`, terminate HTTPS, and
+forward active share hostnames to OpenLander's Traefik HTTP entrypoint on port 80. It must also restrict on-demand certificate issuance to OpenLander's
+allowlist endpoint. A minimal Caddy pattern is:
+
+```caddyfile
+{
+    auto_https disable_redirects
+    email operator@example.com
+    on_demand_tls {
+        ask http://127.0.0.1:10114/__openlander/share/tls-allow
+    }
+}
+
+https:// {
+    tls {
+        on_demand
+        issuer acme {
+            disable_http_challenge
+        }
+    }
+    reverse_proxy 127.0.0.1:80
+}
+```
+
+Keep any existing, host-specific dashboard route above this catch-all route.
+The allowlist returns success only for a currently active protected-share
+hostname, so arbitrary client-supplied names cannot trigger certificate
+issuance. Caddy uses TLS-ALPN validation on port 443 in this example because
+Traefik continues to own port 80.
+
 ### Share an Application
 
 Open an Application detail page and click **Share externally**. OpenLander
