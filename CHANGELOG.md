@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add protected HTTPS sharing for individual Application services without a
+  purchased domain, using an access-code gateway and service-scoped publish
+  controls while keeping Cloudflare Connected Publish as an optional path.
+- Add global and per-operation security controls for Project or service
+  deletion, database access, environment secret access, and Docker cleanup so
+  operators can start permissive and restrict sensitive actions when needed.
+
+### Changed
+
+- Apply the configured global operation policy to MCP Docker cleanup actions
+  instead of requiring a separate approval-only workflow.
+
+### Fixed
+
+- Collect and persist the certificate contact email during the first protected
+  share instead of requiring operators to preconfigure it in Web Server
+  settings.
+
 ## [0.3.2] - 2026-08-05
 
 ### Fixed
