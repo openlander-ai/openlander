@@ -513,7 +513,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
               <PublicAccessControl
                 projectId={project.id}
                 serviceId={resolvedService.id}
-                runtimeUrl={resolvedService.url}
+                runtimeUrl={resolvedService.url ?? undefined}
                 disabled={Boolean(resolvedService.archivedAt)}
                 onAccessSettled={loadServiceDetail}
               />
