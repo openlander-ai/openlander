@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Let embedded browsers submit protected-share codes when they send an opaque
+  form origin with same-origin Fetch Metadata, and redirect direct visits to
+  the internal verification endpoint back to the share gate.
+
 ## [0.3.3-rc.4] - 2026-08-07
 
 ### Changed
