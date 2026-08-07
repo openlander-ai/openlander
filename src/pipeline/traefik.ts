@@ -4,7 +4,13 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
 import type { RuntimeBackend } from './runtime/index.js';
-import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
+import {
+  DOCKER_LABELS,
+  getDataDir,
+  getPolicy,
+  SHARED_NETWORK_NAME,
+  type ProtectedShareConfig,
+} from '../config/index.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
 import {
@@ -26,7 +32,7 @@ export interface TraefikManagerOptions {
   httpsPort?: number;
   dashboardPort?: number;
   instanceId?: string;
-  protectedShareConfig?: () => { publicHost: string; acmeEmail: string };
+  protectedShareConfig?: () => ProtectedShareConfig;
 }
 
 /** Get the dynamic config directory for the current environment. */
@@ -50,7 +56,7 @@ export class TraefikManager {
   private readonly httpsPort: number;
   private readonly dashboardPort: number;
   private readonly instanceId?: string;
-  private readonly protectedShareConfig?: () => { publicHost: string; acmeEmail: string };
+  private readonly protectedShareConfig?: () => ProtectedShareConfig;
 
   constructor(
     private readonly runtime: RuntimeBackend,
@@ -69,7 +75,7 @@ export class TraefikManager {
 
   private protectedShareTlsEnabled(): boolean {
     const config = this.protectedShareConfig?.();
-    return Boolean(config?.publicHost.trim() && config.acmeEmail.trim());
+    return Boolean(config?.enabled && config.publicHost.trim() && config.acmeEmail.trim());
   }
 
   private acmeVolumeName(): string {

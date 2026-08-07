@@ -4,6 +4,7 @@ import { syncManagedTraefikProjectNetworks, type AppContext } from '../../app.js
 import { getPolicy, saveConfig, type OpenLanderEnv } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../db/types.js';
+import { OpenLanderError } from '../../errors.js';
 import { isHttpRoutableRuntimeService } from '../../health/compose-runtime.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { AllContainerInfo, PortInfo } from '../../pipeline/docker/types.js';
@@ -18,6 +19,7 @@ import {
 import {
   PROTECTED_SHARE_MAPPING_PREFIX,
   isValidProtectedShareAcmeEmail,
+  normalizeProtectedShareProxyError,
   normalizeProtectedSharePublicHost,
 } from '../../pipeline/protected-public-share.js';
 
@@ -759,17 +761,34 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
       );
     }
 
-    ctx.config.traefik.protectedShare = { publicHost, acmeEmail };
+    const previous = { ...ctx.config.traefik.protectedShare };
+    ctx.config.traefik.protectedShare = {
+      enabled: previous.enabled,
+      publicHost,
+      acmeEmail,
+    };
     saveConfig(ctx.config);
 
-    let proxyApplied = false;
-    if (ctx.config.traefik.mode === 'managed') {
+    if (ctx.config.traefik.mode === 'managed' && previous.enabled) {
       try {
         await ctx.traefik.start();
         await syncManagedTraefikProjectNetworks(ctx);
-        proxyApplied = true;
       } catch (err) {
-        log.warn({ err }, 'Protected public share settings saved; Traefik restart is pending');
+        ctx.config.traefik.protectedShare = previous;
+        saveConfig(ctx.config);
+        try {
+          await ctx.traefik.start();
+          await syncManagedTraefikProjectNetworks(ctx);
+        } catch (restoreError) {
+          log.error({ err: restoreError }, 'Failed to restore previous protected share settings');
+          throw new OpenLanderError(
+            'Protected share settings could not be applied and the previous proxy could not be restored.',
+            'PROTECTED_SHARE_PROXY_RECOVERY_FAILED',
+            500,
+            { reason: 'proxy_recovery_failed' },
+          );
+        }
+        throw normalizeProtectedShareProxyError(err);
       }
     }
 
@@ -777,8 +796,8 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
       status: 'saved',
       publicHost,
       acmeEmail,
-      ready: proxyApplied,
-      proxyApplied,
+      ready: ctx.config.traefik.mode === 'managed',
+      proxyApplied: ctx.config.traefik.mode === 'managed',
       traefikMode: ctx.config.traefik.mode,
     });
   });

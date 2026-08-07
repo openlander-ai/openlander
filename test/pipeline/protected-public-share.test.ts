@@ -70,7 +70,7 @@ function service(): ServiceRow {
   };
 }
 
-function harness(options?: { publicHost?: string; acmeEmail?: string }) {
+function harness(options?: { enabled?: boolean; publicHost?: string; acmeEmail?: string }) {
   const row = service();
   const owner = project();
   const mappings: DomainMappingRow[] = [];
@@ -148,17 +148,21 @@ function harness(options?: { publicHost?: string; acmeEmail?: string }) {
       mode: 'managed',
       externalNetwork: undefined,
       protectedShare: {
+        enabled: options?.enabled ?? false,
         publicHost: options?.publicHost ?? '34.64.12.34',
         acmeEmail: options?.acmeEmail ?? 'admin@example.com',
       },
     },
   } as OpenLanderConfig;
+  const persistConfig = vi.fn();
   return {
-    manager: new ProtectedPublicShareManager(db, config, traefik),
+    manager: new ProtectedPublicShareManager(db, config, traefik, persistConfig),
     row,
     mappings,
     db,
     traefik,
+    config,
+    persistConfig,
   };
 }
 
@@ -173,7 +177,7 @@ describe('ProtectedPublicShareManager', () => {
   });
 
   it('creates a stable sslip.io HTTPS route and returns the access code only once', async () => {
-    const { manager, row, mappings, traefik } = harness();
+    const { manager, row, mappings, traefik, config, persistConfig } = harness();
     const result = await manager.expose({ projectId: row.project_id, serviceId: row.id });
 
     expect(result).toMatchObject({
@@ -191,6 +195,8 @@ describe('ProtectedPublicShareManager', () => {
     expect(mappings).toHaveLength(1);
     expect(mappings[0]).toMatchObject({ tls_enabled: true, tls_resolver: 'openlander' });
     expect(traefik.start).toHaveBeenCalledOnce();
+    expect(config.traefik.protectedShare.enabled).toBe(true);
+    expect(persistConfig).toHaveBeenCalledOnce();
 
     const repeated = await manager.expose({ projectId: row.project_id, serviceId: row.id });
     expect(repeated.access_code).toBeUndefined();
@@ -251,5 +257,27 @@ describe('ProtectedPublicShareManager', () => {
       code: 'PROTECTED_SHARE_SETUP_REQUIRED',
       details: { missing: ['public_host', 'acme_email'] },
     });
+  });
+
+  it('restores HTTP-only Traefik and keeps the service private when port 443 is occupied', async () => {
+    const { manager, row, mappings, traefik, config, persistConfig } = harness();
+    vi.mocked(traefik.start)
+      .mockRejectedValueOnce(new Error('Bind for 0.0.0.0:443 failed: port is already allocated'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      manager.expose({ projectId: row.project_id, serviceId: row.id }),
+    ).rejects.toMatchObject({
+      code: 'PROTECTED_SHARE_HTTPS_PORT_UNAVAILABLE',
+      statusCode: 409,
+      details: { port: 443, reason: 'host_port_in_use' },
+    });
+
+    expect(config.traefik.protectedShare.enabled).toBe(false);
+    expect(persistConfig).toHaveBeenCalledTimes(2);
+    expect(traefik.start).toHaveBeenCalledTimes(2);
+    expect(mappings).toHaveLength(0);
+    expect(row.visibility).toBe('internal');
+    expect(row.public_url).toBeNull();
   });
 });

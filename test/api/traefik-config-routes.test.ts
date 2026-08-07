@@ -166,7 +166,7 @@ function createTraefikConfigApp(params: {
       previewDeployer: db.previewDeployer,
       config: {
         server: { port: 10114 },
-        traefik: { protectedShare: { publicHost: '', acmeEmail: '' } },
+        traefik: { protectedShare: { enabled: false, publicHost: '', acmeEmail: '' } },
       },
     } as unknown as AppContext),
   );

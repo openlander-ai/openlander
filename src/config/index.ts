@@ -290,6 +290,8 @@ export interface TraefikConfig {
 }
 
 export interface ProtectedShareConfig {
+  /** Whether managed Traefik should claim HTTPS for active protected shares. */
+  enabled: boolean;
   /** Public IPv4 address or operator-owned base domain used to mint share hostnames. */
   publicHost: string;
   /** ACME registration email used by managed Traefik for HTTPS certificates. */
@@ -452,6 +454,7 @@ function buildDefaultConfig(): OpenLanderConfig {
       mode: 'managed',
       externalNetwork: undefined,
       protectedShare: {
+        enabled: false,
         publicHost: '',
         acmeEmail: '',
       },

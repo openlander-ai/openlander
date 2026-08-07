@@ -157,6 +157,7 @@ describe('Connected Publish UI', () => {
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/connect'");
     expect(cloudflareApi).toContain("'/api/setup/cloudflare/disconnect'");
     expect(publicControl).toContain("error.code === 'PROTECTED_SHARE_SETUP_REQUIRED'");
+    expect(publicControl).toContain("error.code === 'PROTECTED_SHARE_HTTPS_PORT_UNAVAILABLE'");
     expect(publicControl).toContain('showProtectedShareSetup()');
     expect(publicControl).toContain('getProtectedShareSettings()');
     expect(publicControl).toContain('saveProtectedShareSettings({');
@@ -182,6 +183,7 @@ describe('Connected Publish UI', () => {
       expect(locale).toMatch(/rotateCode:/);
       expect(locale).toMatch(/methodProtected:/);
       expect(locale).toMatch(/methodCloudflare:/);
+      expect(locale).toMatch(/httpsPortUnavailable:/);
       expect(locale).toMatch(/protectedShare:\s*\{/);
       expect(locale).toMatch(/securityNote:/);
       expect(locale).toMatch(/connectedToast:/);

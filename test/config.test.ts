@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
@@ -83,6 +83,37 @@ describeConfig('Config DB Path', () => {
     expect(parsed.llm.provider).toBe('gemini');
     expect(parsed.llm.apiKey).toBe('test-key');
     expect(parsed.server.port).toBe(3000);
+  });
+
+  it('keeps HTTPS disabled when loading protected-share settings saved before the activation flag', async () => {
+    writeFileSync(
+      join(tmpDir, 'config.json'),
+      JSON.stringify({
+        traefik: {
+          mode: 'managed',
+          protectedShare: {
+            publicHost: '34.64.12.34',
+            acmeEmail: 'owner@example.com',
+          },
+        },
+      }),
+      'utf-8',
+    );
+    const previousDataDir = process.env.OPENLANDER_DATA_DIR;
+    process.env.OPENLANDER_DATA_DIR = tmpDir;
+    vi.resetModules();
+    try {
+      const { loadConfig: loadIsolatedConfig } = await import('../src/config/index.js');
+      expect(loadIsolatedConfig().traefik.protectedShare).toEqual({
+        enabled: false,
+        publicHost: '34.64.12.34',
+        acmeEmail: 'owner@example.com',
+      });
+    } finally {
+      if (previousDataDir === undefined) delete process.env.OPENLANDER_DATA_DIR;
+      else process.env.OPENLANDER_DATA_DIR = previousDataDir;
+      vi.resetModules();
+    }
   });
 });
 

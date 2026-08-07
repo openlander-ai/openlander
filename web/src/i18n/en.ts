@@ -1510,6 +1510,8 @@ export const translations = {
       setupConfirm: 'Save and share',
       runningApplicationRequired: 'Start an HTTP Application to publish this Project.',
       notEligible: 'A running HTTP Application with a detected port is required.',
+      httpsPortUnavailable:
+        'Port 443 is already in use on this server. Free it or use Cloudflare Tunnel.',
       publishFailed: 'Could not share this Application.',
       unpublishFailed: 'Could not stop public access.',
       stopTitle: 'Stop public access?',
@@ -2624,10 +2626,9 @@ export const translations = {
       securityNote:
         'Only ports 80 and 443 need to be open. Application ports remain private, and each shared Application gets its own access-code gate.',
       managedRequired: 'Protected sharing currently requires OpenLander-managed Traefik.',
-      save: 'Save and apply',
-      saving: 'Applying…',
-      saved: 'Protected sharing settings were applied.',
-      savedRestartPending: 'Settings were saved. Traefik will retry when Docker is available.',
+      save: 'Save settings',
+      saving: 'Saving…',
+      saved: 'Settings saved. HTTPS starts when you share an Application.',
       loadFailed: 'Could not load protected sharing settings.',
       saveFailed: 'Could not save protected sharing settings.',
     },

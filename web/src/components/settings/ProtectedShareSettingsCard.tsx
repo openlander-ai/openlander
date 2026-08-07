@@ -58,11 +58,7 @@ export function ProtectedShareSettingsCard() {
       setPublicHost(next.publicHost);
       setAcmeEmail(next.acmeEmail);
       setCertificateSettingsOpen(false);
-      toast.success(
-        next.proxyApplied
-          ? t('webServer.protectedShare.saved')
-          : t('webServer.protectedShare.savedRestartPending'),
-      );
+      toast.success(t('webServer.protectedShare.saved'));
     } catch {
       toast.error(t('webServer.protectedShare.saveFailed'));
     } finally {

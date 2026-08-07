@@ -48,7 +48,12 @@ import { RecoveryCoordinator } from './_ai-ops/recovery-coordinator.js';
 import { handleDestructiveMcpApproval } from './mcp/destructive-executor.js';
 import { eventBus } from './events/index.js';
 import type { EventBus } from './events/index.js';
-import { getDataDir, normalizeLlmConfig, type OpenLanderConfig } from './config/index.js';
+import {
+  getDataDir,
+  normalizeLlmConfig,
+  saveConfig,
+  type OpenLanderConfig,
+} from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { createModuleLogger } from './lib/logger.js';
 import type { AgentPool } from './_ai-ops/agent-pool.js';
@@ -390,7 +395,7 @@ export async function createAppContext(
     instanceId,
     protectedShareConfig: () => config.traefik.protectedShare,
   });
-  const publicShare = new ProtectedPublicShareManager(db, config, traefik);
+  const publicShare = new ProtectedPublicShareManager(db, config, traefik, saveConfig);
 
   const llmCircuitBreaker = new LlmCircuitBreaker();
 

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Defer protected-share HTTPS activation until the first Application is shared,
+  report host port 443 conflicts clearly, and restore the HTTP-only proxy when
+  activation fails.
+
 ## [0.3.3-rc.1] - 2026-08-07
 
 ### Added

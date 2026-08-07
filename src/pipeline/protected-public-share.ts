@@ -83,6 +83,32 @@ export function isValidProtectedShareAcmeEmail(value: string): boolean {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function normalizeProtectedShareProxyError(error: unknown): OpenLanderError {
+  const message = errorMessage(error);
+  const mentionsHttpsPort = /(?:0\.0\.0\.0:443|\[::\]:443|port\s+443|443\/tcp)/i.test(message);
+  const isBindConflict = /(?:address already in use|port is already allocated|bind failed)/i.test(
+    message,
+  );
+  if (mentionsHttpsPort && isBindConflict) {
+    return new OpenLanderError(
+      'Host port 443 is already in use. Free it or use Cloudflare Tunnel.',
+      'PROTECTED_SHARE_HTTPS_PORT_UNAVAILABLE',
+      409,
+      { port: 443, reason: 'host_port_in_use' },
+    );
+  }
+  return new OpenLanderError(
+    'Could not activate the protected sharing proxy.',
+    'PROTECTED_SHARE_PROXY_APPLY_FAILED',
+    500,
+    { reason: 'traefik_start_failed' },
+  );
+}
+
 function isIpv4(value: string): boolean {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value);
 }
@@ -132,6 +158,7 @@ export class ProtectedPublicShareManager {
     private readonly db: Database,
     private readonly config: OpenLanderConfig,
     private readonly traefik: TraefikManager,
+    private readonly persistConfig: (config: OpenLanderConfig) => void = () => undefined,
   ) {}
 
   async getPublicAccess(input: {
@@ -420,7 +447,34 @@ export class ProtectedPublicShareManager {
   }
 
   private async ensureIngressNetworks(): Promise<void> {
-    await this.traefik.start();
+    const protectedShare = this.config.traefik.protectedShare;
+    if (!protectedShare.enabled) {
+      protectedShare.enabled = true;
+      this.persistConfig(this.config);
+      try {
+        await this.traefik.start();
+      } catch (error) {
+        protectedShare.enabled = false;
+        this.persistConfig(this.config);
+        try {
+          await this.traefik.start();
+        } catch {
+          throw new OpenLanderError(
+            'HTTPS activation failed and the HTTP proxy could not be restored.',
+            'PROTECTED_SHARE_PROXY_RECOVERY_FAILED',
+            500,
+            { reason: 'proxy_recovery_failed' },
+          );
+        }
+        throw normalizeProtectedShareProxyError(error);
+      }
+    } else {
+      try {
+        await this.traefik.start();
+      } catch (error) {
+        throw normalizeProtectedShareProxyError(error);
+      }
+    }
     const [projects, services] = await Promise.all([
       this.db.listProjects(undefined, { includeArchived: false }),
       this.db.listServices(),

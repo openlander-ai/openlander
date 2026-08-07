@@ -195,6 +195,11 @@ export function PublicAccessControl({
               ? t('projectDetail.publicAccess.cloudflareNotEligible')
               : t('projectDetail.publicAccess.notEligible'),
           );
+        } else if (
+          error instanceof ApiError &&
+          error.code === 'PROTECTED_SHARE_HTTPS_PORT_UNAVAILABLE'
+        ) {
+          toast.error(t('projectDetail.publicAccess.httpsPortUnavailable'));
         } else {
           toast.error(t('projectDetail.publicAccess.publishFailed'));
         }

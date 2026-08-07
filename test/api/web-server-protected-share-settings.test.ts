@@ -19,7 +19,7 @@ function harness() {
     traefik: {
       mode: 'managed',
       externalNetwork: undefined,
-      protectedShare: { publicHost: '', acmeEmail: '' },
+      protectedShare: { enabled: false, publicHost: '', acmeEmail: '' },
     },
   };
   const traefik = {
@@ -69,7 +69,7 @@ describe('Web Server protected share settings', () => {
     expect(saveConfig).not.toHaveBeenCalled();
   });
 
-  it('normalizes settings, persists them, and reconciles managed Traefik', async () => {
+  it('normalizes and persists settings without claiming HTTPS before the first share', async () => {
     const { app, config, traefik } = harness();
     const response = await app.request('/api/web-server/protected-share-settings', {
       method: 'PUT',
@@ -89,11 +89,12 @@ describe('Web Server protected share settings', () => {
       proxyApplied: true,
     });
     expect(config.traefik.protectedShare).toEqual({
+      enabled: false,
       publicHost: 'share.example.com',
       acmeEmail: 'admin@example.com',
     });
     expect(saveConfig).toHaveBeenCalledOnce();
-    expect(traefik.start).toHaveBeenCalledOnce();
+    expect(traefik.start).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid public host before changing runtime configuration', async () => {
@@ -106,8 +107,39 @@ describe('Web Server protected share settings', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'INVALID_PUBLIC_HOST' });
-    expect(config.traefik.protectedShare).toEqual({ publicHost: '', acmeEmail: '' });
+    expect(config.traefik.protectedShare).toEqual({
+      enabled: false,
+      publicHost: '',
+      acmeEmail: '',
+    });
     expect(saveConfig).not.toHaveBeenCalled();
     expect(traefik.start).not.toHaveBeenCalled();
+  });
+
+  it('restores active settings when managed Traefik cannot apply an edit', async () => {
+    const { app, config, traefik } = harness();
+    config.traefik.protectedShare = {
+      enabled: true,
+      publicHost: 'old.example.com',
+      acmeEmail: 'old@example.com',
+    };
+    traefik.start
+      .mockRejectedValueOnce(new Error('Bind for 0.0.0.0:443 failed: port is already allocated'))
+      .mockResolvedValueOnce(undefined);
+
+    const response = await app.request('/api/web-server/protected-share-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicHost: 'new.example.com', acmeEmail: 'new@example.com' }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(config.traefik.protectedShare).toEqual({
+      enabled: true,
+      publicHost: 'old.example.com',
+      acmeEmail: 'old@example.com',
+    });
+    expect(saveConfig).toHaveBeenCalledTimes(2);
+    expect(traefik.start).toHaveBeenCalledTimes(2);
   });
 });

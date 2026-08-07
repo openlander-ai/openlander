@@ -1563,6 +1563,8 @@ export const translations = {
       setupConfirm: '저장하고 공유',
       runningApplicationRequired: 'HTTP 애플리케이션을 실행하면 공개할 수 있습니다.',
       notEligible: '실행 중이며 포트가 감지된 HTTP 애플리케이션이 필요합니다.',
+      httpsPortUnavailable:
+        '이 서버에서 443 포트를 이미 사용 중입니다. 포트를 비우거나 Cloudflare 터널을 사용하세요.',
       publishFailed: '애플리케이션을 외부 공유하지 못했습니다.',
       unpublishFailed: '공개를 중지하지 못했습니다.',
       stopTitle: '외부 공개를 중지할까요?',
@@ -2801,10 +2803,9 @@ export const translations = {
       securityNote:
         '방화벽에서는 80·443 포트만 열면 됩니다. 애플리케이션 포트는 비공개로 유지되고 공유한 앱마다 접근코드 화면이 생깁니다.',
       managedRequired: '보호된 외부 공유는 현재 OpenLander 관리형 Traefik에서만 지원합니다.',
-      save: '저장하고 적용',
-      saving: '적용 중…',
-      saved: '보호 공유 설정을 적용했습니다.',
-      savedRestartPending: '설정은 저장했습니다. Docker가 연결되면 Traefik 적용을 다시 시도합니다.',
+      save: '설정 저장',
+      saving: '저장 중…',
+      saved: '설정을 저장했습니다. 애플리케이션을 공유할 때 HTTPS를 시작합니다.',
       loadFailed: '보호 공유 설정을 불러오지 못했습니다.',
       saveFailed: '보호 공유 설정을 저장하지 못했습니다.',
     },
