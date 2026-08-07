@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Align the protected-share access gate with OpenLander's light product design,
+  clarify the shared Application and action, and connect validation errors to
+  the access-code field for assistive technology.
+
 ## [0.3.3-rc.3] - 2026-08-07
 
 ### Fixed
