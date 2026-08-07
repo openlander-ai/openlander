@@ -49,9 +49,33 @@ describe('protected share visitor gateway', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     const html = await response.text();
     expect(html).toContain('OpenLander 보호 공유');
+    expect(html).toContain('<h1>demo</h1>');
+    expect(html).toContain('공유 코드를 입력하면 앱을 열 수 있습니다.');
+    expect(html).toContain('>앱 열기</button>');
     expect(html).toContain('name="access_code"');
     expect(html).toContain('value="/dashboard?tab=one"');
+    expect(html).toContain('color-scheme:light');
+    expect(html).not.toContain('radial-gradient');
     expect(html).not.toContain('hash');
+  });
+
+  it('connects an invalid share-code error to the input', async () => {
+    const { app } = harness({ validCode: false });
+    const response = await app.request('/__openlander/share/verify', {
+      method: 'POST',
+      headers: {
+        Host: 'demo.34-64-12-34.sslip.io',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'access_code=AAAA-BBBB',
+    });
+
+    expect(response.status).toBe(401);
+    const html = await response.text();
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-describedby="access-code-error"');
+    expect(html).toContain('id="access-code-error"');
+    expect(html).toContain('That share code is not valid.');
   });
 
   it('allows on-demand TLS only for an active protected-share hostname', async () => {

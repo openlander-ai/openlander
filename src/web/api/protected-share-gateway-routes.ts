@@ -66,23 +66,25 @@ function accessPage(params: {
 }): string {
   const copy = params.korean
     ? {
-        eyebrow: 'OpenLander 보호 공유',
-        title: `${params.target.project.name}에 접근`,
-        description: '계속하려면 공유받은 접근 코드를 입력하세요.',
-        label: '접근 코드',
+        brand: 'OpenLander',
+        title: params.target.project.name,
+        description: '공유 코드를 입력하면 앱을 열 수 있습니다.',
+        label: '공유 코드',
         placeholder: 'XXXX-XXXX',
-        submit: '계속',
-        invalid: '접근 코드가 올바르지 않습니다.',
+        submit: '앱 열기',
+        trust: 'OpenLander 보호 공유',
+        invalid: '공유 코드가 올바르지 않습니다.',
         limited: '시도가 너무 많습니다. 잠시 후 다시 시도하세요.',
       }
     : {
-        eyebrow: 'OpenLander protected share',
-        title: `Access ${params.target.project.name}`,
-        description: 'Enter the access code you received to continue.',
-        label: 'Access code',
+        brand: 'OpenLander',
+        title: params.target.project.name,
+        description: 'Enter the share code to open this app.',
+        label: 'Share code',
         placeholder: 'XXXX-XXXX',
-        submit: 'Continue',
-        invalid: 'That access code is not valid.',
+        submit: 'Open app',
+        trust: 'Protected by OpenLander',
+        invalid: 'That share code is not valid.',
         limited: 'Too many attempts. Try again in a few minutes.',
       };
   const error = params.error ? copy[params.error] : '';
@@ -91,31 +93,45 @@ function accessPage(params: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${escapeHtml(copy.title)}</title>
+  <meta name="theme-color" content="#fbfcfd">
+  <title>${escapeHtml(copy.title)} · OpenLander</title>
   <style>
-    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#0b0d10;color:#f5f7fa}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#18202b 0,#0b0d10 48%)}
-    main{width:min(100%,400px);border:1px solid #2b3440;border-radius:16px;background:#11151a;padding:28px;box-shadow:0 24px 80px #0008}
-    .mark{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#e7ff4f;color:#111;font-weight:900;margin-bottom:22px}
-    .eyebrow{margin:0 0 7px;color:#aeb8c5;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}
-    h1{font-size:24px;line-height:1.25;margin:0 0 8px}p{color:#aeb8c5;font-size:14px;line-height:1.55;margin:0 0 24px}
-    label{display:block;font-size:13px;font-weight:650;margin-bottom:8px}input{width:100%;height:46px;border:1px solid #384554;border-radius:9px;background:#0b0e12;color:#fff;padding:0 13px;font:600 16px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;outline:none}
-    input:focus{border-color:#d7f540;box-shadow:0 0 0 3px #d7f54022}.error{color:#ff8f8f;font-size:12px;margin:9px 0 0}
-    button{width:100%;height:44px;border:0;border-radius:9px;background:#d7f540;color:#111;font-weight:750;margin-top:18px;cursor:pointer}button:hover{background:#e4ff68}
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#fbfcfd;color:#17191c;--primary:oklch(0.62 0.16 152);--primary-hover:oklch(0.56 0.17 152);--error:oklch(0.58 0.19 25)}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:32px 24px;background:#fbfcfd;-webkit-font-smoothing:antialiased}
+    main{width:min(100%,360px)}
+    header{text-align:center;margin-bottom:28px}
+    .brand{margin:0 0 28px;color:#17191c;font-size:30px;font-weight:750;letter-spacing:-.035em}
+    h1{margin:0 0 8px;color:#17191c;font-size:22px;line-height:1.3;font-weight:700;letter-spacing:-.025em;overflow-wrap:anywhere}
+    .description{margin:0;color:#686d74;font-size:14px;line-height:1.55}
+    label{display:block;margin-bottom:8px;color:#30343a;font-size:13px;font-weight:600}
+    input{width:100%;height:42px;border:1px solid #d8dce1;border-radius:8px;background:#fff;color:#17191c;padding:0 12px;font:600 15px ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+    input::placeholder{color:#a1a6ad;font-weight:500}
+    input:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--primary) 14%,transparent)}
+    .error{margin:8px 0 0;color:var(--error);font-size:12px;line-height:1.45}
+    button{width:100%;height:40px;border:0;border-radius:8px;background:var(--primary);color:#fff;font:650 14px Inter,ui-sans-serif,system-ui,sans-serif;margin-top:16px;cursor:pointer;transition:background .15s ease,transform .15s ease}
+    button:hover{background:var(--primary-hover)}
+    button:active{transform:translateY(1px)}
+    button:focus-visible{outline:3px solid color-mix(in oklch,var(--primary) 24%,transparent);outline-offset:2px}
+    footer{margin-top:24px;color:#969ba2;font-size:12px;line-height:1.5;text-align:center}
+    @media(max-width:480px){body{padding:24px 20px}header{margin-bottom:24px}.brand{margin-bottom:24px;font-size:28px}}
+    @media(prefers-reduced-motion:reduce){input,button{transition:none}}
   </style>
 </head>
 <body><main>
-  <div class="mark" aria-hidden="true">O</div>
-  <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
-  <h1>${escapeHtml(copy.title)}</h1>
-  <p>${escapeHtml(copy.description)}</p>
+  <header>
+    <p class="brand">${escapeHtml(copy.brand)}</p>
+    <h1>${escapeHtml(copy.title)}</h1>
+    <p class="description">${escapeHtml(copy.description)}</p>
+  </header>
   <form method="post" action="/__openlander/share/verify">
     <input type="hidden" name="next" value="${escapeHtml(params.nextPath)}">
     <label for="access-code">${escapeHtml(copy.label)}</label>
-    <input id="access-code" name="access_code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="128" placeholder="${copy.placeholder}" required autofocus>
-    ${error ? `<div class="error" role="alert">${escapeHtml(error)}</div>` : ''}
+    <input id="access-code" name="access_code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="128" placeholder="${copy.placeholder}" required autofocus${error ? ' aria-invalid="true" aria-describedby="access-code-error"' : ''}>
+    ${error ? `<div id="access-code-error" class="error" role="alert">${escapeHtml(error)}</div>` : ''}
     <button type="submit">${escapeHtml(copy.submit)}</button>
   </form>
+  <footer>${escapeHtml(copy.trust)}</footer>
 </main></body></html>`;
 }
 
