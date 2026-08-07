@@ -18,6 +18,12 @@ export interface DestructiveMcpPlanSummary {
   tool: string;
   args: Record<string, unknown>;
   targetProjectId: string | null;
+  cleanupResult?: {
+    level: string;
+    total_reclaimed_mb: number;
+    docker_usage_before_bytes: number | null;
+    docker_usage_after_bytes: number | null;
+  };
   failure?: {
     code: string;
     message?: string;
@@ -37,6 +43,7 @@ const safeArgKeys = new Set([
   'target_project_id',
   'network_name',
   'network_id',
+  'level',
 ]);
 
 export function buildMcpActionStatusCall(actionRunId: string): McpCompositeCall {
@@ -45,6 +52,16 @@ export function buildMcpActionStatusCall(actionRunId: string): McpCompositeCall 
     arguments: {
       action: 'mcp_action_status',
       params: { action_run_id: actionRunId },
+    },
+  };
+}
+
+export function buildDockerDiskUsageCall(): McpCompositeCall {
+  return {
+    tool: 'openlander_managed_service',
+    arguments: {
+      action: 'get_disk_usage',
+      params: {},
     },
   };
 }
@@ -100,6 +117,16 @@ export function lifecycleEffectForTool(toolName: string): LifecycleEffect {
     };
   }
 
+  if (toolName === 'cleanup_docker') {
+    return {
+      kind: 'cleanup_docker',
+      reversible: false,
+      runtime: 'preserve_running_containers_and_in_use_images',
+      data: 'prune_docker_cache_by_requested_level',
+      hard_delete: false,
+    };
+  }
+
   return {
     kind: 'approval_hold',
     reversible: false,
@@ -136,6 +163,14 @@ export function afterApprovalGuidanceForTool(toolName: string): Record<string, s
     };
   }
 
+  if (toolName === 'cleanup_docker') {
+    return {
+      succeeded: 'Call get_disk_usage to confirm the remaining Docker disk usage.',
+      rejected: 'Stop and report that the operator rejected Docker cleanup.',
+      failed: 'Report the cleanup failure; do not retry with a stronger level automatically.',
+    };
+  }
+
   return {
     succeeded: 'Poll mcp_action_status until the action reaches a terminal status.',
     rejected: 'Stop and report that the human rejected the request.',
@@ -159,6 +194,12 @@ export function summarizeDestructiveArgs(
   }
 
   return summary;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 export function parseDestructiveMcpPlan(plan: string | null): DestructiveMcpPlanSummary | null {
@@ -215,11 +256,34 @@ export function parseDestructiveMcpPlan(plan: string | null): DestructiveMcpPlan
             ...(Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
           }
         : undefined;
+    const result = asRecord(parsed['result']);
+    const dockerUsage = asRecord(result?.['dockerUsage']);
+    const beforeUsage = asRecord(dockerUsage?.['before']);
+    const afterUsage = asRecord(dockerUsage?.['after']);
+    const level = result?.['level'];
+    const totalReclaimedMB = result?.['totalReclaimedMB'];
+    const beforeBytes = beforeUsage?.['reportedTotalSizeBytes'];
+    const afterBytes = afterUsage?.['reportedTotalSizeBytes'];
+    const cleanupResult =
+      parsed['tool'] === 'cleanup_docker' &&
+      typeof level === 'string' &&
+      typeof totalReclaimedMB === 'number' &&
+      Number.isFinite(totalReclaimedMB)
+        ? {
+            level,
+            total_reclaimed_mb: totalReclaimedMB,
+            docker_usage_before_bytes:
+              typeof beforeBytes === 'number' && Number.isFinite(beforeBytes) ? beforeBytes : null,
+            docker_usage_after_bytes:
+              typeof afterBytes === 'number' && Number.isFinite(afterBytes) ? afterBytes : null,
+          }
+        : undefined;
 
     return {
       tool: parsed['tool'],
       args,
       targetProjectId,
+      ...(cleanupResult ? { cleanupResult } : {}),
       ...(failure ? { failure } : {}),
     };
   } catch {

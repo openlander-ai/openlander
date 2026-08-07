@@ -9,7 +9,7 @@ import {
   removeVolumeSchema,
 } from './schemas.js';
 import { pruneBuildCache, pruneDanglingImages, pruneUnusedImages } from '../../pipeline/cleanup.js';
-import type { ToolDef } from './types.js';
+import type { ToolContext, ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-volume');
 
@@ -64,6 +64,59 @@ function getVolumeUsageSizeBytes(volume: unknown): number | undefined {
   }
 
   return getNumber(usageData['Size']);
+}
+
+interface DockerCleanupUsageSnapshot {
+  available: boolean;
+  imagesSizeBytes?: number;
+  containerWritableSizeBytes?: number;
+  volumesSizeBytes?: number;
+  buildCacheSizeBytes?: number;
+  reportedTotalSizeBytes?: number;
+  error?: string;
+}
+
+function sumRecordSizes(items: unknown[], readSize: (item: unknown) => number): number {
+  return items.reduce<number>((sum, item) => sum + readSize(item), 0);
+}
+
+function summarizeDockerCleanupUsage(raw: unknown): DockerCleanupUsageSnapshot {
+  if (!isRecord(raw)) return { available: false, error: 'Docker disk usage was unavailable.' };
+
+  const images = Array.isArray(raw['Images']) ? (raw['Images'] as unknown[]) : [];
+  const containers = Array.isArray(raw['Containers']) ? (raw['Containers'] as unknown[]) : [];
+  const volumes = Array.isArray(raw['Volumes']) ? (raw['Volumes'] as unknown[]) : [];
+  const buildCache = Array.isArray(raw['BuildCache']) ? (raw['BuildCache'] as unknown[]) : [];
+  const imagesSizeBytes = sumRecordSizes(images, (item) =>
+    isRecord(item) ? (getNumber(item['Size']) ?? 0) : 0,
+  );
+  const containerWritableSizeBytes = sumRecordSizes(containers, (item) =>
+    isRecord(item) ? (getNumber(item['SizeRw']) ?? 0) : 0,
+  );
+  const volumesSizeBytes = sumRecordSizes(volumes, (item) => getVolumeUsageSizeBytes(item) ?? 0);
+  const buildCacheSizeBytes = sumRecordSizes(buildCache, (item) =>
+    isRecord(item) ? (getNumber(item['Size']) ?? 0) : 0,
+  );
+
+  return {
+    available: true,
+    imagesSizeBytes,
+    containerWritableSizeBytes,
+    volumesSizeBytes,
+    buildCacheSizeBytes,
+    reportedTotalSizeBytes:
+      imagesSizeBytes + containerWritableSizeBytes + volumesSizeBytes + buildCacheSizeBytes,
+  };
+}
+
+async function captureDockerCleanupUsage(
+  appCtx: ToolContext['appCtx'],
+): Promise<DockerCleanupUsageSnapshot> {
+  try {
+    return summarizeDockerCleanupUsage(await appCtx.docker.getDiskUsage(8_000));
+  } catch (error) {
+    return { available: false, error: getErrorMessage(error) };
+  }
 }
 
 export const volumeToolDefs: ToolDef[] = [
@@ -370,9 +423,9 @@ export const volumeToolDefs: ToolDef[] = [
     name: 'cleanup_docker',
     riskLevel: 'medium',
     description:
-      'Free Docker disk space by removing dangling images, build cache, and unused images. Host-wide operation — affects all Docker workloads, not just OpenLander projects. Use when disk is running low, Docker builds fail with storage errors, or user asks to clean up. Workflow: get_disk_usage → cleanup_docker → get_disk_usage to show reclaimed space. Three levels: "soft" removes only dangling (untagged) images. "standard" (default) also clears build cache — may slow the next build. "aggressive" additionally removes all unused images older than 24h — frees the most space but removes cached base images and possibly stored rollback images. Does NOT remove running containers, mounted volumes, or images referenced by a container.',
+      'Free Docker disk space by removing dangling images, build cache, and unused images. Host-wide operation — affects all Docker workloads, not just OpenLander projects, and follows the global destructive_actions permission. Use when disk is running low, Docker builds fail with storage errors, or user asks to clean up. Workflow: get_disk_usage → cleanup_docker → get_disk_usage to confirm remaining usage. The cleanup result also includes compact before/after usage snapshots. Three levels: "soft" removes only dangling (untagged) images. "standard" (default) also clears build cache — may slow the next build. "aggressive" additionally removes all unused images older than 24h — frees the most space but removes cached base images and possibly stored rollback images. Does NOT remove running containers, mounted volumes, or images referenced by a container.',
     mcpDescription:
-      'Free Docker disk space by pruning dangling images, build cache, and unused images. Host-wide — affects all Docker workloads on this host. Recommended workflow: call get_disk_usage first, then cleanup_docker, then get_disk_usage again to report reclaimed space. Levels: "soft" (dangling images only), "standard" (default — also clears build cache, may slow next build), "aggressive" (also removes unused images older than 24h, may remove rollback images). Does NOT remove running containers, mounted volumes, or in-use images.',
+      'Free Docker disk space by pruning dangling images, build cache, and unused images. Host-wide and controlled only by the global destructive_actions permission: it may execute, wait for approval, or be blocked. Recommended workflow: call get_disk_usage first, then cleanup_docker, then get_disk_usage again to confirm remaining usage. The result includes reclaimed MB and compact before/after usage snapshots. Levels: "soft" (dangling images only), "standard" (default — also clears build cache, may slow next build), "aggressive" (also removes unused images older than 24h, may remove rollback images). Does NOT remove running containers, mounted volumes, or in-use images.',
     inputSchema: cleanupDockerSchema,
     execute: async (args, { appCtx }) => {
       const level = (args['level'] as string | undefined) ?? 'standard';
@@ -390,6 +443,7 @@ export const volumeToolDefs: ToolDef[] = [
         }
       }
 
+      const dockerUsageBefore = await captureDockerCleanupUsage(appCtx);
       const dangling = pruneDanglingImages();
       totalReclaimedMB += dangling.reclaimedMB;
 
@@ -414,6 +468,7 @@ export const volumeToolDefs: ToolDef[] = [
       }
 
       totalReclaimedMB = Math.round(totalReclaimedMB * 100) / 100;
+      const dockerUsageAfter = await captureDockerCleanupUsage(appCtx);
       log.info({ level, totalReclaimedMB }, 'Docker cleanup completed via MCP');
 
       return {
@@ -422,6 +477,10 @@ export const volumeToolDefs: ToolDef[] = [
         ...(buildCache ? { buildCache } : {}),
         ...(unusedImages ? { unusedImages } : {}),
         totalReclaimedMB,
+        dockerUsage: {
+          before: dockerUsageBefore,
+          after: dockerUsageAfter,
+        },
         ...(warnings.length > 0 ? { warnings } : {}),
       };
     },

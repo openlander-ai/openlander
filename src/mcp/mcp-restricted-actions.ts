@@ -8,7 +8,7 @@
  *
  * Three tiers:
  * - HUMAN_UI_ONLY_TOOLS: real tool defs that exist but are blocked from MCP
- *   execution (managed-infrastructure destruction). Invoking via MCP returns
+ *   execution (host/platform destruction). Invoking via MCP returns
  *   OPERATION_REQUIRES_HUMAN_UI.
  * - HUMAN_UI_ONLY_ALIASES: names that are NOT MCP tools at all (hard delete /
  *   purge and legacy app lifecycle aliases). The composite intercepts them
@@ -23,7 +23,6 @@ export const HUMAN_UI_ONLY_TOOLS = [
   'platform_force_remove',
   'recover_platform',
   'platform_cleanup_orphans',
-  'cleanup_docker',
 ] as const;
 
 export const HUMAN_UI_ONLY_ALIASES = [
@@ -56,6 +55,7 @@ export const APPROVAL_HOLD_TOOLS = [
   'remove_secret_file',
   'remove_git_credential',
   'remove_unused_docker_network',
+  'cleanup_docker',
 ] as const;
 
 export type HumanUiOnlyTool = (typeof HUMAN_UI_ONLY_TOOLS)[number];

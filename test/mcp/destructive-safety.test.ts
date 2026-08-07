@@ -49,18 +49,72 @@ function createContext(overrides?: {
 }
 
 describe('MCP destructive safety', () => {
-  it('keeps host cleanup tools human-UI-only at the MCP boundary', async () => {
+  it('allows Docker cleanup immediately under the default global permission', async () => {
     const context = createContext();
-    const result = await maybeHandleMcpSafety(createTool('cleanup_docker'), {}, context);
+    const result = await maybeHandleMcpSafety(
+      createTool('cleanup_docker'),
+      { level: 'standard' },
+      context,
+    );
+
+    expect(result).toBeUndefined();
+    expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
+  });
+
+  it('holds Docker cleanup when the global destructive permission requires approval', async () => {
+    const context = createContext({
+      settings: {
+        'security.operation_permissions.global': JSON.stringify({
+          destructive_actions: 'approval_required',
+          database_access: 'allow',
+        }),
+      },
+    });
+    const result = await maybeHandleMcpSafety(
+      createTool('cleanup_docker'),
+      { level: 'aggressive' },
+      context,
+    );
 
     expect(result).toMatchObject({
-      error: 'OPERATION_REQUIRES_HUMAN_UI',
-      code: 'OPERATION_REQUIRES_HUMAN_UI',
-      web_ui: {
-        requires_human: true,
+      status: 'pending_approval',
+      tool: 'cleanup_docker',
+      action_run_id: 'action-run-1',
+      effect_preview: {
+        kind: 'cleanup_docker',
+        runtime: 'preserve_running_containers_and_in_use_images',
       },
-      safe_alternatives: [],
-      do_not_substitute: expect.arrayContaining(['cleanup_docker', 'remove_service']),
+      after_approval: {
+        succeeded: expect.stringContaining('get_disk_usage'),
+      },
+    });
+    expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: '', toolName: 'cleanup_docker' }),
+    );
+    const pendingInput = vi.mocked(context.appCtx.db.createPendingMcpApproval).mock.calls[0]?.[0];
+    expect(pendingInput?.plan).toContain('"level":"aggressive"');
+  });
+
+  it('blocks Docker cleanup when the global destructive permission is blocked', async () => {
+    const context = createContext({
+      settings: {
+        'security.operation_permissions.global': JSON.stringify({
+          destructive_actions: 'block',
+          database_access: 'allow',
+        }),
+      },
+    });
+    const result = await maybeHandleMcpSafety(
+      createTool('cleanup_docker'),
+      { level: 'soft' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      error: 'OPERATION_PERMISSION_DENIED',
+      tool: 'cleanup_docker',
+      details: { permission: 'destructive_actions', project_id: null, service_id: null },
     });
     expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
   });
@@ -517,6 +571,65 @@ describe('MCP destructive safety', () => {
         ]),
       },
     });
+  });
+
+  it('returns a compact Docker cleanup result and disk-usage follow-up after approval', async () => {
+    const statusTool = monitoringToolDefs.find((tool) => tool.name === 'mcp_action_status');
+    expect(statusTool).toBeDefined();
+    const context = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getActionRun: vi.fn().mockResolvedValue({
+            id: 'action-run-cleanup',
+            project_id: '',
+            status: 'succeeded',
+            approval_status: 'approved',
+            approval_tool: 'destructive_mcp',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'cleanup_docker',
+              args: { level: 'standard' },
+              targetProjectId: null,
+              result: {
+                level: 'standard',
+                totalReclaimedMB: 128.5,
+                dockerUsage: {
+                  before: { available: true, reportedTotalSizeBytes: 2_000 },
+                  after: { available: true, reportedTotalSizeBytes: 1_000 },
+                },
+                secret: 'must-not-return',
+              },
+            }),
+            error_message: null,
+            approval_requested_at: '2026-08-06T00:00:00.000Z',
+            approval_resolved_at: '2026-08-06T00:01:00.000Z',
+          }),
+        },
+      } as unknown as AppContext,
+    } as ToolContext;
+
+    const result = await statusTool!.execute({ action_run_id: 'action-run-cleanup' }, context);
+
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      requested_args_summary: { level: 'standard' },
+      lifecycle_effect: { kind: 'cleanup_docker', hard_delete: false },
+      result: {
+        level: 'standard',
+        total_reclaimed_mb: 128.5,
+        docker_usage_before_bytes: 2_000,
+        docker_usage_after_bytes: 1_000,
+      },
+      suggested_call: {
+        tool: 'openlander_managed_service',
+        arguments: { action: 'get_disk_usage', params: {} },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('before/after'),
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('must-not-return');
   });
 
   it('returns not_found from mcp_action_status for unknown action runs', async () => {

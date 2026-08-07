@@ -75,7 +75,7 @@ describe('MCP restricted-action policy (single source)', () => {
 
   it('pins tier sentinels (regression guard, incl. the delete_service dedupe)', () => {
     expect(HUMAN_UI_ONLY_TOOLS).not.toContain('remove_service');
-    expect(HUMAN_UI_ONLY_TOOLS).toContain('cleanup_docker');
+    expect(HUMAN_UI_ONLY_TOOLS).not.toContain('cleanup_docker');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_app');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_project');
     expect(APPROVAL_HOLD_TOOLS).toContain('archive_project');
@@ -88,6 +88,7 @@ describe('MCP restricted-action policy (single source)', () => {
     expect(APPROVAL_HOLD_TOOLS).toContain('remove_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('remove_volume');
     expect(APPROVAL_HOLD_TOOLS).toContain('delete_bucket');
+    expect(APPROVAL_HOLD_TOOLS).toContain('cleanup_docker');
     // delete_service is a (non-tool) alias only — it used to be duplicated into
     // the blocked-tools group, where it was dead since it isn't a real tool def.
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_service');

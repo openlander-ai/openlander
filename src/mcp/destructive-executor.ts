@@ -17,6 +17,7 @@ const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
   'remove_service',
   'remove_volume',
   'delete_bucket',
+  'cleanup_docker',
 ]);
 
 interface DestructiveMcpPlan {

@@ -1,6 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import { DeployLockedError } from '../../src/errors.js';
+
+const dockerCleanupMocks = vi.hoisted(() => ({
+  pruneDanglingImages: vi.fn(),
+  pruneBuildCache: vi.fn(),
+  pruneUnusedImages: vi.fn(),
+}));
+
+vi.mock('../../src/pipeline/cleanup.js', () => dockerCleanupMocks);
+
 import { handleDestructiveMcpApproval } from '../../src/mcp/destructive-executor.js';
 
 function createApprovalContext() {
@@ -32,6 +41,10 @@ function createApprovalContext() {
 }
 
 describe('destructive MCP approval executor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('executes an approved Stateful Compose update through the bound approval plan', async () => {
     const statefulCompose = {
       version: 1,
@@ -450,6 +463,87 @@ describe('destructive MCP approval executor', () => {
     );
     expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
       'action-run-network-cleanup',
+      'succeeded',
+    );
+  });
+
+  it('rechecks global policy and executes approved Docker cleanup with before/after usage', async () => {
+    dockerCleanupMocks.pruneDanglingImages.mockReturnValue({
+      status: 'ok',
+      removed: 1,
+      reclaimedMB: 3,
+    });
+    dockerCleanupMocks.pruneBuildCache.mockReturnValue({
+      status: 'ok',
+      removed: 0,
+      reclaimedMB: 5,
+    });
+
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-docker-cleanup',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'cleanup_docker',
+          args: { level: 'standard' },
+          targetProjectId: null,
+          targetServiceId: null,
+          requestedAt: '2026-08-06T00:00:00.000Z',
+        }),
+      }),
+      getSetting: vi.fn().mockResolvedValue({
+        value: JSON.stringify({
+          destructive_actions: 'approval_required',
+          database_access: 'allow',
+        }),
+      }),
+      listProjects: vi.fn().mockResolvedValue([]),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const docker = {
+      getDiskUsage: vi
+        .fn()
+        .mockResolvedValueOnce({
+          Images: [{ Size: 1_000 }],
+          Containers: [{ SizeRw: 100 }],
+          Volumes: [{ UsageData: { Size: 200 } }],
+          BuildCache: [{ Size: 500 }],
+        })
+        .mockResolvedValueOnce({
+          Images: [{ Size: 700 }],
+          Containers: [{ SizeRw: 100 }],
+          Volumes: [{ UsageData: { Size: 200 } }],
+          BuildCache: [],
+        }),
+    };
+    const ctx = { db, docker } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-docker-cleanup',
+      approved: true,
+      projectId: '',
+    });
+
+    expect(db.getSetting).toHaveBeenCalledWith('security.operation_permissions.global');
+    expect(db.listProjects).toHaveBeenCalledWith('building');
+    expect(dockerCleanupMocks.pruneDanglingImages).toHaveBeenCalledOnce();
+    expect(dockerCleanupMocks.pruneBuildCache).toHaveBeenCalledOnce();
+    expect(dockerCleanupMocks.pruneUnusedImages).not.toHaveBeenCalled();
+    expect(db.updateActionRunPlan).toHaveBeenCalledWith(
+      'action-run-docker-cleanup',
+      expect.stringMatching(
+        /"totalReclaimedMB":8.*"before":\{"available":true.*"reportedTotalSizeBytes":1800.*"after":\{"available":true.*"reportedTotalSizeBytes":1000/,
+      ),
+    );
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(
+      1,
+      'action-run-docker-cleanup',
+      'running',
+    );
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-docker-cleanup',
       'succeeded',
     );
   });

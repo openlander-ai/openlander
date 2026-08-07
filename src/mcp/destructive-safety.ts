@@ -22,6 +22,7 @@ const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
   'remove_service',
   'remove_volume',
   'delete_bucket',
+  'cleanup_docker',
 ]);
 const DATABASE_ACCESS_TOOLS = new Set([
   'describe_data_source',
@@ -53,17 +54,14 @@ interface SafetyResult {
 
 function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
   const error = new OperationRequiresHumanUiError(toolName);
-  const isHostCleanup = toolName === 'cleanup_docker';
-  const target = isHostCleanup
-    ? 'OpenLander web UI host cleanup or an operator-run maintenance workflow'
-    : 'the OpenLander web UI typed-confirm flow for that project, service, volume, or bucket';
+  const target = 'an operator-run host maintenance workflow';
   return {
     error: error.code,
     code: error.code,
     message: error.message,
     details: error.details,
     web_ui: {
-      surface: isHostCleanup ? 'host_cleanup' : 'typed_confirm_danger',
+      surface: 'host_maintenance',
       requires_human: true,
     },
     safe_alternatives: [],

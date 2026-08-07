@@ -27,6 +27,7 @@ import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import {
   archivedServicesSuggestedCall,
+  buildDockerDiskUsageCall,
   buildMcpActionStatusCall,
   lifecycleEffectForTool,
   parseDestructiveMcpPlan,
@@ -1093,7 +1094,9 @@ export const monitoringToolDefs: ToolDef[] = [
       const suggestedCall =
         status === 'succeeded' && lifecycleEffect?.kind === 'archive'
           ? archivedServicesSuggestedCall(projectId)
-          : undefined;
+          : status === 'succeeded' && lifecycleEffect?.kind === 'cleanup_docker'
+            ? buildDockerDiskUsageCall()
+            : undefined;
       const guidance =
         status === 'pending'
           ? {
@@ -1130,15 +1133,24 @@ export const monitoringToolDefs: ToolDef[] = [
                         'Call update_app only when no container was restored and the user wants the service running again.',
                       ],
                     }
-                  : status === 'failed'
+                  : status === 'succeeded' && lifecycleEffect?.kind === 'cleanup_docker'
                     ? {
                         message:
-                          'The held MCP action failed. Report the failure and use diagnostic actions if relevant.',
+                          'Docker cleanup completed. The result contains reclaimed space and the captured before/after usage totals.',
                         next_steps: [
-                          'Do not substitute hard delete, remove_service, or cleanup_docker.',
+                          'Use suggested_call to confirm the current Docker disk usage.',
+                          'Do not automatically retry with a stronger cleanup level.',
                         ],
                       }
-                    : undefined;
+                    : status === 'failed'
+                      ? {
+                          message:
+                            'The held MCP action failed. Report the failure and use diagnostic actions if relevant.',
+                          next_steps: [
+                            'Do not substitute hard delete, remove_service, or cleanup_docker.',
+                          ],
+                        }
+                      : undefined;
 
       return {
         actionRunId: run.id,
@@ -1153,6 +1165,7 @@ export const monitoringToolDefs: ToolDef[] = [
         requestedArgsSummary,
         requested_args_summary: requestedArgsSummary,
         lifecycle_effect: lifecycleEffect,
+        result: planSummary?.cleanupResult,
         poll_call: pollCall,
         suggested_call: suggestedCall,
         error: run.error_message,
@@ -1459,7 +1472,7 @@ function buildHostResourceNextSteps(findings: string[]): string[] {
   }
   if (findings.includes('host_disk_high')) {
     steps.push(
-      'Call openlander_managed_service.get_disk_usage to confirm Docker disk pressure; cleanup_docker is human-UI / host-maintenance only and blocked over MCP.',
+      'Call openlander_managed_service.get_disk_usage to confirm Docker disk pressure; cleanup_docker follows the global destructive permission and may execute, wait for approval, or be blocked.',
     );
   }
   if (findings.includes('docker_disk_usage_unavailable')) {

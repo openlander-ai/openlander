@@ -83,7 +83,7 @@ If the same token is sent to `/api`, OpenLander returns `MCP_TOKEN_USED_ON_REST_
 with the correct `/mcp` endpoint and a registration example.
 
 Destructive MCP operations are intentionally gated. Host-maintenance actions
-`platform_force_remove`, `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`
+`platform_force_remove`, `recover_platform`, and `platform_cleanup_orphans`
 remain human-UI-only and return `OPERATION_REQUIRES_HUMAN_UI`.
 
 Database/Cache/Storage deletion actions `remove_service`, `remove_volume`, and `delete_bucket`
@@ -92,6 +92,11 @@ global, Project, or service setting to `approval_required` (returns a pollable `
 `block` (returns `OPERATION_PERMISSION_DENIED`). Service overrides win over Project overrides, which
 win over the global default. Database credential, container-exec, and data-inspection actions follow
 the separate `database_access` allow/block permission.
+
+Host-wide `cleanup_docker` follows only the global `destructive_actions` setting because it has no
+Project or service target. It executes immediately when allowed, enters the same durable approval
+queue when approval is required, and returns `OPERATION_PERMISSION_DENIED` when blocked. A held
+request includes the requested `level` in its approval summary.
 
 Application cleanup and restore use softer paths. `archive_project`,
 `unarchive_project`, `archive_service`, and `unarchive_service` are exposed
@@ -1666,7 +1671,9 @@ the approval status, sanitized `requested_args_summary`, `lifecycle_effect`, and
 agent guidance. A typed execution failure may also return `error_code` and a
 sanitized `error_details` object; arbitrary error-detail keys are not exposed.
 Archive success returns `suggested_call` for `list_archived_services`; restore
-success reminds agents that no container was started automatically.
+success reminds agents that no container was started automatically. Successful held Docker cleanup
+returns a compact `result` with the level, reclaimed MB, and captured before/after Docker usage totals,
+plus a `suggested_call` for `get_disk_usage`.
 
 | Parameter       | Type   | Required | Description                               |
 | --------------- | ------ | -------- | ----------------------------------------- |
@@ -1750,9 +1757,12 @@ timing out the MCP request.
 
 ### `cleanup_docker`
 
-`cleanup_docker` is human-UI / host-maintenance only in OpenLander 0.1 and returns
-`OPERATION_REQUIRES_HUMAN_UI` from MCP. Agents may call `get_disk_usage` to confirm pressure, then
-surface cleanup to the operator instead of calling this action.
+`cleanup_docker` is a host-wide action controlled by the global Security
+`destructive_actions` setting. The default `allow` executes immediately; `approval_required`
+returns a pollable `action_run_id`; `block` returns `OPERATION_PERMISSION_DENIED`. Project and
+service overrides do not apply. The result includes reclaimed MB plus compact Docker usage snapshots
+captured before and after cleanup. If either snapshot times out, cleanup still returns its prune
+results with that snapshot marked unavailable.
 
 | Parameter | Type   | Required | Description                                          |
 | --------- | ------ | -------- | ---------------------------------------------------- |
