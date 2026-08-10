@@ -183,6 +183,13 @@
       "when": 1785891112972,
       "tag": "0025_cloudflare_connected_publish",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786338680567,
+      "tag": "0026_auth_sessions",
+      "breakpoints": true
     }
   ]
 }

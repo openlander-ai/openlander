@@ -725,8 +725,10 @@ export const deployPlans = pgTable(
   ],
 );
 
-// Single-row admin auth state. `active_scope_project_id` is a global MCP
-// scope pin for the single-admin v5.1 model, not per-user/per-token state.
+// Single-row admin credential and instance state. Web sessions are stored in
+// `auth_sessions` so signing in from one browser does not revoke another.
+// `active_scope_project_id` remains a global MCP scope pin for the single-admin
+// v5.1 model, not per-user/per-token state.
 export const auth = pgTable(
   'auth',
   {
@@ -743,6 +745,16 @@ export const auth = pgTable(
     destructive_mcp_unlock: boolean('destructive_mcp_unlock').notNull().default(false),
   },
   (table) => [check('auth_id_check', sql`${table.id} = 1`)],
+);
+
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    token: text('token').primaryKey(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+  },
+  (table) => [index('idx_auth_sessions_expires_at').on(table.expires_at)],
 );
 
 export const patTokens = pgTable(
@@ -2538,6 +2550,7 @@ export const drizzleSchema = {
   secretFiles,
   deployPlans,
   auth,
+  authSessions,
   patTokens,
   aiUsageLog,
   aiOpsInstancePolicy,

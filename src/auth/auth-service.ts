@@ -18,9 +18,12 @@ export interface AuthDatabase {
   setPassword(hash: string): Promise<void>;
   getApiToken(): Promise<{ encrypted: string; iv: string } | null>;
   setApiToken(encrypted: string, iv: string): Promise<void>;
-  getSession(): Promise<{ token: string; createdAt: number; expiresAt: number } | null>;
+  getSession(
+    token: string,
+  ): Promise<{ token: string; createdAt: number; expiresAt: number } | null>;
   createSession(token: string, createdAt: number, expiresAt: number): Promise<void>;
-  deleteSession(): Promise<void>;
+  deleteSession(token: string): Promise<void>;
+  deleteAllSessions(): Promise<void>;
 }
 
 export interface IssuePatTokenInput {
@@ -306,17 +309,13 @@ export async function createSession(
  * Validate a session token against stored token and expiration.
  */
 export async function validateSession(db: AuthDatabase, token: string): Promise<boolean> {
-  const session = await db.getSession();
+  const session = await db.getSession(token);
   if (!session) {
     return false;
   }
 
-  if (session.token !== token) {
-    return false;
-  }
-
   if (Date.now() > session.expiresAt) {
-    await db.deleteSession();
+    await db.deleteSession(token);
     return false;
   }
 
@@ -326,8 +325,8 @@ export async function validateSession(db: AuthDatabase, token: string): Promise<
 /**
  * Delete the current stored session.
  */
-export async function deleteSession(db: AuthDatabase, _token: string): Promise<void> {
-  await db.deleteSession();
+export async function deleteSession(db: AuthDatabase, token: string): Promise<void> {
+  await db.deleteSession(token);
 }
 
 /**
@@ -383,7 +382,7 @@ export async function regenerateToken(db: AuthDatabase): Promise<{ apiToken: str
 export async function resetPassword(db: AuthDatabase, newPassword: string): Promise<void> {
   assertPasswordMeetsPolicy(newPassword);
   await db.setPassword(hashPassword(newPassword));
-  await db.deleteSession();
+  await db.deleteAllSessions();
 }
 
 /**

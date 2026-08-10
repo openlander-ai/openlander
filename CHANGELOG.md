@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep each administrator browser session valid when another browser or agent
+  signs in, while limiting logout to the requesting browser and preserving
+  full-session invalidation for password recovery.
+
 ## [0.3.3-rc.8] - 2026-08-10
 
 ### Fixed

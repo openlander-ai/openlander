@@ -11,7 +11,7 @@ class PatAuthDb implements AuthDatabase {
   private passwordHash = '';
   private apiTokenEncrypted = '';
   private apiTokenIv = '';
-  private session: { token: string; createdAt: number; expiresAt: number } | null = null;
+  private sessions = new Map<string, { token: string; createdAt: number; expiresAt: number }>();
   readonly rows = new Map<string, PatTokenRow>();
   touchCount = 0;
 
@@ -20,14 +20,15 @@ class PatAuthDb implements AuthDatabase {
   }
 
   async getAuth(): Promise<AuthRow> {
+    const session = this.sessions.values().next().value;
     return {
       id: 1,
       password_hash: this.passwordHash,
       api_token: this.apiTokenEncrypted,
       api_token_iv: this.apiTokenIv || null,
-      session_token: this.session?.token ?? null,
-      session_created_at: this.session?.createdAt ?? null,
-      session_expires_at: this.session?.expiresAt ?? null,
+      session_token: session?.token ?? null,
+      session_created_at: session?.createdAt ?? null,
+      session_expires_at: session?.expiresAt ?? null,
       active_scope_project_id: null,
       destructive_mcp_unlock: false,
     };
@@ -47,16 +48,22 @@ class PatAuthDb implements AuthDatabase {
     this.apiTokenIv = iv;
   }
 
-  async getSession(): Promise<{ token: string; createdAt: number; expiresAt: number } | null> {
-    return this.session;
+  async getSession(
+    token: string,
+  ): Promise<{ token: string; createdAt: number; expiresAt: number } | null> {
+    return this.sessions.get(token) ?? null;
   }
 
   async createSession(token: string, createdAt: number, expiresAt: number): Promise<void> {
-    this.session = { token, createdAt, expiresAt };
+    this.sessions.set(token, { token, createdAt, expiresAt });
   }
 
-  async deleteSession(): Promise<void> {
-    this.session = null;
+  async deleteSession(token: string): Promise<void> {
+    this.sessions.delete(token);
+  }
+
+  async deleteAllSessions(): Promise<void> {
+    this.sessions.clear();
   }
 
   async createPatToken(input: {

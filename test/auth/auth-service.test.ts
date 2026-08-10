@@ -27,21 +27,22 @@ class MockAuthDb implements AuthDatabase {
   private passwordHash = '';
   private apiTokenEncrypted = '';
   private apiTokenIv = '';
-  private session: SessionState | null = null;
+  private sessions = new Map<string, SessionState>();
 
   isPasswordSet(): boolean {
     return this.passwordHash.length > 0;
   }
 
   getAuth() {
+    const session = this.sessions.values().next().value as SessionState | undefined;
     return {
       id: 1,
       password_hash: this.passwordHash,
       api_token: this.apiTokenEncrypted,
       api_token_iv: this.apiTokenIv || null,
-      session_token: this.session?.token ?? null,
-      session_created_at: this.session?.createdAt ?? null,
-      session_expires_at: this.session?.expiresAt ?? null,
+      session_token: session?.token ?? null,
+      session_created_at: session?.createdAt ?? null,
+      session_expires_at: session?.expiresAt ?? null,
     };
   }
 
@@ -64,16 +65,20 @@ class MockAuthDb implements AuthDatabase {
     this.apiTokenIv = iv;
   }
 
-  getSession() {
-    return this.session;
+  getSession(token: string) {
+    return this.sessions.get(token) ?? null;
   }
 
   createSession(token: string, createdAt: number, expiresAt: number): void {
-    this.session = { token, createdAt, expiresAt };
+    this.sessions.set(token, { token, createdAt, expiresAt });
   }
 
-  deleteSession(): void {
-    this.session = null;
+  deleteSession(token: string): void {
+    this.sessions.delete(token);
+  }
+
+  deleteAllSessions(): void {
+    this.sessions.clear();
   }
 }
 
@@ -122,13 +127,21 @@ describe('auth-service', () => {
     nowSpy.mockRestore();
   });
 
+  it('keeps existing browser sessions valid when another browser signs in', async () => {
+    const first = await createSession(db);
+    const second = await createSession(db);
+
+    await expect(validateSession(db, first.token)).resolves.toBe(true);
+    await expect(validateSession(db, second.token)).resolves.toBe(true);
+  });
+
   it('validateSession expires and deletes stale sessions (mock Date.now)', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
     const { token } = await createSession(db);
 
     nowSpy.mockReturnValue(10_000 + 604_800_000 + 1);
     await expect(validateSession(db, token)).resolves.toBe(false);
-    expect(db.getSession()).toBeNull();
+    expect(db.getSession(token)).toBeNull();
 
     nowSpy.mockRestore();
   });

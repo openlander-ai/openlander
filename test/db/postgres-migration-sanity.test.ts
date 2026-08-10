@@ -278,6 +278,7 @@ describe('Postgres migration sanity gate', () => {
       '0023_delivery_review_packages',
       '0024_project_updates',
       '0025_cloudflare_connected_publish',
+      '0026_auth_sessions',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -306,8 +307,11 @@ describe('Postgres migration sanity gate', () => {
       '0023_delivery_review_packages.sql',
       '0024_project_updates.sql',
       '0025_cloudflare_connected_publish.sql',
+      '0026_auth_sessions.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
+    expect(sql).toContain('CREATE TABLE "auth_sessions"');
+    expect(sql).toContain('INSERT INTO "auth_sessions" ("token", "created_at", "expires_at")');
     expect(sql).toContain('"active_scope_project_id" text');
     expect(sql).toContain('"scope_service_id" text');
     expect(sql).toContain('CONSTRAINT "pat_tokens_scope_kind_check"');
@@ -569,6 +573,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 27 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -589,7 +600,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 27 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 28 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
@@ -619,6 +630,67 @@ describeWithDatabase('Postgres baseline guard integration', () => {
         await expect(
           sql.unsafe('SELECT 1 FROM project_update_items LIMIT 1'),
         ).resolves.toBeDefined();
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
+    });
+  });
+
+  it('stores independent web sessions and logs out only the requesting browser', async () => {
+    await withIsolatedPostgresDatabase('auth_sessions', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        await db.createSession('browser-a', 1_000, 10_000);
+        await db.createSession('browser-b', 2_000, 11_000);
+
+        await expect(db.getSession('browser-a')).resolves.toMatchObject({ token: 'browser-a' });
+        await expect(db.getSession('browser-b')).resolves.toMatchObject({ token: 'browser-b' });
+
+        await db.deleteSession('browser-a');
+        await expect(db.getSession('browser-a')).resolves.toBeNull();
+        await expect(db.getSession('browser-b')).resolves.toMatchObject({ token: 'browser-b' });
+
+        await db.deleteAllSessions();
+        await expect(db.getSession('browser-b')).resolves.toBeNull();
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
+  it('preserves the current web session while upgrading to the multi-session table', async () => {
+    await withIsolatedPostgresDatabase('auth_session_upgrade', async (url) => {
+      const sql = postgres(url, { max: 1, prepare: false });
+      try {
+        for (const fileName of activeMigrationSqlFiles().filter(
+          (file) => file !== '0026_auth_sessions.sql',
+        )) {
+          const migrationSql = readFileSync(
+            migrationSqlPath(fileName.replace(/\.sql$/, '')),
+            'utf8',
+          );
+          for (const statement of splitMigrationStatements(migrationSql)) {
+            await sql.unsafe(statement);
+          }
+        }
+
+        await sql.unsafe(`
+          INSERT INTO auth (
+            id, password_hash, api_token, session_token, session_created_at, session_expires_at
+          ) VALUES (1, 'hash', 'token', 'legacy-browser', 1000, 604801000)
+        `);
+
+        const migrationSql = readFileSync(migrationSqlPath('0026_auth_sessions'), 'utf8');
+        for (const statement of splitMigrationStatements(migrationSql)) {
+          await sql.unsafe(statement);
+        }
+
+        const rows = (await sql.unsafe(
+          'SELECT token, created_at, expires_at FROM auth_sessions',
+        )) as ReadonlyArray<{ token: string; created_at: string; expires_at: string }>;
+        expect(rows).toEqual([
+          { token: 'legacy-browser', created_at: '1000', expires_at: '604801000' },
+        ]);
       } finally {
         await sql.end({ timeout: 5 });
       }

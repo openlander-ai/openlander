@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, lte } from 'drizzle-orm';
 import type { DrizzleClient } from '../drizzle.js';
-import { auth } from '../schema.drizzle.js';
+import { auth, authSessions } from '../schema.drizzle.js';
 import type { AuthRow } from '../types.js';
 
 export class AuthRepo {
@@ -45,55 +45,49 @@ export class AuthRepo {
     }
   }
 
-  async getSession(): Promise<{ token: string; createdAt: number; expiresAt: number } | null> {
-    const [row] = await this.db.select().from(auth).where(eq(auth.id, 1)).limit(1);
-    if (
-      !row ||
-      !row.session_token ||
-      row.session_created_at === null ||
-      row.session_expires_at === null
-    ) {
-      return null;
-    }
+  async getSession(
+    token: string,
+  ): Promise<{ token: string; createdAt: number; expiresAt: number } | null> {
+    const [row] = await this.db
+      .select()
+      .from(authSessions)
+      .where(eq(authSessions.token, token))
+      .limit(1);
+    if (!row) return null;
     return {
-      token: row.session_token,
-      createdAt: row.session_created_at,
-      expiresAt: row.session_expires_at,
+      token: row.token,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
     };
   }
 
   async createSession(token: string, createdAt: number, expiresAt: number): Promise<void> {
-    const existing = await this.getAuth();
-    if (existing) {
-      await this.db
-        .update(auth)
-        .set({
-          session_token: token,
-          session_created_at: createdAt,
-          session_expires_at: expiresAt,
-        })
-        .where(eq(auth.id, 1));
-    } else {
-      await this.db.insert(auth).values({
-        id: 1,
-        password_hash: '',
-        api_token: '',
-        session_token: token,
-        session_created_at: createdAt,
-        session_expires_at: expiresAt,
+    await this.db.transaction(async (tx) => {
+      await tx.delete(authSessions).where(lte(authSessions.expires_at, createdAt));
+      await tx.insert(authSessions).values({
+        token,
+        created_at: createdAt,
+        expires_at: expiresAt,
       });
-    }
+    });
   }
 
-  async deleteSession(): Promise<void> {
-    await this.db
-      .update(auth)
-      .set({
-        session_token: null,
-        session_created_at: null,
-        session_expires_at: null,
-      })
-      .where(eq(auth.id, 1));
+  async deleteSession(token: string): Promise<void> {
+    await this.db.delete(authSessions).where(eq(authSessions.token, token));
+  }
+
+  async deleteAllSessions(): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(authSessions);
+      await tx
+        .update(auth)
+        .set({
+          session_token: null,
+          session_created_at: null,
+          session_expires_at: null,
+        })
+        .where(eq(auth.id, 1));
+    });
   }
 
   async getActiveScopeProjectId(): Promise<string | null> {

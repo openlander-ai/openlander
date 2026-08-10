@@ -689,9 +689,10 @@ export class Database implements AuthDatabase {
   setPassword(hash: string) { return this.authRepo.setPassword(hash); }
   getApiToken() { return this.authRepo.getApiToken(); }
   setApiToken(encrypted: string, iv: string) { return this.authRepo.setApiToken(encrypted, iv); }
-  getSession() { return this.authRepo.getSession(); }
+  getSession(token: string) { return this.authRepo.getSession(token); }
   createSession(token: string, createdAt: number, expiresAt: number) { return this.authRepo.createSession(token, createdAt, expiresAt); }
-  deleteSession() { return this.authRepo.deleteSession(); }
+  deleteSession(token: string) { return this.authRepo.deleteSession(token); }
+  deleteAllSessions() { return this.authRepo.deleteAllSessions(); }
   getActiveScopeProjectId() { return this.authRepo.getActiveScopeProjectId(); }
   setActiveScopeProjectId(projectId: string | null) { return this.authRepo.setActiveScopeProjectId(projectId); }
   isDestructiveMcpUnlockEnabled() { return this.authRepo.isDestructiveMcpUnlockEnabled(); }
