@@ -11,6 +11,12 @@ import type {
 import type { LLMProviderType } from '../llm/providers.js';
 import type { OpsConfig } from '../monitor/ops-types.js';
 import { DEFAULT_OPS_CONFIG } from '../monitor/ops-types.js';
+import {
+  OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID,
+  OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI,
+  OFFICIAL_CLOUDFLARE_OAUTH_SCOPES,
+  parseCloudflareOAuthScopes,
+} from './cloudflare-publisher.js';
 
 const log = createModuleLogger('config');
 
@@ -417,12 +423,18 @@ function buildDefaultConfig(): OpenLanderConfig {
       apiToken: '',
       tunnelId: '',
       accountId: '',
-      oauthClientId: process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ?? '',
-      oauthRedirectUri: process.env['OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI']?.trim() ?? '',
-      oauthScopes: (process.env['OPENLANDER_CLOUDFLARE_OAUTH_SCOPES'] ?? '')
-        .split(',')
-        .map((scope) => scope.trim())
-        .filter((scope) => scope.length > 0),
+      oauthClientId:
+        process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ||
+        OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID,
+      oauthRedirectUri:
+        process.env['OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI']?.trim() ||
+        OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI,
+      oauthScopes: (() => {
+        const configured = parseCloudflareOAuthScopes(
+          process.env['OPENLANDER_CLOUDFLARE_OAUTH_SCOPES'],
+        );
+        return configured.length > 0 ? configured : [...OFFICIAL_CLOUDFLARE_OAUTH_SCOPES];
+      })(),
     },
     monitoring: {
       healthcheckIntervalSec: 60,
@@ -659,10 +671,38 @@ function normalizeRuntimeConfig(
     ...config,
     docker: normalizeDockerConfig(config.docker, defaults.docker),
     git: normalizeGitConfig(config.git, defaults.git),
+    cloudflare: normalizeCloudflareConfig(config.cloudflare, defaults.cloudflare),
     // OpenLander 0.1 keeps external MCP agents but disables built-in LLM/AI Ops.
     // Stored tokens/settings are ignored rather than deleted.
     ai: { ...DISABLED_AI_FEATURES },
     ops: { ...DISABLED_OPS_CONFIG },
+  };
+}
+
+function normalizeCloudflareConfig(
+  cloudflare: CloudflareConfig,
+  defaults: CloudflareConfig,
+): CloudflareConfig {
+  const environmentScopes = parseCloudflareOAuthScopes(
+    process.env['OPENLANDER_CLOUDFLARE_OAUTH_SCOPES'],
+  );
+
+  return {
+    ...cloudflare,
+    oauthClientId:
+      process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ||
+      cloudflare.oauthClientId.trim() ||
+      defaults.oauthClientId,
+    oauthRedirectUri:
+      process.env['OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI']?.trim() ||
+      cloudflare.oauthRedirectUri.trim() ||
+      defaults.oauthRedirectUri,
+    oauthScopes:
+      environmentScopes.length > 0
+        ? environmentScopes
+        : cloudflare.oauthScopes.length > 0
+          ? cloudflare.oauthScopes
+          : defaults.oauthScopes,
   };
 }
 

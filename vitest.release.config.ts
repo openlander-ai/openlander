@@ -192,6 +192,7 @@ export default defineConfig({
       'test/web/ai-providers-settings-page.test.ts',
       'test/web/ai-ops-briefing-surface.test.ts',
       'test/web/change-password-modal-inline-errors.test.ts',
+      'test/web/cloudflare-oauth-callback.test.ts',
       'test/web/cloudflare-frontend-cut-v0-1.test.ts',
       'test/web/connected-publish-ui.test.ts',
       'test/web/command-palette-quick-links.test.ts',

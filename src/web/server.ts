@@ -422,6 +422,8 @@ function createApp(
       headers: {
         'Content-Type': 'text/javascript; charset=UTF-8',
         'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   });
@@ -435,6 +437,10 @@ function createApp(
       headers: {
         'Content-Type': 'text/html; charset=UTF-8',
         'Cache-Control': 'no-store',
+        'Content-Security-Policy':
+          "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   });

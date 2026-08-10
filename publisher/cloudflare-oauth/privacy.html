@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Privacy — OpenLander Connected Publish</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #090b0e;
+        color: #f4f4f5;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        width: min(44rem, calc(100% - 3rem));
+        margin: 0 auto;
+        padding: 4rem 0;
+      }
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+      p,
+      li {
+        color: #a1a1aa;
+        line-height: 1.7;
+      }
+      a {
+        color: #93c5fd;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="/">← OpenLander Connected Publish</a>
+      <h1>Privacy</h1>
+      <p>Effective August 10, 2026.</p>
+      <h2>Publisher callback</h2>
+      <p>
+        The static callback page receives an OAuth authorization code and state from Cloudflare and
+        passes them to the specific OpenLander browser window that initiated authorization. Its
+        browser code immediately removes the callback query from the address bar, does not write it
+        to browser storage, and does not exchange it for a token or send it to an
+        OpenLander-operated application server.
+      </p>
+      <h2>Self-hosted instance</h2>
+      <p>
+        Your OpenLander instance exchanges the code directly with Cloudflare and stores the
+        resulting token in its own database. The instance uses the permissions shown on Cloudflare's
+        authorization screen to manage the account, Zone, DNS, and connector resources needed for
+        Connected Publish.
+      </p>
+      <h2>Infrastructure logs</h2>
+      <p>
+        The static publisher host and its infrastructure providers necessarily process the callback
+        request and may retain ordinary security and request metadata such as timestamps, requested
+        URLs, and network addresses. Do not include secrets in support requests or public issues.
+      </p>
+      <h2>Questions</h2>
+      <p>
+        Report privacy or security concerns through the
+        <a href="https://github.com/openlander-ai/openlander/security">OpenLander security page</a>.
+      </p>
+    </main>
+  </body>
+</html>

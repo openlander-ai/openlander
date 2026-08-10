@@ -13,6 +13,11 @@ import {
   normalizeLlmConfig,
 } from '../src/config/index.js';
 import type { LLMProviderConfig } from '../src/config/index.js';
+import {
+  OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID,
+  OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI,
+  OFFICIAL_CLOUDFLARE_OAUTH_SCOPES,
+} from '../src/config/cloudflare-publisher.js';
 
 const describeConfig = describe;
 
@@ -114,6 +119,90 @@ describeConfig('Config DB Path', () => {
       else process.env.OPENLANDER_DATA_DIR = previousDataDir;
       vi.resetModules();
     }
+  });
+});
+
+describeConfig('Cloudflare publisher defaults', () => {
+  let tmpDir: string;
+  const environmentKeys = [
+    'OPENLANDER_DATA_DIR',
+    'OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID',
+    'OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI',
+    'OPENLANDER_CLOUDFLARE_OAUTH_SCOPES',
+  ] as const;
+  let previousEnvironment: Record<(typeof environmentKeys)[number], string | undefined>;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'openlander-cloudflare-config-test-'));
+    previousEnvironment = Object.fromEntries(
+      environmentKeys.map((key) => [key, process.env[key]]),
+    ) as Record<(typeof environmentKeys)[number], string | undefined>;
+    for (const key of environmentKeys) delete process.env[key];
+  });
+
+  afterEach(() => {
+    for (const key of environmentKeys) {
+      const previous = previousEnvironment[key];
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
+    vi.resetModules();
+  });
+
+  it('ships a fixed HTTPS callback and the minimum Connected Publish scopes', () => {
+    expect(OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID).toMatch(/^[a-f0-9]{32}$/);
+    expect(OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI).toBe(
+      'https://openlander.dongbin.cloud/cloudflare-oauth-callback',
+    );
+    expect(OFFICIAL_CLOUDFLARE_OAUTH_SCOPES).toEqual([
+      'dns.write',
+      'zone.read',
+      'teams-connectors.write',
+      'account-settings.read',
+    ]);
+  });
+
+  it('replaces blank OAuth values saved by older official builds', async () => {
+    writeFileSync(
+      join(tmpDir, 'config.json'),
+      JSON.stringify({
+        cloudflare: {
+          oauthClientId: '',
+          oauthRedirectUri: '',
+          oauthScopes: [],
+        },
+      }),
+      'utf-8',
+    );
+    process.env.OPENLANDER_DATA_DIR = tmpDir;
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID = ' ';
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI = ' ';
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_SCOPES = ' ';
+    vi.resetModules();
+
+    const { loadConfig: loadIsolatedConfig } = await import('../src/config/index.js');
+    const cloudflare = loadIsolatedConfig().cloudflare;
+
+    expect(cloudflare.oauthClientId).toBe(OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID);
+    expect(cloudflare.oauthRedirectUri).toBe(OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI);
+    expect(cloudflare.oauthScopes).toEqual(OFFICIAL_CLOUDFLARE_OAUTH_SCOPES);
+  });
+
+  it('lets self-built installations override every publisher value through the environment', async () => {
+    process.env.OPENLANDER_DATA_DIR = tmpDir;
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID = 'self-built-client';
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI =
+      'https://publisher.example/oauth/callback';
+    process.env.OPENLANDER_CLOUDFLARE_OAUTH_SCOPES = 'scope.one, scope.two';
+    vi.resetModules();
+
+    const { loadConfig: loadIsolatedConfig } = await import('../src/config/index.js');
+    const cloudflare = loadIsolatedConfig().cloudflare;
+
+    expect(cloudflare.oauthClientId).toBe('self-built-client');
+    expect(cloudflare.oauthRedirectUri).toBe('https://publisher.example/oauth/callback');
+    expect(cloudflare.oauthScopes).toEqual(['scope.one', 'scope.two']);
   });
 });
 
