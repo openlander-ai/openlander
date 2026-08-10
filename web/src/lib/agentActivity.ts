@@ -52,6 +52,12 @@ export type ActivityDetailCode =
   | 'mcp_connected'
   | 'mcp_disconnected';
 
+export type ActivityTitleCode =
+  | 'public_access_enabled'
+  | 'public_access_disabled'
+  | 'public_access_code_rotated'
+  | 'public_access_verification_failed';
+
 export interface ActivityEvent {
   id: string;
   actor: Actor;
@@ -70,6 +76,8 @@ export interface ActivityEvent {
   serviceName?: string | null;
   /** One-sentence headline */
   title: string;
+  /** Locale-neutral title for system events that share a broad activity kind. */
+  titleCode?: ActivityTitleCode;
   /** One-line detail / context. NOT a paragraph. Contains build #, error class, etc. */
   detail?: string;
   /** Locale-neutral system detail. Raw `detail` is reserved for user-authored or legacy text. */

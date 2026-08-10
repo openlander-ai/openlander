@@ -63,4 +63,16 @@ describe('Activity detail localization', () => {
     expect(localizedActivityTitle(value, t)).toBe('배포 성공 · 7af3c12');
     expect(localizedActivityRelativeTime(value, t)).toBe('5분 전');
   });
+
+  it('keeps protected-share actions distinct from generic configuration changes', () => {
+    const value = event({
+      kind: 'config_changed',
+      title: 'Protected share code changed',
+      titleCode: 'public_access_code_rotated',
+      detail: 'web · web.example.com',
+    });
+
+    expect(localizedActivityTitle(value, t)).toBe('보호 공유 코드 변경');
+    expect(localizedActivityDetail(value, t)).toBe('web · web.example.com');
+  });
 });

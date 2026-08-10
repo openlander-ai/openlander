@@ -146,6 +146,16 @@ function metadataNumber(metadata: Record<string, unknown>, key: string): number 
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function publicAccessTitleCode(eventType: string): V4ActivityEvent['titleCode'] {
+  if (eventType === 'public-access:enabled') return 'public_access_enabled';
+  if (eventType === 'public-access:disabled') return 'public_access_disabled';
+  if (eventType === 'public-access:code-rotated') return 'public_access_code_rotated';
+  if (eventType === 'public-access:verification-failed') {
+    return 'public_access_verification_failed';
+  }
+  return undefined;
+}
+
 function redactDataAccessPreview(value: string): string {
   return value
     .replace(/\$[A-Za-z_][A-Za-z0-9_]*\$[\s\S]*?\$[A-Za-z_][A-Za-z0-9_]*\$/g, '$[redacted]$')
@@ -279,6 +289,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
       const actor = actorFromActivityLog(metadata, row.event_type);
+      const titleCode = publicAccessTitleCode(row.event_type);
       events.push({
         id: `activity-${row.id}`,
         actor,
@@ -290,8 +301,9 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         projectName: projectNameById.get(projectId) ?? null,
         serviceName: serviceRef?.serviceName ?? null,
         title: row.title,
+        titleCode,
         detail: row.description,
-        detailCode: 'config_changed',
+        detailCode: titleCode ? undefined : 'config_changed',
         detailParams: {},
       });
     }

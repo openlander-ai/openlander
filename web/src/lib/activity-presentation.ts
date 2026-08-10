@@ -8,6 +8,15 @@ export function localizedActivityDetail(event: ActivityEvent, t: Translate): str
 }
 
 export function localizedActivityTitle(event: ActivityEvent, t: Translate): string {
+  if (event.titleCode) {
+    const titleKey = {
+      public_access_enabled: 'publicAccessEnabled',
+      public_access_disabled: 'publicAccessDisabled',
+      public_access_code_rotated: 'publicAccessCodeRotated',
+      public_access_verification_failed: 'publicAccessVerificationFailed',
+    }[event.titleCode];
+    return t(`activity.eventTitle.${titleKey}`);
+  }
   const deploySuffix = event.title.match(/ · [a-f0-9]{7,40}$/i)?.[0] ?? '';
   switch (event.kind) {
     case 'deploy_started':

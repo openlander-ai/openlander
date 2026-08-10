@@ -147,7 +147,10 @@ describe('GET /api/activity v4 feed', () => {
       project: 'group-1',
       service: 'svc-1',
       title: 'Protected share authentication failed',
+      titleCode: 'public_access_verification_failed',
+      detail: 'api · api.example.com · Invalid access code',
     });
+    expect(body.activities[0]).not.toHaveProperty('detailCode');
   });
 
   it('includes data-access activity rows in the dashboard feed', async () => {

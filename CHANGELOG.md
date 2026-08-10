@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Preserve protected-share action names in the Activity timeline so enabling,
+  stopping, rotating the access code, and failed authentication remain
+  distinguishable from generic configuration changes.
+
 ## [0.3.3-rc.7] - 2026-08-10
 
 ### Fixed
