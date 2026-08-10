@@ -32,6 +32,7 @@ import {
   type CloudflareConnection,
   type CloudflareZoneOption,
 } from '@/lib/api/cloudflare';
+import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 interface OAuthMessage {
@@ -228,8 +229,12 @@ export function ConnectedPublishCard() {
       setAccountId('');
       setZoneId('');
       toast.success(t('webServer.publicAccess.disconnectedToast'));
-    } catch {
-      toast.error(t('webServer.publicAccess.disconnectFailed'));
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError && error.code === 'CLOUDFLARE_NOT_CONNECTED'
+          ? t('webServer.publicAccess.disconnectNeedsReconnect')
+          : t('webServer.publicAccess.disconnectFailed'),
+      );
     } finally {
       setBusy(false);
     }

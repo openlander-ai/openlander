@@ -2875,6 +2875,8 @@ export const translations = {
         '모든 프로젝트 공개 URL이 중지됩니다. OpenLander가 만든 DNS 레코드, Tunnel, 커넥터와 저장된 토큰을 정리하며 사용자가 만든 Cloudflare OAuth 앱은 유지합니다.',
       disconnectConfirm: 'Cloudflare 연결 해제',
       disconnectedToast: 'Cloudflare 연결을 해제했습니다.',
+      disconnectNeedsReconnect:
+        'Cloudflare 인증이 만료되었습니다. 다시 연결한 뒤 연결 해제를 진행하세요.',
       disconnectFailed: 'Cloudflare 연결을 안전하게 해제하지 못했습니다.',
     },
     strip: {

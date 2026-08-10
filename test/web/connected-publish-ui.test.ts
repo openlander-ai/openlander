@@ -77,6 +77,8 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('connectCloudflare');
     expect(connectionCard).toContain('listCloudflareZones');
     expect(connectionCard).toContain('disconnectCloudflare');
+    expect(connectionCard).toContain("error.code === 'CLOUDFLARE_NOT_CONNECTED'");
+    expect(connectionCard).toContain('disconnectNeedsReconnect');
     expect(connectionCard).toContain('<DropdownMenu');
     expect(connectionCard).toContain('<ConfirmDialog');
     expect(connectionCard).toContain('id="connected-publish"');

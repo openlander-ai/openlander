@@ -156,11 +156,39 @@ describeConfig('Cloudflare publisher defaults', () => {
       'https://openlander.dongbin.cloud/cloudflare-oauth-callback',
     );
     expect(OFFICIAL_CLOUDFLARE_OAUTH_SCOPES).toEqual([
+      'offline_access',
       'dns.write',
       'zone.read',
       'teams-connectors.write',
       'account-settings.read',
     ]);
+  });
+
+  it('adds refresh access to scopes saved by older official builds', async () => {
+    writeFileSync(
+      join(tmpDir, 'config.json'),
+      JSON.stringify({
+        cloudflare: {
+          oauthClientId: OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID,
+          oauthRedirectUri: OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI,
+          oauthScopes: [
+            'dns.write',
+            'zone.read',
+            'teams-connectors.write',
+            'account-settings.read',
+          ],
+        },
+      }),
+      'utf-8',
+    );
+    process.env.OPENLANDER_DATA_DIR = tmpDir;
+    vi.resetModules();
+
+    const { loadConfig: loadIsolatedConfig } = await import('../src/config/index.js');
+
+    expect(loadIsolatedConfig().cloudflare.oauthScopes).toEqual(
+      OFFICIAL_CLOUDFLARE_OAUTH_SCOPES,
+    );
   });
 
   it('replaces blank OAuth values saved by older official builds', async () => {
