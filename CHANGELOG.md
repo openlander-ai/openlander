@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Ship the official public Cloudflare PKCE client in OpenLander releases while
+  preserving environment overrides for self-built distributions.
+- Complete the OAuth token exchange on the authenticated self-hosted instance
+  after the fixed publisher callback returns the authorization code and state
+  to its opener.
+
+### Fixed
+
+- Enable the Cloudflare connection button without Compose edits or a server
+  restart, including installations whose older config file saved blank OAuth
+  publisher values.
+
+### Security
+
+- Keep the fixed OAuth callback free of token storage and API calls, remove
+  callback parameters from browser history, validate popup source, callback
+  origin, and state before completion, and serve the callback with restrictive
+  no-store, referrer, framing, and content-type policies.
+
 ## [0.3.4-rc.1] - 2026-08-10
 
 ### Changed
