@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep the documented EventBus event count synchronized with the protected
+  share audit events added in the previous release candidate.
+- Allowlist only the fixed, non-secret protected-share code alphabet so secret
+  scanning continues to reject real credentials.
+
 ## [0.3.3-rc.6] - 2026-08-10
 
 ### Added

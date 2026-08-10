@@ -28,4 +28,6 @@ regexes = [
   '''^change-me$''',
   '''^your-password$''',
   '''^your-secret-here$''',
+  # Fixed, non-secret alphabet used to generate protected-share access codes.
+  '''^ABCDEFGHJKLMNPQRSTUVWXYZ23456789$''',
 ]

@@ -461,7 +461,7 @@ All new code MUST import from `docker.ts` (or `docker/facade.ts`), never raw doc
 
 ### EventBus
 
-`src/events/index.ts` — Decouples modules. 70 event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
+`src/events/index.ts` — Decouples modules. 74 event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
 
 ### Deploy Pipeline (3-Step Flow)
 
