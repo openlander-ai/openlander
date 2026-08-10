@@ -686,23 +686,27 @@ function normalizeCloudflareConfig(
   const environmentScopes = parseCloudflareOAuthScopes(
     process.env['OPENLANDER_CLOUDFLARE_OAUTH_SCOPES'],
   );
+  const oauthClientId =
+    process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ||
+    cloudflare.oauthClientId.trim() ||
+    defaults.oauthClientId;
+  const storedScopes =
+    cloudflare.oauthScopes.length > 0 ? cloudflare.oauthScopes : defaults.oauthScopes;
+  const oauthScopes =
+    environmentScopes.length > 0
+      ? environmentScopes
+      : oauthClientId === OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID
+        ? [...new Set([...OFFICIAL_CLOUDFLARE_OAUTH_SCOPES, ...storedScopes])]
+        : storedScopes;
 
   return {
     ...cloudflare,
-    oauthClientId:
-      process.env['OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID']?.trim() ||
-      cloudflare.oauthClientId.trim() ||
-      defaults.oauthClientId,
+    oauthClientId,
     oauthRedirectUri:
       process.env['OPENLANDER_CLOUDFLARE_OAUTH_REDIRECT_URI']?.trim() ||
       cloudflare.oauthRedirectUri.trim() ||
       defaults.oauthRedirectUri,
-    oauthScopes:
-      environmentScopes.length > 0
-        ? environmentScopes
-        : cloudflare.oauthScopes.length > 0
-          ? cloudflare.oauthScopes
-          : defaults.oauthScopes,
+    oauthScopes,
   };
 }
 

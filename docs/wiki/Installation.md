@@ -81,8 +81,11 @@ OPENLANDER_CLOUDFLARE_OAUTH_SCOPES=scope-id-1,scope-id-2
 
 The redirect URI must be the fixed callback page registered with Cloudflare.
 The scope IDs must match that OAuth client and cover account/Zone reads, DNS
-writes, and Cloudflare Tunnel/connector writes. Restart the OpenLander
-container after changing these overrides.
+writes, and Cloudflare Tunnel/connector writes. Enable both the
+`authorization_code` and `refresh_token` grants, and include `offline_access`
+so long-running installations can refresh Cloudflare authorization without
+asking the operator to reconnect. Restart the OpenLander container after
+changing these overrides.
 
 The official Compose files mount a sibling volume named
 `${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare` at

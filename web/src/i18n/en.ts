@@ -2699,6 +2699,8 @@ export const translations = {
         'All Project public URLs will stop. OpenLander-owned DNS records, Tunnel, connector, and stored token will be removed. Your Cloudflare OAuth app will remain.',
       disconnectConfirm: 'Disconnect Cloudflare',
       disconnectedToast: 'Cloudflare is disconnected.',
+      disconnectNeedsReconnect:
+        'Cloudflare authorization expired. Reconnect, then disconnect again.',
       disconnectFailed: 'Could not safely disconnect Cloudflare.',
     },
     strip: {

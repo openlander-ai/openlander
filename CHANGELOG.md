@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-08-10
+
+### Changed
+
+- Request Cloudflare `offline_access` from the official public OAuth client so
+  long-running installations can refresh authorization without operator
+  intervention.
+
+### Fixed
+
+- Upgrade OAuth scopes saved by older official builds and explain when an
+  expired authorization must be reconnected before a safe disconnect.
+
 ## [0.3.4] - 2026-08-10
 
 ### Changed

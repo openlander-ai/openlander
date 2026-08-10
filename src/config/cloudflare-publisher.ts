@@ -4,6 +4,7 @@ export const OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI =
   'https://openlander.dongbin.cloud/cloudflare-oauth-callback';
 
 export const OFFICIAL_CLOUDFLARE_OAUTH_SCOPES = [
+  'offline_access',
   'dns.write',
   'zone.read',
   'teams-connectors.write',
