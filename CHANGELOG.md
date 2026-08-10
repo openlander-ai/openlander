@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add protected HTTPS sharing for individual Application services without a
+  purchased domain, using stable sslip.io hostnames and an access-code gateway.
+- Add a compact Public Applications manager with URL copy, access-code
+  rotation, stop-sharing controls, and Activity audit events.
+
+### Changed
+
+- Keep Cloudflare Tunnel as an optional publishing path while making direct
+  protected share the default for servers with public ports 80 and 443.
+- Collect the certificate contact email during first use and show the active
+  authentication policy, session lifetime, and code-rotation behavior in Web
+  Server settings.
+
+### Fixed
+
+- Avoid host port 443 conflicts, defer protected-share TLS startup until first
+  use, and preserve external TLS proxy mode across one-click updates.
+- Support embedded-browser verification, redirect direct visits to the
+  internal verification endpoint, and align the access gate with OpenLander's
+  responsive product design and accessibility semantics.
+- Preserve distinct protected-share lifecycle and authentication event names
+  in Activity while keeping release validation and secret scanning aligned.
+- Keep each administrator browser session valid when another browser or agent
+  signs in, while limiting logout to the requesting browser and preserving
+  full-session invalidation for password recovery.
+
+### Security
+
+- Rate-limit access-code verification, avoid storing codes or client IP
+  addresses in Activity, and deduplicate blocked-attempt events without hiding
+  individual invalid-code records.
+
 ## [0.3.3-rc.9] - 2026-08-10
 
 ### Fixed
