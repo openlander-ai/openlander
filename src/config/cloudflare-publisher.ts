@@ -1,7 +1,7 @@
 export const OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID = '29e7e4779ca6bd3a39c0ce05ba538451';
 
 export const OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI =
-  'https://openlander.dongbin.cloud/cloudflare-oauth-callback.html';
+  'https://openlander.dongbin.cloud/cloudflare-oauth-callback';
 
 export const OFFICIAL_CLOUDFLARE_OAUTH_SCOPES = [
   'dns.write',

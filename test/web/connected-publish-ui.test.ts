@@ -153,10 +153,11 @@ describe('Connected Publish UI', () => {
     expect(publisherCallback).toBe(callback);
     expect(publisherCallbackScript).toBe(callbackScript);
     expect(publisherHeaders).toContain('Cache-Control: no-store');
+    expect(publisherHeaders).toContain('/cloudflare-oauth-callback\n  Cache-Control: no-store');
     expect(publisherHeaders).toContain('Referrer-Policy: no-referrer');
     expect(publisherHeaders).not.toContain('Cross-Origin-Opener-Policy');
     expect(publisherConfig).toContain(
-      "'https://openlander.dongbin.cloud/cloudflare-oauth-callback.html'",
+      "'https://openlander.dongbin.cloud/cloudflare-oauth-callback'",
     );
   });
 

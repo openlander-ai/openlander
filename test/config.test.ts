@@ -153,7 +153,7 @@ describeConfig('Cloudflare publisher defaults', () => {
   it('ships a fixed HTTPS callback and the minimum Connected Publish scopes', () => {
     expect(OFFICIAL_CLOUDFLARE_OAUTH_CLIENT_ID).toMatch(/^[a-f0-9]{32}$/);
     expect(OFFICIAL_CLOUDFLARE_OAUTH_REDIRECT_URI).toBe(
-      'https://openlander.dongbin.cloud/cloudflare-oauth-callback.html',
+      'https://openlander.dongbin.cloud/cloudflare-oauth-callback',
     );
     expect(OFFICIAL_CLOUDFLARE_OAUTH_SCOPES).toEqual([
       'dns.write',
