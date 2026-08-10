@@ -5,13 +5,12 @@ import type { AppContext } from '../../app.js';
 import {
   PROTECTED_SHARE_COOKIE,
   PROTECTED_SHARE_SESSION_TTL_SECONDS,
+  PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS,
+  PROTECTED_SHARE_VERIFY_WINDOW_SECONDS,
   type ProtectedShareTarget,
 } from '../../pipeline/protected-public-share.js';
 import { checkRateLimit, clientIp } from '../middleware/rate-limit.js';
 import { parseCookie } from '../middleware/cookies.js';
-
-const VERIFY_WINDOW_MS = 10 * 60 * 1000;
-const VERIFY_MAX_ATTEMPTS = 8;
 
 function requestHostname(c: Context): string {
   const forwarded = c.req.header('x-forwarded-host')?.split(',')[0]?.trim();
@@ -217,10 +216,19 @@ export function createProtectedShareGatewayRoutes(ctx: AppContext): Hono {
     const accessCode = typeof form['access_code'] === 'string' ? form['access_code'] : '';
     const nextPath = safeNextPath(typeof form['next'] === 'string' ? form['next'] : undefined);
     const limit = checkRateLimit(`protected-share:${target.service.id}:${clientIp(c)}`, {
-      windowMs: VERIFY_WINDOW_MS,
-      max: VERIFY_MAX_ATTEMPTS,
+      windowMs: PROTECTED_SHARE_VERIFY_WINDOW_SECONDS * 1000,
+      max: PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS,
     });
     if (limit.limited) {
+      if (limit.firstLimited) {
+        await ctx.eventBus.emit('public-access:verification-failed', {
+          projectId: target.project.id,
+          serviceId: target.service.id,
+          serviceName: target.service.name,
+          hostname,
+          reason: 'rate_limited',
+        });
+      }
       return c.html(
         accessPage({
           target,
@@ -233,6 +241,13 @@ export function createProtectedShareGatewayRoutes(ctx: AppContext): Hono {
       );
     }
     if (!ctx.publicShare.verifyAccessCode(target.service, accessCode)) {
+      await ctx.eventBus.emit('public-access:verification-failed', {
+        projectId: target.project.id,
+        serviceId: target.service.id,
+        serviceName: target.service.name,
+        hostname,
+        reason: 'invalid_code',
+      });
       return c.html(
         accessPage({
           target,

@@ -184,6 +184,11 @@ export interface ProtectedShareSettings {
   ready: boolean;
   traefikMode: 'managed' | 'external';
   tlsMode: 'managed' | 'external';
+  security: {
+    sessionTtlSeconds: number;
+    verifyMaxAttempts: number;
+    verifyWindowSeconds: number;
+  };
 }
 
 export interface SaveProtectedShareSettingsResponse extends ProtectedShareSettings {

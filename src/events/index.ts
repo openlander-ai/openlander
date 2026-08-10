@@ -63,6 +63,10 @@ export type EventType =
   // Config changes
   | 'env:set'
   | 'env:delete'
+  | 'public-access:enabled'
+  | 'public-access:disabled'
+  | 'public-access:code-rotated'
+  | 'public-access:verification-failed'
   // v0.2: Monitoring
   | 'monitor:healthcheck'
   | 'monitor:inactive'
@@ -295,6 +299,31 @@ export interface EventPayload {
   'tunnel:url': { projectId: string; url: string };
   'env:set': { projectId: string; key: string };
   'env:delete': { projectId: string; key: string };
+  'public-access:enabled': {
+    projectId: string;
+    serviceId: string;
+    serviceName: string;
+    hostname: string;
+  };
+  'public-access:disabled': {
+    projectId: string;
+    serviceId: string;
+    serviceName: string;
+    hostname: string;
+  };
+  'public-access:code-rotated': {
+    projectId: string;
+    serviceId: string;
+    serviceName: string;
+    hostname: string;
+  };
+  'public-access:verification-failed': {
+    projectId: string;
+    serviceId: string;
+    serviceName: string;
+    hostname: string;
+    reason: 'invalid_code' | 'rate_limited';
+  };
   'monitor:healthcheck': { projectId: string; healthy: boolean; responseTimeMs: number };
   'monitor:inactive': { projectId: string; daysSinceLastAccess: number };
   'mcp:connect': { clientId: string };

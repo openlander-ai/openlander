@@ -66,6 +66,11 @@ describe('Web Server protected share settings', () => {
       ready: false,
       traefikMode: 'managed',
       tlsMode: 'managed',
+      security: {
+        sessionTtlSeconds: 604800,
+        verifyMaxAttempts: 8,
+        verifyWindowSeconds: 600,
+      },
     });
     expect(saveConfig).not.toHaveBeenCalled();
   });

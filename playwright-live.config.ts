@@ -20,6 +20,7 @@ export default defineConfig({
     'c5-opscenter.spec.ts',
     'c7-dashboard-list.spec.ts',
     'repository-keys.spec.ts',
+    'protected-share.spec.ts',
   ],
   workers: 1,
   fullyParallel: false,

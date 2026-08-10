@@ -102,6 +102,10 @@ const ACTIVITY_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'alert:new': 'alertCreated',
   'alert:resolved': 'alertResolved',
   'webhook:skipped': 'webhookSkipped',
+  'public-access:enabled': 'publicAccessEnabled',
+  'public-access:disabled': 'publicAccessDisabled',
+  'public-access:code-rotated': 'publicAccessCodeRotated',
+  'public-access:verification-failed': 'publicAccessVerificationFailed',
 };
 
 function formatDefaultGateLabel(gateKey: string, label: string, t: Translate): string {

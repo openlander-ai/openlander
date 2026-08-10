@@ -395,7 +395,7 @@ export async function createAppContext(
     instanceId,
     protectedShareConfig: () => config.traefik.protectedShare,
   });
-  const publicShare = new ProtectedPublicShareManager(db, config, traefik, saveConfig);
+  const publicShare = new ProtectedPublicShareManager(db, config, traefik, saveConfig, eventBus);
 
   const llmCircuitBreaker = new LlmCircuitBreaker();
 

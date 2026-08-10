@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Database, DomainMappingRow, ProjectRow, ServiceRow } from '../../src/db/index.js';
+import { EventBus } from '../../src/events/index.js';
 import {
   normalizeProtectedSharePublicHost,
+  PROTECTED_SHARE_SESSION_TTL_SECONDS,
   ProtectedPublicShareManager,
 } from '../../src/pipeline/protected-public-share.js';
 import type { TraefikManager } from '../../src/pipeline/traefik.js';
@@ -155,14 +157,18 @@ function harness(options?: { enabled?: boolean; publicHost?: string; acmeEmail?:
     },
   } as OpenLanderConfig;
   const persistConfig = vi.fn();
+  const events = new EventBus();
+  const emit = vi.spyOn(events, 'emit');
   return {
-    manager: new ProtectedPublicShareManager(db, config, traefik, persistConfig),
+    manager: new ProtectedPublicShareManager(db, config, traefik, persistConfig, events),
     row,
     mappings,
     db,
     traefik,
     config,
     persistConfig,
+    events,
+    emit,
   };
 }
 
@@ -220,6 +226,64 @@ describe('ProtectedPublicShareManager', () => {
     });
     expect(rotated.access_code).not.toBe(initial.access_code);
     expect(manager.validateSessionToken(row, initial.hostname!, token)).toBe(false);
+  });
+
+  it('expires share sessions after the fixed seven-day lifetime', async () => {
+    const { manager, row } = harness();
+    const exposed = await manager.expose({ projectId: row.project_id, serviceId: row.id });
+    const now = Date.parse('2026-08-07T00:00:00.000Z');
+    const token = manager.createSessionToken(row, exposed.hostname!, now);
+
+    expect(
+      manager.validateSessionToken(
+        row,
+        exposed.hostname!,
+        token,
+        now + PROTECTED_SHARE_SESSION_TTL_SECONDS * 1000 - 1,
+      ),
+    ).toBe(true);
+    expect(
+      manager.validateSessionToken(
+        row,
+        exposed.hostname!,
+        token,
+        now + PROTECTED_SHARE_SESSION_TTL_SECONDS * 1000,
+      ),
+    ).toBe(false);
+  });
+
+  it('records enable, code rotation, and disable without logging credentials', async () => {
+    const { manager, row, emit } = harness();
+
+    const exposed = await manager.expose({ projectId: row.project_id, serviceId: row.id });
+    await manager.expose({ projectId: row.project_id, serviceId: row.id });
+    await manager.expose({
+      projectId: row.project_id,
+      serviceId: row.id,
+      rotateAccessCode: true,
+    });
+    await manager.unexpose({ projectId: row.project_id, serviceId: row.id });
+
+    expect(emit).toHaveBeenCalledWith('public-access:enabled', {
+      projectId: row.project_id,
+      serviceId: row.id,
+      serviceName: row.name,
+      hostname: exposed.hostname,
+    });
+    expect(emit).toHaveBeenCalledWith('public-access:code-rotated', {
+      projectId: row.project_id,
+      serviceId: row.id,
+      serviceName: row.name,
+      hostname: exposed.hostname,
+    });
+    expect(emit).toHaveBeenCalledWith('public-access:disabled', {
+      projectId: row.project_id,
+      serviceId: row.id,
+      serviceName: row.name,
+      hostname: exposed.hostname,
+    });
+    expect(JSON.stringify(emit.mock.calls)).not.toContain(exposed.access_code);
+    expect(emit.mock.calls.filter(([event]) => event === 'public-access:enabled')).toHaveLength(1);
   });
 
   it('keeps the hostname reservation but removes credentials and invalidates sessions on disable', async () => {

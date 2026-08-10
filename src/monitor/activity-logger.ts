@@ -37,6 +37,10 @@ const PERSISTED_EVENT_TYPES: EventType[] = [
   'tunnel:url',
   'env:set',
   'env:delete',
+  'public-access:enabled',
+  'public-access:disabled',
+  'public-access:code-rotated',
+  'public-access:verification-failed',
   'compose:start',
   'compose:up',
   'compose:failed',
@@ -91,6 +95,8 @@ export class ActivityLogger {
               if (activity.actionRunId) metadata.actionRunId = activity.actionRunId;
               if (activity.aiMetadata) metadata.aiMetadata = activity.aiMetadata;
               if (activity.reason) metadata.reason = activity.reason;
+              const serviceId = (payload as { serviceId?: unknown }).serviceId;
+              if (typeof serviceId === 'string') metadata.service_id = serviceId;
 
               await this.db.insertActivityLog({
                 event_type: eventType,

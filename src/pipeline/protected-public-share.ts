@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { hashPassword, verifyPassword } from '../auth/auth-service.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
+import { eventBus, type EventBus } from '../events/index.js';
 import {
   OpenLanderError,
   ProjectNotFoundError,
@@ -20,6 +21,8 @@ import type { TraefikManager } from './traefik.js';
 export const PROTECTED_SHARE_MAPPING_PREFIX = 'protected-share-';
 export const PROTECTED_SHARE_COOKIE = 'ol_share';
 export const PROTECTED_SHARE_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const PROTECTED_SHARE_VERIFY_WINDOW_SECONDS = 10 * 60;
+export const PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS = 8;
 const PROTECTED_SHARE_TLS_RESOLVER = 'openlander';
 const ACCESS_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_HOSTNAME_ATTEMPTS = 10;
@@ -159,6 +162,7 @@ export class ProtectedPublicShareManager {
     private readonly config: OpenLanderConfig,
     private readonly traefik: TraefikManager,
     private readonly persistConfig: (config: OpenLanderConfig) => void = () => undefined,
+    private readonly events: EventBus = eventBus,
   ) {}
 
   async getPublicAccess(input: {
@@ -242,6 +246,8 @@ export class ProtectedPublicShareManager {
       });
     }
 
+    const wasPublic =
+      service.visibility === 'shared' && Boolean(service.access_code && service.access_code_iv);
     let accessCode: string | undefined;
     let accessCodeHash = service.access_code;
     let signingSecret = service.access_code_iv;
@@ -261,6 +267,21 @@ export class ProtectedPublicShareManager {
 
     const updated = await this.db.getService(service.id);
     if (!updated) throw new ServiceNotFoundError(service.id);
+    if (!wasPublic) {
+      await this.events.emit('public-access:enabled', {
+        projectId: project.id,
+        serviceId: updated.id,
+        serviceName: updated.name,
+        hostname: mapping.domain,
+      });
+    } else if (input.rotateAccessCode && accessCode) {
+      await this.events.emit('public-access:code-rotated', {
+        projectId: project.id,
+        serviceId: updated.id,
+        serviceName: updated.name,
+        hostname: mapping.domain,
+      });
+    }
     return {
       ...(await this.view(project, updated)),
       ...(accessCode ? { access_code: accessCode } : {}),
@@ -272,9 +293,12 @@ export class ProtectedPublicShareManager {
     serviceId?: string;
   }): Promise<ProtectedPublicAccessView> {
     const { project, service } = await this.resolveTarget(input, false);
+    const wasPublic =
+      service.visibility === 'shared' && Boolean(service.access_code && service.access_code_iv);
     const reservation = (await this.db.listDomainMappingsForService(service.id)).find((candidate) =>
       candidate.id.startsWith(PROTECTED_SHARE_MAPPING_PREFIX),
     );
+    const hostname = reservation?.domain ?? normalizeHost(service.public_url ?? '');
     if (reservation?.status === 'active') {
       await this.db.updateDomainMapping(reservation.id, { status: 'pending' });
     }
@@ -286,6 +310,14 @@ export class ProtectedPublicShareManager {
     });
     const updated = await this.db.getService(service.id);
     if (!updated) throw new ServiceNotFoundError(service.id);
+    if (wasPublic) {
+      await this.events.emit('public-access:disabled', {
+        projectId: project.id,
+        serviceId: updated.id,
+        serviceName: updated.name,
+        hostname,
+      });
+    }
     return await this.view(project, updated);
   }
 

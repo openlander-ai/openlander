@@ -44,7 +44,9 @@ describe('Connected Publish UI', () => {
   });
 
   it('places protected share setup before the optional Cloudflare card', () => {
-    expect(webServer).toContain('<ProtectedShareSettingsCard />');
+    expect(webServer).toContain('<ProtectedShareSettingsCard');
+    expect(webServer).toContain("route.source === 'protected_share'");
+    expect(webServer).toContain('onSharesChanged={routes.reload}');
     expect(webServer).toContain('<ConnectedPublishCard />');
     expect(webServer.indexOf('<ProtectedShareSettingsCard />')).toBeLessThan(
       webServer.indexOf('<ConnectedPublishCard />'),
@@ -55,6 +57,13 @@ describe('Connected Publish UI', () => {
     expect(protectedShareCard).toContain('<Collapsible');
     expect(protectedShareCard).toContain('certificateSettingsOpen');
     expect(protectedShareCard).toContain('id="public-access"');
+    expect(protectedShareCard).toContain('exposeService(route.projectId, route.serviceId');
+    expect(protectedShareCard).toContain(
+      "unexposeService(route.projectId, route.serviceId, 'protected_share')",
+    );
+    expect(protectedShareCard).toContain('rotateAccessCode: true');
+    expect(protectedShareCard).toContain('setRevealedCode');
+    expect(protectedShareCard).toContain('copyToClipboard');
     expect(connectionCard).toContain('startCloudflareOAuth()');
     expect(connectionCard).toContain('getCloudflareConnection()');
     expect(connectionCard).toContain('connectCloudflare');

@@ -23,6 +23,9 @@ import {
 } from '../../pipeline/traefik.js';
 import {
   PROTECTED_SHARE_MAPPING_PREFIX,
+  PROTECTED_SHARE_SESSION_TTL_SECONDS,
+  PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS,
+  PROTECTED_SHARE_VERIFY_WINDOW_SECONDS,
   isValidProtectedShareAcmeEmail,
   normalizeProtectedShareProxyError,
   normalizeProtectedSharePublicHost,
@@ -738,6 +741,11 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
         ctx.config.traefik.mode === 'managed',
       traefikMode: ctx.config.traefik.mode,
       tlsMode: getProtectedShareTlsMode(),
+      security: {
+        sessionTtlSeconds: PROTECTED_SHARE_SESSION_TTL_SECONDS,
+        verifyMaxAttempts: PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS,
+        verifyWindowSeconds: PROTECTED_SHARE_VERIFY_WINDOW_SECONDS,
+      },
     });
   });
 
@@ -806,6 +814,11 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
       proxyApplied: ctx.config.traefik.mode === 'managed',
       traefikMode: ctx.config.traefik.mode,
       tlsMode: getProtectedShareTlsMode(),
+      security: {
+        sessionTtlSeconds: PROTECTED_SHARE_SESSION_TTL_SECONDS,
+        verifyMaxAttempts: PROTECTED_SHARE_VERIFY_MAX_ATTEMPTS,
+        verifyWindowSeconds: PROTECTED_SHARE_VERIFY_WINDOW_SECONDS,
+      },
     });
   });
 

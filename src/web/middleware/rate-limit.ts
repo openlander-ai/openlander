@@ -8,6 +8,7 @@ export interface RateLimitOptions {
 
 export interface RateLimitResult {
   limited: boolean;
+  firstLimited: boolean;
   retryAfterSec: number;
 }
 
@@ -32,14 +33,18 @@ export function checkRateLimit(key: string, opts: RateLimitOptions): RateLimitRe
   if (!bucket || now >= bucket.resetAt) {
     buckets.set(key, { count: 1, resetAt: now + opts.windowMs });
     pruneIfLarge(now);
-    return { limited: false, retryAfterSec: 0 };
+    return { limited: false, firstLimited: false, retryAfterSec: 0 };
   }
 
   bucket.count += 1;
   if (bucket.count > opts.max) {
-    return { limited: true, retryAfterSec: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+    return {
+      limited: true,
+      firstLimited: bucket.count === opts.max + 1,
+      retryAfterSec: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+    };
   }
-  return { limited: false, retryAfterSec: 0 };
+  return { limited: false, firstLimited: false, retryAfterSec: 0 };
 }
 
 function pruneIfLarge(now: number): void {

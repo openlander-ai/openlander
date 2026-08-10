@@ -269,13 +269,15 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       activity_type: 'config',
     });
     for (const row of activityRows) {
-      const serviceRef = serviceById.get(row.project_id);
+      const metadata = parseMetadata(row.metadata);
+      const serviceId = metadataString(metadata, 'service_id');
+      const serviceRef =
+        (serviceId ? serviceById.get(serviceId) : undefined) ?? serviceById.get(row.project_id);
       const projectId = serviceRef?.projectId ?? row.project_id;
       if (projectScoped && projectId !== projectFilter) continue;
       const ms = parseTimestamp(row.created_at);
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
-      const metadata = parseMetadata(row.metadata);
       const actor = actorFromActivityLog(metadata, row.event_type);
       events.push({
         id: `activity-${row.id}`,

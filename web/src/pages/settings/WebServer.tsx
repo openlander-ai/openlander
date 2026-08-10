@@ -228,7 +228,11 @@ export function WebServerSettings() {
         </div>
       )}
 
-      <ProtectedShareSettingsCard />
+      <ProtectedShareSettingsCard
+        shares={(routes.data?.routes ?? []).filter((route) => route.source === 'protected_share')}
+        sharesLoading={routes.loading}
+        onSharesChanged={routes.reload}
+      />
 
       <ConnectedPublishCard />
 

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../../src/app.js';
 import type { ProjectRow, ServiceRow } from '../../../src/db/index.js';
+import { EventBus } from '../../../src/events/index.js';
 import { createProtectedShareGatewayRoutes } from '../../../src/web/api/protected-share-gateway-routes.js';
 import { __resetRateLimit } from '../../../src/web/middleware/rate-limit.js';
 
@@ -27,9 +28,14 @@ function harness(options?: { validCode?: boolean; validSession?: boolean }) {
     verifyAccessCode: vi.fn(() => options?.validCode === true),
     createSessionToken: vi.fn(() => 'signed-session-token'),
   };
+  const eventBus = new EventBus();
+  const emit = vi.spyOn(eventBus, 'emit');
   const app = new Hono();
-  app.route('/', createProtectedShareGatewayRoutes({ publicShare } as unknown as AppContext));
-  return { app, publicShare };
+  app.route(
+    '/',
+    createProtectedShareGatewayRoutes({ publicShare, eventBus } as unknown as AppContext),
+  );
+  return { app, publicShare, emit };
 }
 
 describe('protected share visitor gateway', () => {
@@ -60,7 +66,7 @@ describe('protected share visitor gateway', () => {
   });
 
   it('connects an invalid share-code error to the input', async () => {
-    const { app } = harness({ validCode: false });
+    const { app, emit } = harness({ validCode: false });
     const response = await app.request('/__openlander/share/verify', {
       method: 'POST',
       headers: {
@@ -76,6 +82,13 @@ describe('protected share visitor gateway', () => {
     expect(html).toContain('aria-describedby="access-code-error"');
     expect(html).toContain('id="access-code-error"');
     expect(html).toContain('That share code is not valid.');
+    expect(emit).toHaveBeenCalledWith('public-access:verification-failed', {
+      projectId: target.project.id,
+      serviceId: target.service.id,
+      serviceName: target.service.name,
+      hostname: 'demo.34-64-12-34.sslip.io',
+      reason: 'invalid_code',
+    });
   });
 
   it('redirects direct visits to the internal verification endpoint back to the gate', async () => {
@@ -191,7 +204,7 @@ describe('protected share visitor gateway', () => {
   });
 
   it('rejects cross-origin code submission and rate-limits repeated guesses', async () => {
-    const { app } = harness({ validCode: false });
+    const { app, emit } = harness({ validCode: false });
     const crossOrigin = await app.request('/__openlander/share/verify', {
       method: 'POST',
       headers: {
@@ -217,5 +230,25 @@ describe('protected share visitor gateway', () => {
     }
     expect(response?.status).toBe(429);
     expect(response?.headers.get('retry-after')).toBeTruthy();
+    expect(emit).toHaveBeenLastCalledWith('public-access:verification-failed', {
+      projectId: target.project.id,
+      serviceId: target.service.id,
+      serviceName: target.service.name,
+      hostname: 'demo.34-64-12-34.sslip.io',
+      reason: 'rate_limited',
+    });
+
+    const emissionCount = emit.mock.calls.length;
+    const stillLimited = await app.request('/__openlander/share/verify', {
+      method: 'POST',
+      headers: {
+        Host: 'demo.34-64-12-34.sslip.io',
+        'X-Forwarded-For': '203.0.113.7',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'access_code=AAAA-BBBB',
+    });
+    expect(stillLimited.status).toBe(429);
+    expect(emit.mock.calls).toHaveLength(emissionCount);
   });
 });

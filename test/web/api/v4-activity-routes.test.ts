@@ -116,6 +116,40 @@ describe('GET /api/activity v4 feed', () => {
     });
   });
 
+  it('maps protected-share audit rows to the affected Application', async () => {
+    const app = createApp(
+      baseDb({
+        findActivityLogRecent: async (_limit: number, filters: { activity_type?: string }) => {
+          if (filters.activity_type !== 'config') return [];
+          return [
+            {
+              id: 'share-1',
+              event_type: 'public-access:verification-failed',
+              activity_type: 'config',
+              project_id: 'group-1',
+              title: 'Protected share authentication failed',
+              description: 'api · api.example.com · Invalid access code',
+              metadata: JSON.stringify({ service_id: 'svc-1', reason: 'invalid_code' }),
+              created_at: new Date().toISOString(),
+            },
+          ];
+        },
+      }),
+    );
+
+    const res = await app.request('/api/activity?limit=5&type=config');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.activities[0]).toMatchObject({
+      id: 'activity-share-1',
+      actor: 'system',
+      kind: 'config_changed',
+      project: 'group-1',
+      service: 'svc-1',
+      title: 'Protected share authentication failed',
+    });
+  });
+
   it('includes data-access activity rows in the dashboard feed', async () => {
     const app = createApp(
       baseDb({

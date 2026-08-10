@@ -19,6 +19,7 @@ export interface ActivityEvent {
     | 'approval'
     | 'circuit_breaker'
     | 'cleanup'
+    | 'config'
     | 'alert'
     | 'ai_diagnosis'
     | 'ai:invoked'
@@ -115,6 +116,7 @@ export async function resolveProjectIdFromEvent<T extends EventType>(
 }
 
 export function mapActivityType(eventType: EventType): ActivityEvent['type'] {
+  if (eventType.startsWith('public-access:')) return 'config';
   if (
     eventType === 'ai:invoked' ||
     eventType === 'ai:completed' ||
@@ -151,6 +153,14 @@ export function mapActivityStatus<T extends EventType>(
   eventType: T,
   payload: EventPayload[T],
 ): ActivityEvent['status'] {
+  if (eventType === 'public-access:verification-failed') return 'failed';
+  if (
+    eventType === 'public-access:enabled' ||
+    eventType === 'public-access:disabled' ||
+    eventType === 'public-access:code-rotated'
+  ) {
+    return 'resolved';
+  }
   if (eventType === 'ai:invoked') return 'ai-running';
   if (eventType === 'ai:completed') {
     const completedPayload = payload as EventPayload['ai:completed'];
@@ -272,6 +282,29 @@ export function describeActivityEvent<T extends EventType>(
   ActivityEvent,
   'title' | 'description' | 'actionRunId' | 'aiMetadata' | 'reason' | 'incidentId'
 > {
+  if (eventType.startsWith('public-access:')) {
+    const access = payload as EventPayload[
+      | 'public-access:enabled'
+      | 'public-access:disabled'
+      | 'public-access:code-rotated'
+      | 'public-access:verification-failed'];
+    const target = `${access.serviceName} · ${access.hostname}`;
+    if (eventType === 'public-access:enabled') {
+      return { title: 'Protected share enabled', description: target };
+    }
+    if (eventType === 'public-access:disabled') {
+      return { title: 'Protected share disabled', description: target };
+    }
+    if (eventType === 'public-access:code-rotated') {
+      return { title: 'Protected share code changed', description: target };
+    }
+    const failed = access as EventPayload['public-access:verification-failed'];
+    return {
+      title: 'Protected share authentication failed',
+      description: `${target} · ${failed.reason === 'rate_limited' ? 'Rate limit reached' : 'Invalid access code'}`,
+      reason: failed.reason,
+    };
+  }
   if (eventType === 'deploy:failed') {
     const deployPayload = payload as EventPayload['deploy:failed'];
     return {
