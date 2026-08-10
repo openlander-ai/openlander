@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add a compact protected-share management list to Web Server settings with
+  URL copy, access-code rotation, and stop-sharing actions for every public
+  Application.
+- Record protected-share lifecycle and failed authentication events in the
+  Activity log without storing access codes or client IP addresses.
+
+### Changed
+
+- Show the active protected-share authentication policy in settings, including
+  the attempt window, session lifetime, and code-rotation behavior.
+
+### Security
+
+- Deduplicate rate-limit Activity events so repeated blocked attempts cannot
+  flood the audit log, while preserving individual invalid-code records.
+
 ## [0.3.3-rc.5] - 2026-08-07
 
 ### Fixed
