@@ -64,9 +64,14 @@ advertised through `sslip.io`.
 ### Connected Publish OAuth
 
 Connected Publish uses a public Cloudflare OAuth client with the Authorization
-Code flow and PKCE. Official builds must provide the publisher-registered client values;
-self-built installations may register their own public client and set these in
-the Compose `.env` file:
+Code flow and PKCE. Official builds include OpenLander's publisher client, so
+the **Cloudflare 연결** button works without editing Compose or restarting the
+server. The fixed publisher callback only returns the authorization code and
+state to the OpenLander window that opened it; token exchange and token storage
+stay on the self-hosted OpenLander instance.
+
+Self-built distributions may register their own public client and override all
+publisher values in the Compose `.env` file:
 
 ```dotenv
 OPENLANDER_CLOUDFLARE_OAUTH_CLIENT_ID=your-public-client-id
@@ -77,8 +82,7 @@ OPENLANDER_CLOUDFLARE_OAUTH_SCOPES=scope-id-1,scope-id-2
 The redirect URI must be the fixed callback page registered with Cloudflare.
 The scope IDs must match that OAuth client and cover account/Zone reads, DNS
 writes, and Cloudflare Tunnel/connector writes. Restart the OpenLander
-container after changing these values. The Web Server page reports Connected
-Publish as unavailable when the client id or redirect URI is missing.
+container after changing these overrides.
 
 The official Compose files mount a sibling volume named
 `${OPENLANDER_DATA_VOLUME:-openlander-data}-cloudflare` at

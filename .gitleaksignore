@@ -2,11 +2,12 @@
 #
 # Format: <file>:<rule-id>:<line-number>
 #
-# When a finding is reviewed and confirmed safe (mocked test data, not a
-# real secret), add its fingerprint here. Real-secret patterns from any
-# rule remain blocked elsewhere.
+# When a finding is reviewed and confirmed safe (mocked test data or an
+# intentionally public identifier, not a real secret), add its fingerprint
+# here. Real-secret patterns from any rule remain blocked elsewhere.
 
 test/helpers/web-route-mocks.ts:generic-api-key:60
 test/web/api/approval-routes.test.ts:generic-api-key:86
 test/web/api/approval-routes.test.ts:generic-api-key:110
 src/pipeline/protected-public-share.ts:generic-api-key:24
+src/config/cloudflare-publisher.ts:generic-api-key:1

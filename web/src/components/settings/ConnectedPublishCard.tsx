@@ -23,6 +23,7 @@ import {
 import { useLanguage } from '@/i18n/context';
 import {
   connectCloudflare,
+  completeCloudflareOAuth,
   disconnectCloudflare,
   getCloudflareConnection,
   listCloudflareZones,
@@ -36,16 +37,10 @@ import { cn } from '@/lib/utils';
 interface OAuthMessage {
   type?: unknown;
   status?: unknown;
-  accounts?: unknown;
+  code?: unknown;
   state?: unknown;
   error?: unknown;
   error_description?: unknown;
-}
-
-function isCloudflareAccountOption(value: unknown): value is CloudflareAccountOption {
-  if (!value || typeof value !== 'object') return false;
-  const account = value as Record<string, unknown>;
-  return typeof account.id === 'string' && typeof account.name === 'string';
 }
 
 function publishReturnTarget(search: string): string | null {
@@ -60,7 +55,7 @@ function waitForOAuthPopup(
   callbackOrigin: string,
   expectedState: string,
   timeoutMs: number,
-): Promise<{ accounts: CloudflareAccountOption[]; state: string }> {
+): Promise<{ code: string; state: string }> {
   return new Promise((resolve, reject) => {
     const finish = () => {
       window.removeEventListener('message', onMessage);
@@ -84,10 +79,12 @@ function waitForOAuthPopup(
         reject(new Error('Cloudflare OAuth did not complete authorization'));
         return;
       }
-      const accounts = Array.isArray(event.data.accounts)
-        ? event.data.accounts.filter(isCloudflareAccountOption)
-        : [];
-      resolve({ accounts, state });
+      const code = typeof event.data.code === 'string' ? event.data.code : '';
+      if (!code) {
+        reject(new Error('Cloudflare OAuth returned no authorization code'));
+        return;
+      }
+      resolve({ code, state });
     };
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', onMessage);
@@ -191,6 +188,7 @@ export function ConnectedPublishCard() {
       );
       popup.location.replace(start.auth_url);
       const authorized = await callbackPromise;
+      const completion = await completeCloudflareOAuth(authorized.code, authorized.state);
       const refreshedConnection = await getCloudflareConnection();
       if (refreshedConnection.configured) {
         setConnection(refreshedConnection);
@@ -203,8 +201,8 @@ export function ConnectedPublishCard() {
         }
         return;
       }
-      setAccounts(authorized.accounts);
-      const onlyAccount = authorized.accounts.length === 1 ? authorized.accounts[0] : undefined;
+      setAccounts(completion.accounts);
+      const onlyAccount = completion.accounts.length === 1 ? completion.accounts[0] : undefined;
       if (onlyAccount) {
         const nextZones = await loadZones(onlyAccount.id);
         const onlyZone = nextZones.length === 1 ? nextZones[0] : undefined;

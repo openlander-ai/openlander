@@ -19,6 +19,14 @@ describe('Connected Publish UI', () => {
   const cloudflareApi = readRepoFile('web/src/lib/api/cloudflare.ts');
   const callback = readRepoFile('web/public/cloudflare-oauth-callback.html');
   const callbackScript = readRepoFile('web/public/cloudflare-oauth-callback.js');
+  const publisherCallback = readRepoFile(
+    'publisher/cloudflare-oauth/cloudflare-oauth-callback.html',
+  );
+  const publisherCallbackScript = readRepoFile(
+    'publisher/cloudflare-oauth/cloudflare-oauth-callback.js',
+  );
+  const publisherHeaders = readRepoFile('publisher/cloudflare-oauth/_headers');
+  const publisherConfig = readRepoFile('src/config/cloudflare-publisher.ts');
   const server = readRepoFile('src/web/server.ts');
   const connectedPublish = readRepoFile('src/pipeline/connected-publish.ts');
   const runtimeCompose = readRepoFile('docker-compose.runtime.yml');
@@ -117,20 +125,39 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('const authorized = await callbackPromise');
   });
 
-  it('completes OAuth inside the callback before notifying the opener', () => {
+  it('bridges OAuth code and state to the authenticated opener for local completion', () => {
     expect(callback).toContain('<script src="/cloudflare-oauth-callback.js"></script>');
     expect(callback).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
     expect(callbackScript).toContain("type: 'openlander:cloudflare-oauth'");
-    expect(callbackScript).toContain("fetch('/api/setup/cloudflare/oauth/complete'");
-    expect(callbackScript).toContain("credentials: 'same-origin'");
+    expect(callbackScript).not.toContain("fetch('/api/setup/cloudflare/oauth/complete'");
     expect(callbackScript).toContain("status: 'authorized'");
+    expect(callbackScript).toContain('code,');
+    expect(callbackScript).toContain('state,');
     expect(callbackScript).toContain("'openlander:cloudflare-oauth:ack'");
     expect(callbackScript).toContain('window.opener.postMessage');
+    expect(callbackScript).toContain(
+      "window.history.replaceState(null, '', window.location.pathname)",
+    );
     expect(callback).toContain('Return to OpenLander');
-    expect(callbackScript).not.toContain("postMessage(payload, '*')");
+    expect(callbackScript).toContain("postMessage(payload, '*')");
     expect(callbackScript).not.toMatch(/localStorage|sessionStorage/);
+    expect(callback).toContain('name="referrer" content="no-referrer"');
+    expect(callback).toContain('Content-Security-Policy');
     expect(connectionCard).toContain("type: 'openlander:cloudflare-oauth:ack'");
-    expect(connectionCard).not.toContain('completeCloudflareOAuth');
+    expect(connectionCard).toContain('completeCloudflareOAuth(authorized.code, authorized.state)');
+    expect(connectionCard).toContain('event.origin !== callbackOrigin');
+    expect(connectionCard).toContain('event.source !== popup');
+  });
+
+  it('keeps the official publisher callback aligned with the packaged bridge', () => {
+    expect(publisherCallback).toBe(callback);
+    expect(publisherCallbackScript).toBe(callbackScript);
+    expect(publisherHeaders).toContain('Cache-Control: no-store');
+    expect(publisherHeaders).toContain('Referrer-Policy: no-referrer');
+    expect(publisherHeaders).not.toContain('Cross-Origin-Opener-Policy');
+    expect(publisherConfig).toContain(
+      "'https://openlander.dongbin.cloud/cloudflare-oauth-callback.html'",
+    );
   });
 
   it('serves the OAuth callback before the SPA fallback without caching it', () => {
@@ -148,7 +175,14 @@ describe('Connected Publish UI', () => {
     expect(server.slice(callbackScriptRoute, callbackRoute)).toContain(
       "'Content-Type': 'text/javascript; charset=UTF-8'",
     );
+    expect(server.slice(callbackScriptRoute, callbackRoute)).toContain(
+      "'Referrer-Policy': 'no-referrer'",
+    );
+    expect(server.slice(callbackScriptRoute, callbackRoute)).toContain(
+      "'X-Content-Type-Options': 'nosniff'",
+    );
     expect(server.slice(callbackRoute, spaFallback)).toContain("'Cache-Control': 'no-store'");
+    expect(server.slice(callbackRoute, spaFallback)).toContain("frame-ancestors 'none'");
   });
 
   it('shares only the tunnel token volume with the containerized connector', () => {
