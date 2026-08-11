@@ -7,6 +7,8 @@
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('auth-refresh');
+const NETWORK_ATTEMPTS = 2;
+const NETWORK_RETRY_DELAY_MS = 500;
 
 /** Standard OAuth token response shape. */
 export interface OAuthTokenResponse {
@@ -45,19 +47,33 @@ export async function refreshOAuthToken(
   });
   if (opts.clientSecret) body.set('client_secret', opts.clientSecret);
 
-  let response: Response;
-  try {
-    response = await fetch(opts.tokenUrl, {
-      method: 'POST',
-      signal: AbortSignal.timeout(30_000),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
-  } catch (err) {
-    log.error({ err }, 'Token refresh network error');
-    throw new Error(`Token refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+  let response: Response | undefined;
+  let networkError: unknown;
+  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
+    try {
+      response = await fetch(opts.tokenUrl, {
+        method: 'POST',
+        signal: AbortSignal.timeout(30_000),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      });
+      break;
+    } catch (err) {
+      networkError = err;
+      if (attempt < NETWORK_ATTEMPTS) {
+        log.warn({ err, attempt, attempts: NETWORK_ATTEMPTS }, 'Token refresh network error; retrying');
+        await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  if (!response) {
+    log.error({ err: networkError, attempts: NETWORK_ATTEMPTS }, 'Token refresh network error');
+    throw new Error(
+      `Token refresh failed: ${networkError instanceof Error ? networkError.message : String(networkError)}`,
+    );
   }
 
   // 400/401 = invalid or revoked refresh token — caller should re-auth

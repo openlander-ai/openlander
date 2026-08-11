@@ -14,6 +14,7 @@ beforeEach(() => {
 
 afterEach(() => {
   global.fetch = originalFetch;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -95,9 +96,35 @@ describe('refreshOAuthToken', () => {
   });
 
   it('throws on network error', async () => {
-    mockFetch().mockRejectedValueOnce(new Error('Network unreachable'));
+    vi.useFakeTimers();
+    mockFetch().mockRejectedValue(new Error('Network unreachable'));
 
-    await expect(refreshOAuthToken(baseOpts)).rejects.toThrow('Token refresh failed');
+    const result = refreshOAuthToken(baseOpts);
+    const assertion = expect(result).rejects.toThrow('Token refresh failed');
+    await vi.runAllTimersAsync();
+
+    await assertion;
+    expect(mockFetch()).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries one transient network error before succeeding', async () => {
+    vi.useFakeTimers();
+    mockFetch()
+      .mockRejectedValueOnce(new Error('Connect timeout'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'recovered-access-token',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        }),
+      });
+
+    const result = refreshOAuthToken(baseOpts);
+    await vi.runAllTimersAsync();
+
+    await expect(result).resolves.toMatchObject({ access_token: 'recovered-access-token' });
+    expect(mockFetch()).toHaveBeenCalledTimes(2);
   });
 
   it('preserves new refresh token when returned', async () => {
