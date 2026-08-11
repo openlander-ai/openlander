@@ -105,6 +105,10 @@ describe('Connected Publish UI', () => {
     expect(publicControl).toContain("publish('cloudflare')");
     expect(publicControl).toContain('methodDialogOpen');
     expect(publicControl).toContain('cloudflareBusyElsewhere');
+    expect(publicControl).toContain('cloudflareVerifying');
+    expect(publicControl).toContain('PUBLIC_ACCESS_ROUTE_UNREACHABLE');
+    expect(publicControl).toContain('PUBLIC_ACCESS_APPLICATION_UNHEALTHY');
+    expect(publicControl).toContain('entrypointNote');
   });
 
   it('explains an ineligible Application and confirms session-invalidating actions', () => {
@@ -236,6 +240,10 @@ describe('Connected Publish UI', () => {
       expect(locale).toMatch(/securityNote:/);
       expect(locale).toMatch(/connectedToast:/);
       expect(locale).toMatch(/cloudflareUnreachable:/);
+      expect(locale).toMatch(/cloudflareVerifying:/);
+      expect(locale).toMatch(/routeUnreachable:/);
+      expect(locale).toMatch(/applicationUnhealthy:/);
+      expect(locale).toMatch(/entrypointNote:/);
     }
   });
 });

@@ -1543,6 +1543,7 @@ export const translations = {
       title: '보호된 외부 공유',
       publish: '외부 공유',
       publishing: '공유 준비 중…',
+      cloudflareVerifying: 'DNS·Tunnel 경로와 실제 외부 접속을 확인하고 있습니다…',
       stopping: '공개 중지 중…',
       retry: '공개 다시 시도',
       stop: '공개 중지',
@@ -1570,6 +1571,12 @@ export const translations = {
       httpsPortUnavailable:
         '이 서버에서 443 포트를 이미 사용 중입니다. 포트를 비우거나 Cloudflare 터널을 사용하세요.',
       publishFailed: '애플리케이션을 외부 공유하지 못했습니다.',
+      routeUnreachable:
+        'Cloudflare에 경로는 등록됐지만 아직 외부에서 접속할 수 없습니다. 다시 시도하거나 Cloudflare 연결을 복구하세요.',
+      applicationUnhealthy:
+        '공개 경로는 애플리케이션에 도달했지만 서버 오류가 반환됐습니다. 앱 상태와 로그를 확인하세요.',
+      publishErrorGeneric:
+        '외부 공유를 완료하지 못했습니다. 애플리케이션 상태를 확인하고 다시 시도하세요.',
       unpublishFailed: '공개를 중지하지 못했습니다.',
       stopTitle: '외부 공개를 중지할까요?',
       stopDescription:
@@ -1586,6 +1593,8 @@ export const translations = {
       codeRotated: '새 접근 코드를 만들었습니다. 기존 방문자는 모두 로그아웃되었습니다.',
       methodTitle: '외부 공유 방식 선택',
       methodDescription: '이 애플리케이션에 사용할 접속 방식을 선택하세요.',
+      entrypointNote:
+        '선택한 HTTP 애플리케이션만 공개 진입점이 됩니다. 데이터베이스·Worker·다른 애플리케이션은 비공개로 유지됩니다.',
       methodProtected: '직접 보호 공유',
       methodProtectedShort: '접근 코드',
       methodProtectedDescription:

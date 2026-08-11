@@ -1488,6 +1488,7 @@ export const translations = {
       title: 'Protected public share',
       publish: 'Share externally',
       publishing: 'Preparing share…',
+      cloudflareVerifying: 'Checking DNS, Tunnel routing, and external reachability…',
       stopping: 'Stopping…',
       retry: 'Retry publish',
       stop: 'Stop',
@@ -1517,6 +1518,12 @@ export const translations = {
       httpsPortUnavailable:
         'Port 443 is already in use on this server. Free it or use Cloudflare Tunnel.',
       publishFailed: 'Could not share this Application.',
+      routeUnreachable:
+        'Cloudflare accepted the route, but it is not externally reachable yet. Retry or repair the Cloudflare connection.',
+      applicationUnhealthy:
+        'The public route reached this Application, but the Application returned a server error. Check its status and logs.',
+      publishErrorGeneric:
+        'External sharing did not finish. Review the Application status and retry.',
       unpublishFailed: 'Could not stop public access.',
       stopTitle: 'Stop public access?',
       stopDescription:
@@ -1534,6 +1541,8 @@ export const translations = {
       codeRotated: 'A new access code was generated. Existing sessions were signed out.',
       methodTitle: 'Choose a sharing method',
       methodDescription: 'Choose how this Application should be reachable from the internet.',
+      entrypointNote:
+        'Only this HTTP Application becomes the public entrypoint. Databases, workers, and sibling Applications remain private.',
       methodProtected: 'Direct protected share',
       methodProtectedShort: 'Access code',
       methodProtectedDescription:

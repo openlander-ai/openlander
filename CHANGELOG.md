@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Explain that external sharing publishes only the selected HTTP Application as
+  the public entrypoint while databases, workers, and sibling Applications stay
+  private.
+
+### Fixed
+
+- Keep Cloudflare publishing in `provisioning` until the generated HTTPS URL is
+  externally reachable, retry short DNS and Tunnel propagation delays, and
+  distinguish route failures from Application 5xx responses in the UI.
+
 ## [0.3.6-rc.1] - 2026-08-11
 
 ### Changed

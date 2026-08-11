@@ -14,7 +14,10 @@ import type {
   CloudflareApiClient,
   CloudflareDnsRecord,
 } from '../../src/pipeline/cloudflare-api.js';
-import { ConnectedPublishManager } from '../../src/pipeline/connected-publish.js';
+import {
+  ConnectedPublishManager,
+  type PublicRouteProbeResult,
+} from '../../src/pipeline/connected-publish.js';
 import type { RuntimeBackend } from '../../src/pipeline/runtime/backend.js';
 
 vi.mock('../../src/auth/token-store.js', () => ({
@@ -36,6 +39,7 @@ vi.mock('node:fs/promises', async (importOriginal) => ({
 
 afterEach(() => {
   vi.mocked(getValidToken).mockResolvedValue('access-token');
+  vi.unstubAllGlobals();
 });
 
 const project = {
@@ -77,6 +81,9 @@ function createHarness(
     existingAccess?: ProjectPublicAccessRow;
     connectorState?: string;
     serviceOverrides?: Partial<ServiceRow>;
+    publicRouteProbeResults?: PublicRouteProbeResult[];
+    publicRouteProbeAttempts?: number;
+    useDefaultPublicRouteProbe?: boolean;
   } = {},
 ) {
   let connectionState: CloudflareConnectionRow | null = connection;
@@ -253,6 +260,15 @@ function createHarness(
     }),
   } as unknown as RuntimeBackend;
 
+  const publicRouteProbeResults = [
+    ...(options.publicRouteProbeResults ?? [{ kind: 'reachable', status: 200 }]),
+  ];
+  const publicRouteProbe = vi.fn(async () =>
+    Promise.resolve(
+      publicRouteProbeResults.shift() ?? ({ kind: 'reachable', status: 200 } as const),
+    ),
+  );
+
   const manager = new ConnectedPublishManager(
     {
       apiToken: '',
@@ -264,13 +280,21 @@ function createHarness(
     },
     db,
     new EventBus(),
-    { runtime, instanceId: 'instance-1', apiFactory: () => api },
+    {
+      runtime,
+      instanceId: 'instance-1',
+      apiFactory: () => api,
+      ...(options.useDefaultPublicRouteProbe ? {} : { publicRouteProbe }),
+      publicRouteProbeAttempts: options.publicRouteProbeAttempts ?? 3,
+      publicRouteProbeIntervalMs: 0,
+    },
   );
 
   return {
     api,
     db,
     manager,
+    publicRouteProbe,
     runtime,
     getAccess: () => access,
     getMapping: () => mapping,
@@ -339,6 +363,86 @@ describe('ConnectedPublishManager', () => {
       public_url: 'https://demo-app.example.com',
     });
     expect(harness.api.createTunnelDnsRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps provisioning until the public route is externally reachable', async () => {
+    const harness = createHarness({
+      publicRouteProbeResults: [
+        { kind: 'unreachable' },
+        { kind: 'application_unhealthy', status: 503 },
+        { kind: 'reachable', status: 200 },
+      ],
+    });
+
+    await expect(
+      harness.manager.requestPublish({ projectId: project.id, serviceId: service.id }),
+    ).resolves.toMatchObject({ status: 'provisioning', public_url: null });
+    await harness.manager.waitForPendingOperations();
+
+    expect(harness.publicRouteProbe).toHaveBeenCalledTimes(3);
+    expect(harness.publicRouteProbe).toHaveBeenCalledWith('https://demo-app.example.com');
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
+      status: 'public',
+      public_url: 'https://demo-app.example.com',
+      error: null,
+    });
+  });
+
+  it('checks the external HTTPS URL with a body-free HEAD request by default', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ status: 204 });
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({ useDefaultPublicRouteProbe: true });
+
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://demo-app.example.com',
+      expect.objectContaining({
+        method: 'HEAD',
+        redirect: 'manual',
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({ status: 'public' });
+  });
+
+  it('reports a route-specific error when the Cloudflare URL never becomes reachable', async () => {
+    const harness = createHarness({
+      publicRouteProbeResults: [{ kind: 'unreachable' }, { kind: 'unreachable' }],
+      publicRouteProbeAttempts: 2,
+    });
+
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
+      status: 'error',
+      public_url: null,
+      error: { code: 'PUBLIC_ACCESS_ROUTE_UNREACHABLE' },
+    });
+    expect(harness.getMapping()).toBeNull();
+    expect(harness.getService()).toMatchObject({ visibility: 'internal', public_url: null });
+  });
+
+  it('separates an application 5xx from a Cloudflare route failure', async () => {
+    const harness = createHarness({
+      publicRouteProbeResults: [
+        { kind: 'application_unhealthy', status: 503 },
+        { kind: 'application_unhealthy', status: 503 },
+      ],
+      publicRouteProbeAttempts: 2,
+    });
+
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
+      status: 'error',
+      public_url: null,
+      error: { code: 'PUBLIC_ACCESS_APPLICATION_UNHEALTHY' },
+    });
   });
 
   it('rejects Cloudflare publishing while the protected access-code route is active', async () => {

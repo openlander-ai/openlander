@@ -19,8 +19,10 @@ import {
   CloudflareNotConnectedError,
   OpenLanderError,
   ProjectNotFoundError,
+  PublicAccessApplicationUnhealthyError,
   PublicAccessBusyError,
   PublicAccessNotEligibleError,
+  PublicAccessRouteUnreachableError,
   ServiceNotFoundError,
   ServiceSelectionRequiredError,
 } from '../errors.js';
@@ -45,8 +47,18 @@ const CONTAINERIZED_TOKEN_DIR = '/run/openlander/cloudflare';
 const DEFAULT_CONTAINERIZED_DATA_VOLUME = 'openlander-data';
 const TRAEFIK_ORIGIN = 'http://traefik-ol:80';
 const MAX_HOSTNAME_ATTEMPTS = 10;
+const DEFAULT_PUBLIC_ROUTE_PROBE_ATTEMPTS = 8;
+const DEFAULT_PUBLIC_ROUTE_PROBE_INTERVAL_MS = 1_000;
+const DEFAULT_PUBLIC_ROUTE_PROBE_TIMEOUT_MS = 5_000;
 
 type ApiFactory = (accessToken: string) => CloudflareApiClient;
+
+export type PublicRouteProbeResult =
+  | { kind: 'reachable'; status: number }
+  | { kind: 'application_unhealthy'; status: number }
+  | { kind: 'unreachable' };
+
+export type PublicRouteProbe = (url: string) => Promise<PublicRouteProbeResult>;
 
 export interface ConnectedPublishOptions {
   runtime?: RuntimeBackend;
@@ -54,6 +66,10 @@ export interface ConnectedPublishOptions {
   networkName?: string;
   apiFactory?: ApiFactory;
   connectorImage?: string;
+  publicRouteProbe?: PublicRouteProbe;
+  publicRouteProbeAttempts?: number;
+  publicRouteProbeIntervalMs?: number;
+  sleep?: (durationMs: number) => Promise<void>;
 }
 
 export interface CloudflareConnectionView {
@@ -135,12 +151,32 @@ function serviceCandidates(services: readonly ServiceRow[]) {
   }));
 }
 
+async function defaultPublicRouteProbe(url: string): Promise<PublicRouteProbeResult> {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'manual',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(DEFAULT_PUBLIC_ROUTE_PROBE_TIMEOUT_MS),
+    });
+    return response.status < 500
+      ? { kind: 'reachable', status: response.status }
+      : { kind: 'application_unhealthy', status: response.status };
+  } catch {
+    return { kind: 'unreachable' };
+  }
+}
+
 export class ConnectedPublishManager {
   private readonly runtime?: RuntimeBackend;
   private readonly instanceId: string;
   private readonly networkName: string;
   private readonly apiFactory: ApiFactory;
   private readonly connectorImage: string;
+  private readonly publicRouteProbe: PublicRouteProbe;
+  private readonly publicRouteProbeAttempts: number;
+  private readonly publicRouteProbeIntervalMs: number;
+  private readonly sleep: (durationMs: number) => Promise<void>;
   private operationQueue: Promise<void> = Promise.resolve();
   private disconnecting = false;
 
@@ -155,6 +191,17 @@ export class ConnectedPublishManager {
     this.networkName = options.networkName ?? 'openlander';
     this.apiFactory = options.apiFactory ?? ((accessToken) => new CloudflareApiClient(accessToken));
     this.connectorImage = options.connectorImage ?? CLOUDFLARED_IMAGE;
+    this.publicRouteProbe = options.publicRouteProbe ?? defaultPublicRouteProbe;
+    this.publicRouteProbeAttempts = Math.max(
+      1,
+      options.publicRouteProbeAttempts ?? DEFAULT_PUBLIC_ROUTE_PROBE_ATTEMPTS,
+    );
+    this.publicRouteProbeIntervalMs = Math.max(
+      0,
+      options.publicRouteProbeIntervalMs ?? DEFAULT_PUBLIC_ROUTE_PROBE_INTERVAL_MS,
+    );
+    this.sleep =
+      options.sleep ?? ((durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)));
   }
 
   reloadConfig(config: CloudflareConfig): void {
@@ -440,6 +487,7 @@ export class ConnectedPublishManager {
       await this.db.updateProjectPublicAccess(projectId, { domainMappingId: mapping.id });
       await this.syncIngress(api, connection);
       const publicUrl = `https://${withDns.hostname}`;
+      await this.waitForPublicRoute(publicUrl, withDns.hostname);
       await this.db.updateService(target.service.id, {
         visibility: 'production',
         publicUrl,
@@ -456,6 +504,27 @@ export class ConnectedPublishManager {
     } catch (error) {
       await this.failPublish(projectId, error);
     }
+  }
+
+  private async waitForPublicRoute(publicUrl: string, hostname: string): Promise<void> {
+    let lastResult: PublicRouteProbeResult = { kind: 'unreachable' };
+
+    for (let attempt = 1; attempt <= this.publicRouteProbeAttempts; attempt += 1) {
+      lastResult = await this.publicRouteProbe(publicUrl);
+      if (lastResult.kind === 'reachable') return;
+      if (attempt < this.publicRouteProbeAttempts && this.publicRouteProbeIntervalMs > 0) {
+        await this.sleep(this.publicRouteProbeIntervalMs);
+      }
+    }
+
+    if (lastResult.kind === 'application_unhealthy') {
+      throw new PublicAccessApplicationUnhealthyError(
+        hostname,
+        lastResult.status,
+        this.publicRouteProbeAttempts,
+      );
+    }
+    throw new PublicAccessRouteUnreachableError(hostname, this.publicRouteProbeAttempts);
   }
 
   private async failPublish(projectId: string, error: unknown): Promise<void> {

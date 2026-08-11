@@ -271,6 +271,16 @@ export function PublicAccessControl({
     Boolean(cloudflareAccess?.service_id) &&
     cloudflareAccess?.service_id !== serviceId;
   const transitioning = status === 'provisioning' || status === 'unpublishing';
+  const statusMessage =
+    status === 'provisioning' && provider === 'cloudflare'
+      ? t('projectDetail.publicAccess.cloudflareVerifying')
+      : status === 'error'
+        ? access?.error?.code === 'PUBLIC_ACCESS_ROUTE_UNREACHABLE'
+          ? t('projectDetail.publicAccess.routeUnreachable')
+          : access?.error?.code === 'PUBLIC_ACCESS_APPLICATION_UNHEALTHY'
+            ? t('projectDetail.publicAccess.applicationUnhealthy')
+            : t('projectDetail.publicAccess.publishErrorGeneric')
+        : null;
 
   if (status === 'public' && access?.public_url) {
     return (
@@ -379,6 +389,19 @@ export function PublicAccessControl({
   return (
     <>
       <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2.5">
+        {statusMessage && (
+          <span
+            role={status === 'error' ? 'alert' : 'status'}
+            className={cn(
+              'max-w-sm text-right text-[11.5px] leading-relaxed',
+              status === 'error'
+                ? 'text-[color:var(--ol-error)]'
+                : 'text-[color:var(--ol-fg-subtle)]',
+            )}
+          >
+            {statusMessage}
+          </span>
+        )}
         {publishDisabledReason && (
           <span className="text-[11.5px] text-[color:var(--ol-fg-subtle)]">
             {publishDisabledReason}
@@ -432,6 +455,9 @@ export function PublicAccessControl({
               {t('projectDetail.publicAccess.methodDescription')}
             </DialogDescription>
           </DialogHeader>
+          <p className="text-[11.5px] leading-relaxed text-[color:var(--ol-fg-subtle)]">
+            {t('projectDetail.publicAccess.entrypointNote')}
+          </p>
           <div
             className="mt-3 grid gap-2"
             role="group"

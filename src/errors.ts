@@ -605,6 +605,30 @@ export class PublicAccessBusyError extends OpenLanderError {
   }
 }
 
+export class PublicAccessRouteUnreachableError extends OpenLanderError {
+  constructor(hostname: string, attempts: number) {
+    super(
+      'The public route could not be reached after Cloudflare configuration completed.',
+      'PUBLIC_ACCESS_ROUTE_UNREACHABLE',
+      504,
+      { hostname, attempts },
+    );
+    this.name = 'PublicAccessRouteUnreachableError';
+  }
+}
+
+export class PublicAccessApplicationUnhealthyError extends OpenLanderError {
+  constructor(hostname: string, status: number, attempts: number) {
+    super(
+      'The public route reached the application, but the application did not return a usable response.',
+      'PUBLIC_ACCESS_APPLICATION_UNHEALTHY',
+      502,
+      { hostname, status, attempts },
+    );
+    this.name = 'PublicAccessApplicationUnhealthyError';
+  }
+}
+
 /**
  * Check if a raw error from dockerode is a "not found" error.
  * Use at boundaries where raw dockerode is called directly (not via Docker wrapper).
