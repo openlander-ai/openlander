@@ -4,7 +4,7 @@ import { createModuleLogger } from '../lib/logger.js';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const MAX_PAGES = 20;
 const REQUEST_TIMEOUT_MS = 20_000;
-const NETWORK_RETRY_DELAYS_MS = [250, 750] as const;
+const NETWORK_RETRY_DELAYS_MS = [250, 750, 2_000, 5_000, 10_000] as const;
 const RETRY_SAFE_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE']);
 const log = createModuleLogger('cloudflare-api');
 

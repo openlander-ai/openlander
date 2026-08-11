@@ -169,7 +169,7 @@ describe('CloudflareApiClient', () => {
     await vi.runAllTimersAsync();
     await assertion;
 
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(6);
     vi.useRealTimers();
   });
 });

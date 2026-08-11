@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep retry-safe Cloudflare operations provisioning through longer Colima
+  outbound interruptions instead of requiring a manual retry or VM restart.
+
 ## [0.3.6-rc.6] - 2026-08-11
 
 ### Fixed
