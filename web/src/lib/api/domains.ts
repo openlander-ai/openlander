@@ -11,6 +11,7 @@
  *   - DELETE /api/projects/:p/services/:s/domains/:idOrDomain
  *
  * Backend error codes surfaced as `DomainApiError.code`:
+ *   - DOMAIN_MANAGED_BY_PUBLIC_ACCESS (409, route owned by managed sharing)
  *   - DOMAIN_ROUTING_DISABLED    (409, explicit `proxy.mode = external`)
  *   - DOMAIN_ROUTE_EXISTS        (409, duplicate `(domain, path_prefix)`)
  *   - MISSING_FIELD              (400, required field missing)
@@ -87,6 +88,7 @@ export interface DeleteDomainResponse {
 }
 
 export type DomainErrorCode =
+  | 'DOMAIN_MANAGED_BY_PUBLIC_ACCESS'
   | 'DOMAIN_ROUTING_DISABLED'
   | 'DOMAIN_ROUTE_EXISTS'
   | 'MISSING_FIELD'

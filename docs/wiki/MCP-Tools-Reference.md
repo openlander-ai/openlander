@@ -897,10 +897,11 @@ request.
 
 ### `expose_public` / `unexpose_public`
 
-Publish or unpublish one representative HTTP Application at a stable HTTPS URL through the
-connected Cloudflare account and selected DNS Zone. Publishing returns immediately with
-`provisioning` or `public`; poll `get_public_access` through the returned `status_call`.
-Unpublishing retains the hostname and DNS reservation so republishing reuses the same URL.
+Canonical managed-sharing actions under `openlander_service`. The default
+`provider=protected_share` publishes a stable HTTPS URL behind an OpenLander access-code gate.
+Set `provider=cloudflare` to use Connected Publish instead; that path has no OpenLander access-code
+screen. Cloudflare publishing may return `provisioning`; poll `get_public_access` through the
+returned `status_call`. Unpublishing retains the provider's hostname reservation for reuse.
 
 | Parameter      | Type   | Required | Description                                             |
 | -------------- | ------ | -------- | ------------------------------------------------------- |
@@ -908,6 +909,7 @@ Unpublishing retains the hostname and DNS reservation so republishing reuses the
 | `service_name` | string | No       | Application/Compose name                                |
 | `project_id`   | string | No       | Project id; initial publish must resolve one workload   |
 | `project_name` | string | No       | Project name; initial publish must resolve one workload |
+| `provider`     | string | No       | `protected_share` (default) or `cloudflare`             |
 
 Provide at least one selector. Deploy and redeploy never publish automatically.
 Cloudflare account connection and full disconnection remain human UI workflows;
@@ -1083,10 +1085,11 @@ when no build-time env key is involved.
 
 ### `expose_public` / `unexpose_public`
 
-Project composite aliases for the protected public share workflow exposed by
-`openlander_service`. Prefer `service_id`; Project-only selectors work when one workload can be
-chosen unambiguously. `get_public_access` returns `private` or `public` plus the reserved hostname.
-The first expose returns a generated `access_code`; later status reads never return its plaintext.
+Compatibility aliases for the managed-sharing workflow exposed canonically by
+`openlander_service`. New agents should use `openlander_service`; the Project aliases remain so
+existing clients do not break. Prefer `service_id`; Project-only selectors work when one workload
+can be chosen unambiguously. The first protected-share expose returns a generated `access_code`;
+later status reads never return its plaintext.
 
 | Parameter            | Type    | Required | Description                                            |
 | -------------------- | ------- | -------- | ------------------------------------------------------ |
@@ -1316,11 +1319,11 @@ destructive-action permission: allow, approval hold, or block.
 Provide `service_id`, `service_name`, `project_id`, or `project_name`. Multi-service groups require
 an explicit service target.
 
-Domain route = a Traefik Host/path route for a domain already pointed at OpenLander port 80.
-This manual route action does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints,
-or TLS certificates. Protected public share is the separate managed-Traefik workflow that owns an
-HTTPS hostname and access-code gate per Application; Connected Publish remains the optional
-Cloudflare workflow. Docker labels are not the source of truth for custom domains; check
+Domain route = a user-managed custom Traefik Host/path route for a domain already pointed at
+OpenLander port 80. This manual route action does not create DNS records, Cloudflare Tunnel routes,
+ngrok endpoints, or TLS certificates. Use `expose_public` instead when OpenLander should publish
+the Application. Protected Share and Connected Publish own their generated routes and are managed
+only through `get_public_access` / `unexpose_public`. Docker labels are not the source of truth for custom domains; check
 `/api/traefik/config` and Traefik loaded routers when debugging.
 
 The response includes `route_health` and `route_verification`. Verification is
@@ -1331,7 +1334,11 @@ or TLS are configured.
 ### `list_domain_routes`
 
 Optional `service_id`, `service_name`, `project_id`, or `project_name` filters. With no parameters,
-lists all registered domain routes.
+lists all user-managed custom domain routes. Routes owned by Protected Share or Cloudflare
+Connected Publish are intentionally excluded; inspect them with `get_public_access` instead.
+
+There is no MCP domain-route deletion action. Removing a custom route remains a deliberate human
+UI operation, while managed routes must be disabled with `unexpose_public`.
 
 | Parameter | Type    | Required | Description                                                                 |
 | --------- | ------- | -------- | --------------------------------------------------------------------------- |

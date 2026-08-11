@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
-import type { Database, DomainMappingRow, ProjectRow, ServiceRow } from '../src/db/index.js';
+import type {
+  Database,
+  DomainMappingRow,
+  ProjectPublicAccessRow,
+  ProjectRow,
+  ServiceRow,
+} from '../src/db/index.js';
 import type { OpenLanderConfig } from '../src/config/index.js';
 import { createDomainRoutes } from '../src/web/api/domain-routes.js';
 
@@ -116,6 +122,8 @@ type DomainRouteDb = {
   getService: ReturnType<typeof vi.fn>;
   getDeployablesByGroup: ReturnType<typeof vi.fn>;
   listDomainMappingsForService: ReturnType<typeof vi.fn>;
+  listDomainMappings: ReturnType<typeof vi.fn>;
+  getProjectPublicAccess: ReturnType<typeof vi.fn>;
   findDomainMappingByHostAndPath: ReturnType<typeof vi.fn>;
   createDomainMappingForService: ReturnType<typeof vi.fn>;
   deleteDomainMapping: ReturnType<typeof vi.fn>;
@@ -140,6 +148,8 @@ function createDb(overrides: Partial<DomainRouteDb> = {}): DomainRouteDb {
     listDomainMappingsForService: vi.fn(async (serviceId: string) =>
       mappings.filter((mapping) => mapping.service_id === serviceId),
     ),
+    listDomainMappings: vi.fn(async () => mappings),
+    getProjectPublicAccess: vi.fn(async () => null),
     findDomainMappingByHostAndPath: vi.fn(async () => undefined),
     createDomainMappingForService: vi.fn(
       async (input: {
@@ -192,6 +202,32 @@ describe('createDomainRoutes', () => {
           tls: { enabled: false, status: 'absent' },
         },
       ],
+    });
+  });
+
+  it('hides routes owned by protected share and Cloudflare Connected Publish', async () => {
+    const custom = createDomainMapping({ id: 'custom-route', domain: 'custom.example.com' });
+    const protectedShare = createDomainMapping({
+      id: 'protected-share-reservation',
+      domain: 'protected.example.com',
+    });
+    const connectedPublish = createDomainMapping({
+      id: 'connected-publish-route',
+      domain: 'publish.example.com',
+    });
+    const db = createDb({
+      listDomainMappingsForService: vi.fn(async () => [custom, protectedShare, connectedPublish]),
+      getProjectPublicAccess: vi.fn(
+        async () => ({ domain_mapping_id: connectedPublish.id }) as ProjectPublicAccessRow,
+      ),
+    });
+
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains');
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      count: 1,
+      domains: [{ id: custom.id, domain: custom.domain }],
     });
   });
 
@@ -343,6 +379,36 @@ describe('createDomainRoutes', () => {
     });
   });
 
+  it.each([
+    ['protected_share', 'protected-share-reservation', null],
+    ['cloudflare', 'connected-publish-route', 'connected-publish-route'],
+  ])(
+    'blocks deletion of %s-owned domain mappings',
+    async (provider, mappingId, publicMappingId) => {
+      const managed = createDomainMapping({ id: mappingId });
+      const db = createDb({
+        listDomainMappingsForService: vi.fn(async () => [managed]),
+        getProjectPublicAccess: vi.fn(async () =>
+          publicMappingId
+            ? ({ domain_mapping_id: publicMappingId } as ProjectPublicAccessRow)
+            : null,
+        ),
+      });
+
+      const response = await createApp(db).request(
+        `/api/projects/proj-1/services/svc-1/domains/${mappingId}`,
+        { method: 'DELETE' },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'DOMAIN_MANAGED_BY_PUBLIC_ACCESS',
+        details: { provider, action: 'unexpose_public' },
+      });
+      expect(db.deleteDomainMapping).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps legacy delete-by-domain fallback only for root path mappings', async () => {
     const root = createDomainMapping({ id: 'root', domain: 'api.example.com', path_prefix: '/' });
     const api = createDomainMapping({ id: 'api', domain: 'api.example.com', path_prefix: '/api' });
@@ -367,16 +433,18 @@ describe('createDomainRoutes', () => {
     ];
     const db = createDb({
       getDeployablesByGroup: vi.fn(async () => services),
-      listDomainMappingsForService: vi.fn(async (serviceId: string) => [
-        createDomainMapping({ id: `${serviceId}-domain`, service_id: serviceId }),
-      ]),
+      listDomainMappings: vi.fn(async () =>
+        services.map((service) =>
+          createDomainMapping({ id: `${service.id}-domain`, service_id: service.id }),
+        ),
+      ),
     });
 
     const response = await createApp(db).request('/api/projects/proj-1/domains');
 
     expect(response.status).toBe(200);
-    expect(db.listDomainMappingsForService).toHaveBeenCalledWith('svc-1');
-    expect(db.listDomainMappingsForService).toHaveBeenCalledWith('svc-2');
+    expect(db.listDomainMappings).toHaveBeenCalledOnce();
+    expect(db.listDomainMappingsForService).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({ count: 2 });
   });
 

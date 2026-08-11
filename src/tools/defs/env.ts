@@ -1150,7 +1150,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Publish one HTTP Application at a stable HTTPS URL protected by an access code. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. Set rotate_access_code=true to replace the code and invalidate existing sessions.',
+      'Publish one HTTP Application at a stable HTTPS URL. The default provider=protected_share adds an OpenLander access-code gate; provider=cloudflare uses Connected Publish without that gate. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. rotate_access_code applies only to protected_share.',
     mcpDescription:
       'Enable protected public sharing at a stable HTTPS URL for an Application/Compose workload. Returns the generated access_code once when created or rotated; call get_public_access for later status. Set provider=cloudflare for optional Connected Publish.',
     inputSchema: publicAccessTargetSchema,
@@ -1203,8 +1203,9 @@ export const envToolDefs: ToolDef[] = [
     name: 'get_public_access',
     riskLevel: 'low',
     description:
-      'Get protected public sharing status and the stable URL for an Application/Compose workload.',
-    mcpDescription: 'Get protected public access status. Returns private or public.',
+      'Get the managed public-sharing status and stable URL for an Application/Compose workload. The default provider is protected_share; pass provider=cloudflare for Connected Publish.',
+    mcpDescription:
+      'Get managed public-access status. Defaults to protected_share; provider=cloudflare selects Connected Publish.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolvePublicAccessProject(appCtx, args);
@@ -1243,9 +1244,9 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     riskLevel: 'medium',
     description:
-      'Disable protected public sharing. The hostname is retained for reuse and all existing share sessions are invalidated.',
+      'Disable managed public sharing for one provider. The default provider=protected_share invalidates access-code sessions; provider=cloudflare disables Connected Publish. The stable hostname reservation is retained for reuse.',
     mcpDescription:
-      'Make the Application private while preserving its stable hostname reservation for republish.',
+      'Make one public-access provider private while preserving its stable hostname reservation for republish.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolvePublicAccessProject(appCtx, args);

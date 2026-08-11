@@ -1704,19 +1704,19 @@ export const translations = {
       empty: 'No domains attached yet.',
       emptyExternal:
         'Infrastructure-only mode. Manage routing in your external proxy (nginx, Caddy, Apache, etc.).',
-      add: 'Add Domain',
+      add: 'Add custom domain',
       tlsHint:
         'TLS is handled by your external proxy in v0.1. Automatic HTTPS (ACME) is planned for v0.2.',
       dnsHint:
         "Point this domain's A/AAAA/CNAME record to the server that runs OpenLander. OpenLander does not manage DNS automatically.",
       legacyBadge: 'legacy CF',
       legacyTooltip:
-        'This mapping carries Cloudflare metadata from before v0.1 cold-storage. Deleting it removes only the OpenLander mapping; external DNS records are untouched.',
-      removeAria: 'Remove domain',
+        'This custom route carries legacy Cloudflare metadata. Removing it does not delete external DNS records.',
+      removeAria: 'Remove custom domain {domain}',
       loadError: 'Could not load domains. The list may be out of date.',
       retry: 'Retry',
       dialog: {
-        title: 'Add Domain',
+        title: 'Add custom domain',
         domain: 'Domain',
         domainPlaceholder: 'api.example.com',
         path: 'Path',
@@ -1729,14 +1729,14 @@ export const translations = {
         targetPortPlaceholderNone: 'Service container port',
         stripPrefixHint:
           'Strip the path prefix before forwarding to the container (most non-root routes need this).',
-        submit: 'Add Domain',
+        submit: 'Add custom domain',
         cancel: 'Cancel',
         submitting: 'Adding…',
       },
       delete: {
-        title: 'Remove domain',
+        title: 'Remove custom domain',
         description:
-          'This removes the OpenLander mapping only. External DNS records are not touched.',
+          'This removes the custom OpenLander route only. External DNS records are not touched.',
         confirm: 'Remove',
         cancel: 'Cancel',
       },
@@ -1752,6 +1752,8 @@ export const translations = {
         routingDisabled: 'Domain routing is disabled (Infrastructure-only mode).',
         addFailed: 'Could not add domain.',
         deleteFailed: 'Could not remove domain.',
+        managedByPublicAccess:
+          'This route belongs to managed public sharing. Turn off public access instead.',
       },
       error: {
         duplicate: 'A route for this domain and path already exists.',

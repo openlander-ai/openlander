@@ -86,6 +86,8 @@ function createDuplicateServiceContext(
         ),
       ),
       listDomainMappings: vi.fn(async () => domainMappings),
+      getProjectPublicAccess: vi.fn(async () => null),
+      listProjectPublicAccess: vi.fn(async () => []),
       updateService: vi.fn(async (serviceId: string, updates: { containerPort?: number }) => {
         const service = services.find((item) => item.id === serviceId);
         if (service && updates.containerPort !== undefined) {
@@ -169,6 +171,8 @@ function createMultiDeployableProjectContext(): AppContext {
       createDomainMappingForService: vi.fn(),
       listDomainMappingsForService: vi.fn(async () => []),
       listDomainMappings: vi.fn(async () => []),
+      getProjectPublicAccess: vi.fn(async () => null),
+      listProjectPublicAccess: vi.fn(async () => []),
       isCircuitBreakerOpen: vi.fn(() => false),
       acquireDeployLock: vi.fn(() => true),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
@@ -996,6 +1000,99 @@ describe('deployable service target resolution', () => {
         verification: 'traefik_direct_host_probe',
       },
     });
+  });
+
+  it('keeps managed public-share routes out of the custom-domain MCP inventory', async () => {
+    const ctx = createDuplicateServiceContext();
+    const mappings = [
+      {
+        id: 'custom-route',
+        service_id: 'alpha__svc',
+        domain: 'custom.example.com',
+        status: 'active',
+        path_prefix: '/',
+        strip_prefix: false,
+        upstream_path_prefix: null,
+        target_port: null,
+        tls_enabled: null,
+        tls_resolver: null,
+      },
+      {
+        id: 'protected-share-reservation',
+        service_id: 'alpha__svc',
+        domain: 'protected.example.com',
+        status: 'active',
+        path_prefix: '/',
+        strip_prefix: false,
+        upstream_path_prefix: null,
+        target_port: null,
+        tls_enabled: true,
+        tls_resolver: 'letsencrypt',
+      },
+      {
+        id: 'connected-publish-route',
+        service_id: 'alpha__svc',
+        domain: 'publish.example.com',
+        status: 'active',
+        path_prefix: '/',
+        strip_prefix: false,
+        upstream_path_prefix: null,
+        target_port: null,
+        tls_enabled: null,
+        tls_resolver: null,
+      },
+    ];
+    (ctx.db.listDomainMappingsForService as ReturnType<typeof vi.fn>).mockResolvedValue(mappings);
+    (ctx.db.getProjectPublicAccess as ReturnType<typeof vi.fn>).mockResolvedValue({
+      domain_mapping_id: 'connected-publish-route',
+    });
+
+    const result = await getTool(ctx, 'list_domain_routes').execute(
+      { service_id: 'alpha__svc', verify: false },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      count: 1,
+      routes: [{ id: 'custom-route', domain: 'custom.example.com' }],
+      _agent_guidance: {
+        message: expect.stringContaining('user-managed custom domain routes'),
+        next_steps: expect.arrayContaining([expect.stringContaining('get_public_access')]),
+      },
+    });
+  });
+
+  it('batch-filters Connected Publish ownership for unscoped custom-domain inventory', async () => {
+    const ctx = createDuplicateServiceContext();
+    const custom = {
+      id: 'custom-route',
+      service_id: 'alpha__svc',
+      domain: 'custom.example.com',
+      status: 'active',
+      path_prefix: '/',
+      strip_prefix: false,
+      upstream_path_prefix: null,
+      target_port: null,
+      tls_enabled: null,
+      tls_resolver: null,
+    };
+    const managed = { ...custom, id: 'managed-route', domain: 'publish.example.com' };
+    (ctx.db.listDomainMappings as ReturnType<typeof vi.fn>).mockResolvedValue([custom, managed]);
+    (ctx.db.listProjectPublicAccess as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { domain_mapping_id: managed.id },
+    ]);
+
+    const result = await getTool(ctx, 'list_domain_routes').execute(
+      { verify: false },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      count: 1,
+      routes: [{ id: custom.id, domain: custom.domain }],
+    });
+    expect(ctx.db.listProjectPublicAccess).toHaveBeenCalledOnce();
+    expect(ctx.db.getProjectPublicAccess).not.toHaveBeenCalled();
   });
 
   it('apply_route_config rolls back when a custom domain direct probe fails', async () => {

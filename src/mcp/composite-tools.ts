@@ -674,7 +674,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Applications/Compose workloads: redeploy, restart, rollback, config, env vars, domains, and stable Connected Publish URLs. Prefer compatibility field service_id.',
+    'Applications/Compose workloads: redeploy, restart, rollback, config, env vars, managed public sharing, and user-managed custom domain routes. Prefer compatibility field service_id.',
     toolDefs,
   );
 }

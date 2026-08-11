@@ -188,6 +188,18 @@ describe('openlander_service direct deployable runtime actions', () => {
     expect(exposeDescription).not.toContain('temporary public share URL');
   });
 
+  it('help separates managed public sharing from user-managed custom routes', async () => {
+    const result = (await tool.execute({ action: 'help' }, mockContext)) as {
+      actions: Array<{ name: string; description: string }>;
+    };
+    const byName = new Map(result.actions.map((action) => [action.name, action.description]));
+
+    expect(byName.get('add_domain_route')).toContain('user-managed custom Traefik route');
+    expect(byName.get('add_domain_route')).toContain('expose_public');
+    expect(byName.get('list_domain_routes')).toContain('Managed public-share routes are excluded');
+    expect(byName.get('list_domain_routes')).toContain('get_public_access');
+  });
+
   it('routes deployable service actions directly and validates service target params', async () => {
     for (const action of [
       'update_app',

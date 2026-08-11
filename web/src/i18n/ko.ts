@@ -1767,7 +1767,7 @@ export const translations = {
     },
     domains: {
       // Chrome — action button + retry + badge.
-      add: '도메인 추가',
+      add: '직접 연결 도메인 추가',
       legacyBadge: '이전 CF 방식',
       retry: '다시 시도',
       // Content — empty state + descriptive hints + tooltip + load error + aria.
@@ -1778,19 +1778,19 @@ export const translations = {
       dnsHint:
         'A/AAAA/CNAME 레코드를 OpenLander가 실행되는 서버를 가리키도록 직접 설정하세요. OpenLander는 DNS를 자동 관리하지 않습니다.',
       legacyTooltip:
-        '이 매핑은 v0.1 이전 Cloudflare 통합 시 생성되었습니다. 현재는 호환 모드로 동작 중이며, 삭제 시 OpenLander 매핑만 제거됩니다. 외부 DNS 레코드는 그대로 유지됩니다.',
-      removeAria: '도메인 제거',
+        '이 직접 연결 경로에는 이전 Cloudflare 메타데이터가 남아 있습니다. 제거해도 외부 DNS 레코드는 삭제되지 않습니다.',
+      removeAria: '직접 연결 도메인 {domain} 제거',
       loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
       dialog: {
         // Chrome — dialog title + form labels + buttons.
-        title: '도메인 추가',
+        title: '직접 연결 도메인 추가',
         domain: '도메인',
         path: '경로',
         advanced: '고급 설정',
         stripPrefix: '경로 앞부분 제거',
         upstreamPathPrefix: '대상 경로',
         targetPort: '대상 포트',
-        submit: '도메인 추가',
+        submit: '직접 연결 도메인 추가',
         cancel: '취소',
         submitting: '추가 중…',
         // Content — placeholders that include hint text + hint copy.
@@ -1803,11 +1803,12 @@ export const translations = {
       },
       delete: {
         // Chrome — modal chrome.
-        title: '도메인 제거',
+        title: '직접 연결 도메인 제거',
         confirm: '제거',
         cancel: '취소',
         // Content — confirmation prose.
-        description: 'OpenLander 매핑만 제거합니다. 외부 DNS 레코드는 그대로 유지됩니다.',
+        description:
+          '직접 연결한 OpenLander 경로만 제거합니다. 외부 DNS 레코드는 그대로 유지됩니다.',
       },
       status: {
         // Chrome — status pills.
@@ -1823,6 +1824,8 @@ export const translations = {
           '외부 인프라 모드에서는 OpenLander가 도메인 접속 경로를 관리하지 않습니다.',
         addFailed: '도메인 추가에 실패했습니다.',
         deleteFailed: '도메인 제거에 실패했습니다.',
+        managedByPublicAccess:
+          '외부 공유가 관리하는 경로입니다. 도메인을 지우지 말고 외부 공유를 해제하세요.',
       },
       error: {
         duplicate: '동일한 도메인과 경로 조합이 이미 존재합니다.',

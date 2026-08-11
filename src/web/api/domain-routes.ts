@@ -12,6 +12,10 @@ import {
   normalizeDomainHost,
   normalizeDomainPathPrefix,
 } from '../../db/repos/domain-mapping.repo.js';
+import {
+  getManagedPublicDomainProvider,
+  isManagedPublicDomainMapping,
+} from '../../pipeline/public-domain-ownership.js';
 import { resolveProject } from './helpers/deployable-service-route-shared.js';
 
 interface DomainRouteContext {
@@ -50,7 +54,11 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     const resolved = await resolveService(c, ctx);
     if (resolved instanceof Response) return resolved;
 
-    const domains = await ctx.db.listDomainMappingsForService(resolved.service.id);
+    const domains = await listManualDomainMappingsForService(
+      ctx,
+      resolved.project.id,
+      resolved.service.id,
+    );
     return c.json({
       projectId: resolved.project.id,
       serviceId: resolved.service.id,
@@ -75,12 +83,18 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     const project = await resolveProjectForRoute(c, ctx, c.req.param('id'));
     if (project instanceof Response) return project;
 
-    const deployables = await ctx.db.getDeployablesByGroup(project.id);
-    const domains = (
-      await Promise.all(
-        deployables.map((service) => ctx.db.listDomainMappingsForService(service.id)),
-      )
-    ).flat();
+    const [deployables, allDomains, publicAccess] = await Promise.all([
+      ctx.db.getDeployablesByGroup(project.id),
+      ctx.db.listDomainMappings(),
+      ctx.db.getProjectPublicAccess(project.id),
+    ]);
+    const deployableIds = new Set(deployables.map((service) => service.id));
+    const managedMappingIds = connectedPublishMappingIds(publicAccess?.domain_mapping_id);
+    const domains = allDomains.filter(
+      (mapping) =>
+        deployableIds.has(mapping.service_id) &&
+        !isManagedPublicDomainMapping(mapping.id, managedMappingIds),
+    );
 
     return c.json({
       projectId: project.id,
@@ -155,7 +169,7 @@ async function createDomainMappingResponse(
     tlsEnabled: null,
     tlsResolver: null,
   });
-  const domains = await ctx.db.listDomainMappingsForService(service.id);
+  const domains = await listManualDomainMappingsForService(ctx, project.id, service.id);
 
   return c.json(
     {
@@ -175,17 +189,39 @@ async function deleteDomainMappingResponse(
   project: ProjectRow,
   service: ServiceRow,
 ): Promise<Response> {
-  const resolvedMapping = await resolveDomainMappingForDelete(
-    ctx,
-    service.id,
-    c.req.param('idOrDomain') ?? '',
-  );
+  const [resolvedMapping, publicAccess] = await Promise.all([
+    resolveDomainMappingForDelete(ctx, service.id, c.req.param('idOrDomain') ?? ''),
+    ctx.db.getProjectPublicAccess(project.id),
+  ]);
   if (!resolvedMapping) {
     return c.json({ error: 'NOT_FOUND', message: 'Domain mapping not found' }, 404);
   }
 
+  const provider = getManagedPublicDomainProvider(
+    resolvedMapping.mapping.id,
+    connectedPublishMappingIds(publicAccess?.domain_mapping_id),
+  );
+  if (provider) {
+    return c.json(
+      {
+        error: 'DOMAIN_MANAGED_BY_PUBLIC_ACCESS',
+        code: 'DOMAIN_MANAGED_BY_PUBLIC_ACCESS',
+        message:
+          'This domain is managed by public sharing. Turn off public access instead of deleting its route.',
+        details: {
+          projectId: project.id,
+          serviceId: service.id,
+          domain: resolvedMapping.mapping.domain,
+          provider,
+          action: 'unexpose_public',
+        },
+      },
+      409,
+    );
+  }
+
   await ctx.db.deleteDomainMapping(resolvedMapping.mapping.id);
-  const domains = await ctx.db.listDomainMappingsForService(service.id);
+  const domains = await listManualDomainMappingsForService(ctx, project.id, service.id);
   return c.json({
     status: 'unmapped',
     projectId: project.id,
@@ -194,6 +230,23 @@ async function deleteDomainMappingResponse(
     usedLegacyFallback: resolvedMapping.usedLegacyFallback,
     totalDomains: domains.length,
   });
+}
+
+function connectedPublishMappingIds(mappingId: string | null | undefined): ReadonlySet<string> {
+  return mappingId ? new Set([mappingId]) : new Set();
+}
+
+async function listManualDomainMappingsForService(
+  ctx: DomainRouteContext,
+  projectId: string,
+  serviceId: string,
+): Promise<DomainMappingRow[]> {
+  const [mappings, publicAccess] = await Promise.all([
+    ctx.db.listDomainMappingsForService(serviceId),
+    ctx.db.getProjectPublicAccess(projectId),
+  ]);
+  const managedMappingIds = connectedPublishMappingIds(publicAccess?.domain_mapping_id);
+  return mappings.filter((mapping) => !isManagedPublicDomainMapping(mapping.id, managedMappingIds));
 }
 
 async function resolveProjectForRoute(

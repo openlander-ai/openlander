@@ -16,9 +16,10 @@ import {
 import { resolveComposeTrafficTargetId } from '../health/compose-runtime.js';
 import { loadComposeTrafficService } from './config-snapshot.js';
 import { containerName as projectContainerName } from './helpers.js';
+import { PROTECTED_SHARE_MAPPING_PREFIX } from './public-domain-ownership.js';
 import type { TraefikManager } from './traefik.js';
 
-export const PROTECTED_SHARE_MAPPING_PREFIX = 'protected-share-';
+export { PROTECTED_SHARE_MAPPING_PREFIX } from './public-domain-ownership.js';
 export const PROTECTED_SHARE_COOKIE = 'ol_share';
 export const PROTECTED_SHARE_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const PROTECTED_SHARE_VERIFY_WINDOW_SECONDS = 10 * 60;

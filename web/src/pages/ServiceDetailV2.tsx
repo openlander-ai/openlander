@@ -1408,8 +1408,13 @@ function DomainsTab({
       await deleteServiceDomain(projectId, service.id, deleteTarget.id);
       await refresh();
       setFeedback({ kind: 'ok', msg: t('projectDetail.domains.toast.removed') });
-    } catch {
-      setFeedback({ kind: 'err', msg: t('projectDetail.domains.toast.deleteFailed') });
+    } catch (err) {
+      if (err instanceof DomainApiError && err.code === 'DOMAIN_MANAGED_BY_PUBLIC_ACCESS') {
+        await refresh();
+        setFeedback({ kind: 'err', msg: t('projectDetail.domains.toast.managedByPublicAccess') });
+      } else {
+        setFeedback({ kind: 'err', msg: t('projectDetail.domains.toast.deleteFailed') });
+      }
     } finally {
       setBusy(false);
       setDeleteTarget(null);
@@ -1591,7 +1596,7 @@ function DomainRow({
           size="icon"
           onClick={onDelete}
           disabled={disabled}
-          aria-label={t('projectDetail.domains.removeAria')}
+          aria-label={t('projectDetail.domains.removeAria', { domain: displayUrl })}
           className="shrink-0 h-7 w-7 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)]"
         >
           <Trash2 className="h-3.5 w-3.5" />

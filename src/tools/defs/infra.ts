@@ -11,6 +11,7 @@ import {
 } from '../../db/repos/domain-mapping.repo.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { cloneRepo } from '../../pipeline/git.js';
+import { isManagedPublicDomainMapping } from '../../pipeline/public-domain-ownership.js';
 import type { ToolDef } from './types.js';
 import type { ToolContext } from './types.js';
 import {
@@ -262,9 +263,9 @@ export const infraToolDefs: ToolDef[] = [
     name: 'add_domain_route',
     riskLevel: 'medium',
     description:
-      'Register an internal Traefik Host/path route for a domain that already points to the OpenLander host or reverse proxy. This does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS certificates. No redeploy is required. Prefer service_id; project_id/project_name works only when the Project has exactly one Application/Compose workload. Returns { status: "route_registered", route, routing, urls }. Errors: DOMAIN_ROUTING_DISABLED, DOMAIN_ROUTE_EXISTS, PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
+      'Register a user-managed custom Traefik Host/path route for a domain that already points to the OpenLander host or reverse proxy. This does not publish an app or create DNS, Cloudflare tunnels, or TLS certificates; use expose_public for OpenLander-managed sharing. No redeploy is required. Prefer service_id; project_id/project_name works only when the Project has exactly one Application/Compose workload. Returns { status: "route_registered", route, routing, urls }. Errors: DOMAIN_ROUTING_DISABLED, DOMAIN_ROUTE_EXISTS, PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
     mcpDescription:
-      'Register a Traefik Host/path route for a domain that already points at OpenLander. Does not manage DNS, tunnels, or TLS.',
+      'Register a user-managed custom Traefik route. Use expose_public for managed sharing; this action does not manage DNS, tunnels, or TLS.',
     inputSchema: addDomainRouteSchema,
     execute: async (args, { appCtx }) => {
       if (appCtx.config.traefik.mode === 'external') {
@@ -339,6 +340,7 @@ export const infraToolDefs: ToolDef[] = [
         _agent_guidance: {
           next_steps: [
             'No redeploy is required; domain routing is dynamic.',
+            'If the user asked OpenLander to publish the Application, use expose_public instead of add_domain_route.',
             'DNS, Cloudflare Tunnel, ngrok, reverse proxy, and TLS must be configured outside OpenLander in v0.1.',
             'If this hostname is served through Cloudflare Zero Trust Tunnel, add the same hostname as a Public Hostname in the Cloudflare dashboard and point it at the OpenLander Traefik entrypoint.',
             'Wait a few seconds for Traefik to poll /api/traefik/config before probing the domain.',
@@ -356,8 +358,9 @@ export const infraToolDefs: ToolDef[] = [
     name: 'list_domain_routes',
     riskLevel: 'low',
     description:
-      'List registered domain routes. With no target, lists routes across all Projects. With service_id/service_name/project_id/project_name, lists routes for that Application/Compose workload. These are internal Traefik routes; DNS/tunnel/TLS are external prerequisites.',
-    mcpDescription: 'List registered domain routes. These do not imply DNS/tunnel/TLS ownership.',
+      'List user-managed custom domain routes. OpenLander-managed protected-share and Cloudflare Connected Publish routes are excluded; use get_public_access for those. With no target, lists custom routes across all Projects. With service_id/service_name/project_id/project_name, lists custom routes for that Application/Compose workload.',
+    mcpDescription:
+      'List user-managed custom domain routes. Managed public-share routes are excluded; use get_public_access for them.',
     inputSchema: listDomainRoutesSchema,
     execute: async (args, { appCtx }) => {
       const hasTarget =
@@ -365,11 +368,19 @@ export const infraToolDefs: ToolDef[] = [
         typeof args['service_name'] === 'string' ||
         typeof args['project_id'] === 'string' ||
         typeof args['project_name'] === 'string';
-      const mappings = hasTarget
-        ? await appCtx.db.listDomainMappingsForService(
-            (await resolveDomainServiceTarget(appCtx, args)).service.id,
-          )
-        : await appCtx.db.listDomainMappings();
+      const target = hasTarget ? await resolveDomainServiceTarget(appCtx, args) : null;
+      const [candidateMappings, publicAccessRows] = target
+        ? await Promise.all([
+            appCtx.db.listDomainMappingsForService(target.service.id),
+            appCtx.db.getProjectPublicAccess(target.project.id).then((row) => (row ? [row] : [])),
+          ])
+        : await Promise.all([appCtx.db.listDomainMappings(), appCtx.db.listProjectPublicAccess()]);
+      const connectedPublishMappingIds = new Set(
+        publicAccessRows.flatMap((row) => (row.domain_mapping_id ? [row.domain_mapping_id] : [])),
+      );
+      const mappings = candidateMappings.filter(
+        (mapping) => !isManagedPublicDomainMapping(mapping.id, connectedPublishMappingIds),
+      );
       const verify = args['verify'] === true || (hasTarget && args['verify'] !== false);
       const serviceById = verify
         ? new Map((await appCtx.db.listServices()).map((service) => [service.id, service]))
@@ -405,6 +416,14 @@ export const infraToolDefs: ToolDef[] = [
           verification: verify
             ? 'traefik_direct_host_probe'
             : 'not_checked_for_unfiltered_list_by_default',
+        },
+        _agent_guidance: {
+          message:
+            'Only user-managed custom domain routes are returned. Managed public sharing has a separate lifecycle.',
+          next_steps: [
+            'Use get_public_access to inspect protected-share or Cloudflare Connected Publish URLs.',
+            'Use expose_public or unexpose_public to change managed public sharing.',
+          ],
         },
       });
     },
