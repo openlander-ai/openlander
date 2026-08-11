@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Avoid rewriting an unchanged remotely managed Cloudflare Tunnel configuration
+  during startup reconciliation, preventing existing public URLs from briefly
+  falling through to Cloudflare's 404 ingress while edge configuration propagates.
+- Keep Connected Publish in provisioning when Cloudflare still serves its own
+  fallback 404, then retry on status polling instead of reporting a broken URL
+  as ready.
+
 ## [0.3.6-rc.7] - 2026-08-11
 
 ### Fixed

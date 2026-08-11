@@ -13,6 +13,7 @@ import { EventBus } from '../../src/events/index.js';
 import type {
   CloudflareApiClient,
   CloudflareDnsRecord,
+  CloudflareTunnelIngressRule,
 } from '../../src/pipeline/cloudflare-api.js';
 import {
   ConnectedPublishManager,
@@ -91,13 +92,15 @@ function createHarness(
   let mapping: DomainMappingRow | null = null;
   let serviceState = { ...service, ...options.serviceOverrides } as ServiceRow;
   const dnsRecords = [...(options.existingDns ?? [])];
+  let tunnelIngress: CloudflareTunnelIngressRule[] = [{ service: 'http_status:404' }];
 
   const api = {
     listDnsRecords: vi.fn(async (_zoneId: string, hostname: string) =>
       dnsRecords.filter((record) => record.name === hostname),
     ),
-    getDnsRecord: vi.fn(async (_zoneId: string, recordId: string) =>
-      dnsRecords.find((record) => record.id === recordId) ?? null,
+    getDnsRecord: vi.fn(
+      async (_zoneId: string, recordId: string) =>
+        dnsRecords.find((record) => record.id === recordId) ?? null,
     ),
     createTunnelDnsRecord: vi.fn(async (_zoneId: string, hostname: string, tunnelId: string) => {
       const created = {
@@ -110,7 +113,18 @@ function createHarness(
       dnsRecords.push(created);
       return created;
     }),
-    updateTunnelConfiguration: vi.fn().mockResolvedValue(undefined),
+    getTunnelConfiguration: vi.fn(async () => ({
+      config: { ingress: structuredClone(tunnelIngress) },
+    })),
+    updateTunnelConfiguration: vi.fn(
+      async (
+        _accountId: string,
+        _tunnelId: string,
+        ingress: readonly CloudflareTunnelIngressRule[],
+      ) => {
+        tunnelIngress = structuredClone([...ingress]);
+      },
+    ),
     listTunnels: vi
       .fn()
       .mockResolvedValue([
@@ -409,6 +423,44 @@ describe('ConnectedPublishManager', () => {
       }),
     );
     expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({ status: 'public' });
+  });
+
+  it('keeps the share provisioning while Cloudflare still serves its fallback 404', async () => {
+    const fetchMock = vi.fn(async () =>
+      Promise.resolve(new Response('404 page not found', { status: 404 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const harness = createHarness({ useDefaultPublicRouteProbe: true });
+
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
+      status: 'provisioning',
+      public_url: null,
+    });
+
+    fetchMock.mockImplementation(async () => Promise.resolve(new Response(null, { status: 204 })));
+    await harness.manager.waitForPendingOperations();
+
+    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
+      status: 'public',
+      public_url: 'https://demo-app.example.com',
+    });
+  });
+
+  it('does not rewrite an unchanged remote ingress configuration during reconciliation', async () => {
+    const harness = createHarness();
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+    vi.mocked(harness.api.updateTunnelConfiguration).mockClear();
+
+    await harness.manager.reconcile();
+    await harness.manager.waitForPendingOperations();
+
+    expect(harness.api.getTunnelConfiguration).toHaveBeenCalled();
+    expect(harness.api.updateTunnelConfiguration).not.toHaveBeenCalled();
   });
 
   it('preserves the configured route when the publishing container cannot reach it', async () => {

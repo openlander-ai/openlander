@@ -33,6 +33,7 @@ import {
   type CloudflareAccount,
   type CloudflareDnsRecord,
   type CloudflareTunnel,
+  type CloudflareTunnelIngressRule,
   type CloudflareZone,
 } from './cloudflare-api.js';
 import type { RuntimeBackend } from './runtime/backend.js';
@@ -54,6 +55,7 @@ type ApiFactory = (accessToken: string) => CloudflareApiClient;
 
 export type PublicRouteProbeResult =
   | { kind: 'reachable'; status: number }
+  | { kind: 'route_pending'; status: 404 }
   | { kind: 'application_unhealthy'; status: number }
   | { kind: 'unreachable' };
 
@@ -150,6 +152,38 @@ function serviceCandidates(services: readonly ServiceRow[]) {
   }));
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizedIngressRule(rule: CloudflareTunnelIngressRule): CloudflareTunnelIngressRule {
+  const originRequest = rule.originRequest;
+  return {
+    ...(rule.hostname ? { hostname: rule.hostname } : {}),
+    service: rule.service,
+    ...(originRequest && Object.keys(originRequest).length > 0 ? { originRequest } : {}),
+  };
+}
+
+function sameIngress(
+  current: readonly CloudflareTunnelIngressRule[],
+  desired: readonly CloudflareTunnelIngressRule[],
+): boolean {
+  return (
+    canonicalJson(current.map(normalizedIngressRule)) ===
+    canonicalJson(desired.map(normalizedIngressRule))
+  );
+}
+
 async function defaultPublicRouteProbe(url: string): Promise<PublicRouteProbeResult> {
   try {
     const response = await fetch(url, {
@@ -158,6 +192,21 @@ async function defaultPublicRouteProbe(url: string): Promise<PublicRouteProbeRes
       cache: 'no-store',
       signal: AbortSignal.timeout(DEFAULT_PUBLIC_ROUTE_PROBE_TIMEOUT_MS),
     });
+    if (response.status === 404) {
+      const bodyResponse = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        cache: 'no-store',
+        headers: { Range: 'bytes=0-255' },
+        signal: AbortSignal.timeout(DEFAULT_PUBLIC_ROUTE_PROBE_TIMEOUT_MS),
+      });
+      if (
+        bodyResponse.status === 404 &&
+        (await bodyResponse.text()).trim() === '404 page not found'
+      ) {
+        return { kind: 'route_pending', status: 404 };
+      }
+    }
     return response.status < 500
       ? { kind: 'reachable', status: response.status }
       : { kind: 'application_unhealthy', status: response.status };
@@ -177,6 +226,7 @@ export class ConnectedPublishManager {
   private readonly publicRouteProbeIntervalMs: number;
   private readonly sleep: (durationMs: number) => Promise<void>;
   private operationQueue: Promise<void> = Promise.resolve();
+  private readonly queuedPublishProjects = new Set<string>();
   private disconnecting = false;
 
   constructor(
@@ -343,7 +393,10 @@ export class ConnectedPublishManager {
   async getPublicAccess(projectId: string): Promise<PublicAccessView> {
     const project = await this.db.getProject(projectId);
     if (!project) throw new ProjectNotFoundError(projectId);
-    return publicAccessView(project.id, await this.db.getProjectPublicAccess(project.id));
+    const access = await this.db.getProjectPublicAccess(project.id);
+    const view = publicAccessView(project.id, access);
+    if (access?.status === 'provisioning') this.enqueuePublish(project.id);
+    return view;
   }
 
   async requestPublish(input: {
@@ -398,7 +451,7 @@ export class ConnectedPublishManager {
       lastErrorCode: null,
       lastErrorMessage: null,
     });
-    this.enqueue(() => this.performPublish(target.project.id));
+    this.enqueuePublish(target.project.id);
     return publicAccessView(target.project.id, row);
   }
 
@@ -451,7 +504,7 @@ export class ConnectedPublishManager {
       await this.ensureConnector(connection);
       const rows = await this.db.listProjectPublicAccess();
       for (const row of rows) {
-        if (row.status === 'provisioning') this.enqueue(() => this.performPublish(row.project_id));
+        if (row.status === 'provisioning') this.enqueuePublish(row.project_id);
         if (row.status === 'unpublishing')
           this.enqueue(() => this.performUnpublish(row.project_id));
       }
@@ -473,6 +526,18 @@ export class ConnectedPublishManager {
     });
   }
 
+  private enqueuePublish(projectId: string): void {
+    if (this.queuedPublishProjects.has(projectId)) return;
+    this.queuedPublishProjects.add(projectId);
+    this.enqueue(async () => {
+      try {
+        await this.performPublish(projectId);
+      } finally {
+        this.queuedPublishProjects.delete(projectId);
+      }
+    });
+  }
+
   private async performPublish(projectId: string): Promise<void> {
     try {
       const connection = await this.requireConnection();
@@ -486,7 +551,7 @@ export class ConnectedPublishManager {
       await this.db.updateProjectPublicAccess(projectId, { domainMappingId: mapping.id });
       await this.syncIngress(api, connection);
       const publicUrl = `https://${withDns.hostname}`;
-      await this.waitForPublicRoute(publicUrl, withDns.hostname);
+      if (!(await this.waitForPublicRoute(publicUrl, withDns.hostname))) return;
       await this.db.updateService(target.service.id, {
         visibility: 'production',
         publicUrl,
@@ -505,12 +570,12 @@ export class ConnectedPublishManager {
     }
   }
 
-  private async waitForPublicRoute(publicUrl: string, hostname: string): Promise<void> {
+  private async waitForPublicRoute(publicUrl: string, hostname: string): Promise<boolean> {
     let lastResult: PublicRouteProbeResult = { kind: 'unreachable' };
 
     for (let attempt = 1; attempt <= this.publicRouteProbeAttempts; attempt += 1) {
       lastResult = await this.publicRouteProbe(publicUrl);
-      if (lastResult.kind === 'reachable') return;
+      if (lastResult.kind === 'reachable') return true;
       if (attempt < this.publicRouteProbeAttempts && this.publicRouteProbeIntervalMs > 0) {
         await this.sleep(this.publicRouteProbeIntervalMs);
       }
@@ -523,6 +588,13 @@ export class ConnectedPublishManager {
         this.publicRouteProbeAttempts,
       );
     }
+    if (lastResult.kind === 'route_pending') {
+      log.info(
+        { hostname, attempts: this.publicRouteProbeAttempts },
+        'Cloudflare route is still propagating; keeping public access provisioning',
+      );
+      return false;
+    }
     // A Cloudflare Tunnel URL can be unreachable from the publishing container even while it is
     // already reachable externally. Colima/Docker DNS caches and hairpin routing are common
     // examples. The Cloudflare configuration calls above are authoritative; keep the route and
@@ -531,6 +603,7 @@ export class ConnectedPublishManager {
       { hostname, attempts: this.publicRouteProbeAttempts },
       'Cloudflare route probe remained unreachable; preserving configured public route',
     );
+    return true;
   }
 
   private async failPublish(projectId: string, error: unknown): Promise<void> {
@@ -774,10 +847,14 @@ export class ConnectedPublishManager {
       )
       .sort((left, right) => left.hostname.localeCompare(right.hostname))
       .map((row) => ({ hostname: row.hostname, service: TRAEFIK_ORIGIN, originRequest: {} }));
-    await api.updateTunnelConfiguration(connection.account_id, connection.tunnel_id, [
-      ...routes,
-      { service: 'http_status:404' },
-    ]);
+    const desiredIngress = [...routes, { service: 'http_status:404' }];
+    const current = await api.getTunnelConfiguration(connection.account_id, connection.tunnel_id);
+    if (sameIngress(current.config?.ingress ?? [], desiredIngress)) return;
+    await api.updateTunnelConfiguration(
+      connection.account_id,
+      connection.tunnel_id,
+      desiredIngress,
+    );
   }
 
   private async resolveTarget(projectId: string, serviceId?: string): Promise<PublishTarget> {

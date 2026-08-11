@@ -48,6 +48,12 @@ export interface CloudflareTunnelIngressRule {
   originRequest?: Record<string, unknown>;
 }
 
+export interface CloudflareTunnelConfiguration {
+  config?: {
+    ingress?: CloudflareTunnelIngressRule[];
+  };
+}
+
 function errorDetail<T>(body: CloudflareApiEnvelope<T>, status: number): string {
   const details = (body.errors ?? [])
     .map((entry) => (typeof entry.message === 'string' ? entry.message : null))
@@ -121,6 +127,16 @@ export class CloudflareApiClient {
     return this.request<string>(
       `accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/token`,
       'get_tunnel_token',
+    );
+  }
+
+  getTunnelConfiguration(
+    accountId: string,
+    tunnelId: string,
+  ): Promise<CloudflareTunnelConfiguration> {
+    return this.request<CloudflareTunnelConfiguration>(
+      `accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`,
+      'get_tunnel_configuration',
     );
   }
 

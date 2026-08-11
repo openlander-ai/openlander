@@ -72,6 +72,32 @@ describe('CloudflareApiClient', () => {
     );
   });
 
+  it('reads the current remotely managed tunnel ingress configuration', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        config: {
+          ingress: [
+            { hostname: 'app.example.com', service: 'http://traefik-ol:80' },
+            { service: 'http_status:404' },
+          ],
+        },
+      }),
+    );
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await expect(client.getTunnelConfiguration('account-1', 'tunnel-1')).resolves.toEqual({
+      config: {
+        ingress: [
+          { hostname: 'app.example.com', service: 'http://traefik-ol:80' },
+          { service: 'http_status:404' },
+        ],
+      },
+    });
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      'https://api.cloudflare.com/client/v4/accounts/account-1/cfd_tunnel/tunnel-1/configurations',
+    );
+  });
+
   it('returns null when a tracked DNS record was removed', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       new Response(JSON.stringify({ success: false, errors: [{ message: 'not found' }] }), {
@@ -84,9 +110,7 @@ describe('CloudflareApiClient', () => {
   });
 
   it('allows slow Cloudflare reads enough time to complete', async () => {
-    const timeout = vi
-      .spyOn(AbortSignal, 'timeout')
-      .mockReturnValue(new AbortController().signal);
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(new AbortController().signal);
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse([]));
     const client = new CloudflareApiClient('token', fetcher);
 
