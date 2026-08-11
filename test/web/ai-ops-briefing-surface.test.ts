@@ -111,6 +111,9 @@ describe('AI Ops briefing web surface', () => {
     expect(feedSource).toContain('localizedBriefingTitle(briefing, t)');
     expect(feedSource).toContain('localizedBriefingSummary(briefing, t)');
     expect(feedSource).toContain('localizedBriefingClassification(selectedBriefing, t)');
+    expect(feedSource).toContain('briefingScopeLabel(briefing)');
+    expect(feedSource).toContain('briefing.project_name ?? briefing.project_id');
+    expect(feedSource).toContain('briefing.service_name ?? briefing.service_id');
     expect(feedSource).not.toContain('{briefing.title}');
     expect(feedSource).not.toContain('{briefing.summary}');
     expect(feedSource).not.toContain('{selectedBriefing.summary}');

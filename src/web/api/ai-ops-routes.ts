@@ -234,11 +234,15 @@ export function createAiOpsRoutes(ctx: AppContext): Hono {
   api.get('/ai-ops/briefings', async (c) => {
     const status = briefingStatusFilter(c.req.query('status'));
     const limit = parsePositiveInt(c.req.query('limit'), 20, 100);
-    const briefings = await ctx.db.listRecentAiOpsBriefings({ limit, status });
+    const briefings = await ctx.db.listRecentAiOpsBriefingsWithScope({ limit, status });
 
     return c.json({
       count: briefings.length,
-      briefings: briefings.map((row) => formatAiOpsBriefingRow(row)),
+      briefings: briefings.map((row) => ({
+        ...formatAiOpsBriefingRow(row),
+        project_name: row.project_name,
+        service_name: row.service_name,
+      })),
     });
   });
 

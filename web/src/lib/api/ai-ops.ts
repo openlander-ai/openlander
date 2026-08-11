@@ -86,7 +86,9 @@ export interface AiOpsEvidenceMetadata {
 export interface AiOpsBriefing {
   briefing_id: string;
   project_id: string;
+  project_name?: string | null;
   service_id: string | null;
+  service_name?: string | null;
   status: AiOpsBriefingStatus;
   severity: AiOpsBriefingSeverity;
   classification: string;

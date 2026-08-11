@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../../src/app.js';
 import { exchangeCloudflareCode } from '../../../src/auth/cloudflare-oauth.js';
 import { encryptAndStoreToken } from '../../../src/auth/token-store.js';
-import { OpenLanderError } from '../../../src/errors.js';
+import { CloudflareUnreachableError, OpenLanderError } from '../../../src/errors.js';
 import {
   __cloudflareOAuthStateTestHooks,
   createCloudflareSetupRoutes,
@@ -72,7 +72,7 @@ function createHarness(authKind: 'session' | 'api_token' = 'session') {
     await next();
   });
   app.onError((error, c) => {
-    if (error instanceof OpenLanderError) return c.json(error.toJSON(), 409);
+    if (error instanceof OpenLanderError) return c.json(error.toJSON(), error.statusCode as 400);
     throw error;
   });
   app.route('/api', createCloudflareSetupRoutes(ctx));
@@ -135,6 +135,27 @@ describe('Cloudflare setup routes', () => {
       body: JSON.stringify({ code: 'code-1', state: 'state-1' }),
     });
     expect(replay.status).toBe(400);
+  });
+
+  it('returns a retryable server-connectivity error when token exchange cannot reach Cloudflare', async () => {
+    const { app } = createHarness();
+    __cloudflareOAuthStateTestHooks.set('state-1', 'verifier-1');
+    vi.mocked(exchangeCloudflareCode).mockRejectedValueOnce(
+      new CloudflareUnreachableError('oauth_token', 'UND_ERR_CONNECT_TIMEOUT'),
+    );
+
+    const response = await app.request('/api/setup/cloudflare/oauth/complete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'code-1', state: 'state-1' }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CLOUDFLARE_UNREACHABLE',
+      details: { operation: 'oauth_token', retryable: true },
+    });
+    expect(encryptAndStoreToken).not.toHaveBeenCalled();
   });
 
   it('repairs an existing connected-publish configuration during OAuth completion', async () => {

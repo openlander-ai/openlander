@@ -212,9 +212,13 @@ export function ConnectedPublishCard() {
           return;
         }
       }
-    } catch {
+    } catch (error) {
       popup.close();
-      toast.error(t('webServer.publicAccess.oauthFailed'));
+      toast.error(
+        error instanceof ApiError && error.code === 'CLOUDFLARE_UNREACHABLE'
+          ? t('webServer.publicAccess.cloudflareUnreachable')
+          : t('webServer.publicAccess.oauthFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -233,7 +237,9 @@ export function ConnectedPublishCard() {
       toast.error(
         error instanceof ApiError && error.code === 'CLOUDFLARE_NOT_CONNECTED'
           ? t('webServer.publicAccess.disconnectNeedsReconnect')
-          : t('webServer.publicAccess.disconnectFailed'),
+          : error instanceof ApiError && error.code === 'CLOUDFLARE_UNREACHABLE'
+            ? t('webServer.publicAccess.cloudflareUnreachable')
+            : t('webServer.publicAccess.disconnectFailed'),
       );
     } finally {
       setBusy(false);

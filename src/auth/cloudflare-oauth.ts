@@ -1,4 +1,4 @@
-import { CloudflareApiError } from '../errors.js';
+import { CloudflareApiError, CloudflareUnreachableError } from '../errors.js';
 
 export const CLOUDFLARE_AUTH_URL = 'https://dash.cloudflare.com/oauth2/auth';
 export const CLOUDFLARE_TOKEN_URL = 'https://dash.cloudflare.com/oauth2/token';
@@ -18,6 +18,18 @@ interface CloudflareOAuthTokenResponse {
   token_type?: unknown;
   error?: unknown;
   error_description?: unknown;
+}
+
+function networkFailureReason(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const cause = 'cause' in error ? error.cause : undefined;
+    if (cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string') {
+      return cause.code;
+    }
+    if ('code' in error && typeof error.code === 'string') return error.code;
+    if ('name' in error && typeof error.name === 'string') return error.name;
+  }
+  return 'NETWORK_ERROR';
 }
 
 export function getCloudflareAuthUrl(options: {
@@ -52,12 +64,17 @@ export async function exchangeCloudflareCode(options: {
     code: options.code,
     code_verifier: options.verifier,
   });
-  const response = await (options.fetcher ?? fetch)(CLOUDFLARE_TOKEN_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(30_000),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
-  });
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(CLOUDFLARE_TOKEN_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+  } catch (error) {
+    throw new CloudflareUnreachableError('oauth_token', networkFailureReason(error));
+  }
   const text = await response.text();
   let data: CloudflareOAuthTokenResponse = {};
   try {
@@ -92,12 +109,17 @@ export async function revokeCloudflareToken(options: {
   token: string;
   fetcher?: typeof fetch;
 }): Promise<void> {
-  const response = await (options.fetcher ?? fetch)(CLOUDFLARE_REVOKE_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(30_000),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: options.clientId, token: options.token }).toString(),
-  });
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(CLOUDFLARE_REVOKE_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: options.clientId, token: options.token }).toString(),
+    });
+  } catch (error) {
+    throw new CloudflareUnreachableError('oauth_revoke', networkFailureReason(error));
+  }
   if (!response.ok) {
     throw new CloudflareApiError(response.status, 'OAuth token revocation failed', 'oauth_revoke');
   }

@@ -68,6 +68,12 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function briefingScopeLabel(briefing: AiOpsBriefing): string {
+  const project = briefing.project_name ?? briefing.project_id;
+  const service = briefing.service_name ?? briefing.service_id;
+  return service ? `${project} · ${service}` : project;
+}
+
 export function AiOpsBriefingFeed({
   briefings,
   loading = false,
@@ -225,8 +231,8 @@ export function AiOpsBriefingFeed({
                     {t(`aiOps.status.${briefing.status}`)}
                   </span>
                   {showScope && (
-                    <span className="ol-mono truncate text-[10.5px] text-foreground/50">
-                      {briefing.service_id ?? briefing.project_id}
+                    <span className="truncate text-[10.5px] font-medium text-foreground/55">
+                      {briefingScopeLabel(briefing)}
                     </span>
                   )}
                 </div>

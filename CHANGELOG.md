@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Show Project and Application names in the cross-Project AI Ops briefing inbox
+  instead of opaque IDs.
+
+### Fixed
+
+- Report Cloudflare OAuth token and revocation endpoint connectivity failures as
+  retryable server-network errors with actionable UI guidance instead of a
+  generic sign-in failure.
+
 ## [0.3.5] - 2026-08-10
 
 ### Changed

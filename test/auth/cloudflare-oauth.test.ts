@@ -5,6 +5,7 @@ import {
   CLOUDFLARE_TOKEN_URL,
   exchangeCloudflareCode,
   getCloudflareAuthUrl,
+  revokeCloudflareToken,
 } from '../../src/auth/cloudflare-oauth.js';
 
 describe('Cloudflare public OAuth PKCE', () => {
@@ -78,5 +79,45 @@ describe('Cloudflare public OAuth PKCE', () => {
         fetcher,
       }),
     ).rejects.toMatchObject({ code: 'CLOUDFLARE_API_FAILED', statusCode: 502 });
+  });
+
+  it('returns a retryable connectivity error when the token endpoint is unreachable', async () => {
+    const fetchError = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect timeout'), { code: 'UND_ERR_CONNECT_TIMEOUT' }),
+    });
+
+    await expect(
+      exchangeCloudflareCode({
+        clientId: 'client-id',
+        redirectUri: 'https://auth.openlander.example/cloudflare/callback',
+        code: 'code',
+        verifier: 'verifier',
+        fetcher: vi.fn().mockRejectedValue(fetchError),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CLOUDFLARE_UNREACHABLE',
+      statusCode: 503,
+      details: {
+        operation: 'oauth_token',
+        reason: 'UND_ERR_CONNECT_TIMEOUT',
+        retryable: true,
+      },
+    });
+  });
+
+  it('returns the same connectivity error when token revocation cannot reach Cloudflare', async () => {
+    await expect(
+      revokeCloudflareToken({
+        clientId: 'client-id',
+        token: 'access-token',
+        fetcher: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('dns failed'), { code: 'EAI_AGAIN' })),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CLOUDFLARE_UNREACHABLE',
+      statusCode: 503,
+      details: { operation: 'oauth_revoke', reason: 'EAI_AGAIN', retryable: true },
+    });
   });
 });

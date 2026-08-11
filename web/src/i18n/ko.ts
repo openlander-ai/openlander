@@ -2866,6 +2866,8 @@ export const translations = {
       connectedToast: 'Cloudflare를 연결했습니다.',
       connectFailed: 'Cloudflare 연결을 완료하지 못했습니다.',
       oauthFailed: 'Cloudflare 로그인을 완료하지 못했습니다.',
+      cloudflareUnreachable:
+        'OpenLander 서버에서 Cloudflare에 연결할 수 없습니다. 서버 네트워크를 확인한 뒤 다시 시도하세요.',
       zonesFailed: 'Cloudflare DNS Zone을 불러오지 못했습니다.',
       moreActions: 'Cloudflare 연결 작업',
       reconnect: '다시 연결',

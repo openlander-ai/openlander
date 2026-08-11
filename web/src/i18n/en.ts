@@ -2690,6 +2690,8 @@ export const translations = {
       connectedToast: 'Cloudflare is connected.',
       connectFailed: 'Could not finish the Cloudflare connection.',
       oauthFailed: 'Cloudflare sign-in did not complete.',
+      cloudflareUnreachable:
+        'The OpenLander server cannot reach Cloudflare. Check the server network and try again.',
       zonesFailed: 'Could not load Cloudflare DNS Zones.',
       moreActions: 'Cloudflare connection actions',
       reconnect: 'Reconnect',

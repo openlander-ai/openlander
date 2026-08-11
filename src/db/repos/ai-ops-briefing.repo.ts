@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { aiOpsBriefings } from '../schema.drizzle.js';
+import { aiOpsBriefings, projects, services } from '../schema.drizzle.js';
 import type {
   AiOpsBriefingRow,
   AiOpsBriefingStatus,
@@ -44,6 +44,11 @@ export interface CreateAiOpsBriefingData {
 }
 
 export type AiOpsBriefingStatusFilter = AiOpsBriefingStatus | 'unresolved';
+
+export type AiOpsBriefingWithScopeRow = AiOpsBriefingRow & {
+  project_name: string | null;
+  service_name: string | null;
+};
 
 function serializeUsageMetadata(
   usage: AiOpsLlmSummaryUsageMetadata | null | undefined,
@@ -167,6 +172,38 @@ export class AiOpsBriefingRepo {
       .from(aiOpsBriefings)
       .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
       .limit(limit);
+  }
+
+  async listRecentWithScope(opts?: {
+    limit?: number;
+    status?: AiOpsBriefingStatusFilter;
+  }): Promise<AiOpsBriefingWithScopeRow[]> {
+    const limit = opts?.limit ?? 20;
+    const conditions =
+      opts?.status === 'unresolved'
+        ? inArray(aiOpsBriefings.status, ['open', 'acknowledged'])
+        : opts?.status
+          ? eq(aiOpsBriefings.status, opts.status)
+          : undefined;
+
+    const baseQuery = this.db
+      .select({
+        briefing: aiOpsBriefings,
+        project_name: projects.name,
+        service_name: services.name,
+      })
+      .from(aiOpsBriefings)
+      .leftJoin(projects, eq(aiOpsBriefings.project_id, projects.id))
+      .leftJoin(services, eq(aiOpsBriefings.service_id, services.id));
+    const rows = await (conditions ? baseQuery.where(conditions) : baseQuery)
+      .orderBy(desc(aiOpsBriefings.created_at), desc(aiOpsBriefings.id))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      ...row.briefing,
+      project_name: row.project_name,
+      service_name: row.service_name,
+    }));
   }
 
   async updateStatus(id: string, status: AiOpsBriefingStatus): Promise<AiOpsBriefingRow | null> {

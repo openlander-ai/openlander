@@ -282,15 +282,23 @@ describe('AI Ops routes', () => {
 
   it('lists recent AI Ops briefings across projects for the dashboard inbox', async () => {
     const db = {
-      listRecentAiOpsBriefings: vi.fn(async () => [
-        makeBriefing({
-          id: 'brief-2',
-          project_id: 'p2',
-          service_id: 'svc-2',
-          severity: 'high',
-          status: 'acknowledged',
-        }),
-        makeBriefing({ status: 'open' }),
+      listRecentAiOpsBriefingsWithScope: vi.fn(async () => [
+        {
+          ...makeBriefing({
+            id: 'brief-2',
+            project_id: 'p2',
+            service_id: 'svc-2',
+            severity: 'high',
+            status: 'acknowledged',
+          }),
+          project_name: 'storefront',
+          service_name: 'web',
+        },
+        {
+          ...makeBriefing({ status: 'open' }),
+          project_name: 'demo',
+          service_name: 'demo__svc',
+        },
       ]),
     };
     const app = createApp({ db });
@@ -298,12 +306,17 @@ describe('AI Ops routes', () => {
     const res = await app.request('/api/ai-ops/briefings?status=unresolved&limit=7');
 
     expect(res.status).toBe(200);
-    expect(db.listRecentAiOpsBriefings).toHaveBeenCalledWith({ limit: 7, status: 'unresolved' });
+    expect(db.listRecentAiOpsBriefingsWithScope).toHaveBeenCalledWith({
+      limit: 7,
+      status: 'unresolved',
+    });
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.count).toBe(2);
     const briefings = body.briefings as Array<Record<string, unknown>>;
     expect(briefings[0]?.briefing_id).toBe('brief-2');
     expect(briefings[0]?.project_id).toBe('p2');
+    expect(briefings[0]?.project_name).toBe('storefront');
+    expect(briefings[0]?.service_name).toBe('web');
     expect(briefings[0]?.status).toBe('acknowledged');
     expect(briefings[0]).not.toHaveProperty('evidence');
   });

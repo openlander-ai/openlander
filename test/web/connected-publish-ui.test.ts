@@ -78,6 +78,8 @@ describe('Connected Publish UI', () => {
     expect(connectionCard).toContain('listCloudflareZones');
     expect(connectionCard).toContain('disconnectCloudflare');
     expect(connectionCard).toContain("error.code === 'CLOUDFLARE_NOT_CONNECTED'");
+    expect(connectionCard).toContain("error.code === 'CLOUDFLARE_UNREACHABLE'");
+    expect(connectionCard).toContain('cloudflareUnreachable');
     expect(connectionCard).toContain('disconnectNeedsReconnect');
     expect(connectionCard).toContain('<DropdownMenu');
     expect(connectionCard).toContain('<ConfirmDialog');
@@ -233,6 +235,7 @@ describe('Connected Publish UI', () => {
       expect(locale).toMatch(/protectedShare:\s*\{/);
       expect(locale).toMatch(/securityNote:/);
       expect(locale).toMatch(/connectedToast:/);
+      expect(locale).toMatch(/cloudflareUnreachable:/);
     }
   });
 });

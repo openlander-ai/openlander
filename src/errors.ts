@@ -565,6 +565,18 @@ export class CloudflareOAuthUnavailableError extends OpenLanderError {
   }
 }
 
+export class CloudflareUnreachableError extends OpenLanderError {
+  constructor(operation: string, reason: string) {
+    super(
+      'OpenLander could not reach Cloudflare. Check the server network and try again.',
+      'CLOUDFLARE_UNREACHABLE',
+      503,
+      { operation, reason, retryable: true },
+    );
+    this.name = 'CloudflareUnreachableError';
+  }
+}
+
 export class CloudflareApiError extends OpenLanderError {
   constructor(status: number, detail: string, operation: string) {
     super('Cloudflare API request failed.', 'CLOUDFLARE_API_FAILED', 502, {
