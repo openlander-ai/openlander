@@ -189,6 +189,11 @@ export function PublicAccessControl({
         } else if (error instanceof ApiError && error.code === 'CLOUDFLARE_NOT_CONNECTED') {
           toast.info(t('projectDetail.publicAccess.connectCloudflareFirst'));
           navigate('/settings/web-server#connected-publish');
+        } else if (
+          error instanceof ApiError &&
+          (error.code === 'CLOUDFLARE_UNREACHABLE' || error.code === 'CLOUDFLARE_API_FAILED')
+        ) {
+          toast.error(t('projectDetail.publicAccess.cloudflareUnavailable'));
         } else if (error instanceof ApiError && error.code === 'PUBLIC_ACCESS_NOT_ELIGIBLE') {
           toast.info(
             provider === 'cloudflare'
@@ -275,11 +280,14 @@ export function PublicAccessControl({
     status === 'provisioning' && provider === 'cloudflare'
       ? t('projectDetail.publicAccess.cloudflareVerifying')
       : status === 'error'
-        ? access?.error?.code === 'PUBLIC_ACCESS_ROUTE_UNREACHABLE'
-          ? t('projectDetail.publicAccess.routeUnreachable')
-          : access?.error?.code === 'PUBLIC_ACCESS_APPLICATION_UNHEALTHY'
-            ? t('projectDetail.publicAccess.applicationUnhealthy')
-            : t('projectDetail.publicAccess.publishErrorGeneric')
+        ? access?.error?.code === 'CLOUDFLARE_UNREACHABLE' ||
+          access?.error?.code === 'CLOUDFLARE_API_FAILED'
+          ? t('projectDetail.publicAccess.cloudflareUnavailable')
+          : access?.error?.code === 'PUBLIC_ACCESS_ROUTE_UNREACHABLE'
+            ? t('projectDetail.publicAccess.routeUnreachable')
+            : access?.error?.code === 'PUBLIC_ACCESS_APPLICATION_UNHEALTHY'
+              ? t('projectDetail.publicAccess.applicationUnhealthy')
+              : t('projectDetail.publicAccess.publishErrorGeneric')
         : null;
 
   if (status === 'public' && access?.public_url) {

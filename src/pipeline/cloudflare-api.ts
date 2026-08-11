@@ -1,7 +1,12 @@
-import { CloudflareApiError } from '../errors.js';
+import { CloudflareApiError, CloudflareUnreachableError } from '../errors.js';
+import { createModuleLogger } from '../lib/logger.js';
 
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const MAX_PAGES = 20;
+const REQUEST_TIMEOUT_MS = 8_000;
+const NETWORK_RETRY_DELAYS_MS = [250, 750] as const;
+const RETRY_SAFE_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE']);
+const log = createModuleLogger('cloudflare-api');
 
 interface CloudflareApiEnvelope<T> {
   success?: unknown;
@@ -55,6 +60,22 @@ function appendQuery(path: string, key: string, value: string): string {
   const url = new URL(path, `${CLOUDFLARE_API_BASE}/`);
   url.searchParams.set(key, value);
   return `${url.pathname.replace(/^\/client\/v4\//, '')}${url.search}`;
+}
+
+function networkFailureReason(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const cause = 'cause' in error ? error.cause : undefined;
+    if (cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string') {
+      return cause.code;
+    }
+    if ('code' in error && typeof error.code === 'string') return error.code;
+    if ('name' in error && typeof error.name === 'string') return error.name;
+  }
+  return 'NETWORK_ERROR';
+}
+
+function sleep(durationMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
 export class CloudflareApiClient {
@@ -201,24 +222,37 @@ export class CloudflareApiClient {
     operation: string,
     init?: RequestInit,
   ): Promise<CloudflareApiEnvelope<T>> {
-    let response: Response;
-    try {
-      response = await this.fetcher(`${CLOUDFLARE_API_BASE}/${path}`, {
-        ...init,
-        signal: AbortSignal.timeout(30_000),
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-          ...((init?.headers ?? {}) as Record<string, string>),
-        },
-      });
-    } catch (error) {
-      throw new CloudflareApiError(
-        0,
-        error instanceof Error ? error.message : 'Network request failed',
-        operation,
-      );
+    const url = `${CLOUDFLARE_API_BASE}/${path}`;
+    const method = init?.method?.toUpperCase() ?? 'GET';
+    const retrySafe = RETRY_SAFE_METHODS.has(method);
+    let response: Response | undefined;
+
+    for (let attempt = 0; attempt <= NETWORK_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        response = await this.fetcher(url, {
+          ...init,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+            ...((init?.headers ?? {}) as Record<string, string>),
+          },
+        });
+        break;
+      } catch (error) {
+        const retryDelayMs = retrySafe ? NETWORK_RETRY_DELAYS_MS[attempt] : undefined;
+        if (retryDelayMs === undefined) {
+          throw new CloudflareUnreachableError(operation, networkFailureReason(error));
+        }
+        log.warn(
+          { err: error, operation, method, attempt: attempt + 1, retryDelayMs },
+          'Cloudflare API network error; retrying',
+        );
+        await sleep(retryDelayMs);
+      }
     }
+
+    if (!response) throw new CloudflareUnreachableError(operation, 'NETWORK_ERROR');
 
     const text = await response.text();
     let body: CloudflareApiEnvelope<T> = {};

@@ -544,7 +544,17 @@ export class ConnectedPublishManager {
     }
     // Remove the externally reachable ingress last. Even if Cloudflare is unavailable,
     // deleting the local mapping first makes Traefik return 404 for the hostname.
-    if (connection) await this.syncIngress(await this.getApiClient(), connection);
+    if (connection) {
+      try {
+        await this.syncIngress(await this.getApiClient(), connection);
+      } catch (cleanupError) {
+        log.warn(
+          { err: cleanupError, publishError: error },
+          'Connected Publish failed and remote ingress cleanup could not be verified',
+        );
+        throw error;
+      }
+    }
   }
 
   private async performUnpublish(projectId: string): Promise<void> {

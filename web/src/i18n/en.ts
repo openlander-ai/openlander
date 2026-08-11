@@ -1518,6 +1518,8 @@ export const translations = {
       httpsPortUnavailable:
         'Port 443 is already in use on this server. Free it or use Cloudflare Tunnel.',
       publishFailed: 'Could not share this Application.',
+      cloudflareUnavailable:
+        'This server could not reach Cloudflare. Check the server network or repair the Cloudflare connection, then try again.',
       routeUnreachable:
         'Cloudflare accepted the route, but it is not externally reachable yet. Retry or repair the Cloudflare connection.',
       applicationUnhealthy:

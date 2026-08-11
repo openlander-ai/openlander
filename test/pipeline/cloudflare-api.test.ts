@@ -79,4 +79,53 @@ describe('CloudflareApiClient', () => {
     expect(error).toMatchObject({ code: 'CLOUDFLARE_API_FAILED', statusCode: 502 });
     expect(String(error)).not.toContain('never-leak-this');
   });
+
+  it('retries retry-safe requests after a transient network failure', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(jsonResponse([{ id: 'zone-1', name: 'example.com' }]));
+    const client = new CloudflareApiClient('token', fetcher);
+
+    const assertion = expect(client.listZones('account-1')).resolves.toEqual([
+      { id: 'zone-1', name: 'example.com' },
+    ]);
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('does not retry non-idempotent Cloudflare writes', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('fetch failed'));
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await expect(
+      client.createTunnelDnsRecord('zone-1', 'app.example.com', 'tunnel-1'),
+    ).rejects.toMatchObject({
+      code: 'CLOUDFLARE_UNREACHABLE',
+      details: expect.objectContaining({ operation: 'create_dns_record', retryable: true }),
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('reports an unreachable error after retry-safe requests exhaust retries', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('fetch failed'));
+    const client = new CloudflareApiClient('token', fetcher);
+
+    const assertion = expect(
+      client.updateTunnelConfiguration('account-1', 'tunnel-1', [{ service: 'http_status:404' }]),
+    ).rejects.toMatchObject({
+      code: 'CLOUDFLARE_UNREACHABLE',
+      details: expect.objectContaining({ operation: 'update_tunnel_configuration' }),
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
 });

@@ -108,6 +108,8 @@ describe('Connected Publish UI', () => {
     expect(publicControl).toContain('cloudflareVerifying');
     expect(publicControl).toContain('PUBLIC_ACCESS_ROUTE_UNREACHABLE');
     expect(publicControl).toContain('PUBLIC_ACCESS_APPLICATION_UNHEALTHY');
+    expect(publicControl).toContain('CLOUDFLARE_UNREACHABLE');
+    expect(publicControl).toContain('cloudflareUnavailable');
     expect(publicControl).toContain('entrypointNote');
   });
 
@@ -241,6 +243,7 @@ describe('Connected Publish UI', () => {
       expect(locale).toMatch(/connectedToast:/);
       expect(locale).toMatch(/cloudflareUnreachable:/);
       expect(locale).toMatch(/cloudflareVerifying:/);
+      expect(locale).toMatch(/cloudflareUnavailable:/);
       expect(locale).toMatch(/routeUnreachable:/);
       expect(locale).toMatch(/applicationUnhealthy:/);
       expect(locale).toMatch(/entrypointNote:/);

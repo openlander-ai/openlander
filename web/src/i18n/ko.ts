@@ -1571,6 +1571,8 @@ export const translations = {
       httpsPortUnavailable:
         '이 서버에서 443 포트를 이미 사용 중입니다. 포트를 비우거나 Cloudflare 터널을 사용하세요.',
       publishFailed: '애플리케이션을 외부 공유하지 못했습니다.',
+      cloudflareUnavailable:
+        '이 서버에서 Cloudflare에 연결하지 못했습니다. 서버 네트워크 또는 Cloudflare 연결을 복구한 뒤 다시 시도하세요.',
       routeUnreachable:
         'Cloudflare에 경로는 등록됐지만 아직 외부에서 접속할 수 없습니다. 다시 시도하거나 Cloudflare 연결을 복구하세요.',
       applicationUnhealthy:
