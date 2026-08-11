@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Separate MCP-managed public sharing from user-managed custom domain routes,
+  while retaining Project composite aliases for compatibility.
+- Label custom-domain actions explicitly in the web UI and MCP help.
+
+### Fixed
+
+- Hide Protected Share and Cloudflare Connected Publish routes from custom-domain
+  inventories and reject direct deletion of their managed Traefik mappings.
+
 ## [0.3.6-rc.8] - 2026-08-11
 
 ### Fixed
