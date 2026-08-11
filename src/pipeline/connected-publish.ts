@@ -686,10 +686,10 @@ export class ConnectedPublishManager {
   ): Promise<ProjectPublicAccessRow> {
     const tunnelTarget = `${connection.tunnel_id}.cfargotunnel.com`;
     if (access.cloudflare_dns_record_id) {
-      const records = await api.listDnsRecords(connection.zone_id, access.hostname);
-      const owned = records.find((record) => record.id === access.cloudflare_dns_record_id);
+      const owned = await api.getDnsRecord(connection.zone_id, access.cloudflare_dns_record_id);
       if (owned) {
         if (
+          owned.name.replace(/\.$/, '').toLowerCase() !== access.hostname.toLowerCase() ||
           owned.type.toUpperCase() !== 'CNAME' ||
           owned.content.replace(/\.$/, '').toLowerCase() !== tunnelTarget.toLowerCase()
         ) {

@@ -52,6 +52,50 @@ describe('CloudflareApiClient', () => {
     });
   });
 
+  it('reads a tracked DNS record directly by id', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: 'record-1',
+        type: 'CNAME',
+        name: 'app.example.com',
+        content: 'tunnel-1.cfargotunnel.com',
+      }),
+    );
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await expect(client.getDnsRecord('zone-1', 'record-1')).resolves.toMatchObject({
+      id: 'record-1',
+      name: 'app.example.com',
+    });
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      'https://api.cloudflare.com/client/v4/zones/zone-1/dns_records/record-1',
+    );
+  });
+
+  it('returns null when a tracked DNS record was removed', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: false, errors: [{ message: 'not found' }] }), {
+        status: 404,
+      }),
+    );
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await expect(client.getDnsRecord('zone-1', 'missing')).resolves.toBeNull();
+  });
+
+  it('allows slow Cloudflare reads enough time to complete', async () => {
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(new AbortController().signal);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse([]));
+    const client = new CloudflareApiClient('token', fetcher);
+
+    await client.listDnsRecords('zone-1', 'app.example.com');
+
+    expect(timeout).toHaveBeenCalledWith(20_000);
+    timeout.mockRestore();
+  });
+
   it('cleans up tracked connector connections before tunnel deletion', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({}));
     const client = new CloudflareApiClient('token', fetcher);

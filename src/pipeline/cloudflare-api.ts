@@ -3,7 +3,7 @@ import { createModuleLogger } from '../lib/logger.js';
 
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const MAX_PAGES = 20;
-const REQUEST_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 20_000;
 const NETWORK_RETRY_DELAYS_MS = [250, 750] as const;
 const RETRY_SAFE_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE']);
 const log = createModuleLogger('cloudflare-api');
@@ -161,6 +161,20 @@ export class CloudflareApiClient {
       `zones/${encodeURIComponent(zoneId)}/dns_records?${query.toString()}`,
       'list_dns_records',
     );
+  }
+
+  async getDnsRecord(zoneId: string, recordId: string): Promise<CloudflareDnsRecord | null> {
+    try {
+      return await this.request<CloudflareDnsRecord>(
+        `zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(recordId)}`,
+        'get_dns_record',
+      );
+    } catch (error) {
+      if (error instanceof CloudflareApiError && error.details?.['status'] === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   createTunnelDnsRecord(

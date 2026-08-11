@@ -96,6 +96,9 @@ function createHarness(
     listDnsRecords: vi.fn(async (_zoneId: string, hostname: string) =>
       dnsRecords.filter((record) => record.name === hostname),
     ),
+    getDnsRecord: vi.fn(async (_zoneId: string, recordId: string) =>
+      dnsRecords.find((record) => record.id === recordId) ?? null,
+    ),
     createTunnelDnsRecord: vi.fn(async (_zoneId: string, hostname: string, tunnelId: string) => {
       const created = {
         id: `dns-${String(dnsRecords.length + 1)}`,
