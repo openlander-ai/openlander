@@ -22,7 +22,6 @@ import {
   PublicAccessApplicationUnhealthyError,
   PublicAccessBusyError,
   PublicAccessNotEligibleError,
-  PublicAccessRouteUnreachableError,
   ServiceNotFoundError,
   ServiceSelectionRequiredError,
 } from '../errors.js';
@@ -524,7 +523,14 @@ export class ConnectedPublishManager {
         this.publicRouteProbeAttempts,
       );
     }
-    throw new PublicAccessRouteUnreachableError(hostname, this.publicRouteProbeAttempts);
+    // A Cloudflare Tunnel URL can be unreachable from the publishing container even while it is
+    // already reachable externally. Colima/Docker DNS caches and hairpin routing are common
+    // examples. The Cloudflare configuration calls above are authoritative; keep the route and
+    // let DNS/edge propagation finish instead of deleting a working ingress.
+    log.warn(
+      { hostname, attempts: this.publicRouteProbeAttempts },
+      'Cloudflare route probe remained unreachable; preserving configured public route',
+    );
   }
 
   private async failPublish(projectId: string, error: unknown): Promise<void> {

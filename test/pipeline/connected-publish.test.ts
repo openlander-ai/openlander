@@ -408,7 +408,7 @@ describe('ConnectedPublishManager', () => {
     expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({ status: 'public' });
   });
 
-  it('reports a route-specific error when the Cloudflare URL never becomes reachable', async () => {
+  it('preserves the configured route when the publishing container cannot reach it', async () => {
     const harness = createHarness({
       publicRouteProbeResults: [{ kind: 'unreachable' }, { kind: 'unreachable' }],
       publicRouteProbeAttempts: 2,
@@ -418,12 +418,15 @@ describe('ConnectedPublishManager', () => {
     await harness.manager.waitForPendingOperations();
 
     expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
-      status: 'error',
-      public_url: null,
-      error: { code: 'PUBLIC_ACCESS_ROUTE_UNREACHABLE' },
+      status: 'public',
+      public_url: 'https://demo-app.example.com',
+      error: null,
     });
-    expect(harness.getMapping()).toBeNull();
-    expect(harness.getService()).toMatchObject({ visibility: 'internal', public_url: null });
+    expect(harness.getMapping()).not.toBeNull();
+    expect(harness.getService()).toMatchObject({
+      visibility: 'production',
+      public_url: 'https://demo-app.example.com',
+    });
   });
 
   it('separates an application 5xx from a Cloudflare route failure', async () => {
