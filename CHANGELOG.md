@@ -5,14 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Reuse tracked DNS reservations through direct record lookup and allow slow
+  Cloudflare API reads enough time to complete without restarting Colima.
+
 ## [0.3.6-rc.5] - 2026-08-11
 
 ### Fixed
 
 - Preserve a successfully configured Cloudflare Tunnel route when the
   publishing container cannot loop back through its own public hostname.
-- Reuse tracked DNS reservations through direct record lookup and allow slow
-  Cloudflare API reads enough time to complete without restarting Colima.
 
 ## [0.3.6-rc.4] - 2026-08-11
 
