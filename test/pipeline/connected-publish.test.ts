@@ -39,6 +39,7 @@ vi.mock('node:fs/promises', async (importOriginal) => ({
 }));
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.mocked(getValidToken).mockResolvedValue('access-token');
   vi.unstubAllGlobals();
 });
@@ -84,6 +85,7 @@ function createHarness(
     serviceOverrides?: Partial<ServiceRow>;
     publicRouteProbeResults?: PublicRouteProbeResult[];
     publicRouteProbeAttempts?: number;
+    publicRouteRetryDelayMs?: number;
     useDefaultPublicRouteProbe?: boolean;
   } = {},
 ) {
@@ -304,6 +306,7 @@ function createHarness(
       ...(options.useDefaultPublicRouteProbe ? {} : { publicRouteProbe }),
       publicRouteProbeAttempts: options.publicRouteProbeAttempts ?? 3,
       publicRouteProbeIntervalMs: 0,
+      publicRouteRetryDelayMs: options.publicRouteRetryDelayMs ?? 10_000,
     },
   );
 
@@ -463,7 +466,7 @@ describe('ConnectedPublishManager', () => {
     expect(harness.api.updateTunnelConfiguration).not.toHaveBeenCalled();
   });
 
-  it('preserves the configured route when the publishing container cannot reach it', async () => {
+  it('preserves the configured route but does not claim success when the publishing container cannot reach it', async () => {
     const harness = createHarness({
       publicRouteProbeResults: [{ kind: 'unreachable' }, { kind: 'unreachable' }],
       publicRouteProbeAttempts: 2,
@@ -472,15 +475,77 @@ describe('ConnectedPublishManager', () => {
     await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
     await harness.manager.waitForPendingOperations();
 
-    expect(await harness.manager.getPublicAccess(project.id)).toMatchObject({
-      status: 'public',
-      public_url: 'https://demo-app.example.com',
-      error: null,
+    expect(harness.getAccess()).toMatchObject({
+      status: 'provisioning',
+      hostname: 'demo-app.example.com',
+      last_error_code: null,
     });
     expect(harness.getMapping()).not.toBeNull();
+    expect(harness.getService().visibility).toBeUndefined();
+    expect(harness.getService().public_url).toBeUndefined();
+  });
+
+  it('retries a preserved route in the background until it becomes externally reachable', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness({
+      publicRouteProbeResults: [
+        { kind: 'unreachable' },
+        { kind: 'unreachable' },
+        { kind: 'reachable', status: 200 },
+      ],
+      publicRouteProbeAttempts: 2,
+      publicRouteRetryDelayMs: 25,
+    });
+
+    await harness.manager.requestPublish({ projectId: project.id, serviceId: service.id });
+    await harness.manager.waitForPendingOperations();
+    expect(harness.getAccess()?.status).toBe('provisioning');
+
+    await vi.advanceTimersByTimeAsync(25);
+    await harness.manager.waitForPendingOperations();
+
+    expect(harness.getAccess()).toMatchObject({
+      status: 'public',
+      hostname: 'demo-app.example.com',
+    });
     expect(harness.getService()).toMatchObject({
       visibility: 'production',
       public_url: 'https://demo-app.example.com',
+    });
+  });
+
+  it('revalidates previously public routes after startup reconciliation', async () => {
+    const harness = createHarness({
+      existingAccess: {
+        project_id: project.id,
+        service_id: service.id,
+        connection_id: connection.id,
+        hostname: 'demo-app.example.com',
+        cloudflare_zone_id: connection.zone_id,
+        cloudflare_dns_record_id: 'dns-1',
+        domain_mapping_id: 'domain-1',
+        status: 'public',
+        last_error_code: null,
+        last_error_message: null,
+        published_at: '2026-08-11T00:00:00.000Z',
+      } as ProjectPublicAccessRow,
+      serviceOverrides: {
+        visibility: 'production',
+        public_url: 'https://demo-app.example.com',
+      },
+      publicRouteProbeResults: [{ kind: 'route_pending', status: 404 }],
+    });
+
+    await harness.manager.reconcile();
+    await harness.manager.waitForPendingOperations();
+
+    expect(harness.getAccess()).toMatchObject({
+      status: 'provisioning',
+      domain_mapping_id: 'domain-1',
+    });
+    expect(harness.getService()).toMatchObject({
+      visibility: 'internal',
+      public_url: null,
     });
   });
 

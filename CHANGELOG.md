@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add a per-resource quick menu for opening details, logs, deployment and
+  monitoring tabs, managing domains, and starting or stopping external sharing.
+
+### Changed
+
+- Keep legacy Project-composite public-sharing actions callable for compatibility
+  while advertising managed sharing only through `openlander_service`.
+
+### Fixed
+
+- Keep Cloudflare Connected Publish in `provisioning` with no public URL until
+  the generated HTTPS route is externally reachable, and retry propagation in
+  the background without requiring a Docker or OpenLander restart.
+
 ## [0.3.6-rc.9] - 2026-08-11
 
 ### Changed

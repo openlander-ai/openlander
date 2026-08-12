@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils';
 import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
 import { localizeApiError } from '@/lib/localized-api-error';
+import { ResourceQuickMenu, type ResourceQuickTab } from '@/components/project/ResourceQuickMenu';
 
 type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings';
 
@@ -451,12 +452,13 @@ export function ProjectView() {
   // Avoids drift where some callers forget to attach `?project=` and the
   // resource detail page falls back to a default.
   const openService = useCallback(
-    (service: ServiceNode) => {
+    (service: ServiceNode, tab: ResourceQuickTab = 'overview') => {
+      const tabQuery = tab === 'overview' ? '' : `?tab=${encodeURIComponent(tab)}`;
       if (isManagedServiceNode(service)) {
-        navigate(`/projects/${projectId}/infrastructure/${service.id}`);
+        navigate(`/projects/${projectId}/infrastructure/${service.id}${tabQuery}`);
         return;
       }
-      navigate(`/projects/${projectId}/services/${service.id}`);
+      navigate(`/projects/${projectId}/services/${service.id}${tabQuery}`);
     },
     [navigate, projectId],
   );
@@ -633,6 +635,7 @@ export function ProjectView() {
           className="p-0"
         >
           <ServicesPanel
+            projectId={projectId}
             services={projectServiceRows}
             onOpen={openService}
             onAddService={() => setAddServiceOpen(true)}
@@ -644,6 +647,7 @@ export function ProjectView() {
             archiveForced={isProjectArchived}
             dataAccessByServiceId={dataAccessByServiceId}
             composeAggregateStatus={composeAggregateStatus}
+            onAccessChanged={() => void refetchGroupServices()}
           />
         </TabPanel>
         <TabPanel
@@ -736,6 +740,7 @@ export function ProjectView() {
 // ─── Services panel ─────────────────────────────────────────────────────────
 
 function ServicesPanel({
+  projectId,
   services,
   onOpen,
   onAddService,
@@ -747,9 +752,11 @@ function ServicesPanel({
   archiveForced,
   dataAccessByServiceId,
   composeAggregateStatus,
+  onAccessChanged,
 }: {
+  projectId: string;
   services: ServiceNode[];
-  onOpen: (service: ServiceNode) => void;
+  onOpen: (service: ServiceNode, tab?: ResourceQuickTab) => void;
   onAddService: () => void;
   showArchived: boolean;
   archivedLoading: boolean;
@@ -759,6 +766,7 @@ function ServicesPanel({
   archiveForced?: boolean;
   dataAccessByServiceId: Record<string, DataSourceAccessStatus>;
   composeAggregateStatus?: 'running' | 'degraded' | 'error';
+  onAccessChanged: () => void;
 }) {
   const { t } = useLanguage();
   const toggleArchived = () => onShowArchivedChange(!showArchived);
@@ -961,6 +969,13 @@ function ServicesPanel({
                     </div>
                   )}
                 </div>
+                <ResourceQuickMenu
+                  projectId={projectId}
+                  service={s}
+                  managed={isManagedServiceNode(s)}
+                  onOpenTab={(tab) => onOpen(s, tab)}
+                  onAccessChanged={onAccessChanged}
+                />
               </div>
             </li>
           );

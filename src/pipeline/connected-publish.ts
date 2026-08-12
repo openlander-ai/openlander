@@ -50,6 +50,7 @@ const MAX_HOSTNAME_ATTEMPTS = 10;
 const DEFAULT_PUBLIC_ROUTE_PROBE_ATTEMPTS = 8;
 const DEFAULT_PUBLIC_ROUTE_PROBE_INTERVAL_MS = 1_000;
 const DEFAULT_PUBLIC_ROUTE_PROBE_TIMEOUT_MS = 5_000;
+const DEFAULT_PUBLIC_ROUTE_RETRY_DELAY_MS = 10_000;
 
 type ApiFactory = (accessToken: string) => CloudflareApiClient;
 
@@ -70,6 +71,7 @@ export interface ConnectedPublishOptions {
   publicRouteProbe?: PublicRouteProbe;
   publicRouteProbeAttempts?: number;
   publicRouteProbeIntervalMs?: number;
+  publicRouteRetryDelayMs?: number;
   sleep?: (durationMs: number) => Promise<void>;
 }
 
@@ -224,9 +226,12 @@ export class ConnectedPublishManager {
   private readonly publicRouteProbe: PublicRouteProbe;
   private readonly publicRouteProbeAttempts: number;
   private readonly publicRouteProbeIntervalMs: number;
+  private readonly publicRouteRetryDelayMs: number;
   private readonly sleep: (durationMs: number) => Promise<void>;
   private operationQueue: Promise<void> = Promise.resolve();
   private readonly queuedPublishProjects = new Set<string>();
+  private readonly queuedVerificationProjects = new Set<string>();
+  private readonly publishRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private disconnecting = false;
 
   constructor(
@@ -248,6 +253,10 @@ export class ConnectedPublishManager {
     this.publicRouteProbeIntervalMs = Math.max(
       0,
       options.publicRouteProbeIntervalMs ?? DEFAULT_PUBLIC_ROUTE_PROBE_INTERVAL_MS,
+    );
+    this.publicRouteRetryDelayMs = Math.max(
+      0,
+      options.publicRouteRetryDelayMs ?? DEFAULT_PUBLIC_ROUTE_RETRY_DELAY_MS,
     );
     this.sleep =
       options.sleep ?? ((durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)));
@@ -466,6 +475,7 @@ export class ConnectedPublishManager {
     if (current.status === 'provisioning' || current.status === 'unpublishing') {
       throw new PublicAccessBusyError(project.id, current.status);
     }
+    this.clearPublishRetry(project.id);
     const row = await this.db.updateProjectPublicAccess(project.id, {
       status: 'unpublishing',
       lastErrorCode: null,
@@ -476,6 +486,7 @@ export class ConnectedPublishManager {
   }
 
   async deleteProjectReservation(projectId: string, serviceId?: string): Promise<void> {
+    this.clearPublishRetry(projectId);
     const access = await this.db.getProjectPublicAccess(projectId);
     if (!access || (serviceId && access.service_id !== serviceId)) return;
 
@@ -503,12 +514,13 @@ export class ConnectedPublishManager {
     try {
       await this.ensureConnector(connection);
       const rows = await this.db.listProjectPublicAccess();
+      await this.syncIngress(await this.getApiClient(), connection);
       for (const row of rows) {
         if (row.status === 'provisioning') this.enqueuePublish(row.project_id);
         if (row.status === 'unpublishing')
           this.enqueue(() => this.performUnpublish(row.project_id));
+        if (row.status === 'public') this.enqueuePublishedVerification(row.project_id);
       }
-      await this.syncIngress(await this.getApiClient(), connection);
     } catch (error) {
       await this.recordConnectionError(error);
       throw error;
@@ -527,6 +539,7 @@ export class ConnectedPublishManager {
   }
 
   private enqueuePublish(projectId: string): void {
+    this.clearPublishRetry(projectId);
     if (this.queuedPublishProjects.has(projectId)) return;
     this.queuedPublishProjects.add(projectId);
     this.enqueue(async () => {
@@ -536,6 +549,35 @@ export class ConnectedPublishManager {
         this.queuedPublishProjects.delete(projectId);
       }
     });
+  }
+
+  private enqueuePublishedVerification(projectId: string): void {
+    if (this.queuedVerificationProjects.has(projectId)) return;
+    this.queuedVerificationProjects.add(projectId);
+    this.enqueue(async () => {
+      try {
+        await this.verifyPublishedRoute(projectId);
+      } finally {
+        this.queuedVerificationProjects.delete(projectId);
+      }
+    });
+  }
+
+  private schedulePublishRetry(projectId: string): void {
+    if (this.publishRetryTimers.has(projectId)) return;
+    const timer = setTimeout(() => {
+      this.publishRetryTimers.delete(projectId);
+      this.enqueuePublish(projectId);
+    }, this.publicRouteRetryDelayMs);
+    timer.unref();
+    this.publishRetryTimers.set(projectId, timer);
+  }
+
+  private clearPublishRetry(projectId: string): void {
+    const timer = this.publishRetryTimers.get(projectId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.publishRetryTimers.delete(projectId);
   }
 
   private async performPublish(projectId: string): Promise<void> {
@@ -551,7 +593,11 @@ export class ConnectedPublishManager {
       await this.db.updateProjectPublicAccess(projectId, { domainMappingId: mapping.id });
       await this.syncIngress(api, connection);
       const publicUrl = `https://${withDns.hostname}`;
-      if (!(await this.waitForPublicRoute(publicUrl, withDns.hostname))) return;
+      if (!(await this.waitForPublicRoute(publicUrl, withDns.hostname))) {
+        this.schedulePublishRetry(projectId);
+        return;
+      }
+      this.clearPublishRetry(projectId);
       await this.db.updateService(target.service.id, {
         visibility: 'production',
         publicUrl,
@@ -566,8 +612,49 @@ export class ConnectedPublishManager {
       if (!completed) throw new ServiceNotFoundError(target.service.id);
       await this.events.emit('tunnel:url', { projectId, url: publicUrl });
     } catch (error) {
+      this.clearPublishRetry(projectId);
       await this.failPublish(projectId, error);
     }
+  }
+
+  private async verifyPublishedRoute(projectId: string): Promise<void> {
+    const access = await this.db.getProjectPublicAccess(projectId);
+    if (!access?.service_id || access.status !== 'public') return;
+
+    const publicUrl = `https://${access.hostname}`;
+    const result = await this.publicRouteProbe(publicUrl);
+    if (result.kind === 'reachable') {
+      await this.db.updateService(access.service_id, {
+        visibility: 'production',
+        publicUrl,
+      });
+      return;
+    }
+
+    await this.db.updateService(access.service_id, {
+      visibility: 'internal',
+      publicUrl: null,
+    });
+    if (result.kind === 'application_unhealthy') {
+      const error = new PublicAccessApplicationUnhealthyError(access.hostname, result.status, 1);
+      await this.db.updateProjectPublicAccess(projectId, {
+        status: 'error',
+        lastErrorCode: error.code,
+        lastErrorMessage: error.message,
+      });
+      return;
+    }
+
+    await this.db.updateProjectPublicAccess(projectId, {
+      status: 'provisioning',
+      lastErrorCode: null,
+      lastErrorMessage: null,
+    });
+    log.info(
+      { projectId, hostname: access.hostname, probeResult: result.kind },
+      'Published route is not externally reachable; returning it to provisioning',
+    );
+    this.schedulePublishRetry(projectId);
   }
 
   private async waitForPublicRoute(publicUrl: string, hostname: string): Promise<boolean> {
@@ -595,15 +682,11 @@ export class ConnectedPublishManager {
       );
       return false;
     }
-    // A Cloudflare Tunnel URL can be unreachable from the publishing container even while it is
-    // already reachable externally. Colima/Docker DNS caches and hairpin routing are common
-    // examples. The Cloudflare configuration calls above are authoritative; keep the route and
-    // let DNS/edge propagation finish instead of deleting a working ingress.
-    log.warn(
+    log.info(
       { hostname, attempts: this.publicRouteProbeAttempts },
-      'Cloudflare route probe remained unreachable; preserving configured public route',
+      'Cloudflare route probe remained unreachable; keeping public access provisioning',
     );
-    return true;
+    return false;
   }
 
   private async failPublish(projectId: string, error: unknown): Promise<void> {
@@ -638,6 +721,7 @@ export class ConnectedPublishManager {
 
   private async performUnpublish(projectId: string): Promise<void> {
     try {
+      this.clearPublishRetry(projectId);
       const access = await this.db.getProjectPublicAccess(projectId);
       if (!access || access.status !== 'unpublishing') return;
       if (access.domain_mapping_id) await this.db.deleteDomainMapping(access.domain_mapping_id);
@@ -718,6 +802,7 @@ export class ConnectedPublishManager {
     }
 
     for (const access of accessRows) {
+      this.clearPublishRetry(access.project_id);
       if (access.domain_mapping_id) await this.db.deleteDomainMapping(access.domain_mapping_id);
       if (access.service_id) {
         await this.db.updateService(access.service_id, {

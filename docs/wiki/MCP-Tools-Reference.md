@@ -158,27 +158,28 @@ Composite catalog:
 
 ## Tool Categories
 
-| Category                                                 | Tools | Description                                                     |
-| -------------------------------------------------------- | ----- | --------------------------------------------------------------- |
-| [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans                   |
-| [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                              |
-| [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config           |
-| [Delivery Workspace](#delivery-workspace)                | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview |
-| [Agent Delivery Run](#agent-delivery-run)                | 8     | Plan, verify, hand off, resume, cancel, or complete             |
-| [Project Manifest](#project-manifest)                    | 3     | Register source and apply/inspect Project configuration         |
-| [Release and Promotion](#release-and-promotion)          | 6     | Build once, promote an immutable digest, recall, or roll back   |
-| [Weekly Reporting](#weekly-reporting)                    | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
-| [Engagement Portfolio](#engagement-portfolio)            | 3     | Engagement bootstrap and cross-Project portfolio reads          |
-| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                                 |
-| [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources               |
-| [Data Inspector](#project-aware-data-inspector)          | 3     | Bounded read-only data-source inspection                        |
-| [Domains](#domains)                                      | 2     | Register Host/path domain routes                                |
-| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                                   |
-| [Monitoring](#monitoring--logs)                          | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis   |
-| [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis                          |
-| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                                    |
-| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                                       |
-| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect                                  |
+| Category                                                  | Tools | Description                                                     |
+| --------------------------------------------------------- | ----- | --------------------------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                               | 6     | Create, inspect, update, execute deploy plans                   |
+| [Deployment Controls](#deployment-controls)               | 7     | Status, cancel, rollback, previews                              |
+| [Project Operations](#project-operations)                 | 7     | Project lifecycle, listing, and Project-scoped config           |
+| [Delivery Workspace](#delivery-workspace)                 | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview |
+| [Agent Delivery Run](#agent-delivery-run)                 | 8     | Plan, verify, hand off, resume, cancel, or complete             |
+| [Project Manifest](#project-manifest)                     | 3     | Register source and apply/inspect Project configuration         |
+| [Release and Promotion](#release-and-promotion)           | 6     | Build once, promote an immutable digest, recall, or roll back   |
+| [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
+| [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads          |
+| [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                                 |
+| [Resources](#services--infrastructure)                    | 17    | Create databases, manage infrastructure resources               |
+| [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                        |
+| [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL      |
+| [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes              |
+| [Git & Repository](#git--repository)                      | 4     | Scan repos, list GitHub repos                                   |
+| [Monitoring](#monitoring--logs)                           | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis   |
+| [Debug](#debug--troubleshooting)                          | 1     | Build logs for external-agent analysis                          |
+| [Volume Management](#volume-management)                   | 5     | Docker volumes, disk cleanup                                    |
+| [Infrastructure Analysis](#infrastructure-analysis)       | 2     | Repo analysis, web search                                       |
+| [Platform Admin](#platform-admin)                         | 13    | Health, events, docker inspect                                  |
 
 ---
 
@@ -900,8 +901,10 @@ request.
 Canonical managed-sharing actions under `openlander_service`. The default
 `provider=protected_share` publishes a stable HTTPS URL behind an OpenLander access-code gate.
 Set `provider=cloudflare` to use Connected Publish instead; that path has no OpenLander access-code
-screen. Cloudflare publishing may return `provisioning`; poll `get_public_access` through the
-returned `status_call`. Unpublishing retains the provider's hostname reservation for reuse.
+screen. Cloudflare publishing returns `provisioning` with `public_url: null` until OpenLander has
+actually reached the HTTPS URL. It retries propagation checks in the background; poll
+`get_public_access` through the returned `status_call` and report the URL only after `status` is
+`public`. Unpublishing retains the provider's hostname reservation for reuse.
 
 | Parameter      | Type   | Required | Description                                             |
 | -------------- | ------ | -------- | ------------------------------------------------------- |
@@ -1083,22 +1086,9 @@ when no build-time env key is involved.
 | `value`       | string | Yes      | Secret value |
 | `description` | string | No       | Description  |
 
-### `expose_public` / `unexpose_public`
-
-Compatibility aliases for the managed-sharing workflow exposed canonically by
-`openlander_service`. New agents should use `openlander_service`; the Project aliases remain so
-existing clients do not break. Prefer `service_id`; Project-only selectors work when one workload
-can be chosen unambiguously. The first protected-share expose returns a generated `access_code`;
-later status reads never return its plaintext.
-
-| Parameter            | Type    | Required | Description                                            |
-| -------------------- | ------- | -------- | ------------------------------------------------------ |
-| `service_id`         | string  | No       | Preferred Application/Compose id                       |
-| `service_name`       | string  | No       | Application/Compose name                               |
-| `project_id`         | string  | No       | Project id                                             |
-| `project_name`       | string  | No       | Project name                                           |
-| `rotate_access_code` | boolean | No       | Replace the code and invalidate current share sessions |
-| `provider`           | string  | No       | `protected_share` (default) or `cloudflare`            |
+Legacy clients may still call `expose_public`, `get_public_access`, and `unexpose_public` through
+`openlander_project`, but those compatibility routes are hidden from its general `help` output.
+New agents should use the canonical `openlander_service` actions documented above.
 
 ### `upload_secret_file` / `list_secret_files` / `remove_secret_file`
 

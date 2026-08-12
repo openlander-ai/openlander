@@ -53,6 +53,11 @@ const allToolDefs: ToolDef[] = [
 
 const composites = createCompositeTools(allToolDefs);
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
+const PROJECT_COMPATIBILITY_ONLY_ACTIONS = new Set([
+  'expose_public',
+  'get_public_access',
+  'unexpose_public',
+]);
 
 function findComposite(name: string): CompositeTool {
   const found = composites.find((c) => c.name === name);
@@ -534,13 +539,17 @@ describe('Composite Action Routing', () => {
       expect(listed).toEqual(expected);
     });
 
-    it('project composite covers all PROJECT_ACTIONS that have tool defs', async () => {
+    it('project composite lists all public PROJECT_ACTIONS that have tool defs', async () => {
       const result = (await findComposite('openlander_project').execute(
         { action: 'help' },
         mockContext,
       )) as Record<string, unknown>;
       const listed = (result['actions'] as Array<{ name: string }>).map((a) => a.name);
-      const expected = PROJECT_ACTIONS.filter((name) => allToolDefs.some((d) => d.name === name));
+      const expected = PROJECT_ACTIONS.filter(
+        (name) =>
+          !PROJECT_COMPATIBILITY_ONLY_ACTIONS.has(name) &&
+          allToolDefs.some((definition) => definition.name === name),
+      );
       expect(listed).toEqual(expected);
     });
 

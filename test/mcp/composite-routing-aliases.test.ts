@@ -79,6 +79,29 @@ describe('openlander_project runtime aliases removed', () => {
     }
   });
 
+  it('keeps managed-sharing aliases callable but hides them from general Project help', async () => {
+    const result = (await tool.execute({ action: 'help' }, mockContext)) as {
+      actions: Array<{ name: string }>;
+    };
+    const actionNames = result.actions.map((action) => action.name);
+
+    for (const action of ['expose_public', 'get_public_access', 'unexpose_public']) {
+      expect(actionNames).not.toContain(action);
+      const compatibilityResult = (await tool.execute(
+        { action, params: {} },
+        mockContext,
+      )) as Record<string, unknown>;
+      expect(compatibilityResult).toHaveProperty('error', 'INVALID_PARAMS');
+      expect(compatibilityResult).toHaveProperty('action', action);
+    }
+
+    const scopedHelp = (await tool.execute(
+      { action: 'help', params: { action_name: 'get_public_access' } },
+      mockContext,
+    )) as Record<string, unknown>;
+    expect(scopedHelp).toHaveProperty('action.name', 'get_public_access');
+  });
+
   it('returns UNKNOWN_ACTION for removed project-level runtime actions', async () => {
     for (const removed of removedProjectRuntimeActions) {
       const result = (await tool.execute({ action: removed, params: {} }, mockContext)) as Record<

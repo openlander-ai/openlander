@@ -1152,7 +1152,7 @@ export const envToolDefs: ToolDef[] = [
     description:
       'Publish one HTTP Application at a stable HTTPS URL. The default provider=protected_share adds an OpenLander access-code gate; provider=cloudflare uses Connected Publish without that gate. Prefer service_id. project_id/project_name are accepted only when the Project has one deployable workload. rotate_access_code applies only to protected_share.',
     mcpDescription:
-      'Enable protected public sharing at a stable HTTPS URL for an Application/Compose workload. Returns the generated access_code once when created or rotated; call get_public_access for later status. Set provider=cloudflare for optional Connected Publish.',
+      'Enable protected public sharing at a stable HTTPS URL for an Application/Compose workload. Returns the generated access_code once when created or rotated. Set provider=cloudflare for Connected Publish; it stays provisioning with public_url=null until get_public_access confirms the URL is externally reachable.',
     inputSchema: publicAccessTargetSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveDeployableTarget(appCtx, args, 'expose_public');
@@ -1184,13 +1184,15 @@ export const envToolDefs: ToolDef[] = [
         _agent_guidance: {
           message:
             provider === 'cloudflare'
-              ? 'Cloudflare Connected Publish is provisioning or serving the stable URL.'
+              ? result.status === 'public'
+                ? 'Cloudflare Connected Publish is externally reachable at the stable URL.'
+                : 'Cloudflare Connected Publish is still verifying external reachability.'
               : 'access_code' in result && result.access_code
                 ? 'Protected public sharing is ready. The access code is shown only in this response.'
                 : 'Protected public sharing is ready. Rotate the code if the operator no longer has it.',
           next_steps: [
             provider === 'cloudflare'
-              ? 'Poll status_call until status is public or error.'
+              ? 'Poll status_call until status is public or error; do not report a URL while public_url is null.'
               : 'access_code' in result && result.access_code
                 ? 'Return public_url and access_code to the user through a secure channel.'
                 : 'Return public_url to the user.',

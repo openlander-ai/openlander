@@ -127,9 +127,14 @@ const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'logs',
   'monitoring',
 ]);
+const MANAGED_SERVICE_TAB_IDS = new Set<ManagedServiceTabId>(['overview', 'logs', 'connections']);
 
 function isServiceTabId(value: string | null): value is ServiceTabId {
   return value != null && (SERVICE_TAB_IDS as Set<string>).has(value);
+}
+
+function isManagedServiceTabId(value: string | null): value is ManagedServiceTabId {
+  return value != null && (MANAGED_SERVICE_TAB_IDS as Set<string>).has(value);
 }
 
 function groupServiceToDetailNode(service: GroupService): ServiceNode {
@@ -2547,10 +2552,14 @@ function ManagedServiceDetail({
 }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ManagedServiceTabId>('overview');
+  const [activeTab, setActiveTab] = useState<ManagedServiceTabId>(
+    isManagedServiceTabId(tabParam) ? tabParam : 'overview',
+  );
   const [connections, setConnections] = useState<ConnectedProject[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState<string | null>(null);

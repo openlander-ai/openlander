@@ -72,7 +72,7 @@ export const DEPLOY_ACTIONS = [
  * - Create empty Projects for project-first deploy flows
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
- * - Temporary public share URLs
+ * - Compatibility-only public-sharing routes (hidden from general help)
  * Includes Delivery Workspace metadata, feedback, Gate, deployment-link,
  * readiness, and Receipt-preview actions, plus read-only internal Engagement
  * portfolio summaries. Binary evidence uses short-lived upload capabilities;
@@ -314,6 +314,12 @@ export const PLATFORM_REGISTRY = {
   platform: PLATFORM_ACTIONS,
 } as const;
 
+// Keep old project-composite routes callable for existing MCP clients, but do not advertise
+// them to new agents. Managed public sharing is owned canonically by openlander_service.
+const HIDDEN_HELP_ACTIONS: Partial<Record<keyof typeof COMPOSITE_REGISTRY, ReadonlySet<string>>> = {
+  openlander_project: new Set(['expose_public', 'get_public_access', 'unexpose_public']),
+};
+
 /**
  * Actions that intentionally do NOT exist as MCP operations because the
  * underlying flow is human UI-only (project/app hard delete, purge, and
@@ -515,6 +521,8 @@ function createCompositeTool(
 ): CompositeTool {
   const actions = COMPOSITE_REGISTRY[toolName];
   const toolDefs = buildCompositeToolDefs(allToolDefs, actions);
+  const hiddenHelpActions = HIDDEN_HELP_ACTIONS[toolName] ?? new Set<string>();
+  const visibleToolDefs = toolDefs.filter((def) => !hiddenHelpActions.has(def.name));
 
   return {
     name: toolName,
@@ -533,7 +541,7 @@ function createCompositeTool(
             if (isHumanUiOnlyAction(requestedAction)) {
               return humanUiOnlyResponse(toolName, requestedAction);
             }
-            const availableActions = toolDefs.map((item) => item.name).sort();
+            const availableActions = visibleToolDefs.map((item) => item.name).sort();
             const redirect = unknownActionRedirect(
               toolName,
               requestedAction,
@@ -572,14 +580,14 @@ function createCompositeTool(
           composite: toolName,
           description,
           actions: verbose
-            ? toolDefs.map(buildActionContract)
-            : toolDefs.map((def) => ({
+            ? visibleToolDefs.map(buildActionContract)
+            : visibleToolDefs.map((def) => ({
                 name: def.name,
                 description: def.mcpDescription ?? def.description,
               })),
           _agent_guidance: {
             message: verbose
-              ? `Pick an action and call with params that match input_schema. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }.`
+              ? `Pick an action and call with params that match input_schema. Example: { action: "${visibleToolDefs[0]?.name ?? 'help'}", params: { ... } }.`
               : 'Pick an action, then request only that action contract with { action: "help", params: { action_name: "..." } }. Use params.verbose=true only when you need every schema.',
           },
         };
@@ -590,7 +598,7 @@ function createCompositeTool(
         if (isHumanUiOnlyAction(action)) {
           return humanUiOnlyResponse(toolName, action);
         }
-        const availableActions = toolDefs.map((item) => item.name).sort();
+        const availableActions = visibleToolDefs.map((item) => item.name).sort();
         const redirect = unknownActionRedirect(toolName, action, params, availableActions);
         if (redirect) {
           return redirect;

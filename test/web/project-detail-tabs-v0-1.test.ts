@@ -9,6 +9,8 @@ function readRepoFile(relativePath: string): string {
 
 describe('Project detail v0.1 tabs', () => {
   const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
+  const resourceQuickMenuSource = readRepoFile('web/src/components/project/ResourceQuickMenu.tsx');
+  const serviceDetailSource = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
   const servicesApiSource = readRepoFile('web/src/lib/api/services.ts');
   const projectsApiSource = readRepoFile('web/src/lib/api/projects.ts');
   const enSource = readRepoFile('web/src/i18n/en.ts');
@@ -53,8 +55,34 @@ describe('Project detail v0.1 tabs', () => {
     expect(projectViewSource).toContain('const projectServiceRows = useMemo');
     expect(projectViewSource).toContain('services={projectServiceRows}');
     expect(projectViewSource).toContain(
-      'navigate(`/projects/${projectId}/infrastructure/${service.id}`)',
+      'navigate(`/projects/${projectId}/infrastructure/${service.id}${tabQuery}`)',
     );
+  });
+
+  it('offers lazy, propagation-safe resource quick actions without list-level API fanout', () => {
+    expect(projectViewSource).toContain('<ResourceQuickMenu');
+    expect(resourceQuickMenuSource).toContain('<DropdownMenuContent align="end"');
+    expect(resourceQuickMenuSource).toContain('if (open) void loadAccess()');
+    expect(resourceQuickMenuSource).toContain("void publish('protected_share')");
+    expect(resourceQuickMenuSource).toContain("void publish('cloudflare')");
+    expect(resourceQuickMenuSource).toContain("activeAccess?.status === 'public'");
+    expect(resourceQuickMenuSource).toContain("activeAccess?.status === 'provisioning'");
+    expect(resourceQuickMenuSource).toContain('<ConfirmDialog');
+    expect(resourceQuickMenuSource).toContain('shareResult?.access_code');
+    expect(projectViewSource).toContain('`?tab=${encodeURIComponent(tab)}`');
+    expect(serviceDetailSource).toContain('isManagedServiceTabId(tabParam) ? tabParam :');
+    expect(projectViewSource).not.toContain('getServicePublicAccess(');
+  });
+
+  it('keeps resource quick-menu copy localized in both locales', () => {
+    for (const source of [enSource, koSource]) {
+      expect(source).toContain('quickActions: {');
+      expect(source).toContain('shareProtected:');
+      expect(source).toContain('shareCloudflare:');
+      expect(source).toContain('shareProvisioning:');
+      expect(source).toContain('retryShareStatus:');
+      expect(source).toContain('shareResultTitle:');
+    }
   });
 
   it('drops the projectDetail.tabs.mcp i18n key from both locales', () => {
