@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add explicit reveal, hide, and copy controls for the active MCP access token
+  and protected-share access code in the signed-in web UI.
+
+### Changed
+
+- Keep encrypted recovery copies for newly issued credentials alongside their
+  verification hashes, while requiring one regeneration for older hash-only
+  values before reveal is available.
+
+### Security
+
+- Restrict stored credential reveal to human web sessions, reject API-token and
+  MCP-agent access, and mark plaintext responses as non-cacheable.
+
 ## [0.3.6-rc.10] - 2026-08-12
 
 ### Added
