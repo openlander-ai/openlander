@@ -335,6 +335,8 @@ export class ServiceRepo {
       visibility: ServiceRow['visibility'];
       accessCode: string | null;
       accessCodeIv: string | null;
+      accessCodeEncrypted: string | null;
+      accessCodeEncryptedIv: string | null;
       repoUrl: string | null;
       branch: string | null;
       kind: ServiceRow['kind'];
@@ -385,6 +387,12 @@ export class ServiceRepo {
     }
     if (updates.accessCodeIv !== undefined) {
       setValues.access_code_iv = updates.accessCodeIv;
+    }
+    if (updates.accessCodeEncrypted !== undefined) {
+      setValues.access_code_encrypted = updates.accessCodeEncrypted;
+    }
+    if (updates.accessCodeEncryptedIv !== undefined) {
+      setValues.access_code_encrypted_iv = updates.accessCodeEncryptedIv;
     }
     if (updates.repoUrl !== undefined) {
       setValues.repo_url = updates.repoUrl;

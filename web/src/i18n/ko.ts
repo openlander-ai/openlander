@@ -1586,6 +1586,12 @@ export const translations = {
       stopConfirm: '공개 중지',
       publishReady: '보호된 외부 공유를 시작했습니다.',
       codeSet: '코드 설정됨',
+      codeMasked: '••••-••••',
+      revealCode: '접근 코드 보기',
+      hideCode: '접근 코드 숨기기',
+      codeRevealFailed: '접근 코드를 불러오지 못했습니다.',
+      codeRevealUnavailable:
+        '이전에 만든 코드는 복구할 수 없습니다. 한 번 새로 만들면 이후에는 언제든 다시 볼 수 있습니다.',
       copyCode: '접근 코드 복사',
       codeCopied: '접근 코드를 복사했습니다',
       rotateCode: '새 접근 코드 만들기',
@@ -1767,7 +1773,7 @@ export const translations = {
         setupRequired: '먼저 최초 1회 보호 공유 설정을 완료하세요.',
         shareResultTitle: '외부 공유 준비 완료',
         shareResultDescription:
-          '{name}에 전달할 URL과 접근 코드를 복사하세요. 접근 코드는 지금만 표시됩니다.',
+          '{name}에 전달할 URL과 접근 코드를 복사하세요. 애플리케이션 목록에서 코드를 다시 볼 수 있습니다.',
         publicUrl: '공개 URL',
         accessCode: '접근 코드',
       },
@@ -2767,7 +2773,11 @@ export const translations = {
       regenerateAction: '재발급',
       regenerating: '재발급 중…',
       reveal: '표시',
+      revealing: '불러오는 중…',
       hide: '숨기기',
+      revealFailed: '토큰을 불러오지 못했습니다',
+      revealUnavailable:
+        '이전에 발급한 토큰은 복구할 수 없습니다. 한 번 재발급하면 이후에는 언제든 다시 볼 수 있습니다.',
       // Content — confirmation prompts, success/error notices, hints.
       issueFailed: '토큰 발급에 실패했습니다',
       regenerateConfirm: {
@@ -2780,7 +2790,7 @@ export const translations = {
       regenerateFailed: '토큰 재발급에 실패했습니다',
       legacyTokenRotated:
         '이전에 사용하던 API 토큰(ol_…)이 이번 변경과 함께 무효화되었습니다. 해당 토큰을 사용 중인 MCP 클라이언트가 있다면 갱신해 주세요.',
-      revealedHint: '비밀번호처럼 취급하세요. 한 번만 표시되니 닫기 전에 복사해 두세요.',
+      revealedHint: '비밀번호처럼 취급하세요. 복사가 끝나면 다시 숨겨두세요.',
       passwordHint: '비밀번호와 같습니다. 유출 시 모든 프로젝트가 노출되니 주의하세요.',
       issuedAt: '{when} 발급',
       loadFailed: '토큰 목록을 불러오지 못했습니다',
@@ -2813,7 +2823,7 @@ export const translations = {
       subtitle: '클라이언트를 선택하고 설정 스니펫을 붙여넣으세요.',
       restartHint: '저장 후 클라이언트를 재시작하세요. 첫 호출 시 위 상태가 연결됨으로 바뀝니다.',
       placeholderHint: '토큰을 발급하기 전까지는 예시에 <your-token> 자리표시자가 사용됩니다.',
-      revealToCopyHint: '실제 토큰이 포함된 설정을 복사하려면 토큰을 발급하세요.',
+      revealToCopyHint: '실제 토큰이 포함된 설정을 복사하려면 토큰을 표시하세요.',
     },
     recent: {
       // UI — section title + link affordance.

@@ -71,6 +71,8 @@ class PatAuthDb implements AuthDatabase {
     name: string;
     tokenHash: string;
     tokenSuffix: string;
+    tokenEncrypted?: string | null;
+    tokenEncryptedIv?: string | null;
     scopeKind: 'org' | 'project' | 'service';
     scopeProjectId?: string | null;
     scopeServiceId?: string | null;
@@ -83,6 +85,8 @@ class PatAuthDb implements AuthDatabase {
       name: input.name,
       token_hash: input.tokenHash,
       token_suffix: input.tokenSuffix,
+      token_encrypted: input.tokenEncrypted ?? null,
+      token_encrypted_iv: input.tokenEncryptedIv ?? null,
       scope_kind: input.scopeKind,
       scope_project_id: input.scopeKind === 'project' ? (input.scopeProjectId ?? null) : null,
       scope_service_id: input.scopeKind === 'service' ? (input.scopeServiceId ?? null) : null,
@@ -197,6 +201,8 @@ describe('PAT token auth', () => {
 
     expect(issued.token).toMatch(/^olp_/);
     expect(issued.row.token_hash).not.toBe(issued.token);
+    expect(issued.row.token_encrypted).toBeTruthy();
+    expect(issued.row.token_encrypted).not.toContain(issued.token);
 
     const identity = await service.validateMcpBearerToken(issued.token);
     expect(identity).toMatchObject({
@@ -448,6 +454,28 @@ describe('PAT token auth', () => {
       tokenId: rotated.row.id,
       tokenType: 'pat',
       scopeKind: 'org',
+    });
+    await expect(service.revealOrgMcpPatToken()).resolves.toMatchObject({
+      token: rotated.token,
+      row: { id: rotated.row.id },
+    });
+  });
+
+  it('requires one regeneration before a legacy hash-only org token can be revealed', async () => {
+    const db = new PatAuthDb();
+    const service = new AuthService(db);
+    await db.createPatToken({
+      id: 'legacy-hash-only-pat',
+      name: 'Old org token',
+      tokenHash: 'hash-only',
+      tokenSuffix: 'old1',
+      scopeKind: 'org',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    await expect(service.revealOrgMcpPatToken()).rejects.toMatchObject({
+      code: 'MCP_TOKEN_REVEAL_UNAVAILABLE',
+      statusCode: 409,
     });
   });
 

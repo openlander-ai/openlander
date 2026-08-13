@@ -256,6 +256,8 @@ export interface ServiceRow {
   pending_fix: string | null;
   access_code: string | null;
   access_code_iv: string | null;
+  access_code_encrypted?: string | null;
+  access_code_encrypted_iv?: string | null;
   is_preview: number | null;
   pr_number: number | null;
   project_type: 'web' | 'worker';
@@ -379,6 +381,8 @@ export interface PatTokenRow {
   name: string;
   token_hash: string;
   token_suffix: string;
+  token_encrypted?: string | null;
+  token_encrypted_iv?: string | null;
   scope_kind: 'org' | 'project' | 'service';
   scope_project_id: string | null;
   scope_service_id: string | null;

@@ -598,6 +598,15 @@ export async function exposeService(
   return res.json();
 }
 
+export async function revealServiceAccessCode(
+  projectId: string,
+  serviceId: string,
+): Promise<ProjectPublicAccess> {
+  return apiPost<ProjectPublicAccess>(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/public-access/code/reveal`,
+  );
+}
+
 export async function unexposeService(
   projectId: string,
   serviceId: string,

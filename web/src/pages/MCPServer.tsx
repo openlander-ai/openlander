@@ -19,11 +19,9 @@
  * `GET /api/mcp/token` returns the keeper or null; `POST /api/mcp/token`
  * is the idempotent "ensure" call (mints if missing, reuses + dedupes
  * if present); `POST /api/mcp/token/regenerate` atomically revokes
- * every active org token and issues a fresh one. The backend owns the
- * single-token invariant so this page no longer needs a list-then-revoke
- * race window. Plain text is only echoed on actual mint/rotate, never
- * on reuse — backend stores hashes, mirroring the spec's "treat like a
- * password" framing.
+ * every active org token and issues a fresh one. An explicit
+ * session-only reveal call decrypts the active token on demand; metadata
+ * reads and MCP bearer requests never receive plaintext.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Cable, Check, Copy, Eye, EyeOff, Plus, RefreshCw } from 'lucide-react';
@@ -43,8 +41,10 @@ import {
   ensureOrgMcpToken,
   getOrgMcpToken,
   regenerateOrgMcpToken,
+  revealOrgMcpToken,
   type McpPatTokenMetadata,
 } from '@/lib/api';
+import { ApiError } from '@/lib/api/client';
 import {
   buildAgentInstruction,
   buildAllClientConfigs,
@@ -63,10 +63,11 @@ export function MCPServer() {
 
   const [activeToken, setActiveToken] = useState<McpPatTokenMetadata | null>(null);
   const [tokensLoading, setTokensLoading] = useState(true);
-  // Plaintext is only available for the just-issued token — backend
-  // does not echo it back on subsequent reads.
+  // Plaintext is fetched only after the signed-in operator explicitly
+  // clicks Reveal. Metadata polling never includes the secret.
   const [newTokenPlain, setNewTokenPlain] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [working, setWorking] = useState(false);
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   const [endpointCopied, setEndpointCopied] = useState(false);
@@ -169,6 +170,29 @@ export function MCPServer() {
     }
   }
 
+  async function handleReveal() {
+    if (revealing) return;
+    if (newTokenPlain) {
+      setRevealed(true);
+      return;
+    }
+    setRevealing(true);
+    try {
+      const result = await revealOrgMcpToken();
+      setActiveToken(result.token);
+      setNewTokenPlain(result.plaintext);
+      setRevealed(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'MCP_TOKEN_REVEAL_UNAVAILABLE') {
+        toast.error(t('mcpServer.tokens.revealUnavailable'));
+      } else {
+        toast.error(t('mcpServer.tokens.revealFailed'));
+      }
+    } finally {
+      setRevealing(false);
+    }
+  }
+
   async function handleSaveInstanceName() {
     try {
       await mcpInstance.save();
@@ -257,15 +281,10 @@ export function MCPServer() {
   // Three-state label for the disabled Copy button on the Setup card so
   // the hint matches the actual action required:
   //   - no token issued yet → tell the user to Generate
-  //   - token issued but client cannot re-display it (returning user)
-  //     → only path forward is Regenerate, since Reveal needs a fresh
-  //     `newTokenPlain` from this session
-  //   - newTokenPlain in memory but currently hidden → Reveal
+  //   - token issued but hidden → reveal it before copying
   const copyDisabledLabel = !activeToken
     ? t('mcpServer.setup.copyNeedsGenerate')
-    : !newTokenPlain
-      ? t('mcpServer.setup.copyNeedsRegenerate')
-      : t('mcpServer.setup.copyNeedsReveal');
+    : t('mcpServer.setup.copyNeedsReveal');
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
@@ -443,15 +462,17 @@ export function MCPServer() {
                     >
                       <EyeOff className="h-3 w-3" /> {t('mcpServer.tokens.hide')}
                     </button>
-                  ) : newTokenPlain ? (
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => setRevealed(true)}
+                      onClick={() => void handleReveal()}
+                      disabled={revealing}
                       className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
                     >
-                      <Eye className="h-3 w-3" /> {t('mcpServer.tokens.reveal')}
+                      <Eye className="h-3 w-3" />{' '}
+                      {revealing ? t('mcpServer.tokens.revealing') : t('mcpServer.tokens.reveal')}
                     </button>
-                  ) : null}
+                  )}
                   {tokenDisplay.kind === 'reveal' && (
                     <button
                       type="button"

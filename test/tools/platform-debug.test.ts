@@ -285,6 +285,8 @@ describe('platform-debug tools', () => {
         env_vars: '{"TOKEN":"secret"}',
         access_code: 'secret',
         access_code_iv: 'iv',
+        access_code_encrypted: 'ciphertext',
+        access_code_encrypted_iv: 'cipher-iv',
         git_credential_id: 'credential-id',
       },
       { id: 'svc-b', project_id: 'p2', name: 'db-b', kind: 'postgres' },
@@ -301,6 +303,8 @@ describe('platform-debug tools', () => {
     expect(result.rows[0]).not.toHaveProperty('env_vars');
     expect(result.rows[0]).not.toHaveProperty('access_code');
     expect(result.rows[0]).not.toHaveProperty('access_code_iv');
+    expect(result.rows[0]).not.toHaveProperty('access_code_encrypted');
+    expect(result.rows[0]).not.toHaveProperty('access_code_encrypted_iv');
     expect(result.rows[0]).not.toHaveProperty('git_credential_id');
     expect(result.rows[0]?.['repo_url']).toBe('https://***@github.com/example/private.git');
   });

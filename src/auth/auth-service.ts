@@ -58,6 +58,8 @@ interface PatTokenDatabase {
     name: string;
     tokenHash: string;
     tokenSuffix: string;
+    tokenEncrypted?: string | null;
+    tokenEncryptedIv?: string | null;
     scopeKind: McpScopeKind;
     scopeProjectId?: string | null;
     scopeServiceId?: string | null;
@@ -596,11 +598,14 @@ export class AuthService {
       });
     }
     const token = generatePatTokenPlaintext();
+    const encryptedToken = encryptToken(token);
     const row = await this.db.createPatToken({
       id: randomUUID(),
       name: input.name,
       tokenHash: hashMcpToken(token),
       tokenSuffix: tokenSuffix(token),
+      tokenEncrypted: encryptedToken.encrypted,
+      tokenEncryptedIv: encryptedToken.iv,
       scopeKind: input.scopeKind,
       scopeProjectId: input.scopeProjectId ?? null,
       scopeServiceId: input.scopeServiceId ?? null,
@@ -620,6 +625,54 @@ export class AuthService {
       },
       'pat.issued',
     );
+    return { token, row };
+  }
+
+  async revealOrgMcpPatToken(): Promise<{ token: string; row: PatTokenRow }> {
+    if (!hasPatTokenDatabase(this.db)) {
+      throw new OpenLanderError(
+        'PAT token storage is not available.',
+        'PAT_STORAGE_UNAVAILABLE',
+        500,
+      );
+    }
+
+    const rows = await this.db.listPatTokens({ scopeKind: 'org' });
+    const row = rows.find(
+      (candidate) =>
+        candidate.token_type === 'pat' &&
+        candidate.scope_kind === 'org' &&
+        candidate.scope_project_id === null &&
+        isTokenUsable(candidate),
+    );
+    if (!row) {
+      throw new OpenLanderError('No active MCP access token exists.', 'MCP_TOKEN_NOT_FOUND', 404);
+    }
+    if (!row.token_encrypted || !row.token_encrypted_iv) {
+      throw new OpenLanderError(
+        'This token was issued before secure reveal storage was available. Regenerate it once to enable reveal.',
+        'MCP_TOKEN_REVEAL_UNAVAILABLE',
+        409,
+      );
+    }
+
+    let token: string;
+    try {
+      token = decryptToken(row.token_encrypted, row.token_encrypted_iv);
+    } catch {
+      throw new OpenLanderError(
+        'The encrypted MCP token could not be read.',
+        'MCP_TOKEN_DECRYPT_FAILED',
+        500,
+      );
+    }
+    if (hashMcpToken(token) !== row.token_hash) {
+      throw new OpenLanderError(
+        'The encrypted MCP token does not match its verification hash.',
+        'MCP_TOKEN_DECRYPT_FAILED',
+        500,
+      );
+    }
     return { token, row };
   }
 

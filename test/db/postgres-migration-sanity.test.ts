@@ -279,6 +279,7 @@ describe('Postgres migration sanity gate', () => {
       '0024_project_updates',
       '0025_cloudflare_connected_publish',
       '0026_auth_sessions',
+      '0027_absent_robin_chapel',
     ]);
     expect(activeMigrationSqlFiles()).toEqual([
       '0000_v0_1_initial.sql',
@@ -308,9 +309,14 @@ describe('Postgres migration sanity gate', () => {
       '0024_project_updates.sql',
       '0025_cloudflare_connected_publish.sql',
       '0026_auth_sessions.sql',
+      '0027_absent_robin_chapel.sql',
     ]);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('CREATE TABLE "auth_sessions"');
+    expect(sql).toContain('ADD COLUMN "token_encrypted" text');
+    expect(sql).toContain('ADD COLUMN "token_encrypted_iv" text');
+    expect(sql).toContain('ADD COLUMN "access_code_encrypted" text');
+    expect(sql).toContain('ADD COLUMN "access_code_encrypted_iv" text');
     expect(sql).toContain('INSERT INTO "auth_sessions" ("token", "created_at", "expires_at")');
     expect(sql).toContain('"active_scope_project_id" text');
     expect(sql).toContain('"scope_service_id" text');
@@ -580,6 +586,13 @@ describe('Postgres migration sanity gate', () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 28 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -600,7 +613,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'future unknown public migration count',
       {
-        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 28 }],
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 29 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {

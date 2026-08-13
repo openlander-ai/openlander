@@ -11,6 +11,8 @@ export interface CreatePatTokenInput {
   name: string;
   tokenHash: string;
   tokenSuffix: string;
+  tokenEncrypted?: string | null;
+  tokenEncryptedIv?: string | null;
   scopeKind: 'org' | 'project' | 'service';
   scopeProjectId?: string | null;
   scopeServiceId?: string | null;
@@ -42,6 +44,8 @@ export class PatTokenRepo {
         name: input.name,
         token_hash: input.tokenHash,
         token_suffix: input.tokenSuffix,
+        token_encrypted: input.tokenEncrypted ?? null,
+        token_encrypted_iv: input.tokenEncryptedIv ?? null,
         scope_kind: input.scopeKind,
         scope_project_id: input.scopeKind === 'project' ? (input.scopeProjectId ?? null) : null,
         scope_service_id: input.scopeKind === 'service' ? (input.scopeServiceId ?? null) : null,

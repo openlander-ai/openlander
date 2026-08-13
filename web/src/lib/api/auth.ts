@@ -91,6 +91,15 @@ export async function getOrgMcpToken(): Promise<{ token: McpPatTokenMetadata | n
   return apiGet<{ token: McpPatTokenMetadata | null }>('/api/mcp/token');
 }
 
+export interface RevealOrgMcpTokenResult {
+  token: McpPatTokenMetadata;
+  plaintext: string;
+}
+
+export async function revealOrgMcpToken(): Promise<RevealOrgMcpTokenResult> {
+  return apiPost<RevealOrgMcpTokenResult>('/api/mcp/token/reveal');
+}
+
 export async function getMcpInstance(): Promise<McpInstanceInfo> {
   return apiGet<McpInstanceInfo>('/api/mcp/instance');
 }
@@ -104,8 +113,8 @@ export interface OrgMcpTokenIssueResult {
   token: McpPatTokenMetadata;
   /**
    * The fresh plaintext, returned on initial issuance and on rotate.
-   * `null` when an existing token was reused (hash-only at rest, so
-   * the backend cannot echo the original plaintext).
+   * Existing tokens are revealed through the explicit session-only
+   * reveal endpoint instead of being included in metadata reads.
    */
   plaintext: string | null;
   /** True when this call minted a new token; false when one was reused. */

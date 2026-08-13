@@ -42,6 +42,18 @@ function publicAccessStatusPath(
   return provider === 'cloudflare' ? `${path}?provider=cloudflare` : path;
 }
 
+function requireWebSession(c: Context): Response | null {
+  if (c.get('authKind') === 'session') return null;
+  return c.json(
+    {
+      error: 'WEB_SESSION_REQUIRED',
+      code: 'WEB_SESSION_REQUIRED',
+      message: 'Sign in through the OpenLander web UI to reveal this access code.',
+    },
+    403,
+  );
+}
+
 function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
   const origParam = c.req.param.bind(c.req);
   const projectId = (origParam as (name: string) => string)('p');
@@ -202,6 +214,20 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
               serviceId: c.req.param('s'),
             });
       return cx.json({ ...result, provider });
+    });
+  });
+
+  api.post('/projects/:p/services/:s/public-access/code/reveal', async (c) => {
+    const rejected = requireWebSession(c);
+    if (rejected) return rejected;
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
+      const result = await ctx.publicShare.revealAccessCode({
+        projectId: project.id,
+        serviceId: c.req.param('s'),
+      });
+      cx.header('Cache-Control', 'no-store');
+      return cx.json(result);
     });
   });
 

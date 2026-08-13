@@ -3,6 +3,30 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.3.6
+
+- **Human-only credential reveal:** PAT rows and protected-share Applications gain nullable
+  AES-256-GCM ciphertext/IV columns alongside their existing verification hashes. Newly issued or
+  rotated values can be revealed on demand from an authenticated web session; metadata reads, logs,
+  and ordinary service responses remain redacted. Existing hash-only values require one manual
+  regeneration before reveal is available. MCP keeps its existing issuance-only behavior and cannot
+  retrieve a stored recovery copy.
+- **Why accepted:** operators need to reuse an already issued MCP token or reviewer access code
+  without rotating working clients and visitor sessions every time the browser page is revisited.
+  Keeping the verification hash preserves the existing authentication path while a separately
+  encrypted recovery copy enables the explicit human UI action.
+- **Vocab review:** `token_encrypted`, `token_encrypted_iv`, `access_code_encrypted`, and
+  `access_code_encrypted_iv` are internal persistence fields, not new public resources. Public
+  responses continue to use the existing `plaintext` and `access_code` fields only on explicit
+  session-authorized reveal or issuance responses.
+- **Endpoint collision check:** `rg "mcp/token/reveal|public-access/code/reveal"` found no existing
+  REST or MCP action collision. The new routes are `POST /api/mcp/token/reveal` and
+  `POST /api/projects/:projectId/services/:serviceId/public-access/code/reveal`; both reject API-token
+  and agent authentication and return `Cache-Control: no-store`.
+- **Follow-up:** if OpenLander adds multiple human accounts, require a recent password or WebAuthn
+  confirmation for reveal and record the acting user in the audit log. Do not expose either reveal
+  operation as an MCP action.
+
 ## v0.2.0
 
 - **AI Ops briefing health status:** `/health` now includes an additive

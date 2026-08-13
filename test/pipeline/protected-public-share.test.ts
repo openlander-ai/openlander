@@ -58,6 +58,8 @@ function service(): ServiceRow {
     pending_fix: null,
     access_code: null,
     access_code_iv: null,
+    access_code_encrypted: null,
+    access_code_encrypted_iv: null,
     is_preview: 0,
     pr_number: null,
     project_type: 'web',
@@ -130,12 +132,20 @@ function harness(options?: { enabled?: boolean; publicHost?: string; acmeEmail?:
           publicUrl?: string | null;
           accessCode?: string | null;
           accessCodeIv?: string | null;
+          accessCodeEncrypted?: string | null;
+          accessCodeEncryptedIv?: string | null;
         },
       ) => {
         if (patch.visibility !== undefined) row.visibility = patch.visibility;
         if (patch.publicUrl !== undefined) row.public_url = patch.publicUrl;
         if (patch.accessCode !== undefined) row.access_code = patch.accessCode;
         if (patch.accessCodeIv !== undefined) row.access_code_iv = patch.accessCodeIv;
+        if (patch.accessCodeEncrypted !== undefined) {
+          row.access_code_encrypted = patch.accessCodeEncrypted;
+        }
+        if (patch.accessCodeEncryptedIv !== undefined) {
+          row.access_code_encrypted_iv = patch.accessCodeEncryptedIv;
+        }
       },
     ),
     listProjects: vi.fn(async () => [owner]),
@@ -198,6 +208,9 @@ describe('ProtectedPublicShareManager', () => {
     expect(row.access_code).toMatch(/^\$2/);
     expect(row.access_code).not.toContain(result.access_code!);
     expect(row.access_code_iv).toBeTruthy();
+    expect(row.access_code_encrypted).toBeTruthy();
+    expect(row.access_code_encrypted).not.toContain(result.access_code!);
+    expect(row.access_code_encrypted_iv).toBeTruthy();
     expect(mappings).toHaveLength(1);
     expect(mappings[0]).toMatchObject({ tls_enabled: true, tls_resolver: 'openlander' });
     expect(traefik.start).toHaveBeenCalledOnce();
@@ -208,6 +221,30 @@ describe('ProtectedPublicShareManager', () => {
     expect(repeated.access_code).toBeUndefined();
     expect(repeated.public_url).toBe(result.public_url);
     expect(mappings).toHaveLength(1);
+
+    await expect(
+      manager.revealAccessCode({ projectId: row.project_id, serviceId: row.id }),
+    ).resolves.toMatchObject({ access_code: result.access_code });
+  });
+
+  it('requires one rotation before a legacy hash-only access code can be revealed', async () => {
+    const { manager, row } = harness();
+    await manager.expose({ projectId: row.project_id, serviceId: row.id });
+    row.access_code_encrypted = null;
+    row.access_code_encrypted_iv = null;
+
+    await expect(
+      manager.revealAccessCode({ projectId: row.project_id, serviceId: row.id }),
+    ).rejects.toMatchObject({ code: 'ACCESS_CODE_REVEAL_UNAVAILABLE', statusCode: 409 });
+
+    const rotated = await manager.expose({
+      projectId: row.project_id,
+      serviceId: row.id,
+      rotateAccessCode: true,
+    });
+    await expect(
+      manager.revealAccessCode({ projectId: row.project_id, serviceId: row.id }),
+    ).resolves.toMatchObject({ access_code: rotated.access_code });
   });
 
   it('binds sessions to one hostname and invalidates them after code rotation', async () => {
@@ -300,6 +337,8 @@ describe('ProtectedPublicShareManager', () => {
     expect(row.public_url).toBeNull();
     expect(row.access_code).toBeNull();
     expect(row.access_code_iv).toBeNull();
+    expect(row.access_code_encrypted).toBeNull();
+    expect(row.access_code_encrypted_iv).toBeNull();
     expect(mappings).toHaveLength(1);
     expect(mappings[0]?.status).toBe('pending');
     expect(manager.validateSessionToken(row, exposed.hostname!, token)).toBe(false);

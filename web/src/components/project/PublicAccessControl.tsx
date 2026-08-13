@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Cloud,
   Copy,
+  Eye,
+  EyeOff,
   ExternalLink,
   Globe2,
   KeyRound,
@@ -30,6 +32,7 @@ import { useLanguage } from '@/i18n/context';
 import {
   exposeService,
   getServicePublicAccess,
+  revealServiceAccessCode,
   type ProjectPublicAccess,
   type PublicAccessProvider,
   type PublicAccessStatus,
@@ -67,6 +70,8 @@ export function PublicAccessControl({
     null,
   );
   const [accessCode, setAccessCode] = useState<string | null>(null);
+  const [accessCodeVisible, setAccessCodeVisible] = useState(false);
+  const [accessCodeRevealing, setAccessCodeRevealing] = useState(false);
   const [pending, setPending] = useState(false);
   const [methodDialogOpen, setMethodDialogOpen] = useState(false);
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
@@ -175,6 +180,7 @@ export function PublicAccessControl({
         lastStatus.current = `${provider}:${nextAccess.status}`;
         setAccess({ ...nextAccess, provider });
         setAccessCode(nextAccess.access_code ?? null);
+        setAccessCodeVisible(Boolean(nextAccess.access_code));
         toast.success(
           provider === 'cloudflare'
             ? t('projectDetail.publicAccess.cloudflareStarted')
@@ -250,6 +256,7 @@ export function PublicAccessControl({
       lastStatus.current = `${provider}:${nextAccess.status}`;
       setAccess({ ...nextAccess, provider });
       setAccessCode(null);
+      setAccessCodeVisible(false);
       onAccessSettled?.();
     } catch {
       toast.error(t('projectDetail.publicAccess.unpublishFailed'));
@@ -262,6 +269,29 @@ export function PublicAccessControl({
     void copyToClipboard(value)
       .then(() => toast.success(t(successKey)))
       .catch(() => toast.error(t('projectDetail.publicAccess.copyFailed')));
+  };
+
+  const revealAccessCode = async () => {
+    if (accessCode) {
+      setAccessCodeVisible(true);
+      return;
+    }
+    if (accessCodeRevealing) return;
+    setAccessCodeRevealing(true);
+    try {
+      const result = await revealServiceAccessCode(projectId, serviceId);
+      if (!result.access_code) throw new Error('Access code was not returned.');
+      setAccessCode(result.access_code);
+      setAccessCodeVisible(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'ACCESS_CODE_REVEAL_UNAVAILABLE') {
+        toast.error(t('projectDetail.publicAccess.codeRevealUnavailable'));
+      } else {
+        toast.error(t('projectDetail.publicAccess.codeRevealFailed'));
+      }
+    } finally {
+      setAccessCodeRevealing(false);
+    }
   };
 
   const status = access?.status ?? 'private';
@@ -333,10 +363,37 @@ export function PublicAccessControl({
               <span className="inline-flex items-center gap-1.5 px-2.5 text-[color:var(--ol-fg-muted)]">
                 <KeyRound className="h-3.5 w-3.5" />
                 <span className="ol-mono font-semibold text-[color:var(--ol-fg)]">
-                  {accessCode ?? t('projectDetail.publicAccess.codeSet')}
+                  {accessCode && accessCodeVisible
+                    ? accessCode
+                    : t('projectDetail.publicAccess.codeMasked')}
                 </span>
               </span>
-              {accessCode && (
+              <button
+                type="button"
+                disabled={accessCodeRevealing}
+                onClick={() => {
+                  if (accessCodeVisible) setAccessCodeVisible(false);
+                  else void revealAccessCode();
+                }}
+                className="grid h-full w-8 place-items-center border-l border-[color:var(--ol-border)] hover:bg-[color:var(--ol-panel-3)] disabled:opacity-60"
+                aria-label={
+                  accessCodeVisible
+                    ? t('projectDetail.publicAccess.hideCode')
+                    : t('projectDetail.publicAccess.revealCode')
+                }
+                title={
+                  accessCodeVisible
+                    ? t('projectDetail.publicAccess.hideCode')
+                    : t('projectDetail.publicAccess.revealCode')
+                }
+              >
+                {accessCodeVisible ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className={cn('h-3.5 w-3.5', accessCodeRevealing && 'animate-pulse')} />
+                )}
+              </button>
+              {accessCode && accessCodeVisible && (
                 <button
                   type="button"
                   onClick={() => copy(accessCode, 'projectDetail.publicAccess.codeCopied')}

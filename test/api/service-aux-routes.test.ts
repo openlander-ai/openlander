@@ -86,8 +86,12 @@ function makeDomainMappingRow(overrides: Partial<DomainMappingRow> = {}): Domain
   };
 }
 
-function createApp(ctx: Partial<AppContext>) {
-  const app = new Hono();
+function createApp(ctx: Partial<AppContext>, authKind: 'session' | 'api_token' = 'session') {
+  const app = new Hono<{ Variables: { authKind: 'session' | 'api_token' } }>();
+  app.use('*', async (c, next) => {
+    c.set('authKind', authKind);
+    await next();
+  });
   app.route('/api', createServiceAuxRoutes(ctx as AppContext));
   return app;
 }
@@ -203,6 +207,52 @@ describe('createServiceAuxRoutes', () => {
       projectId: 'group-1',
       serviceId: 'group-1__svc',
     });
+  });
+
+  it('reveals a protected-share code only to a signed-in web session', async () => {
+    const project = makeProjectRow();
+    const revealAccessCode = vi.fn().mockResolvedValue({
+      project_id: project.id,
+      service_id: 'group-1__svc',
+      provider: 'protected_share',
+      status: 'public',
+      public_url: 'https://workspace.example.com',
+      hostname: 'workspace.example.com',
+      access_code_configured: true,
+      access_code: 'ABCD-EFGH',
+      error: null,
+    });
+    const context = {
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+      },
+      publicShare: { revealAccessCode },
+    } satisfies Partial<AppContext>;
+
+    const sessionResponse = await createApp(context).request(
+      '/api/projects/group-1/services/group-1__svc/public-access/code/reveal',
+      { method: 'POST' },
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.headers.get('cache-control')).toBe('no-store');
+    await expect(sessionResponse.json()).resolves.toMatchObject({ access_code: 'ABCD-EFGH' });
+    expect(revealAccessCode).toHaveBeenCalledWith({
+      projectId: 'group-1',
+      serviceId: 'group-1__svc',
+    });
+
+    revealAccessCode.mockClear();
+    const apiTokenResponse = await createApp(context, 'api_token').request(
+      '/api/projects/group-1/services/group-1__svc/public-access/code/reveal',
+      { method: 'POST' },
+    );
+    expect(apiTokenResponse.status).toBe(403);
+    await expect(apiTokenResponse.json()).resolves.toMatchObject({
+      code: 'WEB_SESSION_REQUIRED',
+    });
+    expect(revealAccessCode).not.toHaveBeenCalled();
   });
 
   it('keeps Cloudflare Tunnel available as an explicit service sharing method', async () => {

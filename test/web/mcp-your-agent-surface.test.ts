@@ -35,15 +35,15 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toContain("t('mcpServer.tokens.regenerateAction')");
   });
 
-  it('only reveals plaintext for the just-issued token', () => {
-    // PR #235 endpoints return plaintext only on actual mint/rotate
-    // (`created: true`); reuse returns metadata with plaintext=null.
-    // The page must guard on the plaintext field, not assume it.
+  it('reveals plaintext only after issuance or an explicit session reveal', () => {
+    // Mint/rotate may return plaintext immediately, while a returning
+    // operator must click Reveal so metadata polling never leaks it.
     expect(source).toMatch(/if \(issued\.plaintext\)/);
     expect(source).toMatch(/setNewTokenPlain\(issued\.plaintext\)/);
+    expect(source).toMatch(/await revealOrgMcpToken\(\)/);
+    expect(source).toMatch(/setNewTokenPlain\(result\.plaintext\)/);
     expect(source).toMatch(/setRevealed\(true\)/);
-    // Once revealed=false (or after refresh) we display only the
-    // suffix, never the plaintext from a prior session.
+    // Once hidden, the row displays only the suffix.
     expect(source).toMatch(/`mcp_…\$\{tokenSuffix\}`/);
   });
 
@@ -80,10 +80,8 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/<TabsContent /);
     expect(snippetSource).toContain('mcpServers');
     expect(snippetSource).toContain('[serverKey(serverName)]');
-    // Setup card stays mounted for returning users. Existing tokens cannot
-    // be re-displayed, so the snippet remains visible with a placeholder
-    // and the copy button stays gated until a one-shot plaintext token is
-    // available in this browser session.
+    // Setup card stays mounted for returning users. The snippet remains
+    // redacted until the operator explicitly reveals the token.
     expect(source).toMatch(/<OuterCard title=\{t\('mcpServer\.setup\.title'\)\}/);
     expect(source).toContain('!canCopyConfigWithToken');
     expect(source).toContain("t('mcpServer.setup.placeholderHint')");
@@ -149,6 +147,7 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     for (const dict of [enSource, koSource]) {
       expect(dict).toMatch(/regenerateAction:/);
       expect(dict).toMatch(/legacyTokenRotated:/);
+      expect(dict).toMatch(/revealUnavailable:/);
       expect(dict).toMatch(/instance:\s*\{/);
       expect(dict).toMatch(/tryPrompt:/);
       expect(dict).toMatch(/tryHelp:/);

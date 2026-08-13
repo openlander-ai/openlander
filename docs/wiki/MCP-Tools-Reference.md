@@ -52,10 +52,11 @@ resources, caches, buckets, or the Compose parent metadata row.
 
 Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
 dashboard, or from the setup wizard's MCP step — both issue an instance-wide token, **shown only
-once**. The current API value for this instance-wide scope is `scope_kind: "org"` for compatibility;
-this is not an organization feature. To get the value again, use **Regenerate** (or
-`POST /api/mcp/token/regenerate`), which revokes the previous token; `POST /api/mcp/token` may not
-return the plaintext once a token already exists. Project- and service-scoped tokens exist via the
+after an explicit Reveal click**. The current API value for this instance-wide scope is
+`scope_kind: "org"` for compatibility; this is not an organization feature. The signed-in dashboard
+can reveal newly issued tokens again without revoking them. **Regenerate** (or
+`POST /api/mcp/token/regenerate`) still revokes the previous token; `POST /api/mcp/token` may not
+return plaintext once a token already exists. Project- and service-scoped tokens exist via the
 API (`POST /api/tokens` with `scope_kind: "project"` + `scope_project_id`, or
 `scope_kind: "service"` + `scope_service_id`) but are not part of the 0.1 onboarding UI. The MCP
 endpoint is your dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a

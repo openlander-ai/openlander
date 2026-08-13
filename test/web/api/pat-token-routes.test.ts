@@ -15,7 +15,7 @@ function createHarness() {
     token_type: 'pat' as const,
     capabilities: null,
     last_used_at: null,
-    expires_at: '2026-08-03T00:00:00.000Z',
+    expires_at: '2099-08-03T00:00:00.000Z',
     revoked_at: null,
     created_at: '2026-05-05T00:00:00.000Z',
     server_id: 'local',
@@ -56,6 +56,7 @@ function createHarness() {
       revokedTokenIds: ['pat-old', 'legacy-default'],
       legacyTokenRotated: true,
     })),
+    revealOrgMcpPatToken: vi.fn(async () => ({ token: 'olp_revealed_org', row: orgRow })),
     revokePatToken: vi.fn(async (id: string) => id === 'pat-1'),
   } as unknown as AuthService;
   const ctx = {
@@ -101,6 +102,19 @@ describe('PAT token routes', () => {
     expect(res.status).toBe(403);
     await expect(res.json()).resolves.toMatchObject({ code: 'WEB_SESSION_REQUIRED' });
     expect(authService.rotateOrgMcpPatToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects bearer-only attempts to reveal the active MCP token', async () => {
+    const { app, authService } = createHarness();
+
+    const res = await app.request('/mcp/token/reveal', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer olp_token' },
+    });
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({ code: 'WEB_SESSION_REQUIRED' });
+    expect(authService.revealOrgMcpPatToken).not.toHaveBeenCalled();
   });
 
   it('issues project-scoped PATs and returns plaintext only once', async () => {
@@ -277,7 +291,7 @@ describe('PAT token routes', () => {
         token_type: 'pat',
         capabilities: null,
         last_used_at: null,
-        expires_at: '2026-08-03T00:00:00.000Z',
+        expires_at: '2099-08-03T00:00:00.000Z',
         revoked_at: null,
         created_at: '2026-05-05T00:00:00.000Z',
         server_id: 'local',
@@ -355,6 +369,23 @@ describe('PAT token routes', () => {
         name: 'OpenLander agent',
       }),
     );
+  });
+
+  it('reveals the active MCP token only to a web session and disables response caching', async () => {
+    const { app, authService } = createHarness();
+
+    const res = await app.request('/mcp/token/reveal', {
+      method: 'POST',
+      headers: { Cookie: 'ol_session=session-ok' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    await expect(res.json()).resolves.toMatchObject({
+      plaintext: 'olp_revealed_org',
+      token: { id: 'pat-org', suffix: 'org1' },
+    });
+    expect(authService.revealOrgMcpPatToken).toHaveBeenCalledOnce();
   });
 
   it('soft-revokes tokens', async () => {

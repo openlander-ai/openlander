@@ -524,6 +524,8 @@ export const services = pgTable(
     pending_fix: text('pending_fix'),
     access_code: text('access_code'),
     access_code_iv: text('access_code_iv'),
+    access_code_encrypted: text('access_code_encrypted'),
+    access_code_encrypted_iv: text('access_code_encrypted_iv'),
     is_preview: integer('is_preview').default(0),
     pr_number: integer('pr_number'),
     project_type: text('project_type').notNull().default('web'),
@@ -764,6 +766,8 @@ export const patTokens = pgTable(
     name: text('name').notNull(),
     token_hash: text('token_hash').notNull().unique(),
     token_suffix: text('token_suffix').notNull(),
+    token_encrypted: text('token_encrypted'),
+    token_encrypted_iv: text('token_encrypted_iv'),
     scope_kind: text('scope_kind', { enum: ['org', 'project', 'service'] }).notNull(),
     scope_project_id: text('scope_project_id').references(() => projects.id, {
       onDelete: 'cascade',

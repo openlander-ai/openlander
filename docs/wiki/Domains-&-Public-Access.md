@@ -93,8 +93,8 @@ Traefik continues to own port 80.
 
 Open an Application detail page and click **Share externally**. OpenLander
 creates a stable hostname and an eight-character access code. The code is shown
-only when it is generated; copy it and deliver it to the reviewer through a
-separate secure channel.
+when it is generated. A signed-in operator can later use **Reveal code** to see
+and copy it again; deliver it to the reviewer through a separate secure channel.
 
 Several Applications can be shared at the same time. Each receives its own
 hostname, access-code hash, signing secret, and host-only browser cookie. Nginx
@@ -106,6 +106,7 @@ as the workload exposes HTTP. A Compose workload uses its saved
 The same control can:
 
 - Open or copy the public URL
+- Reveal, hide, or copy the current access code
 - Generate a new access code
 - Stop public sharing
 
@@ -115,7 +116,11 @@ later share reuses the same URL.
 
 ### Security boundary
 
-- Access codes are stored as bcrypt hashes, never plaintext.
+- Access codes keep a bcrypt verification hash plus an AES-256-GCM encrypted
+  recovery copy protected by the OpenLander master key.
+- Only an authenticated human web session can request the recovery copy. Status
+  responses, logs, and visitor requests never include it. MCP can receive a
+  code only when it generates or rotates one; it cannot reveal a stored code.
 - Session tokens are signed with a per-Application secret and bound to the exact
   hostname.
 - Cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, and host-only.
@@ -139,8 +144,9 @@ Prefer the Application id returned by `list_projects`:
 ```
 
 The response contains `public_url` and, on first enablement, `access_code`. The
-plaintext code is not returned by later status calls. Generate a replacement and
-invalidate current sessions with:
+plaintext code is not returned by later status or MCP calls. The dashboard's
+human-only reveal button can retrieve newly issued codes without rotating them.
+Generate a replacement and invalidate current sessions with:
 
 ```json
 {

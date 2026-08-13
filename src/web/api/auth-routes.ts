@@ -416,6 +416,18 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     return c.json({ token: activeOrgPat ? tokenMetadata(activeOrgPat) : null });
   });
 
+  api.post('/mcp/token/reveal', async (c) => {
+    const rejected = await requireWebSession(c);
+    if (rejected) return rejected;
+
+    const result = await authService.revealOrgMcpPatToken();
+    c.header('Cache-Control', 'no-store');
+    return c.json({
+      token: tokenMetadata(result.row),
+      plaintext: result.token,
+    });
+  });
+
   api.get('/mcp/instance', async (c) => {
     const rejected = await requireWebSession(c);
     if (rejected) return rejected;
@@ -598,6 +610,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       scopeServiceId,
       expiresAt,
     });
+    c.header('Cache-Control', 'no-store');
     return c.json({
       id: issued.row.id,
       token: issued.token,
@@ -631,6 +644,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
     const result = await authService.ensureOrgMcpPatToken({ name, expiresAt });
+    c.header('Cache-Control', 'no-store');
     return c.json({
       token: tokenMetadata(result.row),
       plaintext: result.token,
@@ -660,6 +674,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
     const result = await authService.rotateOrgMcpPatToken({ name, expiresAt });
+    c.header('Cache-Control', 'no-store');
     return c.json({
       token: tokenMetadata(result.row),
       plaintext: result.token,

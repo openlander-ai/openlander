@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { hashPassword, verifyPassword } from '../auth/auth-service.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
+import { decrypt, encrypt } from '../env/crypto.js';
 import { eventBus, type EventBus } from '../events/index.js';
 import {
   OpenLanderError,
@@ -252,10 +253,15 @@ export class ProtectedPublicShareManager {
     let accessCode: string | undefined;
     let accessCodeHash = service.access_code;
     let signingSecret = service.access_code_iv;
+    let accessCodeEncrypted = service.access_code_encrypted;
+    let accessCodeEncryptedIv = service.access_code_encrypted_iv;
     if (input.rotateAccessCode || !accessCodeHash || !signingSecret) {
       accessCode = generateAccessCode();
       accessCodeHash = hashPassword(normalizeAccessCode(accessCode));
       signingSecret = randomBytes(32).toString('base64url');
+      const encrypted = encrypt(accessCode);
+      accessCodeEncrypted = encrypted.encrypted;
+      accessCodeEncryptedIv = encrypted.iv;
     }
 
     const publicUrl = `https://${mapping.domain}`;
@@ -264,6 +270,8 @@ export class ProtectedPublicShareManager {
       publicUrl,
       accessCode: accessCodeHash,
       accessCodeIv: signingSecret,
+      accessCodeEncrypted: accessCodeEncrypted ?? null,
+      accessCodeEncryptedIv: accessCodeEncryptedIv ?? null,
     });
 
     const updated = await this.db.getService(service.id);
@@ -308,6 +316,8 @@ export class ProtectedPublicShareManager {
       publicUrl: null,
       accessCode: null,
       accessCodeIv: null,
+      accessCodeEncrypted: null,
+      accessCodeEncryptedIv: null,
     });
     const updated = await this.db.getService(service.id);
     if (!updated) throw new ServiceNotFoundError(service.id);
@@ -320,6 +330,50 @@ export class ProtectedPublicShareManager {
       });
     }
     return await this.view(project, updated);
+  }
+
+  async revealAccessCode(input: {
+    projectId: string;
+    serviceId?: string;
+  }): Promise<ProtectedPublicAccessView> {
+    const { project, service } = await this.resolveTarget(input, false);
+    const isPublic =
+      service.visibility === 'shared' && Boolean(service.access_code && service.access_code_iv);
+    if (!isPublic) {
+      throw new PublicAccessNotEligibleError('This Application is not currently shared.', {
+        projectId: project.id,
+        serviceId: service.id,
+      });
+    }
+    if (!service.access_code_encrypted || !service.access_code_encrypted_iv) {
+      throw new OpenLanderError(
+        'This access code was issued before secure reveal storage was available. Generate a new code once to enable reveal.',
+        'ACCESS_CODE_REVEAL_UNAVAILABLE',
+        409,
+        { projectId: project.id, serviceId: service.id },
+      );
+    }
+
+    let accessCode: string;
+    try {
+      accessCode = decrypt(service.access_code_encrypted, service.access_code_encrypted_iv);
+    } catch {
+      throw new OpenLanderError(
+        'The encrypted access code could not be read.',
+        'ACCESS_CODE_DECRYPT_FAILED',
+        500,
+        { projectId: project.id, serviceId: service.id },
+      );
+    }
+    if (!this.verifyAccessCode(service, accessCode)) {
+      throw new OpenLanderError(
+        'The encrypted access code does not match its verification hash.',
+        'ACCESS_CODE_DECRYPT_FAILED',
+        500,
+        { projectId: project.id, serviceId: service.id },
+      );
+    }
+    return { ...(await this.view(project, service)), access_code: accessCode };
   }
 
   async resolveActiveShareByHostname(hostname: string): Promise<ProtectedShareTarget | null> {

@@ -1533,6 +1533,12 @@ export const translations = {
       stopConfirm: 'Stop public access',
       publishReady: 'Protected public sharing is ready.',
       codeSet: 'Code set',
+      codeMasked: '••••-••••',
+      revealCode: 'Reveal access code',
+      hideCode: 'Hide access code',
+      codeRevealFailed: 'Could not reveal the access code.',
+      codeRevealUnavailable:
+        'This older code cannot be recovered. Generate a new code once; future codes can be revealed anytime.',
       copyCode: 'Copy access code',
       codeCopied: 'Access code copied',
       rotateCode: 'Generate a new access code',
@@ -1702,7 +1708,7 @@ export const translations = {
         setupRequired: 'Finish the one-time secure sharing setup first.',
         shareResultTitle: 'External sharing is ready',
         shareResultDescription:
-          'Copy the URL and access code for {name}. The access code is shown only now.',
+          'Copy the URL and access code for {name}. You can reveal the code again from the Application list.',
         publicUrl: 'Public URL',
         accessCode: 'Access code',
       },
@@ -2607,10 +2613,13 @@ export const translations = {
       legacyTokenRotated:
         'Your old API token (ol_…) was retired as part of this change. Update any MCP client still using it.',
       reveal: 'Reveal',
+      revealing: 'Revealing…',
       hide: 'Hide',
-      revealedHint:
-        'Treat this like a password. We can only show it once — copy it before closing.',
-      passwordHint: 'Treat like a password — one token unlocks every project. Regenerate if lost.',
+      revealFailed: 'Failed to reveal token',
+      revealUnavailable:
+        'This older token cannot be recovered. Regenerate it once; future tokens can be revealed anytime.',
+      revealedHint: 'Treat this like a password. Hide it again when you are done copying.',
+      passwordHint: 'Treat like a password — one token unlocks every project.',
       issuedAt: 'issued {when}',
       loadFailed: 'Failed to load tokens',
     },
@@ -2638,7 +2647,7 @@ export const translations = {
       restartHint:
         'Restart your MCP client after saving. The status above flips to Connected on the first call.',
       placeholderHint: 'Examples use a <your-token> placeholder until a token is revealed.',
-      revealToCopyHint: 'Issue a token to copy a config with the real value included.',
+      revealToCopyHint: 'Reveal the token to copy a config with the real value included.',
     },
     recent: {
       title: 'Recent agent calls',
