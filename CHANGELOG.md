@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Generate Claude Code MCP registration commands with the authentication header
+  after the server name and URL so current variadic `--header` parsing preserves
+  the required positional arguments.
+
 ## [0.3.6-rc.11] - 2026-08-13
 
 ### Added
