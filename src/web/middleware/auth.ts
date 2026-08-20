@@ -162,7 +162,7 @@ export function createAuthMiddleware(authService: AuthService) {
             mcp_endpoint: mcpEndpoint,
             suggested_next_step:
               'Register OpenLander as an MCP server, then verify openlander_project({ action: "help" }) works.',
-            example: `claude mcp add --transport http --header "Authorization: Bearer <MCP_TOKEN>" openlander ${mcpEndpoint}`,
+            example: `claude mcp add --transport http openlander ${mcpEndpoint} --header "Authorization: Bearer <MCP_TOKEN>"`,
           },
           401,
         );

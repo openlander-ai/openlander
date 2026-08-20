@@ -35,7 +35,7 @@ describe('auth middleware', () => {
       suggested_next_step:
         'Register OpenLander as an MCP server, then verify openlander_project({ action: "help" }) works.',
       example:
-        'claude mcp add --transport http --header "Authorization: Bearer <MCP_TOKEN>" openlander http://localhost/mcp',
+        'claude mcp add --transport http openlander http://localhost/mcp --header "Authorization: Bearer <MCP_TOKEN>"',
     });
   });
 });

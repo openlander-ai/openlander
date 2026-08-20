@@ -23,8 +23,8 @@ The primary OpenLander client. Add the server with the Claude Code CLI:
 
 ```bash
 claude mcp add --transport http \
-  --header "Authorization: Bearer YOUR_OPENLANDER_TOKEN" \
-  openlander https://YOUR_DASHBOARD_ORIGIN/mcp
+  openlander https://YOUR_DASHBOARD_ORIGIN/mcp \
+  --header "Authorization: Bearer YOUR_OPENLANDER_TOKEN"
 ```
 
 Copy the exact command — token and endpoint already filled in — from the **Your Agent**
