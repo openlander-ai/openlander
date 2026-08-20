@@ -42,7 +42,7 @@ function mcpRemoteArgs(endpoint: string): string[] {
 }
 
 export function buildClaudeCodeCmd({ endpoint, token, serverName }: BuildOptions): string {
-  return `claude mcp add --transport http --header "Authorization: Bearer ${token}" ${serverKey(serverName)} ${endpoint}`;
+  return `claude mcp add --transport http ${serverKey(serverName)} ${endpoint} --header "Authorization: Bearer ${token}"`;
 }
 
 export function buildCodexConfig({ endpoint, token, serverName }: BuildOptions): string {

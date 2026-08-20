@@ -95,9 +95,9 @@ describe('MCP instance identity', () => {
     );
 
     const claudeCode = snippetById.get('claude-code');
-    expect(claudeCode).toContain('claude mcp add --transport http');
-    expect(claudeCode).toContain('--header "Authorization: Bearer olp_token"');
-    expect(claudeCode).toContain('openlander-ais-prod http://www.aqainc.biz/mcp');
+    expect(claudeCode).toBe(
+      'claude mcp add --transport http openlander-ais-prod http://www.aqainc.biz/mcp --header "Authorization: Bearer olp_token"',
+    );
 
     const cursor = JSON.parse(snippetById.get('cursor') ?? '{}');
     expect(cursor.mcpServers['openlander-ais-prod']).toMatchObject({
