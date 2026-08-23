@@ -16,6 +16,8 @@ export interface EnvVarUsage {
   key: string;
   files: Array<{ path: string; line: number }>;
   optional: boolean;
+  /** True only when source contains an explicit runtime validation contract. */
+  blocking?: boolean;
   requirement?: EnvValueRequirement;
 }
 
@@ -44,11 +46,16 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
     {
       files: Array<{ path: string; line: number }>;
       optionalFlags: boolean[];
+      blockingFlags: boolean[];
       requirement?: EnvValueRequirement;
     }
   >();
   const addUsage = (usage: EnvVarUsage): void => {
-    const entry = mergedByKey.get(usage.key) ?? { files: [], optionalFlags: [] };
+    const entry = mergedByKey.get(usage.key) ?? {
+      files: [],
+      optionalFlags: [],
+      blockingFlags: [],
+    };
     for (const file of usage.files) {
       if (
         !entry.files.some((existing) => existing.path === file.path && existing.line === file.line)
@@ -57,6 +64,7 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
       }
     }
     entry.optionalFlags.push(usage.optional);
+    entry.blockingFlags.push(usage.blocking === true);
     entry.requirement ??= usage.requirement ?? inferEnvValueRequirement(usage.key);
     mergedByKey.set(usage.key, entry);
   };
@@ -89,6 +97,7 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
         key: envEntry.key,
         files: [{ path: envEntry.source, line: 0 }],
         optional: !envEntry.required,
+        blocking: envEntry.required,
       });
     }
   }
@@ -102,6 +111,7 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
           key: envEntry.key,
           files: [{ path: envEntry.source, line: 0 }],
           optional: !envEntry.required,
+          blocking: envEntry.required,
         });
       }
     }
@@ -117,16 +127,18 @@ export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): 
         key: envEntry.key,
         files: [{ path: envEntry.source, line: 0 }],
         optional: !envEntry.required,
+        blocking: envEntry.required,
       });
     }
   }
 
   const vars: EnvVarUsage[] = Array.from(mergedByKey.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, { files, optionalFlags, requirement }]) => ({
+    .map(([key, { files, optionalFlags, blockingFlags, requirement }]) => ({
       key,
       files,
       optional: optionalFlags.every((flag) => flag),
+      blocking: blockingFlags.some((flag) => flag),
       requirement,
     }));
 
@@ -150,6 +162,21 @@ const SKIP_DIRS = new Set([
   'venv',
   '.cache',
   'coverage',
+  'test',
+  'tests',
+  '__tests__',
+  'e2e',
+  'test-crash-scenarios',
+  'fixtures',
+  '__fixtures__',
+  'mocks',
+  '__mocks__',
+  'test-results',
+  'playwright-report',
+  'docs',
+  'examples',
+  'scripts',
+  'tools',
 ]);
 
 const SYSTEM_VARS = new Set([
@@ -217,7 +244,107 @@ interface Finding {
   path: string;
   line: number;
   optional: boolean;
+  blocking: boolean;
   requirement?: EnvValueRequirement;
+}
+
+/**
+ * Mark JavaScript/TypeScript positions that are executable code. Regex-based
+ * env detection still works for bracket access while ignoring examples in
+ * comments and string literals. Template expressions remain executable.
+ */
+function buildNodeCodeMask(content: string): Uint8Array {
+  const mask = new Uint8Array(content.length);
+  let mode: 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment' = 'code';
+  let templateExpressionDepth = 0;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+
+    if (mode === 'line-comment') {
+      if (char === '\n') {
+        mode = 'code';
+        mask[index] = 1;
+      }
+      continue;
+    }
+    if (mode === 'block-comment') {
+      if (char === '*' && next === '/') {
+        index += 1;
+        mode = 'code';
+      }
+      continue;
+    }
+    if (mode === 'single' || mode === 'double') {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if ((mode === 'single' && char === "'") || (mode === 'double' && char === '"')) {
+        mode = 'code';
+      }
+      continue;
+    }
+    if (mode === 'template') {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === '`') {
+        mode = 'code';
+        continue;
+      }
+      if (char === '$' && next === '{') {
+        index += 1;
+        templateExpressionDepth += 1;
+        mode = 'code';
+      }
+      continue;
+    }
+
+    mask[index] = 1;
+    if (char === '/' && next === '/') {
+      mask[index] = 0;
+      index += 1;
+      mode = 'line-comment';
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      mask[index] = 0;
+      index += 1;
+      mode = 'block-comment';
+      continue;
+    }
+    if (char === "'") {
+      mask[index] = 0;
+      mode = 'single';
+      continue;
+    }
+    if (char === '"') {
+      mask[index] = 0;
+      mode = 'double';
+      continue;
+    }
+    if (char === '`') {
+      mask[index] = 0;
+      mode = 'template';
+      continue;
+    }
+    if (templateExpressionDepth > 0) {
+      if (char === '{') {
+        templateExpressionDepth += 1;
+      } else if (char === '}') {
+        templateExpressionDepth -= 1;
+        if (templateExpressionDepth === 0) {
+          mask[index] = 0;
+          mode = 'template';
+        }
+      }
+    }
+  }
+
+  return mask;
 }
 
 function detectNodeFallback(content: string, key: string, matchIndex: number): boolean {
@@ -269,7 +396,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
     }
 
     for (const entry of entries) {
-      if (SKIP_DIRS.has(entry)) continue;
+      if (SKIP_DIRS.has(entry) || entry.startsWith('.')) continue;
       const fullPath = join(dir, entry);
 
       let isDir = false;
@@ -304,11 +431,13 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
 
       const relPath = relative(projectPath, fullPath);
       const patterns = isNode ? NODE_PATTERNS : PYTHON_PATTERNS;
+      const nodeCodeMask = isNode ? buildNodeCodeMask(content) : undefined;
 
       for (const pattern of patterns) {
         pattern.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(content)) !== null) {
+          if (nodeCodeMask && nodeCodeMask[match.index] !== 1) continue;
           const key = match[1];
           if (!key || SYSTEM_VARS.has(key)) continue;
           const line = content.slice(0, match.index).split('\n').length;
@@ -320,6 +449,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
             path: relPath,
             line,
             optional,
+            blocking: isPython && pattern === PYTHON_PATTERNS[0],
             requirement: inferEnvValueRequirement(key),
           });
         }
@@ -329,6 +459,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
         NODE_DESTRUCTURE.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = NODE_DESTRUCTURE.exec(content)) !== null) {
+          if (nodeCodeMask?.[match.index] !== 1) continue;
           const raw = match[1] ?? '';
           const line = content.slice(0, match.index).split('\n').length;
           for (const part of raw.split(',')) {
@@ -342,6 +473,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
               path: relPath,
               line,
               optional,
+              blocking: false,
               requirement: inferEnvValueRequirement(key),
             });
           }
@@ -349,6 +481,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
 
         NODE_ENV_SCHEMA_KEY.lastIndex = 0;
         while ((match = NODE_ENV_SCHEMA_KEY.exec(content)) !== null) {
+          if (nodeCodeMask?.[match.index] !== 1) continue;
           const key = match[1];
           const kind = match[2];
           if (!key || !kind || SYSTEM_VARS.has(key)) continue;
@@ -358,6 +491,7 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
             path: relPath,
             line,
             optional: kind === 'optional',
+            blocking: kind !== 'optional',
             requirement:
               requirementFromNodeSchemaObject(match[0], kind) ?? inferEnvValueRequirement(key),
           });
@@ -378,14 +512,16 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
     {
       files: Array<{ path: string; line: number }>;
       optionalFlags: boolean[];
+      blockingFlags: boolean[];
       requirement?: EnvValueRequirement;
     }
   >();
-  for (const { key, path, line, optional, requirement } of findings) {
-    const entry = byKey.get(key) ?? { files: [], optionalFlags: [] };
+  for (const { key, path, line, optional, blocking, requirement } of findings) {
+    const entry = byKey.get(key) ?? { files: [], optionalFlags: [], blockingFlags: [] };
     if (!entry.files.some((e) => e.path === path && e.line === line)) {
       entry.files.push({ path, line });
       entry.optionalFlags.push(optional);
+      entry.blockingFlags.push(blocking);
     }
     entry.requirement ??= requirement ?? inferEnvValueRequirement(key);
     byKey.set(key, entry);
@@ -393,10 +529,11 @@ export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScan
 
   const vars: EnvVarUsage[] = Array.from(byKey.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, { files, optionalFlags, requirement }]) => ({
+    .map(([key, { files, optionalFlags, blockingFlags, requirement }]) => ({
       key,
       files,
       optional: optionalFlags.every((flag) => flag),
+      blocking: blockingFlags.some((flag) => flag),
       requirement,
     }));
 
