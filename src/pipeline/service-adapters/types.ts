@@ -2,12 +2,7 @@ import type { ServiceRow } from '../../db/index.js';
 import type { RuntimeBackend } from '../runtime/index.js';
 
 export type BuiltInServiceType =
-  | 'postgresql'
-  | 'mysql'
-  | 'redis'
-  | 'mongodb'
-  | 'minio'
-  | 'rabbitmq';
+  'postgresql' | 'mysql' | 'redis' | 'mongodb' | 'neo4j' | 'minio' | 'rabbitmq';
 
 export interface ServiceCredentials {
   user: string;

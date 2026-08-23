@@ -2120,7 +2120,11 @@ export const translations = {
         refresh: '새로고침',
         loading: '불러오는 중…',
         empty: '이 리소스에 연결된 프로젝트가 없습니다.',
+        deferredTitle: '애플리케이션 연결 대기 중',
+        deferredDescription:
+          '이 리소스는 프로젝트에 속해 있습니다. 첫 애플리케이션 또는 Compose 워크로드가 추가되면 런타임 연결이 완료됩니다.',
         openProject: '프로젝트 열기',
+        openOwningProject: '소유 프로젝트 열기',
         error: '연결된 프로젝트를 불러오지 못했습니다.',
       },
       credentials: {
@@ -2170,6 +2174,7 @@ export const translations = {
         mysql: 'MySQL',
         redis: 'Redis',
         mongo: 'MongoDB',
+        neo4j: 'Neo4j',
         minio: 'MinIO',
       },
     },

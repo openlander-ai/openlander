@@ -2365,6 +2365,8 @@ function formatManagedServiceKind(kind: string | null | undefined, t: Translate)
     case 'mongo':
     case 'mongodb':
       return t('services.managedDetail.kind.mongo');
+    case 'neo4j':
+      return t('services.managedDetail.kind.neo4j');
     case 'minio':
       return t('services.managedDetail.kind.minio');
     case 'database':
@@ -2775,6 +2777,7 @@ function ManagedServiceDetail({
         >
           <ManagedConnectionsTab
             connections={connections}
+            owningProjectId={owningProjectId}
             loading={connectionsLoading}
             error={connectionsError}
             onRefresh={() => void loadConnections()}
@@ -3018,11 +3021,13 @@ function ManagedLogsTab({ serviceId }: { serviceId: string }) {
 
 function ManagedConnectionsTab({
   connections,
+  owningProjectId,
   loading,
   error,
   onRefresh,
 }: {
   connections: ConnectedProject[];
+  owningProjectId: string | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -3059,7 +3064,27 @@ function ManagedConnectionsTab({
         </div>
       )}
 
-      {!loading && !error && connections.length === 0 && (
+      {!loading && !error && connections.length === 0 && owningProjectId && (
+        <div className="flex items-start justify-between gap-3 rounded-md border border-[color:var(--ol-warning)] bg-[color-mix(in_oklch,var(--ol-warning)_7%,transparent)] px-3 py-3 text-[12.5px]">
+          <span className="min-w-0">
+            <span className="block font-medium text-[color:var(--ol-fg)]">
+              {t('services.managedDetail.connections.deferredTitle')}
+            </span>
+            <span className="mt-0.5 block text-[color:var(--ol-fg-muted)]">
+              {t('services.managedDetail.connections.deferredDescription')}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate(`/projects/${owningProjectId}`)}
+            className="shrink-0 rounded-md border border-[color:var(--ol-border)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]"
+          >
+            {t('services.managedDetail.connections.openOwningProject')}
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && connections.length === 0 && !owningProjectId && (
         <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-4 text-[12.5px] text-[color:var(--ol-fg-muted)]">
           {t('services.managedDetail.connections.empty')}
         </div>

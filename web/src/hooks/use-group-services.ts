@@ -3,7 +3,7 @@
  *
  * Returns the list of Application/Compose workload rows attached to a Project via the
  * canonical endpoint `GET /api/projects/:p/services` (P2 backend filters
- * to `kind NOT IN [postgres, mysql, redis, mongo, minio]`).
+ * to `kind NOT IN [postgres, mysql, redis, mongo, neo4j, minio]`).
  *
  * This hook complements `useProjectsContext()` (which exposes Projects)
  * — when a consumer needs the workload list under a specific Project, it

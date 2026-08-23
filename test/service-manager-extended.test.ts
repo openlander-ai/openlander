@@ -28,6 +28,7 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
     mysql: 'mysql',
     redis: 'redis',
     mongo: 'mongo',
+    neo4j: 'neo4j',
     minio: 'minio',
   };
   return {
@@ -258,10 +259,62 @@ describe('ServiceManager extended DB/user operations', () => {
         connectionString: 'redis://ol-svc-shared-redis:6379',
       }),
     });
+    const mysql = createService({
+      id: 'svc-mysql',
+      name: 'shared-mysql',
+      type: 'mysql',
+      kind: 'mysql',
+      credentials: JSON.stringify({
+        connectionString: 'mysql://openlander:rootpw@ol-svc-shared-mysql:3306/app',
+      }),
+    });
+    const mongo = createService({
+      id: 'svc-mongo',
+      name: 'shared-mongo',
+      type: 'mongodb',
+      kind: 'mongo',
+      credentials: JSON.stringify({
+        connectionString: 'mongodb://openlander:rootpw@ol-svc-shared-mongo:27017/app',
+      }),
+    });
+    const neo4j = createService({
+      id: 'svc-neo4j',
+      name: 'app-graph',
+      type: 'neo4j',
+      kind: 'neo4j',
+      credentials: JSON.stringify({
+        user: 'neo4j',
+        password: 'graphpw',
+        database: 'neo4j',
+        host: 'ol-svc-app-graph',
+        port: 7687,
+        connectionString: 'neo4j://ol-svc-app-graph:7687',
+      }),
+    });
+    const minio = createService({
+      id: 'svc-minio',
+      name: 'shared-minio',
+      type: 'minio',
+      kind: 'minio',
+      credentials: JSON.stringify({
+        user: 'openlander',
+        password: 'miniopw',
+        connectionString: 'http://ol-svc-shared-minio:9000',
+      }),
+    });
+    const rabbitmq = createService({
+      id: 'svc-rabbitmq',
+      name: 'shared-rabbitmq',
+      type: 'rabbitmq',
+      kind: 'rabbitmq',
+      credentials: JSON.stringify({
+        connectionString: 'amqp://openlander:rootpw@ol-svc-shared-rabbitmq:5672',
+      }),
+    });
 
     const manager = new ServiceManager(
       createMockDockerHarness().docker,
-      createDbMock([postgres, redis]),
+      createDbMock([postgres, mysql, redis, mongo, neo4j, minio, rabbitmq]),
     );
 
     await expect(manager.getSuggestedEnv(postgres, { targetProjectId: 'proj-1' })).resolves.toEqual(
@@ -275,6 +328,36 @@ describe('ServiceManager extended DB/user operations', () => {
     await expect(manager.getSuggestedEnv(redis, { targetProjectId: 'proj-1' })).resolves.toEqual([
       { key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' },
     ]);
+    await expect(manager.getSuggestedEnv(mysql, { targetProjectId: 'proj-1' })).resolves.toEqual([
+      {
+        key: 'DATABASE_URL',
+        value: 'mysql://openlander:rootpw@ol-svc-shared-mysql:3306/app',
+      },
+    ]);
+    await expect(manager.getSuggestedEnv(mongo, { targetProjectId: 'proj-1' })).resolves.toEqual([
+      {
+        key: 'MONGODB_URI',
+        value: 'mongodb://openlander:rootpw@ol-svc-shared-mongo:27017/app',
+      },
+    ]);
+    await expect(manager.getSuggestedEnv(neo4j, { targetProjectId: 'proj-1' })).resolves.toEqual([
+      { key: 'NEO4J_URI', value: 'neo4j://ol-svc-app-graph:7687' },
+      { key: 'NEO4J_USERNAME', value: 'neo4j' },
+      { key: 'NEO4J_PASSWORD', value: 'graphpw' },
+    ]);
+    await expect(manager.getSuggestedEnv(minio, { targetProjectId: 'proj-1' })).resolves.toEqual([
+      { key: 'S3_ENDPOINT', value: 'http://ol-svc-shared-minio:9000' },
+      { key: 'AWS_ACCESS_KEY_ID', value: 'openlander' },
+      { key: 'AWS_SECRET_ACCESS_KEY', value: 'miniopw' },
+    ]);
+    await expect(manager.getSuggestedEnv(rabbitmq, { targetProjectId: 'proj-1' })).resolves.toEqual(
+      [
+        {
+          key: 'AMQP_URL',
+          value: 'amqp://openlander:rootpw@ol-svc-shared-rabbitmq:5672',
+        },
+      ],
+    );
   });
 
   it('suggests bare env keys for project-scoped services when target project has no collision', async () => {
@@ -331,6 +414,29 @@ describe('ServiceManager extended DB/user operations', () => {
         key: 'ANALYTICS_PG_DATABASE_URL',
         value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
       },
+    ]);
+  });
+
+  it('reuses a bare key when the existing value is only a placeholder', async () => {
+    const projectPg = createService({
+      id: 'svc-project-pg',
+      name: 'analytics-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
+      }),
+    });
+    const manager = new ServiceManager(
+      createMockDockerHarness().docker,
+      createDbMock([projectPg], [], {
+        projectEnv: { 'proj-1': { DATABASE_URL: 'postgresql://placeholder/replace-me' } },
+      }),
+    );
+
+    await expect(
+      manager.getSuggestedEnv(projectPg, { targetProjectId: 'proj-1' }),
+    ).resolves.toEqual([
+      { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app' },
     ]);
   });
 
@@ -589,6 +695,27 @@ describe('ServiceManager extended DB/user operations', () => {
     );
   });
 
+  it('createDatabase() rejects Neo4j Community multi-database creation', async () => {
+    const neo4j = createService({
+      id: 'svc-neo4j',
+      name: 'app-graph',
+      type: 'neo4j',
+      kind: 'neo4j',
+      container_id: 'svc-neo4j-container',
+      container_name: 'ol-svc-app-graph',
+      port: 7687,
+      credentials: JSON.stringify({ user: 'neo4j', password: 'graphpw', database: 'neo4j' }),
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-neo4j-container', true);
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([neo4j]));
+
+    await expect(manager.createDatabase('svc-neo4j', 'second_graph')).rejects.toThrow(
+      'Database creation is not supported for service type: neo4j',
+    );
+  });
+
   it('createUser() rejects redis service type', async () => {
     const redis = createService({
       id: 'svc-redis',
@@ -722,6 +849,36 @@ describe('ServiceManager detail/log/stats operations', () => {
       maxConnections: null,
     });
     expect(dockerHarness.getExecCommands('svc-stopped-container')).toEqual([]);
+  });
+
+  it('getStats() reads Neo4j disk usage from /data without unsupported graph queries', async () => {
+    const neo4j = createService({
+      id: 'svc-neo4j-stats',
+      name: 'app-graph',
+      type: 'neo4j',
+      kind: 'neo4j',
+      status: 'running',
+      container_id: 'svc-neo4j-stats-container',
+      port: 7687,
+      credentials: JSON.stringify({ user: 'neo4j', password: 'graphpw', database: 'neo4j' }),
+    });
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-neo4j-stats-container', true);
+    dockerHarness.queueExecResult('svc-neo4j-stats-container', {
+      exitCode: 0,
+      stdout: '8192\t/data\n',
+    });
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([neo4j]));
+
+    await expect(manager.getStats('svc-neo4j-stats')).resolves.toMatchObject({
+      status: 'running',
+      diskUsageBytes: 8192,
+      activeConnections: null,
+      maxConnections: null,
+    });
+    expect(dockerHarness.getExecCommands('svc-neo4j-stats-container')).toEqual([
+      ['du', '-sb', '/data'],
+    ]);
   });
 
   it('recordLightweightMetricSample() writes CPU and memory without service exec probes', async () => {

@@ -178,6 +178,7 @@ describe('Korean localization quality gate', () => {
       'services.managedDetail.kind.minio',
       'services.managedDetail.kind.mongo',
       'services.managedDetail.kind.mysql',
+      'services.managedDetail.kind.neo4j',
       'services.managedDetail.kind.postgres',
       'services.managedDetail.kind.redis',
       'settings.nav.ai',
@@ -373,6 +374,7 @@ describe('Korean localization quality gate', () => {
       mysql: 'MySQL',
       redis: 'Redis',
       mongo: 'MongoDB',
+      neo4j: 'Neo4j',
       minio: 'MinIO',
     });
   });

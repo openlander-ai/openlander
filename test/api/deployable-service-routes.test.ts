@@ -319,7 +319,7 @@ describe('createDeployableServiceRoutes', () => {
     expect(res.status).toBe(200);
     expect(getServices).toHaveBeenCalledWith({
       project_id: 'stack',
-      kindNotIn: ['postgres', 'mysql', 'redis', 'mongo', 'minio'],
+      kindNotIn: ['postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio'],
     });
     expect(getDeployablesByGroup).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({

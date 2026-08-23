@@ -28,7 +28,7 @@ export interface ServiceTemplate {
  * `kind` values:
  *   - Project-level workloads: 'git' | 'image' | 'compose'
  *   - Internal Compose nodes: 'compose-child'
- *   - Database/Cache/Storage resources: 'postgres' | 'mysql' | 'redis' | 'mongo' | 'minio'
+ *   - Database/Cache/Storage resources: 'postgres' | 'mysql' | 'redis' | 'mongo' | 'neo4j' | 'minio'
  *
  * Fields like `status`, `container_id`, `port` remain populated on the row
  * so today's UI keeps rendering during the additive-schema transition.

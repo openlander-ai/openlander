@@ -227,7 +227,7 @@ full tables, fixtures, and limitations.
 - A **Compose** resource is one Project-level stack; its containers stay inside
   that stack surface.
 - A **Database/Cache/Storage resource** is infrastructure such as Postgres, MySQL, Redis,
-  MongoDB, or MinIO. In v0.1 these are project-scoped: they attach to the
+  MongoDB, Neo4j, or MinIO. In v0.1 these are project-scoped: they attach to the
   project that uses them and run on that project's Docker network. Cross-project
   shared Database/Cache/Storage resources and external TCP exposure are deferred.
 
@@ -248,7 +248,7 @@ common single-Application case.
   before deploying.
 - Deploy apps from public Git repos, connected private GitHub repos, or public
   container images, and provision
-  project-scoped Postgres, MySQL, Redis, MongoDB, and MinIO services alongside
+  project-scoped Postgres, MySQL, Redis, MongoDB, Neo4j, and MinIO services alongside
   them. Private container registry support is on the roadmap.
 - Cancel a stuck build mid-flight. The cancel goes through the same SSE log
   channel agents are watching.
@@ -324,7 +324,7 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - MCP server with deploy / inspect / operate tools.
 - Dashboard for human oversight + intervention.
 - Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
-  MongoDB, and MinIO through agent/MCP workflows.
+  MongoDB, Neo4j, and MinIO through agent/MCP workflows.
 - Deterministic post-deploy recovery primitives for external agents: structured
   `diagnose_service` findings, safe route re-pointing, same-image runtime env
   apply, verification details, and rollback when a hot path fails.

@@ -33,12 +33,12 @@ it is selected.
 
 ## Mental Model
 
-| Term                            | Meaning                                                                            | Use it for                                       |
-| ------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Project                         | A workspace that groups related resources.                                         | Organization, settings, resource list.           |
-| Application                     | An app, API, worker, or image workload that OpenLander builds/runs.                | Env vars, redeploys, domains, logs, diagnostics. |
-| Compose                         | A compose stack represented as one Project-level resource.                         | Stack deploys and stack-level diagnostics.       |
-| Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets.        |
+| Term                            | Meaning                                                                                   | Use it for                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Project                         | A workspace that groups related resources.                                                | Organization, settings, resource list.              |
+| Application                     | An app, API, worker, or image workload that OpenLander builds/runs.                       | Env vars, redeploys, domains, logs, diagnostics.    |
+| Compose                         | A compose stack represented as one Project-level resource.                                | Stack deploys and stack-level diagnostics.          |
+| Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, Neo4j, or MinIO. | Credentials, supported backups, databases, buckets. |
 
 After a deploy, call `list_projects` and keep the returned Application/Compose
 `service_id`. In v0.1.x this compatibility field appears at
