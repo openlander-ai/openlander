@@ -433,7 +433,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/rabbitmq/minio, or a custom container) inside a Project. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then call update_app for the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/neo4j/rabbitmq/minio, or a custom container) inside a Project. Neo4j Community exposes Bolt only and returns NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g. template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then call update_app for the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
       'Create a Database/Cache/Storage resource inside a Project. Pass project_id or project_name. Use this manual path for existing groups/shared resources; for new apps with safe DB/cache proposals, prefer deploy-plan approval. Existing Application: redeploy to apply saved env.',
     inputSchema: createServiceSchema,
@@ -498,13 +498,21 @@ export const serviceToolDefs: ToolDef[] = [
       let attachCleanupFailed: string | undefined;
       let droppedKeys: string[] | undefined;
       let autoInjectedEnvKeys: string[] = [];
+      let suggestedEnv: Array<{ key: string; value: string }> = [];
       try {
+        // Resolve the connection-env contract before injection. Computing it
+        // afterwards sees the keys just injected and incorrectly renames the
+        // response even though auto_injected_env_keys used the bare names.
+        suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result, {
+          targetProjectId: target.projectId,
+        });
         const linker = new ManagedServiceLinker(appCtx.db, appCtx.env);
         const linked = await linker.connect({
           projectId: target.projectId,
           service: result,
           source: 'mcp',
           credentials: parseStringCredentials(result.credentials),
+          connectionEnv: suggestedEnv,
         });
         resolvedProjectId = linked.resolvedProjectId;
         autoInjectedEnvKeys = linked.autoInjectedEnvKeys;
@@ -539,9 +547,6 @@ export const serviceToolDefs: ToolDef[] = [
         };
       }
 
-      const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result, {
-        targetProjectId: resolvedProjectId,
-      });
       const attachedProjectId = resolvedProjectId;
       const hasDeployableService = await projectHasDeployableService(appCtx, attachedProjectId);
 
@@ -1076,7 +1081,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'remove_service',
     riskLevel: 'high',
     description:
-      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. If projects reference this service, removal is blocked unless force=true. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND, SERVICE_IN_USE.',
+      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. Create a supported, verified backup before removing important data; Neo4j requires an external Neo4j-supported export because backup_service is intentionally unavailable. If projects reference this service, removal is blocked unless force=true. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND, SERVICE_IN_USE.',
     mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
     inputSchema: removeServiceSchema,
     execute: async (args, { appCtx }) => {
@@ -1090,7 +1095,7 @@ export const serviceToolDefs: ToolDef[] = [
       return {
         status: 'removed',
         service: serviceName,
-        warning: `All persistent data for ${serviceType} service "${serviceName}" has been permanently deleted. This cannot be undone. If you needed the data, it is now lost. Use backup_service before remove_service in the future.`,
+        warning: `All persistent data for ${serviceType} service "${serviceName}" has been permanently deleted. This cannot be undone. Use a supported, verified backup or export before remove_service in the future.`,
         ...(result.connected_projects && { connected_projects: result.connected_projects }),
       };
     },
@@ -1100,7 +1105,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'backup_service',
     riskLevel: 'medium',
     description:
-      "Create a backup snapshot of a service's persistent data (database files, etc.). Returns { status, backupId, path, sizeBytes }. Use BEFORE remove_service to prevent data loss.",
+      'Create a generic volume backup snapshot for supported service types. Neo4j is rejected because a live /data tar is not a safe Neo4j backup. Returns { status, backupId, path, sizeBytes }. Use a verified, service-appropriate backup before remove_service.',
     mcpDescription: 'Create a backup snapshot of service data before destructive actions.',
     inputSchema: backupServiceSchema,
     execute: async (args, { appCtx }) => {
@@ -1120,7 +1125,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'restore_service',
     riskLevel: 'medium',
     description:
-      'Restore a service volume from a backup snapshot. Stops the service container, restores the selected backup into the service volume, then starts the service again. Returns { status, service, backupId }.',
+      'Restore a supported service volume from a generic backup snapshot. Neo4j is rejected because raw-volume restore is not supported. Stops the service container, restores the selected backup, then starts the service again. Returns { status, service, backupId }.',
     mcpDescription: 'Restore service data from a selected backup snapshot.',
     inputSchema: restoreServiceSchema,
     execute: async (args, { appCtx }) => {
@@ -1281,7 +1286,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service_user',
     riskLevel: 'medium',
     description:
-      'Create a new user in a PostgreSQL or MySQL service with optional database grants. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
+      'Create a new user in a PostgreSQL or MySQL service with optional database grants. Neo4j Community user creation is not exposed. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, SERVICE_OPERATION_UNSUPPORTED, CONTAINER_NOT_RUNNING.',
     mcpDescription: 'Create a database user with optional per-database grants.',
     inputSchema: createServiceUserSchema,
     execute: async (args, { appCtx }) => {

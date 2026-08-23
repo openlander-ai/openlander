@@ -95,6 +95,15 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain('value={String(service.port)}');
   });
 
+  it('distinguishes an empty Project connection from an unowned managed resource', () => {
+    expect(source).toContain('owningProjectId={owningProjectId}');
+    expect(source).toContain('connections.length === 0 && owningProjectId');
+    expect(source).toContain("t('services.managedDetail.connections.deferredTitle')");
+    expect(source).toContain("t('services.managedDetail.connections.deferredDescription')");
+    expect(source).toContain('navigate(`/projects/${owningProjectId}`)');
+    expect(source).toContain('connections.length === 0 && !owningProjectId');
+  });
+
   it('falls legacy ?tab={general|resources|advanced|settings} through to overview', () => {
     expect(source).toContain('isServiceTabId(tabParam) ? tabParam : ');
     expect(source).toContain("'overview'");

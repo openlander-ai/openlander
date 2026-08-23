@@ -998,6 +998,7 @@ export class PlanEngine {
         service: created,
         source: 'deploy_plan',
         credentials: { connectionString },
+        connectionEnv: suggestedEnv,
       });
 
       return connectionString;
@@ -2230,6 +2231,10 @@ export class PlanEngine {
               service: reusable,
               source: 'deploy_plan',
               credentials: { connectionString },
+              // A deploy plan already owns the application-facing key. Preserve
+              // that resolved contract instead of asking the generic recommender
+              // to choose another key from the current project state.
+              connectionEnv: [{ key: envVarName, value: connectionString }],
             });
             return connectionString;
           },

@@ -1112,22 +1112,29 @@ The first expose returns a generated `access_code`; later status reads never ret
 
 ### `create_service`
 
-| Parameter      | Type   | Required | Description                                                    |
-| -------------- | ------ | -------- | -------------------------------------------------------------- |
-| `name`         | string | Yes      | Service name                                                   |
-| `template`     | string | No       | `postgresql`, `mysql`, `redis`, `mongodb`, `rabbitmq`, `minio` |
-| `image`        | string | No       | Custom Docker image                                            |
-| `port`         | number | No       | Port number                                                    |
-| `project_id`   | string | No       | Attach to this Project id                                      |
-| `project_name` | string | No       | Attach to this Project name                                    |
+| Parameter      | Type   | Required | Description                                                             |
+| -------------- | ------ | -------- | ----------------------------------------------------------------------- |
+| `name`         | string | Yes      | Service name                                                            |
+| `template`     | string | No       | `postgresql`, `mysql`, `redis`, `mongodb`, `neo4j`, `rabbitmq`, `minio` |
+| `image`        | string | No       | Custom Docker image                                                     |
+| `port`         | number | No       | Port number                                                             |
+| `project_id`   | string | No       | Attach to this Project id                                               |
+| `project_name` | string | No       | Attach to this Project name                                             |
 
 `create_service` requires `project_id` or `project_name`. This keeps new
 databases/caches attached to the isolated project Docker network used by the app
 that will consume them. Cross-project shared Database/Cache/Storage resources are not exposed in
 v0.1, and OpenLander does not expose Database/Cache resource ports over external
 TCP. Create the service with the target app's `project_id` or `project_name`.
-The standalone action does not write env vars to the app; use the returned
-`suggested_env` with `openlander_service.set_env_vars`, then `update_app`.
+The standalone action saves compatible connection env vars on the target workload
+when one exists and returns the same values in `suggested_env`. It does not
+redeploy the app; call `update_app` to apply them to a running workload.
+
+The `neo4j` template provisions Neo4j Community with Bolt port `7687` and a
+persistent `/data` volume. Its `suggested_env` contains `NEO4J_URI`,
+`NEO4J_USERNAME`, and `NEO4J_PASSWORD`. OpenLander disables the HTTP Browser
+server and does not expose Enterprise multi-database features. Generic volume backup/restore
+and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Neo4j.
 
 ### `list_services`
 

@@ -50,12 +50,16 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'ALREADY_CONNECTED', message: 'Service already connected' }, 409);
     }
 
+    const connectionEnv = await ctx.serviceManager.getSuggestedEnv(service, {
+      targetProjectId: project.id,
+    });
     const linker = new ManagedServiceLinker(ctx.db, ctx.env);
     const linked = await linker.connect({
       projectId: project.id,
       service,
       source: 'web',
       credentials: parseServiceCredentials(service.credentials),
+      connectionEnv,
     });
     const connection = await ctx.db.getServiceConnectionByProjectAndService(
       linked.resolvedProjectId,

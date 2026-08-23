@@ -63,6 +63,7 @@ function kindFromType(type: string): ServiceRow['kind'] {
       return 'mongo';
     case 'mysql':
     case 'redis':
+    case 'neo4j':
     case 'minio':
       return type;
     default:
@@ -142,6 +143,47 @@ describe('ServiceManager.create regressions', () => {
     expect(first.assigned_port).toEqual(expect.any(Number));
     expect(second.assigned_port).toEqual(expect.any(Number));
     expect(second.assigned_port).not.toBe(first.assigned_port);
+  });
+
+  it('creates a Neo4j Community service with Bolt-only networking and persistent data', async () => {
+    const db = createDbMock();
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    const created = await manager.create({
+      name: 'app-graph',
+      projectId: 'app-project',
+      template: 'neo4j',
+      network: 'ol-app-project',
+      aliases: ['app-graph'],
+    });
+
+    expect(created.kind).toBe('neo4j');
+    expect(created.image_url).toBe('neo4j:2026.07.1');
+    expect(JSON.parse(created.credentials ?? '{}')).toMatchObject({
+      user: 'neo4j',
+      database: 'neo4j',
+      host: 'ol-svc-app-graph',
+      port: 7687,
+      connectionString: 'neo4j://ol-svc-app-graph:7687',
+    });
+    expect(dockerHarness.docker.runServiceContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'neo4j:2026.07.1',
+        name: 'ol-svc-app-graph',
+        port: 7687,
+        network: 'ol-app-project',
+        aliases: ['app-graph'],
+        volumeBinds: ['ol-svc-data-app-graph:/data'],
+        envVars: expect.objectContaining({
+          NEO4J_AUTH: expect.stringMatching(/^neo4j\/[a-f0-9]{32}$/),
+          NEO4J_server_http_enabled: 'false',
+        }),
+        healthcheck: expect.objectContaining({
+          test: expect.arrayContaining(['CMD-SHELL']),
+        }),
+      }),
+    );
   });
 
   it('rolls back container and volume when service persistence fails', async () => {

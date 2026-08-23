@@ -1098,6 +1098,7 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
         expect.objectContaining({ id: 'mysql', image: 'mysql:8', port: 3306 }),
         expect.objectContaining({ id: 'redis', image: 'redis:7-alpine', port: 6379 }),
         expect.objectContaining({ id: 'mongodb', image: 'mongo:7', port: 27017 }),
+        expect.objectContaining({ id: 'neo4j', image: 'neo4j:2026.07.1', port: 7687 }),
       ]),
     );
   });
@@ -1124,6 +1125,10 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
         expect.objectContaining({
           id: 'mongodb',
           versions: expect.arrayContaining(['8', '7']),
+        }),
+        expect.objectContaining({
+          id: 'neo4j',
+          versions: expect.arrayContaining(['2026.07.1', '2025.10.1', '5.26.12']),
         }),
       ]),
     );

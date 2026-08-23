@@ -1,0 +1,2 @@
+ALTER TABLE "services" DROP CONSTRAINT "services_kind_check";--> statement-breakpoint
+ALTER TABLE "services" ADD CONSTRAINT "services_kind_check" CHECK ("services"."kind" IN ('git', 'image', 'compose', 'compose-child', 'postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio'));

@@ -218,8 +218,8 @@ describe('Auto env injection', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('injects DATABASE_URL for postgres service', () => {
-    const keys = autoInjectServiceEnv({
+  it('injects DATABASE_URL for postgres service', async () => {
+    const keys = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -233,8 +233,8 @@ describe('Auto env injection', () => {
     expect(env.getAll('p1').DATABASE_URL).toBe('postgresql://postgres:postgres@shared-pg:5432/app');
   });
 
-  it('injects REDIS_URL for redis service', () => {
-    const keys = autoInjectServiceEnv({
+  it('injects REDIS_URL for redis service', async () => {
+    const keys = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -248,8 +248,8 @@ describe('Auto env injection', () => {
     expect(env.getAll('p1').REDIS_URL).toBe('redis://shared-redis:6379');
   });
 
-  it('uses service name as hostname in env value', () => {
-    const value = autoInjectServiceEnv({
+  it('uses service name as hostname in env value', async () => {
+    const value = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -265,10 +265,10 @@ describe('Auto env injection', () => {
     expect(vars.DATABASE_URL).not.toContain('ol-svc-analytics-db');
   });
 
-  it('does not overwrite user-set env var', () => {
+  it('does not overwrite user-set env var', async () => {
     env.set('p1', 'DATABASE_URL', 'postgresql://custom-user:pw@custom:5432/app');
 
-    const keys = autoInjectServiceEnv({
+    const keys = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -282,7 +282,7 @@ describe('Auto env injection', () => {
     expect(env.getAll('p1').DATABASE_URL).toBe('postgresql://custom-user:pw@custom:5432/app');
   });
 
-  it('suffixes key for same-type duplicate connection', () => {
+  it('prefixes key for same-type duplicate connection', async () => {
     db.createService({
       id: 'svc-pg-1',
       name: 'primary-db',
@@ -301,7 +301,7 @@ describe('Auto env injection', () => {
     });
     db.createServiceConnection({ projectId: 'p1', serviceId: 'svc-pg-1' });
 
-    const keys = autoInjectServiceEnv({
+    const keys = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -311,14 +311,30 @@ describe('Auto env injection', () => {
       containerName: 'ol-svc-analytics-db',
     });
 
-    expect(keys).toEqual(['DATABASE_URL_ANALYTICS_DB']);
-    expect(env.getAll('p1').DATABASE_URL_ANALYTICS_DB).toBe(
+    expect(keys).toEqual(['ANALYTICS_DB_DATABASE_URL']);
+    expect(env.getAll('p1').ANALYTICS_DB_DATABASE_URL).toBe(
       'postgresql://postgres:postgres@analytics-db:5432/app',
     );
   });
 
-  it('returns empty array for unknown service type', () => {
-    const keys = autoInjectServiceEnv({
+  it('persists the caller-selected key unchanged', async () => {
+    const keys = await autoInjectServiceEnv({
+      db,
+      env,
+      projectId: 'p1',
+      serviceId: 'svc-redis',
+      serviceName: 'analytics-cache',
+      serviceType: 'redis',
+      containerName: 'ol-svc-analytics-cache',
+      connectionEnv: [{ key: 'ANALYTICS_CACHE_REDIS_URL', value: 'redis://analytics-cache:6379' }],
+    });
+
+    expect(keys).toEqual(['ANALYTICS_CACHE_REDIS_URL']);
+    expect(env.getAll('p1').ANALYTICS_CACHE_REDIS_URL).toBe('redis://analytics-cache:6379');
+  });
+
+  it('returns empty array for unknown service type', async () => {
+    const keys = await autoInjectServiceEnv({
       db,
       env,
       projectId: 'p1',
@@ -353,12 +369,12 @@ describe('Auto env cleanup on disconnect', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('removes only auto-injected env vars', () => {
+  it('removes only auto-injected env vars', async () => {
     env.set('p1', 'DATABASE_URL', 'postgresql://postgres:postgres@shared-pg:5432/app');
     env.set('p1', 'REDIS_URL', 'redis://shared-redis:6379');
     env.set('p1', 'USER_DEFINED', 'keep-me');
 
-    cleanupAutoInjectedEnv({
+    await cleanupAutoInjectedEnv({
       db,
       env,
       projectId: 'p1',
@@ -371,10 +387,10 @@ describe('Auto env cleanup on disconnect', () => {
     expect(vars.USER_DEFINED).toBe('keep-me');
   });
 
-  it('preserves user-set env vars', () => {
+  it('preserves user-set env vars', async () => {
     env.set('p1', 'DATABASE_URL', 'postgresql://custom:custom@custom-db:5432/app');
 
-    cleanupAutoInjectedEnv({
+    await cleanupAutoInjectedEnv({
       db,
       env,
       projectId: 'p1',
@@ -384,10 +400,10 @@ describe('Auto env cleanup on disconnect', () => {
     expect(env.getAll('p1').DATABASE_URL).toBe('postgresql://custom:custom@custom-db:5432/app');
   });
 
-  it('handles empty auto_injected_env_keys gracefully', () => {
+  it('handles empty auto_injected_env_keys gracefully', async () => {
     env.set('p1', 'KEEP_ME', '1');
 
-    cleanupAutoInjectedEnv({
+    await cleanupAutoInjectedEnv({
       db,
       env,
       projectId: 'p1',

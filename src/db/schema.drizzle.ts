@@ -482,6 +482,7 @@ export const services = pgTable(
         'mysql',
         'redis',
         'mongo',
+        'neo4j',
         'minio',
       ],
     }).notNull(),
@@ -546,7 +547,7 @@ export const services = pgTable(
   (table) => [
     check(
       'services_kind_check',
-      sql`${table.kind} IN ('git', 'image', 'compose', 'compose-child', 'postgres', 'mysql', 'redis', 'mongo', 'minio')`,
+      sql`${table.kind} IN ('git', 'image', 'compose', 'compose-child', 'postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio')`,
     ),
     index('idx_services_project').on(table.project_id),
     index('idx_services_kind').on(table.kind),
@@ -573,6 +574,7 @@ export type ServiceKind =
   | 'mysql'
   | 'redis'
   | 'mongo'
+  | 'neo4j'
   | 'minio';
 
 /**

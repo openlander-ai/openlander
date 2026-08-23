@@ -146,7 +146,7 @@ describe('ProjectRepo.listProjectsWithMetadata', () => {
     );
     expect(source).not.toContain('function deployableServiceKindFilter(kindColumn: SQL): SQL');
     expect(source).not.toContain(
-      "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose')",
+      "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio', 'compose')",
     );
   });
 });

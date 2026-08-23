@@ -106,7 +106,15 @@ describe('createServiceConnectionRoutes', () => {
       getAllForService: vi.fn(async () => ({})),
       setBulkForService: vi.fn(async () => true),
     };
-    const app = createApp({ db, env } as Partial<AppContext>);
+    const serviceManager = {
+      getSuggestedEnv: vi.fn(async () => [
+        {
+          key: 'DATABASE_URL',
+          value: 'postgresql://postgres:postgres@postgres-main:5432/app',
+        },
+      ]),
+    };
+    const app = createApp({ db, env, serviceManager } as Partial<AppContext>);
 
     const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
 
@@ -180,7 +188,15 @@ describe('createServiceConnectionRoutes', () => {
       })),
       setBulkForService: vi.fn(async () => true),
     };
-    const app = createApp({ db, env } as Partial<AppContext>);
+    const serviceManager = {
+      getSuggestedEnv: vi.fn(async () => [
+        {
+          key: 'DATABASE_URL',
+          value: 'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+        },
+      ]),
+    };
+    const app = createApp({ db, env, serviceManager } as Partial<AppContext>);
 
     const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
 
@@ -222,7 +238,15 @@ describe('createServiceConnectionRoutes', () => {
       getAll: vi.fn(async () => ({})),
       set: vi.fn(async () => true),
     };
-    const app = createApp({ db, env } as Partial<AppContext>);
+    const serviceManager = {
+      getSuggestedEnv: vi.fn(async () => [
+        {
+          key: 'DATABASE_URL',
+          value: 'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+        },
+      ]),
+    };
+    const app = createApp({ db, env, serviceManager } as Partial<AppContext>);
 
     const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
 

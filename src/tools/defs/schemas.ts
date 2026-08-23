@@ -535,7 +535,7 @@ export const createServiceSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Service template (postgresql, mysql, redis, mongodb, rabbitmq, minio). Provides auto-credentials, healthcheck, and default config. Can be combined with image to override the default Docker image while keeping template benefits.',
+      'Service template (postgresql, mysql, redis, mongodb, neo4j, rabbitmq, minio). Provides auto-credentials, healthcheck, and default config. Can be combined with image to override the default Docker image while keeping template benefits.',
     ),
   image: z
     .string()

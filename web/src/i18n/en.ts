@@ -1988,7 +1988,11 @@ export const translations = {
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: 'No Projects are connected to this resource.',
+        deferredTitle: 'Application connection pending',
+        deferredDescription:
+          'This resource belongs to a Project. Its runtime connection will be completed when the first Application or Compose workload is added.',
         openProject: 'Open project',
+        openOwningProject: 'Open owning project',
         error: 'Failed to load connected projects.',
       },
       credentials: {
@@ -2036,6 +2040,7 @@ export const translations = {
         mysql: 'MySQL',
         redis: 'Redis',
         mongo: 'MongoDB',
+        neo4j: 'Neo4j',
         minio: 'MinIO',
       },
     },

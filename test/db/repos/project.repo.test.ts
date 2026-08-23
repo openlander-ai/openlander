@@ -430,7 +430,13 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     // group (compose-children + plain git/image), excluding managed DBs and
     // the synthetic 'compose' parent meta. Mirror that here per-row.
     const MANAGED_AND_META: ReadonlySet<string> = new Set([
-      'postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose',
+      'postgres',
+      'mysql',
+      'redis',
+      'mongo',
+      'neo4j',
+      'minio',
+      'compose',
     ]);
     for (const row of batched) {
       const expectedEnvs = envRepo.getEnvironmentsByProject(row.project.id);
