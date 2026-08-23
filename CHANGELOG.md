@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add Neo4j as a managed storage service with automatic application bindings for
+  `NEO4J_URI`, `NEO4J_USERNAME`, and `NEO4J_PASSWORD`.
+
+### Fixed
+
+- Ignore commented and example-only environment variable references while
+  scanning application source, preventing false missing-variable warnings.
+
 ## [0.3.6-rc.12] - 2026-08-20
 
 ### Fixed
