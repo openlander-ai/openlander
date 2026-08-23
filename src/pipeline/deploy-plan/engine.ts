@@ -597,11 +597,12 @@ export class PlanEngine {
       detectedEnv.push({
         key: variable.key,
         source: variable.files[0]?.path ?? 'source',
-        // Compose is the explicit runtime contract. Source-only variables can
-        // belong to optional features, tests, or build tooling that the
-        // selected stack does not run, so keep them visible without blocking
-        // execution. Dockerfile deployments still require bare source usages.
-        required: sourceVarsRequired && !variable.optional,
+        // Source usage alone does not prove that a value is required: it can
+        // be an optional feature, fallback input, or build tooling. Block only
+        // when source contains an explicit validation contract. Env templates,
+        // Docker ARGs, and Compose declarations were added above and keep their
+        // own required status.
+        required: sourceVarsRequired && !variable.optional && variable.blocking === true,
       });
     }
   }
@@ -998,6 +999,7 @@ export class PlanEngine {
         service: created,
         source: 'deploy_plan',
         credentials: { connectionString },
+        connectionEnv: suggestedEnv,
       });
 
       return connectionString;
@@ -2230,6 +2232,10 @@ export class PlanEngine {
               service: reusable,
               source: 'deploy_plan',
               credentials: { connectionString },
+              // A deploy plan already owns the application-facing key. Preserve
+              // that resolved contract instead of asking the generic recommender
+              // to choose another key from the current project state.
+              connectionEnv: [{ key: envVarName, value: connectionString }],
             });
             return connectionString;
           },

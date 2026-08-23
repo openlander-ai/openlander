@@ -55,6 +55,7 @@ describe('ManagedServiceLinker.connect', () => {
       service: POSTGRES_SERVICE,
       source: 'mcp',
       credentials: { connectionString: 'postgres://host/db' },
+      connectionEnv: [{ key: 'APP_POSTGRES_DATABASE_URL', value: 'postgres://host/db' }],
     });
 
     expect(db.attachServiceToProject).toHaveBeenCalledWith('svc-pg', 'p1');
@@ -70,6 +71,7 @@ describe('ManagedServiceLinker.connect', () => {
         serviceId: 'svc-pg',
         serviceType: 'postgresql',
         credentials: { connectionString: 'postgres://host/db' },
+        connectionEnv: [{ key: 'APP_POSTGRES_DATABASE_URL', value: 'postgres://host/db' }],
       }),
     );
     expect(db.updateServiceConnection).toHaveBeenCalledWith('conn-1', {

@@ -28,6 +28,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import type { Database, ServiceRow } from '../src/db/index.js';
+import { ServiceOperationUnsupportedError } from '../src/errors.js';
 import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
 
@@ -41,6 +42,7 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
     mysql: 'mysql',
     redis: 'redis',
     mongo: 'mongo',
+    neo4j: 'neo4j',
     minio: 'minio',
   };
   return {
@@ -251,5 +253,50 @@ describe('ServiceManager backup Redis BGSAVE', () => {
         process.env.OPENLANDER_DATA_VOLUME = originalDataVolume;
       }
     }
+  });
+});
+
+describe('ServiceManager Neo4j backup safety', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects the generic live-volume backup path', async () => {
+    const neo4j = createService({
+      id: 'svc-neo4j',
+      name: 'app-graph',
+      type: 'neo4j',
+      kind: 'neo4j',
+      image: 'neo4j:2026.07.1',
+      container_id: 'svc-neo4j-container',
+      port: 7687,
+    });
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([neo4j]));
+
+    await expect(manager.backup('svc-neo4j')).rejects.toBeInstanceOf(
+      ServiceOperationUnsupportedError,
+    );
+    expect(dockerHarness.docker.runInfraContainer).not.toHaveBeenCalled();
+  });
+
+  it('rejects the generic raw-volume restore path', async () => {
+    const neo4j = createService({
+      id: 'svc-neo4j',
+      name: 'app-graph',
+      type: 'neo4j',
+      kind: 'neo4j',
+      image: 'neo4j:2026.07.1',
+      container_id: 'svc-neo4j-container',
+      port: 7687,
+    });
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([neo4j]));
+
+    await expect(manager.restore('svc-neo4j', 'app-graph-1')).rejects.toBeInstanceOf(
+      ServiceOperationUnsupportedError,
+    );
+    expect(dockerHarness.docker.stopContainer).not.toHaveBeenCalled();
+    expect(dockerHarness.docker.runInfraContainer).not.toHaveBeenCalled();
   });
 });

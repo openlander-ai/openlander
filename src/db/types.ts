@@ -231,6 +231,7 @@ export interface ServiceRow {
     | 'mysql'
     | 'redis'
     | 'mongo'
+    | 'neo4j'
     | 'minio';
   parent_service_id: string | null;
   runtime_role: 'application' | 'job' | 'resource';

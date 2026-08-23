@@ -10,6 +10,7 @@ import { ORPHAN_MANAGED_GROUP_ID } from '../db/service-ids.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { sleep } from '../lib/sleep.js';
 import { serviceContainerName, serviceVolumeName } from './helpers.js';
+import { isPlaceholderEnvValue } from './env-inject.js';
 import { ensureManagedTraefikNetwork } from './traefik.js';
 import {
   getServiceAdapter,
@@ -106,6 +107,7 @@ export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   mongodb: ['8', '7'],
   // Canonical alias so version resolution works when service.kind='mongo'
   mongo: ['8', '7'],
+  neo4j: ['2026.07.1', '2025.10.1', '5.26.12'],
   minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
   rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
@@ -187,6 +189,23 @@ const mongoTemplate: ServiceTemplate = {
   env: (c) => [`MONGO_INITDB_ROOT_USERNAME=${c.user}`, `MONGO_INITDB_ROOT_PASSWORD=${c.password}`],
 };
 
+const neo4jTemplate: ServiceTemplate = {
+  type: 'neo4j',
+  image: 'neo4j:2026.07.1',
+  port: 7687,
+  healthcheck: {
+    test: [
+      'CMD-SHELL',
+      'cypher-shell -a neo4j://localhost:7687 -u neo4j -p "${NEO4J_AUTH#*/}" "RETURN 1" >/dev/null 2>&1',
+    ],
+    interval: 30,
+    timeout: 10,
+    retries: 5,
+    startPeriod: 60,
+  },
+  env: (c) => [`NEO4J_AUTH=neo4j/${c.password}`, 'NEO4J_server_http_enabled=false'],
+};
+
 export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   postgresql: postgresTemplate,
   // Canonical alias — legacyTypeToKind() maps 'postgresql'→'postgres'
@@ -211,6 +230,7 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   mongodb: mongoTemplate,
   // Canonical alias — legacyTypeToKind() maps 'mongodb'→'mongo'
   mongo: mongoTemplate,
+  neo4j: neo4jTemplate,
   minio: {
     type: 'minio',
     image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
@@ -250,6 +270,7 @@ export const SERVICE_MEMORY_LIMITS: Record<
   redis: { memoryLimitBytes: 134217728, cpuShares: 256 }, // 128MB
   mongodb: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // 1GB
   mongo: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // canonical alias
+  neo4j: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // 1GB
   minio: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
   rabbitmq: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
 };
@@ -263,10 +284,11 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   postgres: 'DATABASE_URL', // canonical alias
   mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
-  mongodb: 'MONGODB_URL',
-  mongo: 'MONGODB_URL', // canonical alias
+  mongodb: 'MONGODB_URI',
+  mongo: 'MONGODB_URI', // canonical alias
+  neo4j: 'NEO4J_URI',
   minio: 'S3_ENDPOINT',
-  rabbitmq: 'RABBITMQ_URL',
+  rabbitmq: 'AMQP_URL',
 };
 
 export class ServiceManager {
@@ -331,6 +353,18 @@ export class ServiceManager {
       ];
     }
 
+    if (serviceKind === 'neo4j') {
+      const user = (credentials?.['user'] as string | undefined) ?? '';
+      const password = (credentials?.['password'] as string | undefined) ?? '';
+      const neo4jKeys = ['NEO4J_URI', 'NEO4J_USERNAME', 'NEO4J_PASSWORD'];
+      const shouldPrefix = await this.shouldPrefixSuggestedEnvKeys(service, neo4jKeys, opts);
+      return [
+        { key: `${shouldPrefix ? prefix : ''}NEO4J_URI`, value: connectionString },
+        { key: `${shouldPrefix ? prefix : ''}NEO4J_USERNAME`, value: user },
+        { key: `${shouldPrefix ? prefix : ''}NEO4J_PASSWORD`, value: password },
+      ];
+    }
+
     const shouldPrefix = await this.shouldPrefixSuggestedEnvKeys(service, [baseKey], opts);
     const key = shouldPrefix ? `${prefix}${baseKey}` : baseKey;
 
@@ -355,12 +389,19 @@ export class ServiceManager {
   }
 
   private async getProjectRuntimeEnvKeys(projectId: string): Promise<Set<string>> {
-    const keys = new Set(Object.keys(await this.db.getEnvVars(projectId)));
+    const keys = new Set<string>();
+    for (const [key, value] of Object.entries(await this.db.getEnvVars(projectId))) {
+      if (!isPlaceholderEnvValue(value)) {
+        keys.add(key);
+      }
+    }
     const envServices = await this.getProjectRuntimeEnvServices(projectId);
     for (const service of envServices) {
       const serviceEnv = await this.db.getEnvVarsForService(projectId, service.id);
-      for (const key of Object.keys(serviceEnv)) {
-        keys.add(key);
+      for (const [key, value] of Object.entries(serviceEnv)) {
+        if (!isPlaceholderEnvValue(value)) {
+          keys.add(key);
+        }
       }
     }
     return keys;
@@ -815,6 +856,9 @@ export class ServiceManager {
 
   async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {
     const service = await this.getRequiredService(id);
+    if (service.kind === 'neo4j') {
+      throw new ServiceOperationUnsupportedError('Backup', 'neo4j');
+    }
     const volumeName = this.getVolumeName(service.name);
     const backupDir = this.getBackupDir();
     const backupId = `${service.name}-${String(Date.now())}`;
@@ -895,6 +939,9 @@ export class ServiceManager {
 
   async restore(id: string, backupId: string): Promise<void> {
     const service = await this.getRequiredService(id);
+    if (service.kind === 'neo4j') {
+      throw new ServiceOperationUnsupportedError('Restore', 'neo4j');
+    }
     const backupDir = this.getBackupDir();
     const backupFilename = `${backupId}.tar.gz`;
     const backupPath = join(backupDir, backupFilename);
@@ -1656,9 +1703,9 @@ export class ServiceManager {
     host: string;
     port: number;
   } {
-    const user = 'openlander';
+    const user = type === 'neo4j' ? 'neo4j' : 'openlander';
     const password = randomBytes(16).toString('hex');
-    const database = this.toDatabaseName(name);
+    const database = type === 'neo4j' ? 'neo4j' : this.toDatabaseName(name);
 
     return {
       user,

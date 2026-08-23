@@ -104,6 +104,41 @@ describe('scanForEnvUsage', () => {
     expect(r.vars.map((v) => v.key)).toContain('REAL_VAR');
   });
 
+  it('skips non-runtime test, e2e, and QA tool directories', () => {
+    mkdirSync(join(tmp, 'src'), { recursive: true });
+    mkdirSync(join(tmp, 'test'), { recursive: true });
+    mkdirSync(join(tmp, 'e2e'), { recursive: true });
+    mkdirSync(join(tmp, 'tools', 'qa'), { recursive: true });
+    writeFileSync(join(tmp, 'src', 'app.ts'), 'const value = process.env.RUNTIME_KEY;');
+    writeFileSync(join(tmp, 'test', 'app.test.ts'), 'const value = process.env.TEST_KEY;');
+    writeFileSync(join(tmp, 'e2e', 'flow.ts'), 'const value = process.env.E2E_KEY;');
+    writeFileSync(join(tmp, 'tools', 'qa', 'runner.ts'), 'const value = process.env.QA_KEY;');
+
+    const keys = scanForEnvUsage(tmp).vars.map((v) => v.key);
+    expect(keys).toContain('RUNTIME_KEY');
+    expect(keys).not.toContain('TEST_KEY');
+    expect(keys).not.toContain('E2E_KEY');
+    expect(keys).not.toContain('QA_KEY');
+  });
+
+  it('ignores env-like text in comments and strings while scanning template expressions', () => {
+    writeFileSync(
+      join(tmp, 'app.ts'),
+      [
+        '// process.env.COMMENT_KEY',
+        "const snippet = 'process.env.STRING_KEY';",
+        'const rendered = `value: ${process.env.TEMPLATE_KEY}`;',
+        'const actual = process.env.ACTUAL_KEY;',
+      ].join('\n'),
+    );
+
+    const keys = scanForEnvUsage(tmp).vars.map((v) => v.key);
+    expect(keys).toContain('ACTUAL_KEY');
+    expect(keys).toContain('TEMPLATE_KEY');
+    expect(keys).not.toContain('COMMENT_KEY');
+    expect(keys).not.toContain('STRING_KEY');
+  });
+
   // Optional detection tests
   it('detects optional: true for process.env.KEY || "default"', () => {
     writeFileSync(join(tmp, 'app.ts'), "const x = process.env.DATABASE_URL || 'localhost';");
@@ -224,6 +259,7 @@ for (const item of schema) {
 
     expect(jwt).toBeDefined();
     expect(jwt?.optional).toBe(false);
+    expect(jwt?.blocking).toBe(true);
     expect(jwt?.requirement).toMatchObject({ kind: 'minlen', min: 16, source: 'schema' });
     expect(appBase).toBeDefined();
     expect(appBase?.optional).toBe(false);
@@ -236,6 +272,7 @@ for (const item of schema) {
     });
     expect(optional).toBeDefined();
     expect(optional?.optional).toBe(true);
+    expect(optional?.blocking).toBe(false);
     expect(optional?.requirement).toBeUndefined();
   });
 });

@@ -415,6 +415,39 @@ describe('PlanEngine.createPlan', () => {
     rmSync(repoPath, { recursive: true, force: true });
   });
 
+  it('keeps bare source-only environment usage advisory for Dockerfile deployments', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-source-env-'));
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(join(repoPath, 'server.js'), 'const token = process.env.FEATURE_TOKEN;\n');
+
+    mockCloneRepo.mockResolvedValue({
+      path: repoPath,
+      commitSha: 'source-env-advisory',
+    });
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockExistsSync.mockImplementation(actualFs.existsSync);
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
+
+    try {
+      const plan = await engine.createPlan({
+        repoUrl: 'https://github.com/test/source-env-app',
+        branch: 'main',
+      });
+
+      expect(plan.status).toBe('ready');
+      expect(plan.missing).not.toContain('FEATURE_TOKEN');
+      expect(plan.env.detected).toContainEqual(
+        expect.objectContaining({
+          key: 'FEATURE_TOKEN',
+          required: false,
+        }),
+      );
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it('surfaces needs_approval when postgresql is detected without a scoped service', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',

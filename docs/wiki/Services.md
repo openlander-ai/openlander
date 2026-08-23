@@ -6,7 +6,7 @@ OpenLander's user-facing resources are:
 | ----------- | ---------------------------------------------------------- | ---------------------------- |
 | Application | Your app, API, worker, or image workload.                  | `openlander_service`         |
 | Compose     | A compose stack represented as one Project-level resource. | `openlander_service`         |
-| Database    | PostgreSQL, MySQL, or MongoDB.                             | `openlander_managed_service` |
+| Database    | PostgreSQL, MySQL, MongoDB, or Neo4j.                      | `openlander_managed_service` |
 | Cache       | Redis.                                                     | `openlander_managed_service` |
 | Storage     | MinIO.                                                     | `openlander_managed_service` |
 
@@ -30,6 +30,7 @@ optional parent `aggregate_status`.
 | **MySQL**      | mysql:8               | 3306         | Relational database          |
 | **Redis**      | redis:7               | 6379         | Cache / message broker       |
 | **MongoDB**    | mongo:7               | 27017        | Document database            |
+| **Neo4j**      | neo4j:2026.07.1       | 7687         | Graph database (Bolt)        |
 | **RabbitMQ**   | rabbitmq:3-management | 5672         | Message queue                |
 | **MinIO**      | minio/minio           | 9000         | S3-compatible object storage |
 | **Custom**     | Any Docker image      | User-defined | Anything else                |
@@ -51,10 +52,10 @@ delete.
 create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 ```
 
-This creates infrastructure and returns connection guidance. It does not write
-app env vars, deploy, or redeploy your app by itself. To use the new resource
-from an app, read credentials or `suggested_env`, then call `set_env_vars` on
-the Application.
+This creates infrastructure, connects it to the Project, and saves compatible
+connection env vars on the target workload when one exists. It does not redeploy
+the app; call `update_app` to apply the saved values to a running workload. The
+response also returns `suggested_env` for review or manual configuration.
 
 `create_service` requires `project_id` or `project_name` so the resource is
 attached to the same isolated Docker network as the app that will use it.
@@ -112,6 +113,11 @@ create_service_user(
 ```
 
 Password is auto-generated if omitted.
+
+Neo4j is intentionally limited to the Community single-database model. The managed
+resource enables only Bolt on port `7687`, disables the HTTP server, persists `/data`, and returns
+`NEO4J_URI`, `NEO4J_USERNAME`, and `NEO4J_PASSWORD`. Database and user creation,
+the HTTP Browser port, and Enterprise-only multi-database features are not exposed.
 
 ---
 
@@ -172,6 +178,10 @@ operation returns `DEPLOY_LOCKED` with sanitized blocker evidence.
 ---
 
 ## Backups
+
+The generic OpenLander volume backup and restore actions are not available for Neo4j.
+A live tar copy of `/data` is not treated as a valid Neo4j backup. Use a reviewed,
+Neo4j-supported offline dump/load or export/import procedure outside this v0.1 scope.
 
 ### Create Backup
 
@@ -242,7 +252,7 @@ Typical agent flow:
 ```
 create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 get_service_credentials(service_name: "my-postgres")
-set_env_vars(service_id: "my-app__svc", variables: { DATABASE_URL: "..." })
+# If auto_injected_env_keys is empty, save or override suggested_env manually.
 update_app(service_id: "my-app__svc")
 ```
 
@@ -250,4 +260,5 @@ This standalone `create_service` flow is separate from deploy-plan approval.
 When `execute_deploy_plan` approves a proposed project-scoped Database/Cache/Storage resource on
 an existing project, that plan execution may provision the resource, write its
 connection env, and deploy in one flow. Standalone `create_service` remains
-explicit: create infrastructure, then set env vars, then `update_app`.
+explicit: create and connect infrastructure, review the saved/suggested env vars,
+then call `update_app`.

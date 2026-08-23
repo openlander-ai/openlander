@@ -30,6 +30,8 @@ export interface ManagedServiceConnectParams {
    * stays in the pipeline layer.
    */
   credentials?: Record<string, string>;
+  /** Exact connection env selected before attach; persisted without renaming. */
+  connectionEnv?: ReadonlyArray<{ key: string; value: string }>;
 }
 
 export interface ManagedServiceConnectResult {
@@ -41,7 +43,7 @@ export interface ManagedServiceConnectResult {
 
 function serviceDependencyType(serviceKind: string): 'database' | 'cache' | 'custom' {
   const normalized = serviceKind === 'postgresql' ? 'postgres' : serviceKind;
-  if (normalized === 'postgres' || normalized === 'mysql') {
+  if (normalized === 'postgres' || normalized === 'mysql' || normalized === 'neo4j') {
     return 'database';
   }
   if (normalized === 'redis') {
@@ -72,7 +74,7 @@ export class ManagedServiceLinker {
    * and the injected-key metadata is preserved when nothing new is injected.
    */
   async connect(params: ManagedServiceConnectParams): Promise<ManagedServiceConnectResult> {
-    const { projectId, service, source, credentials } = params;
+    const { projectId, service, source, credentials, connectionEnv } = params;
 
     const moved = await this.db.attachServiceToProject(service.id, projectId);
     const resolvedProjectId = moved.targetProjectId;
@@ -122,6 +124,7 @@ export class ManagedServiceLinker {
       serviceType: serviceKind,
       containerName: service.container_name ?? '',
       credentials,
+      connectionEnv,
     });
 
     // Only (over)write the injected-key metadata when this call actually injected

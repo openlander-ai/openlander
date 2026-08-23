@@ -26,6 +26,8 @@ function legacyTypeToKind(legacy: string | undefined): ServiceRow['kind'] {
       return 'mysql';
     case 'redis':
       return 'redis';
+    case 'neo4j':
+      return 'neo4j';
     case 'minio':
       return 'minio';
     default:
@@ -270,6 +272,9 @@ describe('MCP service tools (Task 8)', () => {
         ],
       },
     });
+    expect(serviceManager.getSuggestedEnv.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(ctx.env.setBulkForService).mock.invocationCallOrder[0]!,
+    );
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
     await expect(
@@ -350,6 +355,36 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         next_steps: expect.arrayContaining([expect.stringContaining('update_app')]),
       },
+    });
+  });
+
+  it('uses the same prefixed key for suggested and auto-injected env', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+    const connectionString = 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app';
+
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-analytics',
+        name: 'analytics-pg',
+        credentials: JSON.stringify({ connectionString }),
+      }),
+    );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'ANALYTICS_PG_DATABASE_URL', value: connectionString },
+    ]);
+
+    const result = await tool.execute(
+      { name: 'analytics-pg', template: 'postgresql', project_name: 'myapp' },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.env.setBulkForService).toHaveBeenCalledWith('proj-1', 'proj-1__svc', {
+      ANALYTICS_PG_DATABASE_URL: connectionString,
+    });
+    expect(result).toMatchObject({
+      suggested_env: [{ key: 'ANALYTICS_PG_DATABASE_URL', value: connectionString }],
+      auto_injected_env_keys: ['ANALYTICS_PG_DATABASE_URL'],
     });
   });
 
@@ -490,9 +525,15 @@ describe('MCP service tools (Task 8)', () => {
         type: 'mysql',
         port: 3306,
         credentials:
-          '{"host":"ol-svc-shared-mysql","port":3306,"user":"openlander","password":"mysqlpw"}',
+          '{"host":"ol-svc-shared-mysql","port":3306,"user":"openlander","password":"mysqlpw","connectionString":"mysql://openlander:mysqlpw@ol-svc-shared-mysql:3306/app"}',
       }),
     );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      {
+        key: 'DATABASE_URL',
+        value: 'mysql://openlander:mysqlpw@ol-svc-shared-mysql:3306/app',
+      },
+    ]);
 
     const result = await tool.execute(
       { name: 'shared-mysql', template: 'mysql', project_name: 'myapp' },
@@ -515,9 +556,15 @@ describe('MCP service tools (Task 8)', () => {
           port: 3306,
           user: 'openlander',
           password: 'mysqlpw',
+          connectionString: 'mysql://openlander:mysqlpw@ol-svc-shared-mysql:3306/app',
         },
       },
-      suggested_env: [],
+      suggested_env: [
+        {
+          key: 'DATABASE_URL',
+          value: 'mysql://openlander:mysqlpw@ol-svc-shared-mysql:3306/app',
+        },
+      ],
       auto_injected_env_keys: ['DATABASE_URL'],
       externalAccess: [
         { host: '10.0.0.10', port: 3306, type: 'lan' },
@@ -553,6 +600,9 @@ describe('MCP service tools (Task 8)', () => {
           '{"host":"ol-svc-shared-redis","port":6379,"connectionString":"redis://ol-svc-shared-redis:6379"}',
       }),
     );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' },
+    ]);
 
     const result = await tool.execute(
       { name: 'shared-redis', template: 'redis', project_name: 'myapp' },
@@ -576,7 +626,7 @@ describe('MCP service tools (Task 8)', () => {
           connectionString: 'redis://ol-svc-shared-redis:6379',
         },
       },
-      suggested_env: [],
+      suggested_env: [{ key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' }],
       auto_injected_env_keys: ['REDIS_URL'],
       externalAccess: [
         { host: '10.0.0.10', port: 6379, type: 'lan' },
@@ -595,6 +645,65 @@ describe('MCP service tools (Task 8)', () => {
       template: 'redis',
       network: 'ol-myapp',
       aliases: ['shared-redis'],
+    });
+  });
+
+  it('create_service wires Neo4j URI, username, and password into the project', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-neo4j',
+        name: 'app-graph',
+        type: 'neo4j',
+        kind: 'neo4j',
+        image: 'neo4j:2026.07.1',
+        port: 7687,
+        credentials: JSON.stringify({
+          host: 'ol-svc-app-graph',
+          port: 7687,
+          user: 'neo4j',
+          password: 'graphpw',
+          database: 'neo4j',
+          connectionString: 'neo4j://ol-svc-app-graph:7687',
+        }),
+      }),
+    );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'NEO4J_URI', value: 'neo4j://ol-svc-app-graph:7687' },
+      { key: 'NEO4J_USERNAME', value: 'neo4j' },
+      { key: 'NEO4J_PASSWORD', value: 'graphpw' },
+    ]);
+
+    const result = await tool.execute(
+      { name: 'app-graph', template: 'neo4j', project_name: 'myapp' },
+      { target: 'mcp' },
+    );
+
+    expect(serviceManager.create).toHaveBeenCalledWith({
+      name: 'app-graph',
+      projectId: 'proj-1',
+      template: 'neo4j',
+      network: 'ol-myapp',
+      aliases: ['app-graph'],
+    });
+    expect(ctx.env.setBulkForService).toHaveBeenCalledWith('proj-1', 'proj-1__svc', {
+      NEO4J_URI: 'neo4j://ol-svc-app-graph:7687',
+      NEO4J_USERNAME: 'neo4j',
+      NEO4J_PASSWORD: 'graphpw',
+    });
+    expect(ctx.db.createProjectDependency).toHaveBeenCalledWith(
+      expect.objectContaining({ dependency_type: 'database' }),
+    );
+    expect(result).toMatchObject({
+      status: 'created',
+      service: { id: 'svc-neo4j', type: 'neo4j', port: 7687 },
+      suggested_env: [
+        { key: 'NEO4J_URI', value: 'neo4j://ol-svc-app-graph:7687' },
+        { key: 'NEO4J_USERNAME', value: 'neo4j' },
+        { key: 'NEO4J_PASSWORD', value: 'graphpw' },
+      ],
+      auto_injected_env_keys: ['NEO4J_URI', 'NEO4J_USERNAME', 'NEO4J_PASSWORD'],
     });
   });
 

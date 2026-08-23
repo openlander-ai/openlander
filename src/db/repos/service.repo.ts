@@ -16,6 +16,7 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
   'mysql',
   'redis',
   'mongo',
+  'neo4j',
   'minio',
 ];
 
@@ -51,6 +52,7 @@ export function normalizeKind(kind: string): ServiceKind {
     'mysql',
     'redis',
     'mongo',
+    'neo4j',
     'minio',
   ];
   return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'image';
@@ -79,6 +81,7 @@ function inferManagedKindFromCredentials(raw: string | null): ServiceKind | null
   if (/^mysql:\/\//i.test(connectionString)) return 'mysql';
   if (/^redis:\/\//i.test(connectionString)) return 'redis';
   if (/^mongodb(?:\+srv)?:\/\//i.test(connectionString)) return 'mongo';
+  if (/^neo4j(?:\+s|\+ssc)?:\/\//i.test(connectionString)) return 'neo4j';
   return null;
 }
 

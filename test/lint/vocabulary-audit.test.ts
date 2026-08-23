@@ -182,7 +182,7 @@ describe('vocabulary-audit (Project resources / compatibility service guardrail)
       "const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
     );
     expect(projectRepo).not.toMatch(
-      /s\.kind NOT IN \('postgres', 'mysql', 'redis', 'mongo', 'minio'/,
+      /s\.kind NOT IN \('postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio'/,
     );
     expect(projectRepo.match(/deployableServiceKindFilter\(sql`s\.kind`\)/g)).toHaveLength(3);
   });

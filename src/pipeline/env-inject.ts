@@ -37,6 +37,7 @@ export const SERVICE_ENV_MAP: Record<
   // infra-analyzer's suggested key; MONGO_URL stays a recognized input alias only.
   mongo: { varName: 'MONGODB_URI', template: (s) => `mongodb://${s}:27017/app` },
   mongodb: { varName: 'MONGODB_URI', template: (s) => `mongodb://${s}:27017/app` },
+  neo4j: { varName: 'NEO4J_URI', template: (s) => `neo4j://${s}:7687` },
   rabbitmq: { varName: 'AMQP_URL', template: (s) => `amqp://${s}:5672` },
 };
 
@@ -71,7 +72,7 @@ function normalizeServiceType(serviceType: string): string {
   return normalized;
 }
 
-function toServiceNameSuffix(serviceName: string): string {
+function toServiceNamePrefix(serviceName: string): string {
   return serviceName
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_')
@@ -79,7 +80,7 @@ function toServiceNameSuffix(serviceName: string): string {
     .replace(/_+/g, '_');
 }
 
-function isPlaceholderEnvValue(value: string): boolean {
+export function isPlaceholderEnvValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   const placeholderPattern =
     /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/;
@@ -103,7 +104,42 @@ export async function autoInjectServiceEnv(params: {
   serviceType: string;
   containerName: string;
   credentials?: Record<string, string>;
+  /**
+   * Exact connection variables selected by the caller before attachment.
+   * When present, these entries are the contract: the injector persists these
+   * keys and returns the same keys instead of independently deriving names.
+   */
+  connectionEnv?: ReadonlyArray<{ key: string; value: string }>;
 }): Promise<string[]> {
+  const targetServiceId = await loadProjectEnvService(params.db, params.projectId);
+  const allVars = targetServiceId
+    ? await params.env.getAllForService(params.projectId, targetServiceId)
+    : await params.env.getAll(params.projectId);
+
+  if (params.connectionEnv) {
+    const valuesToSet = Object.fromEntries(
+      params.connectionEnv
+        .filter(({ key }) => {
+          const currentValue = allVars[key];
+          return typeof currentValue !== 'string' || isPlaceholderEnvValue(currentValue);
+        })
+        .map(({ key, value }) => [key, value]),
+    );
+    const injectedKeys = Object.keys(valuesToSet);
+    if (injectedKeys.length === 0) {
+      return [];
+    }
+
+    if (targetServiceId) {
+      await params.env.setBulkForService(params.projectId, targetServiceId, valuesToSet);
+    } else {
+      for (const [key, value] of Object.entries(valuesToSet)) {
+        await params.env.set(params.projectId, key, value);
+      }
+    }
+    return injectedKeys;
+  }
+
   const mapping = SERVICE_ENV_MAP[normalizeServiceType(params.serviceType)];
   if (!mapping) {
     return [];
@@ -127,19 +163,52 @@ export async function autoInjectServiceEnv(params: {
     }
   }
 
-  const envKey = hasSameTypeConnection
-    ? `${mapping.varName}_${toServiceNameSuffix(params.serviceName)}`
-    : mapping.varName;
+  const keyPrefix = hasSameTypeConnection ? `${toServiceNamePrefix(params.serviceName)}_` : '';
+  const envKey = `${keyPrefix}${mapping.varName}`;
   const credentialValue = params.credentials?.['connectionString'];
   const envValue =
     typeof credentialValue === 'string' && credentialValue.trim().length > 0
       ? credentialValue.trim()
       : mapping.template(params.serviceName);
 
-  const targetServiceId = await loadProjectEnvService(params.db, params.projectId);
-  const allVars = targetServiceId
-    ? await params.env.getAllForService(params.projectId, targetServiceId)
-    : await params.env.getAll(params.projectId);
+  if (normalizeServiceType(params.serviceType) === 'neo4j') {
+    const username = params.credentials?.['user'];
+    const password = params.credentials?.['password'];
+    if (
+      typeof username !== 'string' ||
+      username.trim().length === 0 ||
+      typeof password !== 'string' ||
+      password.length === 0
+    ) {
+      return [];
+    }
+
+    const neo4jVars: Record<string, string> = {
+      [`${keyPrefix}NEO4J_URI`]: envValue,
+      [`${keyPrefix}NEO4J_USERNAME`]: username,
+      [`${keyPrefix}NEO4J_PASSWORD`]: password,
+    };
+    const valuesToSet = Object.fromEntries(
+      Object.entries(neo4jVars).filter(([key]) => {
+        const currentValue = allVars[key];
+        return typeof currentValue !== 'string' || isPlaceholderEnvValue(currentValue);
+      }),
+    );
+    const injectedKeys = Object.keys(valuesToSet);
+    if (injectedKeys.length === 0) {
+      return [];
+    }
+
+    if (targetServiceId) {
+      await params.env.setBulkForService(params.projectId, targetServiceId, valuesToSet);
+    } else {
+      for (const [key, value] of Object.entries(valuesToSet)) {
+        await params.env.set(params.projectId, key, value);
+      }
+    }
+    return injectedKeys;
+  }
+
   const existingValue = allVars[envKey];
   if (typeof existingValue === 'string' && !isPlaceholderEnvValue(existingValue)) {
     return [];

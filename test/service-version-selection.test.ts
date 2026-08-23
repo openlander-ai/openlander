@@ -41,6 +41,7 @@ describe('AVAILABLE_VERSIONS constant', () => {
     expect(AVAILABLE_VERSIONS.mysql).toBeDefined();
     expect(AVAILABLE_VERSIONS.redis).toBeDefined();
     expect(AVAILABLE_VERSIONS.mongodb).toBeDefined();
+    expect(AVAILABLE_VERSIONS.neo4j).toBeDefined();
   });
 
   it('should have array of strings for each template', () => {
@@ -73,6 +74,10 @@ describe('AVAILABLE_VERSIONS constant', () => {
 
   it('mongodb should have 2 versions with latest first', () => {
     expect(AVAILABLE_VERSIONS.mongodb).toEqual(['8', '7']);
+  });
+
+  it('neo4j should offer current and compatibility versions', () => {
+    expect(AVAILABLE_VERSIONS.neo4j).toEqual(['2026.07.1', '2025.10.1', '5.26.12']);
   });
 });
 
