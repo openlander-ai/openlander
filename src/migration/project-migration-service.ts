@@ -97,9 +97,12 @@ function sanitizeUrl(raw: string | null): string | null {
     const parsed = new URL(raw);
     parsed.username = '';
     parsed.password = '';
+    // Migration artifacts must never carry credential-bearing query strings or fragments.
+    parsed.search = '';
+    parsed.hash = '';
     return parsed.toString();
   } catch {
-    return raw.replace(/^(https?:\/\/)[^/@\s]+@/i, '$1');
+    return raw.replace(/[?#].*$/, '').replace(/^(https?:\/\/)[^/@\s]+@/i, '$1');
   }
 }
 

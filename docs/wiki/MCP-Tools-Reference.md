@@ -163,29 +163,29 @@ Composite catalog:
 
 ## Tool Categories
 
-| Category                                                  | Tools | Description                                                     |
-| --------------------------------------------------------- | ----- | --------------------------------------------------------------- |
-| [Deploy Plan](#deploy-plan)                               | 6     | Create, inspect, update, execute deploy plans                   |
-| [Deployment Controls](#deployment-controls)               | 7     | Status, cancel, rollback, previews                              |
-| [Project Operations](#project-operations)                 | 7     | Project lifecycle, listing, and Project-scoped config           |
-| [Delivery Workspace](#delivery-workspace)                 | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview |
-| [Agent Delivery Run](#agent-delivery-run)                 | 8     | Plan, verify, hand off, resume, cancel, or complete             |
-| [Project Manifest](#project-manifest)                     | 3     | Register source and apply/inspect Project configuration         |
+| Category                                                  | Tools | Description                                                                         |
+| --------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                               | 6     | Create, inspect, update, execute deploy plans                                       |
+| [Deployment Controls](#deployment-controls)               | 7     | Status, cancel, rollback, previews                                                  |
+| [Project Operations](#project-operations)                 | 7     | Project lifecycle, listing, and Project-scoped config                               |
+| [Delivery Workspace](#delivery-workspace)                 | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview                     |
+| [Agent Delivery Run](#agent-delivery-run)                 | 8     | Plan, verify, hand off, resume, cancel, or complete                                 |
+| [Project Manifest](#project-manifest)                     | 3     | Register source and apply/inspect Project configuration                             |
 | [Migration Planning](#migration-planning)                 | 4     | Export a neutral graph, compare targets, inspect PostgreSQL, and build a DB runbook |
-| [Release and Promotion](#release-and-promotion)           | 6     | Build once, promote an immutable digest, recall, or roll back   |
-| [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
-| [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads          |
-| [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                                 |
-| [Resources](#services--infrastructure)                    | 17    | Create databases, manage infrastructure resources               |
-| [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                        |
-| [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL      |
-| [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes              |
-| [Git & Repository](#git--repository)                      | 4     | Scan repos, list GitHub repos                                   |
-| [Monitoring](#monitoring--logs)                           | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis   |
-| [Debug](#debug--troubleshooting)                          | 1     | Build logs for external-agent analysis                          |
-| [Volume Management](#volume-management)                   | 5     | Docker volumes, disk cleanup                                    |
-| [Infrastructure Analysis](#infrastructure-analysis)       | 2     | Repo analysis, web search                                       |
-| [Platform Admin](#platform-admin)                         | 13    | Health, events, docker inspect                                  |
+| [Release and Promotion](#release-and-promotion)           | 6     | Build once, promote an immutable digest, recall, or roll back                       |
+| [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF                          |
+| [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads                              |
+| [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                                                     |
+| [Resources](#services--infrastructure)                    | 17    | Create databases, manage infrastructure resources                                   |
+| [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                                            |
+| [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL                          |
+| [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes                                  |
+| [Git & Repository](#git--repository)                      | 4     | Scan repos, list GitHub repos                                                       |
+| [Monitoring](#monitoring--logs)                           | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis                       |
+| [Debug](#debug--troubleshooting)                          | 1     | Build logs for external-agent analysis                                              |
+| [Volume Management](#volume-management)                   | 5     | Docker volumes, disk cleanup                                                        |
+| [Infrastructure Analysis](#infrastructure-analysis)       | 2     | Repo analysis, web search                                                           |
+| [Platform Admin](#platform-admin)                         | 13    | Health, events, docker inspect                                                      |
 
 ---
 

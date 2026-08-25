@@ -110,7 +110,8 @@ describe('ProjectMigrationService', () => {
       id: 'app-1',
       name: 'api',
       kind: 'git',
-      repo_url: 'https://token@example.com/acme/api.git',
+      repo_url:
+        'https://oauth:password-secret@example.com/acme/api.git?access_token=query-secret#fragment-secret',
       branch: 'main',
       container_id: 'container-app',
       container_name: 'api',
@@ -269,7 +270,9 @@ describe('ProjectMigrationService', () => {
     );
     expect(snapshot.readiness.status).toBe('needs_attention');
     expect(serialized).not.toContain('must-not-appear');
-    expect(serialized).not.toContain('token@example.com');
+    expect(serialized).not.toContain('password-secret');
+    expect(serialized).not.toContain('query-secret');
+    expect(serialized).not.toContain('fragment-secret');
     expect(serialized).not.toContain('encrypted_content');
   });
 

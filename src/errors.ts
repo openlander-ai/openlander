@@ -948,6 +948,25 @@ export class PostgresMigrationRehearsalNotFoundError extends OpenLanderError {
   }
 }
 
+export class PostgresMigrationMetadataInvalidError extends OpenLanderError {
+  constructor(field: string) {
+    super(
+      'A PostgreSQL migration metadata response was invalid.',
+      'POSTGRES_MIGRATION_METADATA_INVALID',
+      500,
+      { field },
+    );
+    this.name = 'PostgresMigrationMetadataInvalidError';
+  }
+}
+
+export class PostgresMigrationRehearsalStepError extends OpenLanderError {
+  constructor(code: string, message: string) {
+    super(message, code, 409);
+    this.name = 'PostgresMigrationRehearsalStepError';
+  }
+}
+
 export class BlueGreenStabilityError extends OpenLanderError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'BLUE_GREEN_STABILITY_FAILED', 500, details);

@@ -7,9 +7,11 @@ import type { Database } from '../db/index.js';
 import type { ProjectRow, ServiceRow } from '../db/types.js';
 import {
   PostgresMigrationPreflightError,
+  PostgresMigrationMetadataInvalidError,
   PostgresMigrationRehearsalConflictError,
   PostgresMigrationRehearsalInputError,
   PostgresMigrationRehearsalNotFoundError,
+  PostgresMigrationRehearsalStepError,
   PostgresMigrationSelectionRequiredError,
   PostgresMigrationSourceNotFoundError,
   ProjectNotFoundError,
@@ -148,51 +150,41 @@ const SYSTEM_IDENTIFIER_SQL = 'SELECT system_identifier::text FROM pg_control_sy
 const TERMINAL_RETENTION_MS = 6 * 60 * 60 * 1000;
 const MINIMUM_DUMP_HEADROOM_BYTES = 64 * 1024 * 1024;
 
-class RehearsalStepError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'RehearsalStepError';
-  }
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('invalid record');
+    throw new PostgresMigrationMetadataInvalidError('record');
   }
   return value as Record<string, unknown>;
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
-  if (typeof value !== 'string') throw new Error(`invalid ${key}`);
+  if (typeof value !== 'string') throw new PostgresMigrationMetadataInvalidError(key);
   return value;
 }
 
 function requiredNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new Error(`invalid ${key}`);
+    throw new PostgresMigrationMetadataInvalidError(key);
   }
   return value;
 }
 
 function stringArray(record: Record<string, unknown>, key: string): string[] {
   const value = record[key];
-  if (!Array.isArray(value)) throw new Error(`invalid ${key}`);
+  if (!Array.isArray(value)) throw new PostgresMigrationMetadataInvalidError(key);
   const entries = value as unknown[];
   return entries
     .map((entry) => {
-      if (typeof entry !== 'string') throw new Error(`invalid ${key}`);
+      if (typeof entry !== 'string') throw new PostgresMigrationMetadataInvalidError(key);
       return entry;
     })
     .sort((left, right) => left.localeCompare(right, 'en'));
 }
 
 function parseExtensions(value: unknown): PostgresMigrationExtension[] {
-  if (!Array.isArray(value)) throw new Error('invalid extensions');
+  if (!Array.isArray(value)) throw new PostgresMigrationMetadataInvalidError('extensions');
   return value
     .map((entry) => {
       const record = asRecord(entry);
@@ -205,12 +197,12 @@ function parseExtensions(value: unknown): PostgresMigrationExtension[] {
 }
 
 function parseRoles(value: unknown): { roles: PostgresMigrationRole[]; truncated: boolean } {
-  if (!Array.isArray(value)) throw new Error('invalid roles');
+  if (!Array.isArray(value)) throw new PostgresMigrationMetadataInvalidError('roles');
   const roles = value.map((entry) => {
     const record = asRecord(entry);
     const boolean = (key: string): boolean => {
       const candidate = record[key];
-      if (typeof candidate !== 'boolean') throw new Error(`invalid ${key}`);
+      if (typeof candidate !== 'boolean') throw new PostgresMigrationMetadataInvalidError(key);
       return candidate;
     };
     return {
@@ -621,10 +613,16 @@ export class PostgresMigrationExecutionService {
     try {
       result = await this.runtime.execSimple(containerId, command, { env });
     } catch {
-      throw new RehearsalStepError(code, 'The PostgreSQL command could not be executed.');
+      throw new PostgresMigrationRehearsalStepError(
+        code,
+        'The PostgreSQL command could not be executed.',
+      );
     }
     if (result.exitCode !== 0) {
-      throw new RehearsalStepError(code, 'The PostgreSQL command did not complete successfully.');
+      throw new PostgresMigrationRehearsalStepError(
+        code,
+        'The PostgreSQL command did not complete successfully.',
+      );
     }
     return result.stdout;
   }
@@ -633,13 +631,21 @@ export class PostgresMigrationExecutionService {
     containerId: string,
     command: string[],
     env: string[],
-  ): Promise<string | null> {
-    try {
-      const result = await this.runtime.execSimple(containerId, command, { env });
-      return result.exitCode === 0 && result.stdout.trim() ? result.stdout.trim() : null;
-    } catch {
-      return null;
+  ): Promise<string> {
+    const stdout = await this.executeSql(
+      containerId,
+      command,
+      env,
+      'POSTGRES_MIGRATION_CLUSTER_IDENTITY_CHECK_FAILED',
+    );
+    const identifier = stdout.trim();
+    if (!identifier) {
+      throw new PostgresMigrationRehearsalStepError(
+        'POSTGRES_MIGRATION_CLUSTER_IDENTITY_CHECK_FAILED',
+        'OpenLander could not prove that the target PostgreSQL cluster differs from the source.',
+      );
     }
+    return identifier;
   }
 
   private async executeRehearsal(
@@ -652,7 +658,7 @@ export class PostgresMigrationExecutionService {
     try {
       const containerId = selected.service.container_id ?? selected.service.container_name;
       if (!containerId) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_SOURCE_CONTAINER_MISSING',
           'The source PostgreSQL container is unavailable.',
         );
@@ -667,7 +673,7 @@ export class PostgresMigrationExecutionService {
           .filter((value): value is string => typeof value === 'string')
           .some((value) => value.toLowerCase() === normalizedTargetHost)
       ) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_MATCHES_SOURCE_CLUSTER',
           'The target resolves to the source PostgreSQL cluster.',
         );
@@ -692,26 +698,26 @@ export class PostgresMigrationExecutionService {
       try {
         targetMetadata = parseTargetMetadata(targetStdout, sourceExtensionNames);
       } catch {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_PREFLIGHT_INVALID',
           'The target PostgreSQL metadata response was invalid.',
         );
       }
       run.target_preflight = publicTargetMetadata(targetMetadata);
       if (!targetMetadata.empty) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_NOT_EMPTY',
           'The target database is not empty. Rehearsal restore was not started.',
         );
       }
       if (targetMetadata.server_major_version < sourcePreflight.metadata.server_major_version) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_VERSION_INCOMPATIBLE',
           'The target PostgreSQL major version is older than the source.',
         );
       }
       if (targetMetadata.unsupported_source_extensions.length > 0) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_EXTENSION_UNAVAILABLE',
           'One or more source extensions are unavailable on the target.',
         );
@@ -729,8 +735,8 @@ export class PostgresMigrationExecutionService {
           targetEnv(target),
         ),
       ]);
-      if (sourceSystemId && targetSystemId && sourceSystemId === targetSystemId) {
-        throw new RehearsalStepError(
+      if (sourceSystemId === targetSystemId) {
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_TARGET_MATCHES_SOURCE_CLUSTER',
           'The target resolves to the source PostgreSQL cluster.',
         );
@@ -742,7 +748,7 @@ export class PostgresMigrationExecutionService {
         Math.ceil(sourcePreflight.metadata.database_size_bytes * 1.25) +
         MINIMUM_DUMP_HEADROOM_BYTES;
       if (!Number.isFinite(availableBytes) || availableBytes < requiredBytes) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_INSUFFICIENT_DISK',
           'The OpenLander host does not have enough temporary disk space for a safe rehearsal dump.',
         );
@@ -769,14 +775,14 @@ export class PostgresMigrationExecutionService {
           { env: sourceEnv(sourceCredentials.password) },
         );
       } catch {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_DUMP_FAILED',
           'The source dump did not complete successfully.',
         );
       }
       const dump = await stat(dumpPath);
       if (dump.size <= 0) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_DUMP_EMPTY',
           'The source dump archive was empty.',
         );
@@ -803,7 +809,7 @@ export class PostgresMigrationExecutionService {
           { env: targetEnv(target) },
         );
       } catch {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_RESTORE_FAILED',
           'The target restore failed. Inspect the target before retrying with a fresh empty database.',
         );
@@ -820,7 +826,7 @@ export class PostgresMigrationExecutionService {
       try {
         observed = parseTargetMetadata(verificationStdout, sourceExtensionNames);
       } catch {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_VERIFICATION_INVALID',
           'The target verification response was invalid.',
         );
@@ -834,7 +840,7 @@ export class PostgresMigrationExecutionService {
         extensions_restored: sourceExtensionNames.every((extension) => installed.has(extension)),
       };
       if (Object.values(verification).some((value) => !value)) {
-        throw new RehearsalStepError(
+        throw new PostgresMigrationRehearsalStepError(
           'POSTGRES_MIGRATION_VERIFICATION_FAILED',
           'The restored target object counts did not match the source preflight.',
         );
@@ -852,9 +858,9 @@ export class PostgresMigrationExecutionService {
       const run = this.rehearsals.get(runId);
       if (!run) return;
       const safeError =
-        error instanceof RehearsalStepError
+        error instanceof PostgresMigrationRehearsalStepError
           ? error
-          : new RehearsalStepError(
+          : new PostgresMigrationRehearsalStepError(
               'POSTGRES_MIGRATION_REHEARSAL_FAILED',
               'The PostgreSQL migration rehearsal failed.',
             );

@@ -275,6 +275,35 @@ describe('PostgresMigrationExecutionService', () => {
     expect(fakeRuntime.execFromFile).not.toHaveBeenCalled();
   });
 
+  it('fails closed before dump when cluster identity cannot be verified', async () => {
+    const fakeRuntime = runtime();
+    fakeRuntime.execSimple.mockImplementationOnce(async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify(sourceMetadata()),
+      stderr: '',
+    }));
+    fakeRuntime.execSimple.mockImplementationOnce(async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify(targetMetadata(true)),
+      stderr: '',
+    }));
+    fakeRuntime.execSimple.mockImplementationOnce(async () => ({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'permission denied',
+    }));
+    const service = new PostgresMigrationExecutionService(database() as never, fakeRuntime.backend);
+
+    const started = await service.startRehearsal('project-1', 'postgres-1', target);
+    const finished = await waitForTerminal(service, started.run_id);
+
+    expect(finished.status).toBe('failed');
+    expect(finished.error?.code).toBe('POSTGRES_MIGRATION_CLUSTER_IDENTITY_CHECK_FAILED');
+    expect(finished.execution_policy.target_changes_started).toBe(false);
+    expect(fakeRuntime.execToFile).not.toHaveBeenCalled();
+    expect(fakeRuntime.execFromFile).not.toHaveBeenCalled();
+  });
+
   it('rejects loopback targets and missing human confirmation before starting', async () => {
     const fakeRuntime = runtime();
     const service = new PostgresMigrationExecutionService(database() as never, fakeRuntime.backend);
