@@ -1222,11 +1222,34 @@ The standalone action saves compatible connection env vars on the target workloa
 when one exists and returns the same values in `suggested_env`. It does not
 redeploy the app; call `update_app` to apply them to a running workload.
 
+For PostgreSQL extension images, `create_service` keeps `DATABASE_URL` as the sole connection
+secret and returns implementation guidance based on the selected image family:
+
+| Image family                 | Optional application selector          | Boundary               |
+| ---------------------------- | -------------------------------------- | ---------------------- |
+| `pgvector/pgvector`          | `VECTOR_STORE_BACKEND=pgvector`        | `VectorStore`          |
+| `apache/age`                 | `GRAPH_STORE_BACKEND=age`              | `GraphRepository`      |
+| `postgis/postgis`            | `SPATIAL_STORE_BACKEND=postgis`        | `SpatialRepository`    |
+| `timescale/timescaledb[-ha]` | `TIMESERIES_STORE_BACKEND=timescaledb` | `TimeSeriesRepository` |
+
+OpenLander does not auto-inject these selectors or duplicate `DATABASE_URL` under capability-specific
+names. The selected Docker image must contain extension binaries; versioned application migrations
+own `CREATE EXTENSION IF NOT EXISTS` and runtime code keeps extension-specific SQL behind its
+adapter/repository boundary.
+
 The `neo4j` template provisions Neo4j Community with Bolt port `7687` and a
 persistent `/data` volume. Its `suggested_env` contains `NEO4J_URI`,
 `NEO4J_USERNAME`, and `NEO4J_PASSWORD`. OpenLander disables the HTTP Browser
 server and does not expose Enterprise multi-database features. Generic volume backup/restore
 and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Neo4j.
+
+For a new MinIO connection, the `minio` template returns `OBJECT_STORAGE_PROVIDER`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. The
+returned `_agent_guidance` tells agents to map those values to the selected provider SDK inside an
+infrastructure adapter, configure bucket/prefix separately, and persist logical store + object key
+references instead of provider URLs. Existing Projects keep any stored `S3_ENDPOINT` / `AWS_*`
+values; OpenLander does not auto-rename or remove them. Automatic legacy aliases are not added to a
+new connection.
 
 ### `list_services`
 
@@ -1264,6 +1287,9 @@ Provide either `service_id` or `service_name`. Applications are intentionally re
 
 `command` must be an argv array such as `["psql", "-U", "openlander", "-c", "SELECT 1"]`.
 Shell strings like `"psql -U openlander"` are intentionally rejected.
+Do not use this action to package-install PostgreSQL extensions into a running container. Select a
+reviewed Docker image containing the extension, activate it through a versioned database migration,
+and use this action only for bounded verification when necessary.
 
 `remove_service` follows the effective destructive-action permission. It executes when allowed,
 enters the human approval queue when approval is required, and returns
@@ -1382,6 +1408,12 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 
 `create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` follows the effective
 destructive-action permission: allow, approval hold, or block.
+
+`create_bucket` returns portability guidance with the created bucket. Agents should configure
+`OBJECT_STORAGE_BUCKET` and optional `OBJECT_STORAGE_PREFIX` at the application infrastructure
+boundary, keep S3/MinIO credentials behind an adapter, and avoid persisting provider URLs as
+business data. Existing legacy keys remain untouched unless the user explicitly migrates the
+application adapter. This guidance does not provision an AWS/GCP bucket or copy objects.
 
 ### Backup Operations
 
