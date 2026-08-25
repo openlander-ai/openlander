@@ -541,7 +541,7 @@ export const createServiceSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Docker image (e.g., pgvector/pgvector:pg17). When used with template, overrides the template default image. When used alone, port is required.',
+      'Docker image (for example pgvector/pgvector:pg17 or apache/age:release_PG17_1.6.0). When used with the postgresql template, the image supplies extension binaries while OpenLander keeps the standard DATABASE_URL connection contract. When used alone, port is required.',
     ),
   port: z
     .number()

@@ -35,6 +35,35 @@ optional parent `aggregate_status`.
 | **MinIO**      | minio/minio           | 9000         | S3-compatible object storage |
 | **Custom**     | Any Docker image      | User-defined | Anything else                |
 
+### PostgreSQL Extension-Ready Applications
+
+PostgreSQL extensions do not need separate connection secrets. Keep `DATABASE_URL` as the only
+PostgreSQL connection URL, select an image that already contains the required extension binaries,
+and activate extensions through versioned application migrations. Do not install extension
+packages into a running database container.
+
+When an application genuinely supports multiple implementations, keep the selection at an
+application-owned adapter boundary:
+
+| PostgreSQL capability | Optional selector                      | Application boundary   |
+| --------------------- | -------------------------------------- | ---------------------- |
+| pgvector              | `VECTOR_STORE_BACKEND=pgvector`        | `VectorStore`          |
+| Apache AGE            | `GRAPH_STORE_BACKEND=age`              | `GraphRepository`      |
+| PostGIS               | `SPATIAL_STORE_BACKEND=postgis`        | `SpatialRepository`    |
+| TimescaleDB           | `TIMESERIES_STORE_BACKEND=timescaledb` | `TimeSeriesRepository` |
+
+These selectors are ordinary application configuration, not credentials, and OpenLander does not
+inject them automatically. Do not create duplicate secrets such as `AGE_DATABASE_URL` or
+`VECTOR_DATABASE_URL` while the capability uses the same PostgreSQL instance. Application
+migrations should use an allowlisted `CREATE EXTENSION IF NOT EXISTS ...` statement and verify the
+extension through `pg_available_extensions` / `pg_extension`.
+
+For AGE, prefer a provider-neutral `GRAPH_NAMESPACE` over an AGE-specific graph-name variable.
+Keep AGE connection bootstrap and Cypher behind `GraphRepository`, retain relational tables as the
+source of truth, and treat the graph as a rebuildable projection. Standard PostgreSQL JSONB is the
+default document-storage option; a Mongo-compatible gateway is a separate runtime concern rather
+than another connection variable.
+
 ---
 
 ## Create a Database/Cache/Storage resource
