@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.15] - 2026-08-26
+
+### Added
+
+- Add provider-neutral `OBJECT_STORAGE_*` bindings for new MinIO connections
+  with guidance for portable object keys and storage adapters.
+- Add extension-aware PostgreSQL implementation guidance for pgvector, Apache
+  AGE, PostGIS, and TimescaleDB while retaining `DATABASE_URL` as the connection
+  contract.
+
+### Changed
+
+- Preserve existing MinIO `S3_ENDPOINT` and `AWS_*` bindings instead of
+  rewriting application configuration during an upgrade.
+- Require PostgreSQL extension images to contain their binaries and direct
+  applications to activate extensions through versioned migrations rather than
+  modifying running database containers.
+
 ## [0.3.6-rc.14] - 2026-08-26
 
 ### Added
