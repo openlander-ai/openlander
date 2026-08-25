@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add provider-neutral Project migration snapshots and target comparisons for
+  AWS ECS/Fargate and Google Cloud Run through the web UI and MCP.
+- Add PostgreSQL migration runbooks, read-only preflight checks, and a
+  human-session-only rehearsal that restores into a verified empty target.
+
+### Security
+
+- Fail closed before PostgreSQL dump or restore when the target cluster identity
+  cannot be verified, and redact credentials from persisted migration artifacts.
+
 ## [0.3.6-rc.13] - 2026-08-23
 
 ### Added
