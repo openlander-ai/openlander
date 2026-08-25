@@ -11,6 +11,13 @@ export interface EnvVarChange {
   op: EnvVarChangeOp;
 }
 
+export interface EnvVarMetadataRow {
+  project_id: string;
+  service_id: string | null;
+  environment_id: string | null;
+  key: string;
+}
+
 interface EnvScope {
   projectId: string;
   serviceId?: string;
@@ -283,6 +290,22 @@ export class EnvVarRepo {
       result[row.key] = row.value;
     }
     return result;
+  }
+
+  /**
+   * Project migration/read-model query. Intentionally omits `value` so
+   * callers cannot accidentally serialize secret or configuration values.
+   */
+  async listMetadataByProject(projectId: string): Promise<EnvVarMetadataRow[]> {
+    return await this.db
+      .select({
+        project_id: envVars.project_id,
+        service_id: envVars.service_id,
+        environment_id: envVars.environment_id,
+        key: envVars.key,
+      })
+      .from(envVars)
+      .where(eq(envVars.project_id, projectId));
   }
 
   async setEnvVar(

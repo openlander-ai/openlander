@@ -518,6 +518,7 @@ export class Database implements AuthDatabase {
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
   getEnvironmentsByServiceId(serviceId: string) { return this.environmentRepo.getEnvironmentsByServiceId(serviceId); }
+  getEnvironmentsByServiceIds(serviceIds: readonly string[]) { return this.environmentRepo.getEnvironmentsByServiceIds(serviceIds); }
   getEnvironmentsByProjectIds(projectIds: string[]) { return this.environmentRepo.getEnvironmentsByProjectIds(projectIds); }
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { return this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { return this.environmentRepo.deleteEnvironment(id); }
@@ -554,6 +555,7 @@ export class Database implements AuthDatabase {
   listDeliveryProjectContext(deliveryId: string) { return this.projectUpdateRepo.listDeliveryContext(deliveryId); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
   getEnvVarsForService(projectId: string, serviceId: string, environmentId?: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId, environmentId); }
+  listEnvVarMetadataByProject(projectId: string) { return this.envVarRepo.listMetadataByProject(projectId); }
   setEnvVar(projectId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVar(projectId, key, value, environmentId); }
   setEnvVarForService(projectId: string, serviceId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVarForService(projectId, serviceId, key, value, environmentId); }
   setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.setEnvVarsBulk(projectId, vars, environmentId); }
@@ -570,6 +572,7 @@ export class Database implements AuthDatabase {
   setGlobalSecret(key: string, encryptedValue: string, iv: string, description?: string) { return this.globalSecretRepo.setGlobalSecret(key, encryptedValue, iv, description); }
   deleteGlobalSecret(key: string) { return this.globalSecretRepo.deleteGlobalSecret(key); }
   getSecretFiles(projectId: string | null) { return this.secretFileRepo.getSecretFiles(projectId); }
+  listSecretFileMetadataByProject(projectId: string) { return this.secretFileRepo.listMetadataByProject(projectId); }
   getSecretFilesForDeploy(projectId: string) { return this.secretFileRepo.getSecretFilesForDeploy(projectId); }
   upsertSecretFile(projectId: string | null, filename: string, encryptedContent: string, iv: string, mountPath: string = '/run/secrets') { return this.secretFileRepo.upsertSecretFile(projectId, filename, encryptedContent, iv, mountPath); }
   deleteSecretFile(projectId: string | null, filename: string) { return this.secretFileRepo.deleteSecretFile(projectId, filename); }

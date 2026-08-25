@@ -856,6 +856,98 @@ export class ServiceSelectionRequiredError extends OpenLanderError {
   }
 }
 
+export class PostgresMigrationSourceNotFoundError extends OpenLanderError {
+  constructor(projectId: string, serviceId?: string | null) {
+    super(
+      serviceId
+        ? 'The selected Service is not an active Project-owned PostgreSQL resource.'
+        : 'This Project has no active Project-owned PostgreSQL resource.',
+      'POSTGRES_MIGRATION_SOURCE_NOT_FOUND',
+      404,
+      { project_id: projectId, service_id: serviceId ?? null },
+    );
+    this.name = 'PostgresMigrationSourceNotFoundError';
+  }
+}
+
+export class PostgresMigrationSelectionRequiredError extends OpenLanderError {
+  constructor(projectId: string, candidates: Array<{ service_id: string; service_name: string }>) {
+    super(
+      'This Project has multiple PostgreSQL resources. Specify service_id.',
+      'POSTGRES_MIGRATION_SELECTION_REQUIRED',
+      400,
+      { project_id: projectId, candidates },
+    );
+    this.name = 'PostgresMigrationSelectionRequiredError';
+  }
+}
+
+export class PostgresMigrationTargetInvalidError extends OpenLanderError {
+  constructor(target: string | null) {
+    super(
+      'Select aws_rds_postgresql or gcp_cloud_sql_postgresql as the PostgreSQL migration target.',
+      'POSTGRES_MIGRATION_TARGET_INVALID',
+      400,
+      {
+        target,
+        allowed_targets: ['aws_rds_postgresql', 'gcp_cloud_sql_postgresql'],
+      },
+    );
+    this.name = 'PostgresMigrationTargetInvalidError';
+  }
+}
+
+export class PostgresMigrationPreflightError extends OpenLanderError {
+  constructor(
+    reason: 'source_not_running' | 'container_missing' | 'query_failed' | 'invalid_response',
+    serviceId: string,
+  ) {
+    super(
+      'OpenLander could not inspect the selected PostgreSQL source.',
+      'POSTGRES_MIGRATION_PREFLIGHT_FAILED',
+      409,
+      { reason, service_id: serviceId },
+    );
+    this.name = 'PostgresMigrationPreflightError';
+  }
+}
+
+export class PostgresMigrationRehearsalInputError extends OpenLanderError {
+  constructor(field: string, reason: string) {
+    super(
+      'The PostgreSQL rehearsal target is invalid.',
+      'POSTGRES_MIGRATION_REHEARSAL_INPUT_INVALID',
+      400,
+      { field, reason },
+    );
+    this.name = 'PostgresMigrationRehearsalInputError';
+  }
+}
+
+export class PostgresMigrationRehearsalConflictError extends OpenLanderError {
+  constructor(projectId: string, runId: string) {
+    super(
+      'A PostgreSQL migration rehearsal is already running for this Project.',
+      'POSTGRES_MIGRATION_REHEARSAL_CONFLICT',
+      409,
+      { project_id: projectId, run_id: runId },
+    );
+    this.name = 'PostgresMigrationRehearsalConflictError';
+  }
+}
+
+export class PostgresMigrationRehearsalNotFoundError extends OpenLanderError {
+  constructor(projectId: string, runId: string) {
+    super(
+      'The PostgreSQL migration rehearsal was not found. In-memory runs are lost when OpenLander restarts.',
+      'POSTGRES_MIGRATION_REHEARSAL_NOT_FOUND',
+      404,
+      { project_id: projectId, run_id: runId },
+    );
+    this.name = 'PostgresMigrationRehearsalNotFoundError';
+  }
+}
+
 export class BlueGreenStabilityError extends OpenLanderError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'BLUE_GREEN_STABILITY_FAILED', 500, details);

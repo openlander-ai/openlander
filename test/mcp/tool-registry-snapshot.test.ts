@@ -39,6 +39,7 @@ const EXPECTED_TOOLS = [
   'cancel_deploy',
   'cleanup_docker',
   'cleanup_preview',
+  'compare_migration_targets',
   'complete_delivery',
   'create_bucket',
   'create_delivery',
@@ -79,6 +80,9 @@ const EXPECTED_TOOLS = [
   'get_env_var',
   'get_instance_info',
   'get_logs',
+  'get_migration_preflight',
+  'get_migration_runbook',
+  'get_migration_snapshot',
   'get_project_context',
   'get_project_manifest',
   'get_project_stats',
@@ -212,8 +216,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 138 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(138);
+  it('maintains exactly 142 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(142);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

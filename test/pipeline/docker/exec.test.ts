@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 import { PassThrough } from 'node:stream';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -249,6 +249,86 @@ describe('execToFile', () => {
       await docker.execToFile('database-id', ['pg_dump'], outputPath);
 
       expect(await readFile(outputPath)).toEqual(dump);
+      expect(execInspect).toHaveBeenCalledOnce();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('passes environment values to the binary output command without adding them to argv', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'openlander-exec-to-file-env-'));
+    const outputPath = join(root, 'backup.pgdump');
+    try {
+      const execStream = new PassThrough();
+      const containerExec = vi.fn().mockResolvedValueOnce({
+        start: vi.fn().mockResolvedValueOnce(execStream),
+        inspect: vi.fn().mockResolvedValueOnce({ ExitCode: 0 }),
+      });
+      mockGetContainer.mockReturnValueOnce({ exec: containerExec });
+      mockDemuxStream.mockImplementationOnce(
+        (stream: NodeJS.ReadableStream, stdout: PassThrough) => {
+          stream.resume();
+          stdout.write(Buffer.from('dump'));
+        },
+      );
+      setTimeout(() => execStream.end(), 5);
+
+      const docker = new Docker();
+      await docker.execToFile('database-id', ['pg_dump'], outputPath, {
+        env: ['PGPASSWORD=secret'],
+      });
+
+      expect(containerExec).toHaveBeenCalledWith({
+        Cmd: ['pg_dump'],
+        Env: ['PGPASSWORD=secret'],
+        AttachStdout: true,
+        AttachStderr: true,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('execFromFile', () => {
+  beforeEach(resetMocks);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('streams binary file bytes to container stdin and waits for a successful exit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'openlander-exec-from-file-'));
+    const inputPath = join(root, 'backup.pgdump');
+    const archive = Buffer.from([0, 1, 2, 255, 10]);
+    await writeFile(inputPath, archive);
+    try {
+      const execStream = new PassThrough();
+      const inputChunks: Buffer[] = [];
+      execStream.on('data', (chunk: Buffer) => inputChunks.push(chunk));
+      const execInspect = vi.fn().mockResolvedValueOnce({ ExitCode: 0 });
+      const containerExec = vi.fn().mockResolvedValueOnce({
+        start: vi.fn().mockResolvedValueOnce(execStream),
+        inspect: execInspect,
+      });
+      mockGetContainer.mockReturnValueOnce({ exec: containerExec });
+      mockDemuxStream.mockImplementationOnce(
+        (_stream: NodeJS.ReadableStream, stdout: PassThrough, stderr: PassThrough) => {
+          stdout.end();
+          stderr.end();
+        },
+      );
+
+      const docker = new Docker();
+      await docker.execFromFile('database-id', ['pg_restore'], inputPath, {
+        env: ['PGPASSWORD=secret'],
+      });
+
+      expect(Buffer.concat(inputChunks)).toEqual(archive);
+      expect(containerExec).toHaveBeenCalledWith({
+        Cmd: ['pg_restore'],
+        Env: ['PGPASSWORD=secret'],
+        AttachStdin: true,
+        AttachStdout: true,
+        AttachStderr: true,
+      });
       expect(execInspect).toHaveBeenCalledOnce();
     } finally {
       await rm(root, { recursive: true, force: true });

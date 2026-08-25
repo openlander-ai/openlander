@@ -67,7 +67,10 @@ export interface RuntimeBackend {
     ...args: Parameters<ContainerOps['waitForHealthy']>
   ): ReturnType<ContainerOps['waitForHealthy']>;
   listManagedContainers(serverId?: string): ReturnType<ContainerOps['listManagedContainers']>;
-  listAllContainers(serverId?: string): ReturnType<ContainerOps['listAllContainers']>;
+  listAllContainers(
+    serverId?: string,
+    options?: Parameters<ContainerOps['listAllContainers']>[0],
+  ): ReturnType<ContainerOps['listAllContainers']>;
 
   buildImage(
     contextPath: Parameters<ImageOps['buildImage']>[0],
@@ -144,6 +147,20 @@ export interface RuntimeBackend {
     opts?: Parameters<ExecOps['execSimple']>[2],
     serverId?: string,
   ): ReturnType<ExecOps['execSimple']>;
+  execToFile(
+    containerId: Parameters<ExecOps['execToFile']>[0],
+    cmd: Parameters<ExecOps['execToFile']>[1],
+    outputPath: Parameters<ExecOps['execToFile']>[2],
+    opts?: Parameters<ExecOps['execToFile']>[3],
+    serverId?: string,
+  ): ReturnType<ExecOps['execToFile']>;
+  execFromFile(
+    containerId: Parameters<ExecOps['execFromFile']>[0],
+    cmd: Parameters<ExecOps['execFromFile']>[1],
+    inputPath: Parameters<ExecOps['execFromFile']>[2],
+    opts?: Parameters<ExecOps['execFromFile']>[3],
+    serverId?: string,
+  ): ReturnType<ExecOps['execFromFile']>;
   execStream(...args: Parameters<ExecOps['execStream']>): ReturnType<ExecOps['execStream']>;
   execTerminal(...args: Parameters<ExecOps['execTerminal']>): ReturnType<ExecOps['execTerminal']>;
 

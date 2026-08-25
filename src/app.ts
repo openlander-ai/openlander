@@ -79,6 +79,7 @@ import {
 } from './operations/index.js';
 import { PlatformUpdater } from './update/platform-updater.js';
 import { VERSION } from './version.js';
+import { ProjectMigrationService } from './migration/project-migration-service.js';
 
 const log = createModuleLogger('app');
 
@@ -238,6 +239,7 @@ export interface AppContext {
   evidenceUploadService: EvidenceUploadService;
   deliveryReviewPackageService: DeliveryReviewPackageService;
   projectManifestService: ProjectManifestService;
+  projectMigrationService: ProjectMigrationService;
   releaseService: ReleaseService;
   releasePromotionService: ReleasePromotionService;
   weeklyReportService: WeeklyReportService;
@@ -384,6 +386,7 @@ export async function createAppContext(
     () => config.language,
   );
   const runtime: RuntimeBackend = docker;
+  const projectMigrationService = new ProjectMigrationService(db, runtime);
   const serverContext = createLocalServerContext(docker);
 
   const jobManager = new JobManager();
@@ -643,6 +646,7 @@ export async function createAppContext(
     evidenceUploadService,
     deliveryReviewPackageService,
     projectManifestService,
+    projectMigrationService,
     releaseService,
     releasePromotionService,
     weeklyReportService,

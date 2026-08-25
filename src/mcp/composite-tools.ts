@@ -105,6 +105,10 @@ export const PROJECT_ACTIONS = [
   'register_project_repository',
   'apply_project_manifest',
   'get_project_manifest',
+  'get_migration_snapshot',
+  'compare_migration_targets',
+  'get_migration_runbook',
+  'get_migration_preflight',
   'record_project_update',
   'get_project_context',
   'get_project_update',
@@ -145,7 +149,7 @@ export const PROJECT_ACTIONS = [
  * openlander_managed_service (rc.2): Database/Cache/Storage resources.
  * Renamed from `SERVICE_ACTIONS` — see plan §6.7. The 21-action list is
  * frozen verbatim from the rc.1 SERVICE_ACTIONS baseline.
- * - Database/Cache/Storage resource provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
+ * - Database/Cache/Storage resource provisioning (PostgreSQL, MySQL, Redis, MongoDB, Neo4j, MinIO)
  * - Read-only Project-aware data inspection
  * - Resource lifecycle (start, stop, remove)
  * - Resource credentials & connection strings
@@ -274,7 +278,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 49 tools
+ * - PROJECT_ACTIONS: 64 action slots
  * - MANAGED_SERVICE_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 15 tools

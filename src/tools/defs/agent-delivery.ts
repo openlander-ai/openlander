@@ -9,6 +9,10 @@ import {
   registerProjectRepositoryOperation,
 } from '../../operations/definitions/project-manifest.js';
 import { projectUpdateOperations } from '../../operations/definitions/project-update.js';
+import { getMigrationSnapshotOperation } from '../../operations/definitions/migration.js';
+import { compareMigrationTargetsOperation } from '../../operations/definitions/migration-targets.js';
+import { getMigrationRunbookOperation } from '../../operations/definitions/migration-runbook.js';
+import { getMigrationPreflightOperation } from '../../operations/definitions/migration-preflight.js';
 import type { ApplicationOperationDefinition } from '../../operations/types.js';
 import type { ToolDef } from './types.js';
 
@@ -99,5 +103,9 @@ export const projectManifestToolDefs: ToolDef[] = [
   registerProjectRepositoryOperation,
   applyProjectManifestOperation,
   getProjectManifestOperation,
+  getMigrationSnapshotOperation,
+  compareMigrationTargetsOperation,
+  getMigrationRunbookOperation,
+  getMigrationPreflightOperation,
   ...projectUpdateOperations,
 ].map((definition) => operationToolDef(definition));

@@ -1632,6 +1632,159 @@ export const translations = {
       errorPort: 'Port must be a positive integer.',
       errorCreate: 'Failed to create application',
     },
+    migration: {
+      more: 'More Project actions',
+      prepare: 'Prepare migration',
+      title: 'Prepare migration package',
+      description:
+        'Inspect this Project and download a provider-neutral JSON snapshot and Markdown migration plan.',
+      loading: 'Inspecting Project resources and runtime metadata…',
+      loadError: 'Failed to prepare the migration package',
+      retry: 'Try again',
+      status: {
+        ready: 'Ready to plan migration',
+        needs_attention: 'Review required before migration',
+        blocked: 'Migration inputs are blocked',
+      },
+      runtime: 'Runtime inspection: {status}',
+      runtimeObserved: '{count} Project container(s) observed',
+      runtimeStatus: {
+        complete: 'Complete',
+        partial: 'Partial',
+        unavailable: 'Unavailable',
+      },
+      counts: {
+        workloads: 'Workloads',
+        data: 'Data',
+        volumes: 'Volumes',
+        blockers: 'Blockers',
+        warnings: 'Warnings',
+      },
+      empty: 'This Project has no Application or Compose resource to migrate yet.',
+      findings: 'Migration findings',
+      checks: {
+        NO_DEPLOYABLE_SERVICE: 'Add an Application or Compose workload before migration.',
+        SOURCE_REFERENCE_MISSING: 'A required repository or image reference is missing.',
+        DEPLOY_REVISION_MISSING: 'Select and verify an exact source revision.',
+        IMAGE_REFERENCE_MUTABLE: 'Pin the image reference to a sha256 digest.',
+        IMAGE_ID_MISSING: 'The runtime image ID could not be recorded.',
+        HEALTH_CHECK_MISSING: 'Add or verify a destination health check for this workload.',
+        COMPOSE_DEFINITION_REVIEW_REQUIRED:
+          'Review Compose files, overlays, profiles, and traffic routing manually.',
+        STATEFUL_DATA_EXPORT_REQUIRED:
+          'Plan a resource-specific logical export and import for this data service.',
+        PERSISTENT_VOLUME_TRANSFER_REQUIRED:
+          'Plan an explicit transfer for the observed persistent volumes or bind mounts.',
+        TARGET_ENV_INPUT_REQUIRED:
+          'Re-enter the excluded environment-variable values at the destination.',
+        TARGET_SECRET_FILE_INPUT_REQUIRED: 'Recreate the project secret files at the destination.',
+        DOMAIN_CUTOVER_REQUIRED: 'Validate the destination before planning domain and DNS cutover.',
+        DOCKER_UNAVAILABLE: 'Docker runtime metadata could not be inspected.',
+        CONTAINER_INVENTORY_FAILED: 'The Docker container inventory could not be inspected.',
+        VOLUME_INVENTORY_FAILED: 'The Docker volume inventory could not be inspected.',
+        DISK_USAGE_FAILED: 'Docker volume sizes could not be inspected.',
+        RUNTIME_CONTAINER_UNMATCHED:
+          'A stored container ID was not present in the Docker inventory.',
+        RUNTIME_METADATA_INCOMPLETE:
+          'Some active services have no observable Docker container metadata.',
+      },
+      noCloudChanges:
+        'Snapshot, target comparison, runbook, and preflight are read-only. Only an explicitly started rehearsal writes to the confirmed target database; it never changes the source.',
+      secretsExcluded:
+        'Environment values, global secrets, and secret file contents are excluded from all downloads.',
+      targets: {
+        title: 'Cloud target comparison',
+        status: {
+          compatible: 'Compatible',
+          review_required: 'Review required',
+          blocked: 'Blocked',
+        },
+        summary: '{services} services · {reviews} reviews · {blockers} blockers',
+        more: '+{count} more mappings in TARGETS.md',
+        disclaimer:
+          'These are planning recommendations only. Account, region, quota, IAM, compatibility, and pricing are not verified.',
+      },
+      runbook: {
+        title: 'PostgreSQL migration runbook',
+        description:
+          'Generate reviewed pg_dump/pg_restore templates for one Project-owned PostgreSQL database.',
+        empty: 'No active Project-owned PostgreSQL database is available for a runbook.',
+        database: 'Source database',
+        selectDatabase: 'Select PostgreSQL',
+        target: 'Destination',
+        targets: {
+          aws_rds_postgresql: 'AWS RDS for PostgreSQL',
+          gcp_cloud_sql_postgresql: 'GCP Cloud SQL for PostgreSQL',
+        },
+        generate: 'Generate runbook',
+        generating: 'Generating…',
+        loadError: 'Failed to prepare the PostgreSQL migration runbook',
+        status: {
+          needs_input: 'Operator inputs and rehearsal required',
+          blocked: 'Runbook is blocked',
+        },
+        summary: '{phases} phases · {inputs} required inputs',
+        writeFreeze: 'A verified write freeze is required for final cutover.',
+        downloadJson: 'Download runbook JSON',
+        downloadMarkdown: 'Download RUNBOOK.md',
+      },
+      preflight: {
+        inspect: 'Run preflight',
+        inspecting: 'Inspecting…',
+        loadError: 'Failed to inspect PostgreSQL migration readiness',
+        ready: 'Source preflight complete',
+        size: 'Database size',
+        tables: 'Tables',
+        sequences: 'Sequences',
+        extensions: 'Extensions',
+        readOnly:
+          'Read-only metadata inspection. Table rows, credential values, and secret values were not read or returned.',
+      },
+      rehearsal: {
+        title: 'Safe rehearsal restore',
+        description:
+          'Dump the source read-only and restore it to a fresh empty managed PostgreSQL target. OpenLander checks the target before writing.',
+        host: 'Target host',
+        hostPlaceholder: 'Managed PostgreSQL endpoint',
+        port: 'Port',
+        database: 'Target database',
+        user: 'Target user',
+        password: 'Target password',
+        confirmEmpty:
+          'I confirm this is a disposable, newly created empty target database and authorize OpenLander to restore data into it.',
+        credentialPolicy:
+          'TLS is required. The password is used only for this run and is never stored, logged, or returned.',
+        start: 'Start rehearsal',
+        starting: 'Starting…',
+        startError: 'Failed to start the PostgreSQL migration rehearsal',
+        statusError: 'Failed to refresh the PostgreSQL migration rehearsal',
+        retryStatus: 'Retry status',
+        status: {
+          queued: 'Rehearsal queued',
+          running: 'Rehearsal running',
+          succeeded: 'Rehearsal succeeded',
+          failed: 'Rehearsal failed',
+        },
+        phaseLabel: 'Phase: {phase}',
+        phase: {
+          queued: 'Queued',
+          preflight_source: 'Inspecting source',
+          preflight_target: 'Checking empty target and compatibility',
+          dumping: 'Creating source dump',
+          restoring: 'Restoring target in one transaction',
+          verifying: 'Verifying restored objects',
+          completed: 'Completed',
+          failed: 'Stopped safely',
+        },
+        result: 'Dump {size} · {seconds}s elapsed · object verification passed',
+        failedDetail: 'Stopped with {code}. Use a fresh empty target before retrying.',
+        ephemeral:
+          'This status is kept only in memory and disappears when OpenLander restarts. No automatic target cleanup is performed.',
+      },
+      downloadJson: 'Download migration.json',
+      downloadMarkdown: 'Download MIGRATION.md',
+      downloadTargets: 'Download TARGETS.md',
+    },
     serviceDelete: {
       title: 'Delete this Application',
       body: 'Remove the container and Application-owned configuration. Project volumes are preserved unless explicitly selected.',

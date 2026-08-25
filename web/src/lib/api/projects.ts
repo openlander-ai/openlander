@@ -40,6 +40,248 @@ export interface EnvironmentEnvVarsResponse {
 export type ProjectWithOptionalEnvironments = Project & { environments?: Environment[] };
 type BackendProjectWithOptionalEnvironments = Project & { environments?: BackendEnvironment[] };
 
+export interface ProjectMigrationReadinessCheck {
+  code: string;
+  level: 'pass' | 'warning' | 'blocker';
+  message: string;
+  service_id: string | null;
+}
+
+export interface ProjectMigrationSnapshot {
+  schema_version: 'openlander.project-migration/v1';
+  generated_at: string;
+  project: { id: string; name: string; display_name: string };
+  services: Array<{
+    id: string;
+    project_id: string;
+    ownership: 'project' | 'connected';
+    name: string;
+    kind:
+      | 'git'
+      | 'image'
+      | 'compose'
+      | 'compose-child'
+      | 'postgres'
+      | 'mysql'
+      | 'redis'
+      | 'mongo'
+      | 'neo4j'
+      | 'minio';
+    archived_at: string | null;
+  }>;
+  volumes: Array<{ id: string }>;
+  runtime_inspection: {
+    status: 'complete' | 'partial' | 'unavailable';
+    checked_at: string;
+    container_count: number;
+    matched_container_count: number;
+    volume_count: number;
+  };
+  readiness: {
+    status: 'ready' | 'needs_attention' | 'blocked';
+    checks: ProjectMigrationReadinessCheck[];
+  };
+  export_policy: {
+    secret_values_included: false;
+    global_secrets_included: false;
+    secret_file_contents_included: false;
+    data_payloads_included: false;
+  };
+  [key: string]: unknown;
+}
+
+export interface ProjectMigrationTargetPlan {
+  id: 'aws_ecs_fargate' | 'gcp_cloud_run';
+  provider: 'aws' | 'gcp';
+  display_name: string;
+  status: 'compatible' | 'review_required' | 'blocked';
+  summary: {
+    mapped_service_count: number;
+    mapped_volume_count: number;
+    manual_review_count: number;
+    blocker_count: number;
+  };
+  resource_mappings: Array<{
+    source_service_id: string;
+    source_service_name: string;
+    source_kind: string;
+    source_ownership: 'project' | 'connected';
+    target_resource_type: string;
+    target_resource_name: string;
+    confidence: 'high' | 'medium' | 'low';
+  }>;
+}
+
+export interface ProjectMigrationTargetComparison {
+  schema_version: 'openlander.project-migration-targets/v1';
+  generated_at: string;
+  project: { id: string; name: string; display_name: string };
+  source_readiness: 'ready' | 'needs_attention' | 'blocked';
+  targets: ProjectMigrationTargetPlan[];
+}
+
+export interface ProjectMigrationBundle {
+  snapshot: ProjectMigrationSnapshot;
+  document_markdown: string;
+  target_comparison: ProjectMigrationTargetComparison;
+  target_document_markdown: string;
+}
+
+export type PostgresMigrationTarget = 'aws_rds_postgresql' | 'gcp_cloud_sql_postgresql';
+
+export interface PostgresMigrationRunbook {
+  schema_version: 'openlander.postgresql-migration-runbook/v1';
+  generated_at: string;
+  project: { id: string; name: string; display_name: string };
+  source_service: {
+    id: string;
+    name: string;
+    kind: 'postgres';
+    ownership: 'project';
+    postgres_major_version: number | null;
+  };
+  target: {
+    id: PostgresMigrationTarget;
+    provider: 'aws' | 'gcp';
+    display_name: string;
+  };
+  strategy: {
+    method: 'native_pg_dump_pg_restore';
+    suitability: 'review_required';
+    write_freeze_required: true;
+    online_replication_included: false;
+  };
+  readiness: {
+    status: 'needs_input' | 'blocked';
+    checks: Array<{ code: string; level: 'pass' | 'warning' | 'blocker'; message: string }>;
+  };
+  required_inputs: Array<{
+    key: string;
+    label: string;
+    sensitive: boolean;
+    description: string;
+    placeholder: string;
+  }>;
+  phases: Array<{ id: string; order: number; title: string; downtime: 'none' | 'required' }>;
+  execution_policy: {
+    commands_executed: false;
+    credentials_included: false;
+    cloud_changes_made: false;
+    data_copied: false;
+    dns_changed: false;
+  };
+  [key: string]: unknown;
+}
+
+export interface PostgresMigrationRunbookBundle {
+  runbook: PostgresMigrationRunbook;
+  document_markdown: string;
+}
+
+export interface PostgresMigrationPreflight {
+  schema_version: 'openlander.postgresql-preflight/v1';
+  generated_at: string;
+  project: { id: string; name: string; display_name: string };
+  source_service: {
+    id: string;
+    name: string;
+    kind: 'postgres';
+    runtime_status: string | null;
+  };
+  metadata: {
+    server_version: string;
+    server_major_version: number;
+    database_name: string;
+    database_size_bytes: number;
+    schema_count: number;
+    relation_count: number;
+    table_count: number;
+    sequence_count: number;
+    estimated_row_count: number;
+    extensions: Array<{ name: string; version: string }>;
+    roles: Array<{ name: string; can_login: boolean }>;
+    roles_truncated: boolean;
+  };
+  readiness: {
+    status: 'ready_for_rehearsal' | 'blocked';
+    checks: Array<{ code: string; level: 'pass' | 'warning' | 'blocker'; message: string }>;
+  };
+  inspection_policy: {
+    read_only: true;
+    row_contents_read: false;
+    credentials_included: false;
+    secret_values_included: false;
+  };
+}
+
+export interface PostgresMigrationRehearsal {
+  schema_version: 'openlander.postgresql-rehearsal/v1';
+  run_id: string;
+  project_id: string;
+  service_id: string;
+  target: {
+    provider: PostgresMigrationTarget;
+    host: string;
+    port: number;
+    database: string;
+    ssl_mode: 'require';
+  };
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  phase:
+    | 'queued'
+    | 'preflight_source'
+    | 'preflight_target'
+    | 'dumping'
+    | 'restoring'
+    | 'verifying'
+    | 'completed'
+    | 'failed';
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  source_preflight: PostgresMigrationPreflight | null;
+  target_preflight: {
+    server_version: string;
+    server_major_version: number;
+    database_size_bytes: number;
+    schema_count: number;
+    relation_count: number;
+    table_count: number;
+    sequence_count: number;
+    installed_extensions: string[];
+    unsupported_source_extensions: string[];
+    empty: boolean;
+  } | null;
+  result: {
+    dump_size_bytes: number;
+    duration_ms: number;
+    verification: Record<string, boolean>;
+  } | null;
+  error: { code: string; message: string } | null;
+  execution_policy: {
+    source_mutated: false;
+    target_mutation_permitted: true;
+    target_changes_started: boolean;
+    credentials_stored: false;
+    credentials_returned: false;
+    persisted: false;
+  };
+}
+
+export interface PostgresMigrationRehearsalInput {
+  service_id: string;
+  target: {
+    provider: PostgresMigrationTarget;
+    host: string;
+    port: number;
+    database: string;
+    user: string;
+    password: string;
+    ssl_mode: 'require';
+    confirm_empty_target: true;
+  };
+}
+
 function mapEnvironment(environment: BackendEnvironment): Environment {
   return {
     id: environment.id,
@@ -223,6 +465,66 @@ export async function getProject(id: string): Promise<ProjectWithOptionalEnviron
     updatedAt: data.updatedAt ?? data.updated_at ?? '',
     environments: mappedEnvironments,
   };
+}
+
+export async function getProjectMigration(id: string): Promise<ProjectMigrationBundle> {
+  const res = await fetchWithAuth(`/api/projects/${encodeURIComponent(id)}/migration`);
+  if (!res.ok) await throwApiError(res, 'Failed to prepare migration package');
+  return res.json() as Promise<ProjectMigrationBundle>;
+}
+
+export async function getProjectMigrationRunbook(
+  id: string,
+  target: PostgresMigrationTarget,
+  serviceId?: string,
+): Promise<PostgresMigrationRunbookBundle> {
+  const query = new URLSearchParams({ target });
+  if (serviceId) query.set('service_id', serviceId);
+  const res = await fetchWithAuth(
+    `/api/projects/${encodeURIComponent(id)}/migration/runbook?${query.toString()}`,
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to prepare PostgreSQL migration runbook');
+  return res.json() as Promise<PostgresMigrationRunbookBundle>;
+}
+
+export async function getProjectMigrationPreflight(
+  id: string,
+  serviceId: string,
+): Promise<PostgresMigrationPreflight> {
+  const res = await fetchWithAuth(`/api/projects/${encodeURIComponent(id)}/migration/preflight`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service_id: serviceId }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to inspect PostgreSQL migration readiness');
+  const body = (await res.json()) as { preflight: PostgresMigrationPreflight };
+  return body.preflight;
+}
+
+export async function startProjectMigrationRehearsal(
+  id: string,
+  input: PostgresMigrationRehearsalInput,
+): Promise<PostgresMigrationRehearsal> {
+  const res = await fetchWithAuth(`/api/projects/${encodeURIComponent(id)}/migration/rehearsals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to start PostgreSQL migration rehearsal');
+  const body = (await res.json()) as { rehearsal: PostgresMigrationRehearsal };
+  return body.rehearsal;
+}
+
+export async function getProjectMigrationRehearsal(
+  id: string,
+  runId: string,
+): Promise<PostgresMigrationRehearsal> {
+  const res = await fetchWithAuth(
+    `/api/projects/${encodeURIComponent(id)}/migration/rehearsals/${encodeURIComponent(runId)}`,
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to read PostgreSQL migration rehearsal');
+  const body = (await res.json()) as { rehearsal: PostgresMigrationRehearsal };
+  return body.rehearsal;
 }
 
 export async function updateProject(

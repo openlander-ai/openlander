@@ -115,17 +115,35 @@ export interface PortInfo {
   Type?: string;
 }
 
+export interface ContainerMountInfo {
+  type: string;
+  name: string | null;
+  source: string;
+  destination: string;
+  driver: string | null;
+  mode: string | null;
+  readOnly: boolean;
+  propagation: string | null;
+}
+
 export interface AllContainerInfo {
   id: string;
   name: string;
   image: string;
+  imageId?: string | null;
   state: string;
   status: string;
   ports: PortInfo[];
+  mounts?: ContainerMountInfo[];
   labels: Record<string, string>;
   managedByOpenLander: boolean;
   composeProject: string | null;
   created: number;
+}
+
+export interface ListAllContainersOptions {
+  /** Preserve the historical empty-array fallback unless a strict read is requested. */
+  failOnError?: boolean;
 }
 
 export interface BuildImageOptions {

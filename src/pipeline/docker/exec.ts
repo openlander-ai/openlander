@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { finished, pipeline } from 'node:stream/promises';
 import type { DockerContext } from './context.js';
 import { withTimeout } from './helpers.js';
@@ -77,10 +77,16 @@ export class ExecOps {
     return await exec.start({ hijack: true, stdin: true });
   }
 
-  async execToFile(containerId: string, cmd: string[], outputPath: string): Promise<void> {
+  async execToFile(
+    containerId: string,
+    cmd: string[],
+    outputPath: string,
+    opts?: { env?: string[] },
+  ): Promise<void> {
     const container = this.ctx.client.getContainer(containerId);
     const exec = await container.exec({
       Cmd: cmd,
+      ...(opts?.env ? { Env: opts.env } : {}),
       AttachStdout: true,
       AttachStderr: true,
     });
@@ -107,6 +113,49 @@ export class ExecOps {
     });
     await Promise.all([streamCompletion, outputPipeline]);
     const info = await withTimeout(exec.inspect(), 10_000, 'exec-to-file inspect');
+    if ((info.ExitCode ?? 1) !== 0) {
+      const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+      throw new ServiceConfigError(
+        stderr || `Container command exited with code ${String(info.ExitCode)}`,
+      );
+    }
+  }
+
+  /** Stream a host file to a non-TTY container command without buffering it in memory. */
+  async execFromFile(
+    containerId: string,
+    cmd: string[],
+    inputPath: string,
+    opts?: { env?: string[] },
+  ): Promise<void> {
+    const container = this.ctx.client.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      ...(opts?.env ? { Env: opts.env } : {}),
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+    const stream = await exec.start({ hijack: true, stdin: true });
+    const stdoutStream = new PassThrough();
+    const stderrStream = new PassThrough();
+    const stderrChunks: Buffer[] = [];
+    let stderrBytes = 0;
+    stdoutStream.resume();
+    stderrStream.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= 64 * 1024) return;
+      const retained = chunk.subarray(0, 64 * 1024 - stderrBytes);
+      stderrChunks.push(retained);
+      stderrBytes += retained.length;
+    });
+    this.ctx.client.modem.demuxStream(stream, stdoutStream, stderrStream);
+    const inputPipeline = pipeline(createReadStream(inputPath), stream);
+    const streamCompletion = finished(stream, { readable: true, writable: false }).finally(() => {
+      if (!stdoutStream.destroyed) stdoutStream.end();
+      if (!stderrStream.destroyed) stderrStream.end();
+    });
+    await Promise.all([inputPipeline, streamCompletion]);
+    const info = await withTimeout(exec.inspect(), 10_000, 'exec-from-file inspect');
     if ((info.ExitCode ?? 1) !== 0) {
       const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
       throw new ServiceConfigError(

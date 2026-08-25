@@ -1690,6 +1690,157 @@ export const translations = {
       errorPort: '포트는 양의 정수여야 합니다.',
       errorCreate: '애플리케이션을 만들지 못했습니다',
     },
+    migration: {
+      more: '프로젝트 추가 작업',
+      prepare: '이관 준비',
+      title: '이관 패키지 준비',
+      description:
+        '이 프로젝트를 점검하고 특정 클라우드에 종속되지 않은 JSON 스냅샷과 Markdown 이관 계획을 내려받습니다.',
+      loading: '프로젝트 리소스와 실행 정보를 점검하는 중…',
+      loadError: '이관 패키지를 준비하지 못했습니다',
+      retry: '다시 시도',
+      status: {
+        ready: '이관 계획을 세울 준비가 됐습니다',
+        needs_attention: '이관 전에 확인이 필요합니다',
+        blocked: '필수 이관 정보가 부족합니다',
+      },
+      runtime: '실행 정보 점검: {status}',
+      runtimeObserved: '프로젝트 컨테이너 {count}개 확인',
+      runtimeStatus: {
+        complete: '완료',
+        partial: '일부 확인',
+        unavailable: '확인 불가',
+      },
+      counts: {
+        workloads: '워크로드',
+        data: '데이터',
+        volumes: '볼륨',
+        blockers: '차단 항목',
+        warnings: '주의 항목',
+      },
+      empty: '아직 이관할 애플리케이션이나 Compose 리소스가 없습니다.',
+      findings: '이관 전 확인 항목',
+      checks: {
+        NO_DEPLOYABLE_SERVICE: '이관 전에 애플리케이션이나 Compose 워크로드를 추가하세요.',
+        SOURCE_REFERENCE_MISSING: '필수 저장소 또는 이미지 정보가 없습니다.',
+        DEPLOY_REVISION_MISSING: '이관할 정확한 소스 리비전을 선택하고 확인하세요.',
+        IMAGE_REFERENCE_MUTABLE: '이미지를 sha256 digest로 고정하세요.',
+        IMAGE_ID_MISSING: '실행 중인 이미지 ID를 확인하지 못했습니다.',
+        HEALTH_CHECK_MISSING: '대상 환경에서 사용할 헬스체크를 추가하거나 확인하세요.',
+        COMPOSE_DEFINITION_REVIEW_REQUIRED:
+          'Compose 파일, overlay, profile, 트래픽 라우팅을 직접 확인하세요.',
+        STATEFUL_DATA_EXPORT_REQUIRED:
+          '이 데이터 서비스에 맞는 논리 export/import 절차를 준비하세요.',
+        PERSISTENT_VOLUME_TRANSFER_REQUIRED:
+          '확인된 영속 볼륨이나 bind mount의 전송 절차를 준비하세요.',
+        TARGET_ENV_INPUT_REQUIRED: '제외된 환경 변수 값을 대상 환경에 다시 입력하세요.',
+        TARGET_SECRET_FILE_INPUT_REQUIRED: '프로젝트 시크릿 파일을 대상 환경에 다시 만드세요.',
+        DOMAIN_CUTOVER_REQUIRED: '대상 환경 검증 후 도메인과 DNS 전환을 계획하세요.',
+        DOCKER_UNAVAILABLE: 'Docker 실행 정보를 확인하지 못했습니다.',
+        CONTAINER_INVENTORY_FAILED: 'Docker 컨테이너 목록을 확인하지 못했습니다.',
+        VOLUME_INVENTORY_FAILED: 'Docker 볼륨 목록을 확인하지 못했습니다.',
+        DISK_USAGE_FAILED: 'Docker 볼륨 크기를 확인하지 못했습니다.',
+        RUNTIME_CONTAINER_UNMATCHED: '저장된 컨테이너 ID를 Docker 목록에서 찾지 못했습니다.',
+        RUNTIME_METADATA_INCOMPLETE:
+          '일부 활성 서비스의 Docker 컨테이너 정보를 확인하지 못했습니다.',
+      },
+      noCloudChanges:
+        '스냅샷, 목적지 비교, Runbook, 사전 점검은 읽기 전용입니다. 직접 시작한 사전 연습만 확인된 대상 DB에 쓰며 원본은 변경하지 않습니다.',
+      secretsExcluded:
+        '환경 변수 값, 전역 시크릿, 시크릿 파일 내용은 모든 다운로드 파일에서 제외됩니다.',
+      targets: {
+        title: '클라우드 목적지 비교',
+        status: {
+          compatible: '호환 가능',
+          review_required: '검토 필요',
+          blocked: '진행 불가',
+        },
+        summary: '서비스 {services}개 · 검토 {reviews}개 · 차단 {blockers}개',
+        more: '나머지 매핑 {count}개는 TARGETS.md에서 확인',
+        disclaimer:
+          '계획 수립을 위한 권고이며 계정, 리전, 할당량, IAM, 호환성, 비용은 확인하지 않았습니다.',
+      },
+      runbook: {
+        title: 'PostgreSQL 이관 Runbook',
+        description:
+          '프로젝트가 직접 소유한 PostgreSQL 하나에 대해 검토 가능한 pg_dump/pg_restore 명령 템플릿을 만듭니다.',
+        empty: 'Runbook을 만들 수 있는 활성 프로젝트 소유 PostgreSQL이 없습니다.',
+        database: '원본 데이터베이스',
+        selectDatabase: 'PostgreSQL 선택',
+        target: '목적지',
+        targets: {
+          aws_rds_postgresql: 'AWS RDS PostgreSQL 데이터베이스',
+          gcp_cloud_sql_postgresql: 'GCP Cloud SQL PostgreSQL 데이터베이스',
+        },
+        generate: 'Runbook 만들기',
+        generating: '만드는 중…',
+        loadError: 'PostgreSQL 이관 Runbook을 준비하지 못했습니다',
+        status: {
+          needs_input: '운영자 입력과 사전 연습이 필요합니다',
+          blocked: 'Runbook 진행이 차단됐습니다',
+        },
+        summary: '{phases}단계 · 필수 입력 {inputs}개',
+        writeFreeze: '최종 전환 전에 쓰기 중단 여부를 반드시 확인해야 합니다.',
+        downloadJson: 'Runbook JSON 내려받기',
+        downloadMarkdown: 'RUNBOOK.md 내려받기',
+      },
+      preflight: {
+        inspect: '사전 점검',
+        inspecting: '점검 중…',
+        loadError: 'PostgreSQL 이관 준비 상태를 점검하지 못했습니다',
+        ready: '원본 사전 점검 완료',
+        size: '데이터베이스 크기',
+        tables: '테이블',
+        sequences: '시퀀스',
+        extensions: '확장',
+        readOnly:
+          '읽기 전용 메타데이터 점검입니다. 테이블 행, credential 값, 시크릿 값은 읽거나 반환하지 않았습니다.',
+      },
+      rehearsal: {
+        title: '안전한 복원 사전 연습',
+        description:
+          '원본은 읽기 전용으로 dump하고 새로 만든 빈 관리형 PostgreSQL에 복원합니다. 쓰기 전에 대상이 실제로 비어 있는지 다시 확인합니다.',
+        host: '대상 호스트',
+        hostPlaceholder: '관리형 PostgreSQL endpoint',
+        port: '포트',
+        database: '대상 데이터베이스',
+        user: '대상 사용자',
+        password: '대상 비밀번호',
+        confirmEmpty:
+          '새로 만든 폐기 가능한 빈 대상 데이터베이스임을 확인했으며 OpenLander가 데이터를 복원하도록 승인합니다.',
+        credentialPolicy:
+          'TLS 연결만 허용합니다. 비밀번호는 이번 실행에만 쓰며 저장·로그·응답에 남기지 않습니다.',
+        start: '사전 연습 시작',
+        starting: '시작 중…',
+        startError: 'PostgreSQL 이관 사전 연습을 시작하지 못했습니다',
+        statusError: 'PostgreSQL 이관 사전 연습 상태를 갱신하지 못했습니다',
+        retryStatus: '상태 다시 확인',
+        status: {
+          queued: '사전 연습 대기 중',
+          running: '사전 연습 진행 중',
+          succeeded: '사전 연습 성공',
+          failed: '사전 연습 실패',
+        },
+        phaseLabel: '현재 단계: {phase}',
+        phase: {
+          queued: '대기',
+          preflight_source: '원본 점검',
+          preflight_target: '빈 대상 및 호환성 확인',
+          dumping: '원본 dump 생성',
+          restoring: '단일 transaction으로 대상 복원',
+          verifying: '복원된 객체 검증',
+          completed: '완료',
+          failed: '안전하게 중단',
+        },
+        result: 'dump {size} · {seconds}초 소요 · 객체 검증 통과',
+        failedDetail: '{code}로 중단했습니다. 다시 시도할 때는 새 빈 대상을 사용하세요.',
+        ephemeral:
+          '이 상태는 메모리에만 있어 OpenLander 재시작 시 사라집니다. 대상 데이터는 자동 삭제하지 않습니다.',
+      },
+      downloadJson: 'migration.json 내려받기',
+      downloadMarkdown: 'MIGRATION.md 내려받기',
+      downloadTargets: 'TARGETS.md 내려받기',
+    },
     serviceDelete: {
       // Chrome — card title + modal title + form label + buttons.
       title: '이 애플리케이션 삭제',

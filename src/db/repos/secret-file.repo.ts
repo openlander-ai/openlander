@@ -3,6 +3,12 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { secretFiles } from '../schema.drizzle.js';
 
+export interface SecretFileMetadataRow {
+  project_id: string | null;
+  filename: string;
+  mount_path: string;
+}
+
 export class SecretFileRepo {
   private readonly db: DrizzleClient;
   private readonly client: PostgresClient;
@@ -26,6 +32,18 @@ export class SecretFileRepo {
     const condition =
       projectId === null ? isNull(secretFiles.project_id) : eq(secretFiles.project_id, projectId);
     return await this.db.select().from(secretFiles).where(condition);
+  }
+
+  /** Metadata-only project read; never selects encrypted_content or iv. */
+  async listMetadataByProject(projectId: string): Promise<SecretFileMetadataRow[]> {
+    return await this.db
+      .select({
+        project_id: secretFiles.project_id,
+        filename: secretFiles.filename,
+        mount_path: secretFiles.mount_path,
+      })
+      .from(secretFiles)
+      .where(eq(secretFiles.project_id, projectId));
   }
 
   async getSecretFilesForDeploy(projectId: string): Promise<

@@ -30,6 +30,7 @@ const DATABASE_ACCESS_TOOLS = new Set([
   'get_service_credentials',
   'create_service_user',
   'exec_service_container',
+  'get_migration_preflight',
 ]);
 
 interface SafetyResult {

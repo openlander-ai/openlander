@@ -49,21 +49,34 @@ const createMockContainer = (
   name: string,
   options: {
     image?: string;
+    imageId?: string;
     state?: string;
     status?: string;
     ports?: Array<{ IP?: string; PrivatePort?: number; PublicPort?: number; Type?: string }>;
     labels?: Record<string, string>;
     created?: number;
+    mounts?: Array<{
+      Type: string;
+      Name?: string;
+      Source: string;
+      Destination: string;
+      Driver?: string;
+      Mode?: string;
+      RW?: boolean;
+      Propagation?: string;
+    }>;
   } = {},
 ) => ({
   Id: id,
   Names: [`/${name}`],
   Image: options.image ?? 'test-image:latest',
+  ImageID: options.imageId,
   State: options.state ?? 'running',
   Status: options.status ?? 'Up 2 hours',
   Ports: options.ports ?? [],
   Labels: options.labels ?? {},
   Created: options.created ?? Date.now(),
+  Mounts: options.mounts ?? [],
 });
 
 const resetDockerodeMocks = () => {
@@ -812,14 +825,34 @@ describeDocker('listAllContainers', () => {
     expect(result).toEqual([]);
   });
 
+  it('rethrows list failures when failOnError is requested', async () => {
+    const error = new Error('Docker daemon not running');
+    mockListContainers.mockRejectedValueOnce(error);
+
+    await expect(docker.listAllContainers(undefined, { failOnError: true })).rejects.toBe(error);
+  });
+
   it('maps container fields correctly', async () => {
     const mockContainer = createMockContainer('abc123def456', 'my-container', {
       image: 'nginx:1.21',
+      imageId: 'sha256:nginx',
       state: 'running',
       status: 'Up 3 days',
       ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
       labels: { 'openlander.managed': 'true', custom: 'label' },
       created: 1700000000,
+      mounts: [
+        {
+          Type: 'volume',
+          Name: 'nginx-data',
+          Source: '/var/lib/docker/volumes/nginx-data/_data',
+          Destination: '/usr/share/nginx/html',
+          Driver: 'local',
+          Mode: 'rw',
+          RW: true,
+          Propagation: '',
+        },
+      ],
     });
 
     mockListContainers.mockResolvedValueOnce([mockContainer]);
@@ -830,10 +863,23 @@ describeDocker('listAllContainers', () => {
     expect(container.id).toBe('abc123def456');
     expect(container.name).toBe('my-container');
     expect(container.image).toBe('nginx:1.21');
+    expect(container.imageId).toBe('sha256:nginx');
     expect(container.state).toBe('running');
     expect(container.status).toBe('Up 3 days');
     expect(container.ports).toEqual([
       { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' },
+    ]);
+    expect(container.mounts).toEqual([
+      {
+        type: 'volume',
+        name: 'nginx-data',
+        source: '/var/lib/docker/volumes/nginx-data/_data',
+        destination: '/usr/share/nginx/html',
+        driver: 'local',
+        mode: 'rw',
+        readOnly: false,
+        propagation: null,
+      },
     ]);
     expect(container.labels).toEqual({ 'openlander.managed': 'true', custom: 'label' });
     expect(container.managedByOpenLander).toBe(true);

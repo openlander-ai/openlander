@@ -16,6 +16,10 @@ import { engagementOperations } from './definitions/engagement.js';
 import { agentDeliveryOperations, webDeliveryOperations } from './definitions/delivery.js';
 import { deliveryReviewPackageOperations } from './definitions/delivery-review-package.js';
 import { networkMaintenanceOperations } from './definitions/network-maintenance.js';
+import { getMigrationSnapshotOperation } from './definitions/migration.js';
+import { compareMigrationTargetsOperation } from './definitions/migration-targets.js';
+import { getMigrationRunbookOperation } from './definitions/migration-runbook.js';
+import { getMigrationPreflightOperation } from './definitions/migration-preflight.js';
 import {
   applyProjectManifestOperation,
   getProjectManifestOperation,
@@ -277,6 +281,10 @@ export function createApplicationOperationRegistry(): ApplicationOperationRegist
     registerProjectRepositoryOperation,
     applyProjectManifestOperation,
     getProjectManifestOperation,
+    getMigrationSnapshotOperation,
+    compareMigrationTargetsOperation,
+    getMigrationRunbookOperation,
+    getMigrationPreflightOperation,
     ...projectUpdateOperations,
     ...agentDeliveryOperations,
     ...deliveryReviewPackageOperations,

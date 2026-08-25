@@ -125,8 +125,11 @@ export class Docker implements RuntimeBackend {
     return this.containerOps.listManagedContainers();
   }
 
-  listAllContainers(_serverId?: string) {
-    return this.containerOps.listAllContainers();
+  listAllContainers(
+    _serverId?: string,
+    options?: Parameters<ContainerOps['listAllContainers']>[0],
+  ) {
+    return this.containerOps.listAllContainers(options);
   }
 
   buildImage(
@@ -253,6 +256,10 @@ export class Docker implements RuntimeBackend {
 
   execToFile(...args: Parameters<ExecOps['execToFile']>) {
     return this.execOps.execToFile(...args);
+  }
+
+  execFromFile(...args: Parameters<ExecOps['execFromFile']>) {
+    return this.execOps.execFromFile(...args);
   }
 
   execTerminal(...args: Parameters<ExecOps['execTerminal']>) {

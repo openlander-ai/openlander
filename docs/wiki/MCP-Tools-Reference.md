@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **138 unique default operations** surfaced through those composites
+- **142 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -38,6 +38,10 @@ Agent routing rule of thumb:
 | "Register a repo before deployment is defined"     | `openlander_project.register_project_repository`                                                            |
 | "Plan and hand off an Agent delivery run"          | `openlander_project.plan_delivery` / `record_delivery_run_progress` / `resume_delivery_run`                 |
 | "Apply or inspect the repository Project manifest" | `openlander_project.apply_project_manifest` / `get_project_manifest`                                        |
+| "Prepare this Project for cloud migration"         | `openlander_project.get_migration_snapshot`                                                                 |
+| "Compare AWS and GCP migration targets"            | `openlander_project.compare_migration_targets`                                                              |
+| "Build a PostgreSQL cloud migration runbook"       | `openlander_project.get_migration_runbook`                                                                  |
+| "Inspect PostgreSQL before cloud migration"        | `openlander_project.get_migration_preflight`                                                                |
 | "Build once and promote the same artifact"         | `openlander_deploy.create_release` / `promote_release` / `evaluate_promotion`                               |
 | "Stop or roll back a Release"                      | `openlander_deploy.recall_release` / `rollback_environment`                                                 |
 | "Create this week's internal and customer report"  | `openlander_project.generate_weekly_report` / `publish_weekly_report`                                       |
@@ -147,13 +151,13 @@ from trusted human surfaces (for example, saving the value in the web UI) or by 
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                             |
-| ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git              |
-| `openlander_project`         | 48           | Projects, manifests, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
-| `openlander_service`         | 26           | Application lifecycle, config, domain routes, public access, and env vocabulary     |
-| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
-| `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
+| Composite                    | Action slots | Purpose                                                                                                 |
+| ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git                                  |
+| `openlander_project`         | 64           | Projects, manifests, migration planning, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
+| `openlander_service`         | 26           | Application lifecycle, config, domain routes, public access, and env vocabulary                         |
+| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage                     |
+| `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes                                |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
@@ -167,6 +171,7 @@ Composite catalog:
 | [Delivery Workspace](#delivery-workspace)                 | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview |
 | [Agent Delivery Run](#agent-delivery-run)                 | 8     | Plan, verify, hand off, resume, cancel, or complete             |
 | [Project Manifest](#project-manifest)                     | 3     | Register source and apply/inspect Project configuration         |
+| [Migration Planning](#migration-planning)                 | 4     | Export a neutral graph, compare targets, inspect PostgreSQL, and build a DB runbook |
 | [Release and Promotion](#release-and-promotion)           | 6     | Build once, promote an immutable digest, recall, or roll back   |
 | [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF      |
 | [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads          |
@@ -472,6 +477,99 @@ project-scoped tokens see only the scoped Project, and service-scoped tokens see
 contain the scoped service. For service-scoped tokens, `deployable_service`,
 `deployable_services`, and `deployable_service_count` are also reduced to the scoped service so
 agents do not receive sibling service identifiers.
+
+## Migration Planning
+
+### `get_migration_snapshot`
+
+Generate an on-demand, provider-neutral migration graph for one Project.
+
+| Parameter    | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `project_id` | string | Yes      | Project ID  |
+
+The response contains Project identity, Application/Compose and
+Database/Cache/Storage resources, formal Service Connections, persistent mount
+metadata, domain routes, environment-variable keys, secret-file mount metadata,
+runtime-inspection status, and deterministic readiness checks. It does not
+contain Markdown, raw logs, environment-variable values, global secrets,
+secret-file contents, or data payloads.
+
+This is a read-only preparation step. It does not create cloud resources, copy
+database/object/volume data, or change DNS. A project-scoped token may read only
+its exact Project; a service-scoped token cannot request this Project-wide
+snapshot because it would expose sibling resource metadata. The Web Project
+page can download the same snapshot as `migration.json` together with a rendered
+`MIGRATION.md` document. The same REST bundle also includes an AWS/GCP target
+comparison and rendered `TARGETS.md`; both reuse the snapshot's `generated_at`.
+
+### `compare_migration_targets`
+
+Compare the same redacted Project snapshot against two planning targets:
+AWS ECS on Fargate and Google Cloud Run.
+
+| Parameter    | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `project_id` | string | Yes      | Project ID  |
+
+The response contains per-Service target resource recommendations, persistent
+data mappings, supporting configuration/network resources, confidence, manual
+review findings, and official provider reference links. It intentionally omits
+the full source snapshot and Markdown to keep the MCP response focused.
+
+This query does not inspect a cloud account, region, IAM, quota, or pricing. It
+does not provision resources, copy data, or change DNS. MongoDB, MinIO,
+Compose, and bind-mount mappings remain review-required rather than being
+treated as drop-in compatible. Project-scoped tokens may compare only their
+exact Project; service-scoped tokens cannot request a Project-wide comparison.
+
+### `get_migration_runbook`
+
+Generate an operator-reviewed PostgreSQL native dump/restore runbook for one
+Project-owned Database and one explicit destination.
+
+| Parameter    | Type   | Required    | Description                                                        |
+| ------------ | ------ | ----------- | ------------------------------------------------------------------ |
+| `project_id` | string | Yes         | Project ID                                                         |
+| `target`     | enum   | Yes         | `aws_rds_postgresql` or `gcp_cloud_sql_postgresql`                 |
+| `service_id` | string | Conditional | Project-owned PostgreSQL ID; required when the Project has several |
+
+The JSON response contains required operator inputs, preflight and rehearsal
+steps, placeholder-only `pg_dump`/`pg_restore` commands, final write-freeze,
+schema/row/sequence/extension/application verification, cutover, and rollback.
+Markdown is kept out of MCP; the Web endpoint can download the same generated
+runbook as JSON and `RUNBOOK.md`.
+
+This action never executes a command, reads credentials or database contents,
+provisions a cloud service, copies data, changes application config or DNS, or
+creates activity/evidence rows. It accepts only active PostgreSQL resources
+owned by the Project; a connected Database owned by another Project is not a
+valid source. Both `project_id` and `service_id` are scope-checked, and
+service-scoped tokens cannot request the Project-wide runbook.
+
+### `get_migration_preflight`
+
+Inspect one active Project-owned PostgreSQL source before a managed-cloud
+migration rehearsal.
+
+| Parameter    | Type   | Required    | Description                                                        |
+| ------------ | ------ | ----------- | ------------------------------------------------------------------ |
+| `project_id` | string | Yes         | Project ID                                                         |
+| `service_id` | string | Conditional | Project-owned PostgreSQL ID; required when the Project has several |
+
+The response includes the observed PostgreSQL version, database size,
+encoding/collation, extensions, bounded role metadata, schema/table/sequence
+counts, and an estimated row count. It does not query table row contents or
+return source credentials, secret values, raw command output, or Markdown.
+`database_access` permission and every supplied Project/Service selector are
+enforced before inspection.
+
+Actual dump/restore rehearsal is intentionally absent from MCP. It is available
+only in the authenticated Web migration dialog, requires explicit confirmation
+of a disposable empty target, verifies the target is actually empty, requires
+TLS, and never stores or returns the target password. Rehearsal status is
+process-memory only; no cloud provisioning, DNS change, source mutation, or
+automatic target cleanup is performed.
 
 ### `archive_project`
 

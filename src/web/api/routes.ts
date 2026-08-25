@@ -20,6 +20,7 @@ import { createEvidenceUploadRoutes } from './evidence-upload-routes.js';
 import { createReviewPackageUploadRoutes } from './review-package-upload-routes.js';
 import { createSecurityPermissionRoutes } from './security-permission-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
+import { createMigrationRoutes } from './migration-routes.js';
 import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectGroupRoutes } from './project-group-routes.js';
 import { createProjectCompatRoutes } from './project-compat-routes.js';
@@ -89,7 +90,7 @@ type TraefikHttpMiddleware =
   | { redirectScheme: { scheme: string; permanent: boolean } }
   | { forwardAuth: { address: string; trustForwardHeader: boolean } };
 
-const MANAGED_SERVICE_KINDS = new Set(['postgres', 'mysql', 'redis', 'mongo', 'minio']);
+const MANAGED_SERVICE_KINDS = new Set(['postgres', 'mysql', 'redis', 'mongo', 'neo4j', 'minio']);
 
 function traefikObjectName(value: string): string {
   return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'route';
@@ -623,6 +624,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createAiOpsRoutes(ctx));
   api.route('/', createDataAccessRoutes(ctx));
   api.route('/', createMcpStatusRoutes(ctx));
+  api.route('/', createMigrationRoutes(ctx));
   api.route('/', createMonitoringRoutes(ctx));
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectGroupRoutes(ctx));

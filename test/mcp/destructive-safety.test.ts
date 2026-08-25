@@ -175,6 +175,29 @@ describe('MCP destructive safety', () => {
     });
   });
 
+  it('applies the database-access permission to migration preflight', async () => {
+    const context = createContext({
+      settings: {
+        'security.operation_permissions.global': JSON.stringify({
+          destructive_actions: 'allow',
+          database_access: 'block',
+        }),
+      },
+    });
+    const result = await maybeHandleMcpSafety(
+      createTool('get_migration_preflight'),
+      { project_id: 'project-1' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      error: 'OPERATION_PERMISSION_DENIED',
+      tool: 'get_migration_preflight',
+      details: { permission: 'database_access', project_id: 'project-1' },
+    });
+  });
+
   it('lets platform_cleanup_orphans dry-run preview execute through MCP', async () => {
     const context = createContext();
     const result = await maybeHandleMcpSafety(

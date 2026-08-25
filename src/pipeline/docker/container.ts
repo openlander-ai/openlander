@@ -880,7 +880,7 @@ export class ContainerOps {
     }));
   }
 
-  async listAllContainers(): Promise<AllContainerInfo[]> {
+  async listAllContainers(options: { failOnError?: boolean } = {}): Promise<AllContainerInfo[]> {
     try {
       const containers = await this.ctx.client.listContainers({
         all: true,
@@ -893,6 +893,7 @@ export class ContainerOps {
           id: c.Id,
           name: c.Names[0]?.replace(/^\//, '') ?? 'unknown',
           image: c.Image,
+          imageId: typeof c.ImageID === 'string' && c.ImageID.length > 0 ? c.ImageID : null,
           state: c.State,
           status: c.Status,
           ports: c.Ports.map((p) => ({
@@ -901,6 +902,20 @@ export class ContainerOps {
             PublicPort: p.PublicPort,
             Type: p.Type,
           })),
+          mounts: c.Mounts.map((mount) => ({
+            type: mount.Type,
+            name: typeof mount.Name === 'string' && mount.Name.length > 0 ? mount.Name : null,
+            source: mount.Source,
+            destination: mount.Destination,
+            driver:
+              typeof mount.Driver === 'string' && mount.Driver.length > 0 ? mount.Driver : null,
+            mode: typeof mount.Mode === 'string' && mount.Mode.length > 0 ? mount.Mode : null,
+            readOnly: !mount.RW,
+            propagation:
+              typeof mount.Propagation === 'string' && mount.Propagation.length > 0
+                ? mount.Propagation
+                : null,
+          })),
           labels,
           managedByOpenLander: labels[DOCKER_LABELS.MANAGED] === 'true',
           composeProject: labels['com.docker.compose.project'] ?? null,
@@ -908,6 +923,9 @@ export class ContainerOps {
         };
       });
     } catch (error) {
+      if (options.failOnError === true) {
+        throw error;
+      }
       log.warn({ error }, 'Failed to list all containers, returning empty array');
       return [];
     }

@@ -229,7 +229,242 @@ function createPublicAccessComposite(execute = vi.fn(async () => ({ status: 'ok'
   };
 }
 
+function createMigrationComposite(execute = vi.fn(async () => ({ status: 'generated' }))) {
+  const toolDefs: ToolDef[] = [
+    {
+      name: 'get_migration_snapshot',
+      description: 'Generate a Project migration snapshot',
+      inputSchema: z.object({ project_id: z.string().min(1) }),
+      execute,
+    },
+    {
+      name: 'compare_migration_targets',
+      description: 'Compare Project migration targets',
+      inputSchema: z.object({ project_id: z.string().min(1) }),
+      execute,
+    },
+    {
+      name: 'get_migration_runbook',
+      description: 'Generate a PostgreSQL migration runbook',
+      inputSchema: z.object({
+        project_id: z.string().min(1),
+        service_id: z.string().min(1).optional(),
+        target: z.enum(['aws_rds_postgresql', 'gcp_cloud_sql_postgresql']),
+      }),
+      execute,
+    },
+    {
+      name: 'get_migration_preflight',
+      description: 'Inspect PostgreSQL migration readiness',
+      inputSchema: z.object({
+        project_id: z.string().min(1),
+        service_id: z.string().min(1).optional(),
+      }),
+      execute,
+    },
+  ];
+  return {
+    tool: createOpenLanderProjectCompositeTool(toolDefs),
+    execute,
+  };
+}
+
 describe('MCP scoped token enforcement', () => {
+  it('allows a project-scoped migration snapshot only for its exact Project', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    await expect(
+      tool.execute(
+        { action: 'get_migration_snapshot', params: { project_id: 'project-1' } },
+        context,
+      ),
+    ).resolves.toEqual({ status: 'generated' });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a migration snapshot for another Project before execution', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    const result = await tool.execute(
+      { action: 'get_migration_snapshot', params: { project_id: 'project-2' } },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'project_mismatch', targetProjectId: 'project-2' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Project-wide migration snapshot for a service-scoped token', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: 'service-1',
+    });
+
+    const result = await tool.execute(
+      { action: 'get_migration_snapshot', params: { project_id: 'project-1' } },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'service_mismatch', targetProjectId: 'project-1' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('applies the same Project scope boundary to target comparison', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    await expect(
+      tool.execute(
+        { action: 'compare_migration_targets', params: { project_id: 'project-1' } },
+        context,
+      ),
+    ).resolves.toEqual({ status: 'generated' });
+    expect(execute).toHaveBeenCalledOnce();
+
+    execute.mockClear();
+    const rejected = await tool.execute(
+      { action: 'compare_migration_targets', params: { project_id: 'project-2' } },
+      context,
+    );
+    expect(rejected).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'project_mismatch', targetProjectId: 'project-2' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('scope-checks both project_id and service_id for a PostgreSQL runbook', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    await expect(
+      tool.execute(
+        {
+          action: 'get_migration_runbook',
+          params: {
+            project_id: 'project-1',
+            service_id: 'service-1',
+            target: 'aws_rds_postgresql',
+          },
+        },
+        context,
+      ),
+    ).resolves.toEqual({ status: 'generated' });
+    expect(execute).toHaveBeenCalledOnce();
+
+    execute.mockClear();
+    const mixedTarget = await tool.execute(
+      {
+        action: 'get_migration_runbook',
+        params: {
+          project_id: 'project-1',
+          service_id: 'service-2',
+          target: 'gcp_cloud_sql_postgresql',
+        },
+      },
+      context,
+    );
+    expect(mixedTarget).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'project_mismatch', targetProjectId: 'project-2' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Project-wide PostgreSQL runbook for a service-scoped token', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'service',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: 'service-1',
+    });
+
+    const result = await tool.execute(
+      {
+        action: 'get_migration_runbook',
+        params: {
+          project_id: 'project-1',
+          service_id: 'service-1',
+          target: 'aws_rds_postgresql',
+        },
+      },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'service_mismatch', targetProjectId: 'project-1' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('scope-checks both project_id and service_id for PostgreSQL preflight', async () => {
+    const { tool, execute } = createMigrationComposite();
+    const { context } = createScopedContext({
+      source: 'mcp',
+      mcpScopeKind: 'project',
+      mcpScopeProjectId: 'project-1',
+      mcpScopeServiceId: null,
+    });
+
+    await expect(
+      tool.execute(
+        {
+          action: 'get_migration_preflight',
+          params: { project_id: 'project-1', service_id: 'service-1' },
+        },
+        context,
+      ),
+    ).resolves.toEqual({ status: 'generated' });
+    expect(execute).toHaveBeenCalledOnce();
+
+    execute.mockClear();
+    const mixedTarget = await tool.execute(
+      {
+        action: 'get_migration_preflight',
+        params: { project_id: 'project-1', service_id: 'service-2' },
+      },
+      context,
+    );
+    expect(mixedTarget).toMatchObject({
+      code: 'SCOPE_VIOLATION',
+      details: { reason: 'project_mismatch', targetProjectId: 'project-2' },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('returns SCOPE_VIOLATION when a project-scoped token targets another project', async () => {
     const { tool, execute } = createMonitorComposite();
     const { context } = createScopedContext({

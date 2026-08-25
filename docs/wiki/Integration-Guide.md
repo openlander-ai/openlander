@@ -234,15 +234,15 @@ the same database.
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **138 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **142 unique default operations**, plus 13 optional platform tools with `config.mcp.platformTools: true` (the default is `false`). Each composite takes `{ action, params }`:
 
-| Composite                    | Actions | Purpose                                                                            |
-| ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 28      | Deploy lifecycle: plans, execution, rollback, build                                |
-| `openlander_project`         | 48      | Projects, Agent Delivery, Engagement bootstrap/portfolio, secrets, exposure        |
-| `openlander_service`         | 26      | Application lifecycle, config, domains                                             |
-| `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                  |
-| `openlander_monitor`         | 15      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, host/network diagnosis |
+| Composite                    | Actions | Purpose                                                                               |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 28      | Deploy lifecycle: plans, execution, rollback, build                                   |
+| `openlander_project`         | 64      | Projects, manifests, migration planning, Agent Delivery, Engagement, reports, secrets |
+| `openlander_service`         | 26      | Application lifecycle, config, domains                                                |
+| `openlander_managed_service` | 24      | Databases, caches, credentials, backups, data inspection, volumes                     |
+| `openlander_monitor`         | 15      | Monitoring & ops: logs, AI Ops briefings, topology, alerts, host/network diagnosis    |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 

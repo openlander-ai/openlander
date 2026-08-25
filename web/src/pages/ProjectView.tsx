@@ -19,12 +19,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
+  Activity as ActivityIcon,
   Box,
   ClipboardList,
+  Code2,
   Database,
   ExternalLink,
   FileCheck2,
+  Globe,
+  Info,
+  MoreHorizontal,
+  PackageOpen,
   Plus,
+  Rocket,
+  ScrollText,
   Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
@@ -55,6 +63,7 @@ import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/d
 import { cn } from '@/lib/utils';
 import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
 import { EngagementChip } from '@/components/engagement/EngagementChip';
+import { ProjectMigrationDialog } from '@/components/project/ProjectMigrationDialog';
 import { localizeApiError } from '@/lib/localized-api-error';
 import { ResourceQuickMenu, type ResourceQuickTab } from '@/components/project/ResourceQuickMenu';
 
@@ -217,6 +226,7 @@ export function ProjectView() {
   const [archivedServicesError, setArchivedServicesError] = useState<string | null>(null);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [migrationOpen, setMigrationOpen] = useState(false);
   // Database/Cache resources are agent-provisioned, not built here — this
   // secondary action hands the user to the MCP guide instead of a native DB
   // wizard (kind="add-managed-db", never "add-service").
@@ -617,6 +627,23 @@ export function ProjectView() {
               <Plus className="h-3.5 w-3.5" />
               {t('projectDetail.addService.title')}
             </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('projectDetail.migration.more')}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => setMigrationOpen(true)}>
+                  <PackageOpen className="mr-2 h-3.5 w-3.5" />
+                  {t('projectDetail.migration.prepare')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
         bodyClassName="p-0"
@@ -733,6 +760,14 @@ export function ProjectView() {
         kind="add-managed-db"
         projectName={realProject?.name}
       />
+      {realProject && (
+        <ProjectMigrationDialog
+          open={migrationOpen}
+          onOpenChange={setMigrationOpen}
+          projectId={projectId}
+          projectName={realProject.name}
+        />
+      )}
     </div>
   );
 }
