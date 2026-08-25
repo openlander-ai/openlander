@@ -19,20 +19,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
-  Activity as ActivityIcon,
   Box,
   ClipboardList,
-  Code2,
   Database,
   ExternalLink,
   FileCheck2,
-  Globe,
-  Info,
   MoreHorizontal,
   PackageOpen,
   Plus,
-  Rocket,
-  ScrollText,
   Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
@@ -66,6 +60,12 @@ import { EngagementChip } from '@/components/engagement/EngagementChip';
 import { ProjectMigrationDialog } from '@/components/project/ProjectMigrationDialog';
 import { localizeApiError } from '@/lib/localized-api-error';
 import { ResourceQuickMenu, type ResourceQuickTab } from '@/components/project/ResourceQuickMenu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings';
 
