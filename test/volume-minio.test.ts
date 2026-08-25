@@ -67,12 +67,12 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
   };
 }
 
-function createDbMock(services: ServiceRow[]): Database {
+function createDbMock(services: ServiceRow[], projectEnv: Record<string, string> = {}): Database {
   const byId = new Map(services.map((svc) => [svc.id, svc]));
   return {
     getService: vi.fn((id: string) => byId.get(id) ?? null),
     listServices: vi.fn(() => Array.from(byId.values())),
-    getEnvVars: vi.fn(() => ({})),
+    getEnvVars: vi.fn(() => projectEnv),
     getEnvVarsForService: vi.fn(() => ({})),
     getDeployablesByGroup: vi.fn(() => []),
     updateService: vi.fn(),
@@ -138,7 +138,7 @@ function getMcpTool(ctx: AppContext, name: string) {
 }
 
 describe('MinIO getSuggestedEnv', () => {
-  it('returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY for first minio service', async () => {
+  it('returns provider-neutral object storage keys for the first MinIO service', async () => {
     const service = createService({
       id: 'svc-minio-1',
       name: 'storage',
@@ -154,9 +154,10 @@ describe('MinIO getSuggestedEnv', () => {
 
     const manager = new ServiceManager(createMockDockerHarness().docker, createDbMock([service]));
     await expect(manager.getSuggestedEnv(service, { targetProjectId: 'proj-1' })).resolves.toEqual([
-      { key: 'S3_ENDPOINT', value: 'http://ol-svc-storage:9000' },
-      { key: 'AWS_ACCESS_KEY_ID', value: 'openlander' },
-      { key: 'AWS_SECRET_ACCESS_KEY', value: 'abc123' },
+      { key: 'OBJECT_STORAGE_ENDPOINT', value: 'http://ol-svc-storage:9000' },
+      { key: 'OBJECT_STORAGE_ACCESS_KEY', value: 'openlander' },
+      { key: 'OBJECT_STORAGE_SECRET_KEY', value: 'abc123' },
+      { key: 'OBJECT_STORAGE_PROVIDER', value: 'minio' },
     ]);
   });
 
@@ -191,10 +192,46 @@ describe('MinIO getSuggestedEnv', () => {
       createDbMock([first, second]),
     );
     await expect(manager.getSuggestedEnv(second)).resolves.toEqual([
-      { key: 'UPLOADS_STORE_S3_ENDPOINT', value: 'http://ol-svc-uploads-store:9000' },
-      { key: 'UPLOADS_STORE_AWS_ACCESS_KEY_ID', value: 'another-user' },
-      { key: 'UPLOADS_STORE_AWS_SECRET_ACCESS_KEY', value: 'pw456' },
+      {
+        key: 'UPLOADS_STORE_OBJECT_STORAGE_ENDPOINT',
+        value: 'http://ol-svc-uploads-store:9000',
+      },
+      { key: 'UPLOADS_STORE_OBJECT_STORAGE_ACCESS_KEY', value: 'another-user' },
+      { key: 'UPLOADS_STORE_OBJECT_STORAGE_SECRET_KEY', value: 'pw456' },
+      { key: 'UPLOADS_STORE_OBJECT_STORAGE_PROVIDER', value: 'minio' },
     ]);
+  });
+
+  it('does not treat stored legacy S3/AWS keys as a neutral-key collision', async () => {
+    const service = createService({
+      id: 'svc-minio-new',
+      name: 'storage',
+      type: 'minio',
+      credentials: JSON.stringify({
+        user: 'new-user',
+        password: 'new-password',
+        connectionString: 'http://ol-svc-storage:9000',
+      }),
+    });
+    const legacyEnv = {
+      S3_ENDPOINT: 'http://ol-svc-legacy-storage:9000',
+      AWS_ACCESS_KEY_ID: 'legacy-user',
+      AWS_SECRET_ACCESS_KEY: 'legacy-password',
+    };
+    const db = createDbMock([service], legacyEnv);
+    const manager = new ServiceManager(createMockDockerHarness().docker, db);
+
+    await expect(manager.getSuggestedEnv(service, { targetProjectId: 'proj-1' })).resolves.toEqual([
+      { key: 'OBJECT_STORAGE_ENDPOINT', value: 'http://ol-svc-storage:9000' },
+      { key: 'OBJECT_STORAGE_ACCESS_KEY', value: 'new-user' },
+      { key: 'OBJECT_STORAGE_SECRET_KEY', value: 'new-password' },
+      { key: 'OBJECT_STORAGE_PROVIDER', value: 'minio' },
+    ]);
+    expect(legacyEnv).toEqual({
+      S3_ENDPOINT: 'http://ol-svc-legacy-storage:9000',
+      AWS_ACCESS_KEY_ID: 'legacy-user',
+      AWS_SECRET_ACCESS_KEY: 'legacy-password',
+    });
   });
 });
 
@@ -327,6 +364,15 @@ describe('MCP volume and bucket tools', () => {
       status: 'created',
       service: 'storage',
       bucket: 'my-bucket',
+      _agent_guidance: {
+        message:
+          'Treat this MinIO bucket as deployment configuration, not as an S3-specific domain identifier.',
+        next_steps: [
+          'Configure OBJECT_STORAGE_BUCKET=my-bucket and an optional OBJECT_STORAGE_PREFIX at the application infrastructure boundary.',
+          'Read OBJECT_STORAGE_* inside an application-owned adapter and map it to the selected provider SDK; do not read provider credential shapes from domain code.',
+          'Persist a logical store plus opaque object key, not a full s3://, gs://, or provider HTTP URL.',
+        ],
+      },
     });
     expect(serviceManager.createBucket).toHaveBeenCalledWith('svc-minio', 'my-bucket');
 

@@ -141,6 +141,31 @@ list_buckets(service_name: "my-minio")
 delete_bucket(service_name: "my-minio", bucket_name: "uploads")
 ```
 
+### Keep Application Storage Portable
+
+For a new MinIO connection, OpenLander injects `OBJECT_STORAGE_PROVIDER`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. These are
+application infrastructure inputs; map them to the selected provider SDK inside an adapter rather
+than exposing provider credential names to domain code. New application code should:
+
+- expose provider-neutral configuration such as `OBJECT_STORAGE_BUCKET`, optional
+  `OBJECT_STORAGE_PREFIX`, and an infrastructure-selected backend;
+- keep MinIO/S3, Amazon S3, and Google Cloud Storage SDK calls behind one application-owned
+  object-storage interface;
+- persist a logical store plus an opaque object key, not a full `s3://`, `gs://`, MinIO endpoint,
+  or provider HTTP URL;
+- keep bucket, prefix, endpoint, path-style addressing, and credentials in deployment config; and
+- contract-test the portable operations the application actually uses, including signed URLs and
+  metadata when applicable.
+
+Google Cloud Storage HMAC/XML interoperability can be a useful migration bridge for an existing
+S3 client, but it is not a guarantee that provider-specific ACL, metadata, multipart upload,
+versioning, lifecycle, or event behavior is identical. Prefer a native provider adapter when those
+features matter. Existing OpenLander Projects keep their `S3_ENDPOINT` / `AWS_*` compatibility
+keys; OpenLander does not rename or remove them automatically. When an existing application needs
+a newly connected MinIO resource, migrate its adapter explicitly or map the new `OBJECT_STORAGE_*`
+inputs to its legacy SDK configuration rather than creating automatic aliases.
+
 ---
 
 ## Service Lifecycle

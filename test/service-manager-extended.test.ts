@@ -346,9 +346,10 @@ describe('ServiceManager extended DB/user operations', () => {
       { key: 'NEO4J_PASSWORD', value: 'graphpw' },
     ]);
     await expect(manager.getSuggestedEnv(minio, { targetProjectId: 'proj-1' })).resolves.toEqual([
-      { key: 'S3_ENDPOINT', value: 'http://ol-svc-shared-minio:9000' },
-      { key: 'AWS_ACCESS_KEY_ID', value: 'openlander' },
-      { key: 'AWS_SECRET_ACCESS_KEY', value: 'miniopw' },
+      { key: 'OBJECT_STORAGE_ENDPOINT', value: 'http://ol-svc-shared-minio:9000' },
+      { key: 'OBJECT_STORAGE_ACCESS_KEY', value: 'openlander' },
+      { key: 'OBJECT_STORAGE_SECRET_KEY', value: 'miniopw' },
+      { key: 'OBJECT_STORAGE_PROVIDER', value: 'minio' },
     ]);
     await expect(manager.getSuggestedEnv(rabbitmq, { targetProjectId: 'proj-1' })).resolves.toEqual(
       [

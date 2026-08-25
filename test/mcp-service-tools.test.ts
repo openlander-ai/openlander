@@ -707,6 +707,70 @@ describe('MCP service tools (Task 8)', () => {
     });
   });
 
+  it('create_service injects provider-neutral MinIO env without rewriting legacy keys', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-minio',
+        name: 'app-storage',
+        type: 'minio',
+        kind: 'minio',
+        image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
+        port: 9000,
+        credentials: JSON.stringify({
+          host: 'ol-svc-app-storage',
+          port: 9000,
+          user: 'openlander',
+          password: 'storagepw',
+          connectionString: 'http://ol-svc-app-storage:9000',
+        }),
+      }),
+    );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'OBJECT_STORAGE_ENDPOINT', value: 'http://ol-svc-app-storage:9000' },
+      { key: 'OBJECT_STORAGE_ACCESS_KEY', value: 'openlander' },
+      { key: 'OBJECT_STORAGE_SECRET_KEY', value: 'storagepw' },
+      { key: 'OBJECT_STORAGE_PROVIDER', value: 'minio' },
+    ]);
+
+    const result = await tool.execute(
+      { name: 'app-storage', template: 'minio', project_name: 'myapp' },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.env.setBulkForService).toHaveBeenCalledWith('proj-1', 'proj-1__svc', {
+      OBJECT_STORAGE_ENDPOINT: 'http://ol-svc-app-storage:9000',
+      OBJECT_STORAGE_ACCESS_KEY: 'openlander',
+      OBJECT_STORAGE_SECRET_KEY: 'storagepw',
+      OBJECT_STORAGE_PROVIDER: 'minio',
+    });
+    expect(result).toMatchObject({
+      status: 'created',
+      service: { id: 'svc-minio', type: 'minio', port: 9000 },
+      suggested_env: [
+        { key: 'OBJECT_STORAGE_ENDPOINT', value: 'http://ol-svc-app-storage:9000' },
+        { key: 'OBJECT_STORAGE_ACCESS_KEY', value: 'openlander' },
+        { key: 'OBJECT_STORAGE_SECRET_KEY', value: 'storagepw' },
+        { key: 'OBJECT_STORAGE_PROVIDER', value: 'minio' },
+      ],
+      auto_injected_env_keys: [
+        'OBJECT_STORAGE_ENDPOINT',
+        'OBJECT_STORAGE_ACCESS_KEY',
+        'OBJECT_STORAGE_SECRET_KEY',
+        'OBJECT_STORAGE_PROVIDER',
+      ],
+      _agent_guidance: {
+        message: expect.stringContaining('object-storage adapter'),
+        next_steps: [
+          'Connection env was saved automatically on the target Application/Compose workload.',
+          'Call update_app for the target service/project to apply it.',
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).toContain('logical store plus object key');
+  });
+
   it('list_services returns services and throws service-manager failures', async () => {
     const services = [
       createServiceRow({ id: 'svc-pg', name: 'shared-pg' }),

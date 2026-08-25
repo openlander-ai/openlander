@@ -1130,6 +1130,14 @@ persistent `/data` volume. Its `suggested_env` contains `NEO4J_URI`,
 server and does not expose Enterprise multi-database features. Generic volume backup/restore
 and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Neo4j.
 
+For a new MinIO connection, the `minio` template returns `OBJECT_STORAGE_PROVIDER`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. The
+returned `_agent_guidance` tells agents to map those values to the selected provider SDK inside an
+infrastructure adapter, configure bucket/prefix separately, and persist logical store + object key
+references instead of provider URLs. Existing Projects keep any stored `S3_ENDPOINT` / `AWS_*`
+values; OpenLander does not auto-rename or remove them. Automatic legacy aliases are not added to a
+new connection.
+
 ### `list_services`
 
 | Parameter         | Type    | Required | Description                                     |
@@ -1284,6 +1292,12 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 
 `create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` follows the effective
 destructive-action permission: allow, approval hold, or block.
+
+`create_bucket` returns portability guidance with the created bucket. Agents should configure
+`OBJECT_STORAGE_BUCKET` and optional `OBJECT_STORAGE_PREFIX` at the application infrastructure
+boundary, keep S3/MinIO credentials behind an adapter, and avoid persisting provider URLs as
+business data. Existing legacy keys remain untouched unless the user explicitly migrates the
+application adapter. This guidance does not provision an AWS/GCP bucket or copy objects.
 
 ### Backup Operations
 
