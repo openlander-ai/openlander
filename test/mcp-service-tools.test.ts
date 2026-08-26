@@ -77,6 +77,7 @@ function createMockContext(
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     remove: vi.fn(async () => ({})),
+    exec: vi.fn(),
     createDatabase: vi.fn(),
     createUser: vi.fn(),
     getSuggestedEnv: vi.fn(async () => []),
@@ -266,9 +267,7 @@ describe('MCP service tools (Task 8)', () => {
         { host: '100.100.100.10', port: 5432, type: 'vpn' },
       ],
       _agent_guidance: {
-        message: expect.stringContaining(
-          'Keep DATABASE_URL as the only PostgreSQL connection secret',
-        ),
+        message: expect.stringContaining('DATABASE_URL remains the only connection secret'),
         next_steps: [
           'Connection env was saved automatically on the target Application/Compose workload.',
           'Call update_app for the target service/project to apply it.',
@@ -391,7 +390,7 @@ describe('MCP service tools (Task 8)', () => {
     });
   });
 
-  it('keeps DATABASE_URL as the only connection env and guides AGE behind an adapter', async () => {
+  it('keeps DATABASE_URL as the only connection env and reports AGE migration limits', async () => {
     const { ctx, serviceManager } = createMockContext();
     const tool = getTool(ctx, 'create_service');
     const connectionString = 'postgresql://openlander:pw@ol-svc-graph-pg:5432/app';
@@ -434,9 +433,9 @@ describe('MCP service tools (Task 8)', () => {
         message: expect.stringContaining('GRAPH_STORE_BACKEND=age'),
       },
     });
-    expect((result as { _agent_guidance: { message: string } })._agent_guidance.message).toContain(
-      'GraphRepository',
-    );
+    const message = (result as { _agent_guidance: { message: string } })._agent_guidance.message;
+    expect(message).toContain('migration source of truth');
+    expect(message).not.toContain('GraphRepository');
   });
 
   it('create_service points empty project groups at first deploy_app attach', async () => {
@@ -622,6 +621,7 @@ describe('MCP service tools (Task 8)', () => {
         { host: '100.100.100.10', port: 3306, type: 'vpn' },
       ],
       _agent_guidance: {
+        message: expect.stringContaining('Docker DNS, not localhost'),
         next_steps: [
           'Connection env was saved automatically on the target Application/Compose workload.',
           'Call update_app for the target service/project to apply it.',
@@ -684,6 +684,7 @@ describe('MCP service tools (Task 8)', () => {
         { host: '100.100.100.10', port: 6379, type: 'vpn' },
       ],
       _agent_guidance: {
+        message: expect.stringContaining('credential values must remain secret'),
         next_steps: [
           'Connection env was saved automatically on the target Application/Compose workload.',
           'Call update_app for the target service/project to apply it.',
@@ -812,14 +813,14 @@ describe('MCP service tools (Task 8)', () => {
         'OBJECT_STORAGE_PROVIDER',
       ],
       _agent_guidance: {
-        message: expect.stringContaining('object-storage adapter'),
+        message: expect.stringContaining('does not copy objects'),
         next_steps: [
           'Connection env was saved automatically on the target Application/Compose workload.',
           'Call update_app for the target service/project to apply it.',
         ],
       },
     });
-    expect(JSON.stringify(result)).toContain('logical store plus object key');
+    expect(JSON.stringify(result)).not.toMatch(/SDK|adapter/);
   });
 
   it('list_services returns services and throws service-manager failures', async () => {
@@ -978,6 +979,9 @@ describe('MCP service tools (Task 8)', () => {
           { host: '100.100.100.10', port: 5432, type: 'vpn' },
         ],
         externalConnectionStrings: [],
+        _agent_guidance: {
+          message: expect.stringContaining('plaintext credentials'),
+        },
       },
     );
     expect(ctx.db.insertActivityLog).toHaveBeenCalledWith(
@@ -999,6 +1003,31 @@ describe('MCP service tools (Task 8)', () => {
         tool.execute({ service_name: 'missing-service' }, { target: 'mcp' }),
       ).rejects.toThrow('Service not found: missing-service');
     }
+  });
+
+  it('exec_service_container reports the ephemeral container boundary', async () => {
+    const services = [createServiceRow({ id: 'svc-pg', name: 'shared-pg' })];
+    const { ctx, serviceManager } = createMockContext(services);
+    serviceManager.exec.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+    });
+
+    const result = await getTool(ctx, 'exec_service_container').execute(
+      { service_name: 'shared-pg', command: ['psql', '-c', 'SELECT 1'] },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      _agent_guidance: {
+        message: expect.stringContaining('filesystem changes may be lost'),
+        next_steps: expect.arrayContaining([expect.stringContaining('versioned migration')]),
+      },
+    });
+    expect(result).not.toHaveProperty('_agent_guidance.notes');
   });
 
   it('managed service status and credentials reject deployable app services with guidance', async () => {
@@ -1061,6 +1090,13 @@ describe('MCP service tools (Task 8)', () => {
       password: 'pw123',
       database: 'appdb',
       connectionString: 'postgresql://appuser:pw123@ol-svc-shared-pg:5432/appdb',
+      _agent_guidance: {
+        message: expect.stringContaining('did not save them to an application workload'),
+        next_steps: [
+          'Save only the required connection value in the intended workload secret env; keep it out of source control, build output, and logs.',
+          'Call update_app after saving the env value to apply it to a running workload.',
+        ],
+      },
     });
     expect(serviceManager.createUser).toHaveBeenCalledWith('svc-pg', 'appuser', 'pw123', {
       database: 'appdb',

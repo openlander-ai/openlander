@@ -613,7 +613,7 @@ export const execServiceContainerSchema = z.object({
     .array(z.string())
     .min(1)
     .describe(
-      'Command to execute as an array (e.g., ["psql", "-U", "openlander", "-c", "CREATE EXTENSION vector"])',
+      'Command to execute as an array (e.g., ["psql", "-U", "openlander", "-c", "SELECT 1"])',
     ),
   timeout_seconds: z
     .number()

@@ -366,11 +366,10 @@ describe('MCP volume and bucket tools', () => {
       bucket: 'my-bucket',
       _agent_guidance: {
         message:
-          'Treat this MinIO bucket as deployment configuration, not as an S3-specific domain identifier.',
+          'The bucket was created only in this MinIO resource. OpenLander did not update application env, provision a cloud bucket, copy objects, or rewrite persisted object locations.',
         next_steps: [
-          'Configure OBJECT_STORAGE_BUCKET=my-bucket and an optional OBJECT_STORAGE_PREFIX at the application infrastructure boundary.',
-          'Read OBJECT_STORAGE_* inside an application-owned adapter and map it to the selected provider SDK; do not read provider credential shapes from domain code.',
-          'Persist a logical store plus opaque object key, not a full s3://, gs://, or provider HTTP URL.',
+          'Save OBJECT_STORAGE_BUCKET=my-bucket and an optional OBJECT_STORAGE_PREFIX on the target workload, then call update_app to apply them.',
+          'For migration portability, persist an opaque object key rather than a full s3://, gs://, or provider HTTP URL.',
         ],
       },
     });

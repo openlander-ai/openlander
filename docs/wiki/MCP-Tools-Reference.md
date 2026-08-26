@@ -1223,19 +1223,19 @@ when one exists and returns the same values in `suggested_env`. It does not
 redeploy the app; call `update_app` to apply them to a running workload.
 
 For PostgreSQL extension images, `create_service` keeps `DATABASE_URL` as the sole connection
-secret and returns implementation guidance based on the selected image family:
+secret and returns the OpenLander integration contract based on the selected image family:
 
-| Image family                 | Optional application selector          | Boundary               |
-| ---------------------------- | -------------------------------------- | ---------------------- |
-| `pgvector/pgvector`          | `VECTOR_STORE_BACKEND=pgvector`        | `VectorStore`          |
-| `apache/age`                 | `GRAPH_STORE_BACKEND=age`              | `GraphRepository`      |
-| `postgis/postgis`            | `SPATIAL_STORE_BACKEND=postgis`        | `SpatialRepository`    |
-| `timescale/timescaledb[-ha]` | `TIMESERIES_STORE_BACKEND=timescaledb` | `TimeSeriesRepository` |
+| Image family                 | Optional application selector          | OpenLander behavior |
+| ---------------------------- | -------------------------------------- | ------------------- |
+| `pgvector/pgvector`          | `VECTOR_STORE_BACKEND=pgvector`        | Not auto-injected   |
+| `apache/age`                 | `GRAPH_STORE_BACKEND=age`              | Not auto-injected   |
+| `postgis/postgis`            | `SPATIAL_STORE_BACKEND=postgis`        | Not auto-injected   |
+| `timescale/timescaledb[-ha]` | `TIMESERIES_STORE_BACKEND=timescaledb` | Not auto-injected   |
 
 OpenLander does not auto-inject these selectors or duplicate `DATABASE_URL` under capability-specific
 names. The selected Docker image must contain extension binaries; versioned application migrations
-own `CREATE EXTENSION IF NOT EXISTS` and runtime code keeps extension-specific SQL behind its
-adapter/repository boundary.
+own `CREATE EXTENSION IF NOT EXISTS` and extension schema changes. OpenLander does not modify a
+running database container to install extension packages.
 
 The `neo4j` template provisions Neo4j Community with Bolt port `7687` and a
 persistent `/data` volume. Its `suggested_env` contains `NEO4J_URI`,
@@ -1245,11 +1245,10 @@ and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Ne
 
 For a new MinIO connection, the `minio` template returns `OBJECT_STORAGE_PROVIDER`,
 `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. The
-returned `_agent_guidance` tells agents to map those values to the selected provider SDK inside an
-infrastructure adapter, configure bucket/prefix separately, and persist logical store + object key
-references instead of provider URLs. Existing Projects keep any stored `S3_ENDPOINT` / `AWS_*`
-values; OpenLander does not auto-rename or remove them. Automatic legacy aliases are not added to a
-new connection.
+returned `_agent_guidance` states that bucket/prefix are configured separately and that OpenLander
+does not copy objects or rewrite persisted object locations. Existing Projects keep any stored
+`S3_ENDPOINT` / `AWS_*` values; OpenLander does not auto-rename or remove them. Automatic legacy
+aliases are not added to a new connection.
 
 ### `list_services`
 
@@ -1289,7 +1288,9 @@ Provide either `service_id` or `service_name`. Applications are intentionally re
 Shell strings like `"psql -U openlander"` are intentionally rejected.
 Do not use this action to package-install PostgreSQL extensions into a running container. Select a
 reviewed Docker image containing the extension, activate it through a versioned database migration,
-and use this action only for bounded verification when necessary.
+and use this action only for bounded verification when necessary. The response also warns that
+container filesystem changes are not declarative OpenLander configuration and can disappear when
+the container is replaced.
 
 `remove_service` follows the effective destructive-action permission. It executes when allowed,
 enters the human approval queue when approval is required, and returns
@@ -1302,6 +1303,11 @@ human-UI-only flow.
 | -------------- | ------ | -------- | ------------------------------------ |
 | `service_id`   | string | No       | Database/Cache/Storage resource id   |
 | `service_name` | string | No       | Database/Cache/Storage resource name |
+
+The response contains plaintext credentials and records a credential-reveal activity. Internal
+host and connection strings are for workloads on the same Project network; external connection
+strings are operator-access endpoints and are not automatic application bindings. Keep returned
+values out of source control, build output, and logs.
 
 Provide either `service_id` or `service_name`.
 
@@ -1386,12 +1392,16 @@ DB indexes return `DATA_REDIS_DB_INVALID` before any container command runs.
 
 `create_service_user`
 
-| Parameter       | Type   | Required   | Description               |
-| --------------- | ------ | ---------- | ------------------------- |
-| `service_name`  | string | Yes        | Service name              |
-| `database_name` | string | Yes        | Database name             |
-| `username`      | string | Yes (user) | Username                  |
-| `password`      | string | No         | Auto-generated if omitted |
+| Parameter      | Type   | Required | Description               |
+| -------------- | ------ | -------- | ------------------------- |
+| `service_name` | string | Yes      | Service name              |
+| `username`     | string | Yes      | Username                  |
+| `password`     | string | No       | Auto-generated if omitted |
+| `database`     | string | No       | Optional database grant   |
+
+The response contains the new plaintext password and connection string. OpenLander does not bind
+them to an Application automatically; save only the required value as workload secret env and call
+`update_app` to apply it.
 
 The Database resource itself is provisioned by `create_service` (template `postgresql` /
 `mysql` / `mongodb`). `create_database` and `list_databases` are not exposed on the MCP
@@ -1409,11 +1419,10 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 `create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` follows the effective
 destructive-action permission: allow, approval hold, or block.
 
-`create_bucket` returns portability guidance with the created bucket. Agents should configure
-`OBJECT_STORAGE_BUCKET` and optional `OBJECT_STORAGE_PREFIX` at the application infrastructure
-boundary, keep S3/MinIO credentials behind an adapter, and avoid persisting provider URLs as
-business data. Existing legacy keys remain untouched unless the user explicitly migrates the
-application adapter. This guidance does not provision an AWS/GCP bucket or copy objects.
+`create_bucket` returns the exact OpenLander boundary with the created bucket. It does not update
+application env, provision an AWS/GCP bucket, copy objects, or rewrite persisted object locations.
+Agents should save `OBJECT_STORAGE_BUCKET` and optional `OBJECT_STORAGE_PREFIX` on the target
+workload, call `update_app`, and avoid persisting provider URLs as business data.
 
 ### Backup Operations
 
@@ -2026,7 +2035,9 @@ changes without `dry_run=false` plus `confirm=true`. `platform_cleanup_orphans` 
 - All tools return structured JSON responses.
 - Status responses stay intentionally small: current status, IDs, revision
   fields such as `deploy_id`/`commit_sha`, and short guidance.
-- Tool responses may include `_agent_guidance` with suggested next steps.
+- Tool responses may include `_agent_guidance` with suggested next steps and short OpenLander-owned
+  integration constraints. Guidance describes env, networking, secret, lifecycle, and migration
+  boundaries; it does not select an application framework, ORM, SDK, or source-code architecture.
 - Tool responses may include these call links:
   - `status_call` for polling progress.
   - `diagnostic_call` for service or host diagnosis.
