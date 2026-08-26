@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.16] - 2026-08-26
+
+### Changed
+
+- Keep managed-service MCP guidance focused on OpenLander-owned connection,
+  secret, lifecycle, and migration constraints across all supported services.
+- Remove framework, ORM, SDK, and source-architecture prescriptions from MCP
+  deployment prompts while retaining PostgreSQL and object-storage compatibility
+  facts.
+- Clarify plaintext credential handling and the non-persistent nature of ad hoc
+  commands executed inside managed-service containers.
+
+### Fixed
+
+- Correct the documented `create_service_user` parameters to match the public
+  MCP schema.
+
 ## [0.3.6-rc.15] - 2026-08-26
 
 ### Added
