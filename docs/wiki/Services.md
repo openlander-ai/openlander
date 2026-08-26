@@ -42,15 +42,15 @@ PostgreSQL connection URL, select an image that already contains the required ex
 and activate extensions through versioned application migrations. Do not install extension
 packages into a running database container.
 
-When an application genuinely supports multiple implementations, keep the selection at an
-application-owned adapter boundary:
+When an application genuinely supports multiple implementations, it may use an optional non-secret
+selector. OpenLander reports but does not inject these values:
 
-| PostgreSQL capability | Optional selector                      | Application boundary   |
-| --------------------- | -------------------------------------- | ---------------------- |
-| pgvector              | `VECTOR_STORE_BACKEND=pgvector`        | `VectorStore`          |
-| Apache AGE            | `GRAPH_STORE_BACKEND=age`              | `GraphRepository`      |
-| PostGIS               | `SPATIAL_STORE_BACKEND=postgis`        | `SpatialRepository`    |
-| TimescaleDB           | `TIMESERIES_STORE_BACKEND=timescaledb` | `TimeSeriesRepository` |
+| PostgreSQL capability | Optional selector                      | OpenLander behavior |
+| --------------------- | -------------------------------------- | ------------------- |
+| pgvector              | `VECTOR_STORE_BACKEND=pgvector`        | Not auto-injected   |
+| Apache AGE            | `GRAPH_STORE_BACKEND=age`              | Not auto-injected   |
+| PostGIS               | `SPATIAL_STORE_BACKEND=postgis`        | Not auto-injected   |
+| TimescaleDB           | `TIMESERIES_STORE_BACKEND=timescaledb` | Not auto-injected   |
 
 These selectors are ordinary application configuration, not credentials, and OpenLander does not
 inject them automatically. Do not create duplicate secrets such as `AGE_DATABASE_URL` or
@@ -59,10 +59,8 @@ migrations should use an allowlisted `CREATE EXTENSION IF NOT EXISTS ...` statem
 extension through `pg_available_extensions` / `pg_extension`.
 
 For AGE, prefer a provider-neutral `GRAPH_NAMESPACE` over an AGE-specific graph-name variable.
-Keep AGE connection bootstrap and Cypher behind `GraphRepository`, retain relational tables as the
-source of truth, and treat the graph as a rebuildable projection. Standard PostgreSQL JSONB is the
-default document-storage option; a Mongo-compatible gateway is a separate runtime concern rather
-than another connection variable.
+OpenLander does not inject it automatically. Retain relational records as the migration source of
+truth and treat the AGE graph as reconstructable data.
 
 ---
 

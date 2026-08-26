@@ -27,13 +27,13 @@ const PROMPTS: PromptDef[] = [
       {
         name: 'project_type',
         description:
-          'Project type for tailored advice (e.g. nextjs, fastapi, rails, spring-boot, generic)',
+          'Optional project type for OpenLander-specific build/env contract notes (e.g. nextjs, fastapi, rails, spring-boot, generic)',
         required: false,
       },
     ],
     getMessages: (args) => {
       const projectType = args['project_type'] ?? 'generic';
-      const typeSpecific = getTypeSpecificAdvice(projectType);
+      const typeSpecific = getTypeSpecificPlatformContract(projectType);
 
       return [
         {
@@ -184,36 +184,32 @@ ${failureSpecific}`,
   },
 ];
 
-function getTypeSpecificAdvice(projectType: string): string {
+function getTypeSpecificPlatformContract(projectType: string): string {
   switch (projectType.toLowerCase()) {
     case 'nextjs':
     case 'next':
-      return `## Next.js Tips
-- Use \`docker_target: "runner"\` for multi-stage Dockerfiles with standalone output.
-- \`NEXT_PUBLIC_*\` env vars are automatically injected as Docker build args — just pass them via env_vars.
-- Standalone output mode (\`output: 'standalone'\` in next.config) produces smaller images.`;
+      return `## Next.js / OpenLander Contract
+- Saved \`NEXT_PUBLIC_*\` values are passed as Docker build args as well as runtime env; changing them requires a rebuild.
+- OpenLander does not choose a Docker build target. Set \`docker_target\` only when the repository's Dockerfile defines the requested stage.`;
 
     case 'fastapi':
     case 'python':
-      return `## FastAPI / Python Tips
-- Ensure Dockerfile installs dependencies with \`pip install --no-cache-dir -r requirements.txt\`.
-- Use \`uvicorn\` as the CMD, binding to \`0.0.0.0\` (not 127.0.0.1).
-- DATABASE_URL format for SQLAlchemy: \`postgresql+asyncpg://...\` (add driver suffix).`;
+      return `## Python / OpenLander Contract
+- The container process must listen on \`0.0.0.0\` and the saved container port; OpenLander does not rewrite an application bind address.
+- Managed PostgreSQL returns a standard \`postgresql://\` \`DATABASE_URL\`. OpenLander does not add ORM- or driver-specific scheme suffixes.`;
 
     case 'rails':
     case 'ruby':
-      return `## Rails Tips
-- Set \`RAILS_ENV=production\` and \`SECRET_KEY_BASE\` in env vars.
-- Run \`rails db:migrate\` as part of the Dockerfile or entrypoint.
-- Use \`DATABASE_URL\` — Rails auto-parses it in database.yml.`;
+      return `## Rails / OpenLander Contract
+- Managed PostgreSQL returns \`DATABASE_URL\`; application secrets such as \`SECRET_KEY_BASE\` remain user-owned env.
+- OpenLander does not run application database migrations automatically during deploy or rollback.`;
 
     case 'spring-boot':
     case 'spring':
     case 'java':
-      return `## Spring Boot Tips
-- Use multi-stage Docker build: build with Maven/Gradle, run with JRE-only image.
-- Set \`SPRING_DATASOURCE_URL\` for JDBC connections (format: \`jdbc:postgresql://host:port/db\`).
-- Memory: set \`JAVA_OPTS=-Xmx512m\` to limit heap in container environments.`;
+      return `## Java / OpenLander Contract
+- Managed PostgreSQL returns \`DATABASE_URL\`. OpenLander does not translate it into framework-specific JDBC environment variables.
+- JVM heap, build stages, and framework profiles are application-owned configuration; OpenLander applies only the env and resource limits explicitly saved for the workload.`;
 
     default:
       return '';
@@ -236,7 +232,7 @@ function getRecoveryAdvice(failureType: string): string {
       return `## OOM / SIGKILL Tips
 - Run \`diagnose_host_resources\` first (read-only): it reports top CPU/memory containers and Docker disk totals.
 - If disk is the pressure, \`get_disk_usage\` to confirm. Reclaiming space with \`cleanup_docker\` follows the global destructive permission: it executes, waits for human approval, or returns \`OPERATION_PERMISSION_DENIED\`. Use the returned \`poll_call\` when approval is required, then call \`get_disk_usage\` again.
-- If a single container is the cause, lower its memory footprint (e.g. \`JAVA_OPTS=-Xmx512m\`) via \`set_env_vars\` and redeploy.`;
+- If a single container is the cause, change the application-owned runtime settings or the workload resource limits, then redeploy. OpenLander does not tune a language runtime automatically.`;
 
     case 'healthcheck':
     case 'health':
