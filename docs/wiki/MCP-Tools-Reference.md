@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **142 unique default operations** surfaced through those composites
+- **144 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -27,6 +27,7 @@ Agent routing rule of thumb:
 | "Set env vars or connect DB/Redis to an app"       | `openlander_service.set_env_vars`, then `update_app`                                                        |
 | "Fix route port mismatch without rebuild"          | `openlander_service.apply_route_config`                                                                     |
 | "Create PostgreSQL/Redis/MySQL/etc."               | `openlander_managed_service.create_service`                                                                 |
+| "Read or change database/cache/storage RAM"        | `openlander_managed_service.get_service_resources` / `update_service_resources`                             |
 | "Inspect this project's database/cache safely"     | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
 | "Why is this failing?"                             | `openlander_monitor.diagnose_service` with `service_id`                                                     |
 | "What did AI Ops notice?"                          | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
@@ -156,7 +157,7 @@ Composite catalog:
 | `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git                                  |
 | `openlander_project`         | 64           | Projects, manifests, migration planning, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
 | `openlander_service`         | 26           | Application lifecycle, config, domain routes, public access, and env vocabulary                         |
-| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage                     |
+| `openlander_managed_service` | 26           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage                     |
 | `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes                                |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
@@ -176,7 +177,7 @@ Composite catalog:
 | [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF                          |
 | [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads                              |
 | [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                                                     |
-| [Resources](#services--infrastructure)                    | 17    | Create databases, manage infrastructure resources                                   |
+| [Resources](#services--infrastructure)                    | 19    | Create databases, manage infrastructure resources                                   |
 | [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                                            |
 | [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL                          |
 | [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes                                  |
@@ -1260,6 +1261,51 @@ aliases are not added to a new connection.
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 Project-scoped rows include `kind`, `attached_project_id`, and `attached_project_name` so agents can tell which app project can reach the database/cache over its Docker network.
+
+### `get_service_resources` / `update_service_resources`
+
+Read or change the actual Docker memory limit for managed PostgreSQL, MySQL, Redis,
+MongoDB, Neo4j, or MinIO through `openlander_managed_service`.
+
+| Parameter          | Type    | Required           | Description                                                                                |
+| ------------------ | ------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `service_id`       | string  | One target         | Preferred exact Database/Cache/Storage service ID                                          |
+| `service_name`     | string  | One target         | Resource name; `service_id` takes precedence when both are supplied                        |
+| `resource_profile` | string  | Update only        | `micro` (256 MiB), `small` (512 MiB), `medium` (1024 MiB), `large` (2048 MiB), or `custom` |
+| `memory_mb`        | integer | Custom update only | Limit in MiB, at least 64; only accepted with `resource_profile="custom"`                  |
+
+Use `list_services` to select the DB ID, then read before updating:
+
+```json
+{ "action": "get_service_resources", "params": { "service_id": "db-id" } }
+```
+
+```json
+{
+  "action": "update_service_resources",
+  "params": { "service_id": "db-id", "resource_profile": "custom", "memory_mb": 1024 }
+}
+```
+
+Responses include `status`, `project_id`, `service_id`, `profile`, `memory`
+(`limitBytes`, `reservationBytes`, `swapBytes`), `cpu.shares`, and `running`.
+The read reports actual Docker limits, including existing containers without saved
+profiles; `memory: null` means unlimited. Updates use the same pipeline as the web UI:
+increases apply in place, are verified, and are saved for container recovery. CPU,
+engine settings, data volumes, and env vars are unchanged. Limits cannot exceed 80%
+of host memory.
+
+A running decrease returns `SERVICE_CONTAINER_STATE_INVALID`. Stop the DB explicitly
+before decreasing; the update does not stop or restart it automatically. A stopped DB
+remains stopped. Runtime/persistence failures return `SERVICE_OPERATION_FAILED` when
+raised by the managed resource pipeline. After a failure, read the applied limit again:
+Docker may have applied it even if saving failed. Archived/recovering Projects, open
+circuit breakers, and concurrent deploy locks retain their existing mutation guards.
+
+Project- and service-scoped tokens check every supplied service selector before
+execution; mixing an allowed ID with an out-of-scope name returns `SCOPE_VIOLATION`.
+Application/Compose targets return `SERVICE_KIND_MISMATCH`; use
+`openlander_service.update_service_config` and then `update_app` for those workloads.
 
 ### `get_service_status`
 

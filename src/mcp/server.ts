@@ -112,7 +112,7 @@ All actions: action="help"
 
 ## openlander_managed_service
 Database/Cache/Storage resources and volumes. The action names are compatibility names; create_service creates a Database/Cache/Storage resource.
-Key actions: create_service, list_services, get_service_credentials, backup_service, add_volume, get_disk_usage
+Key actions: create_service, list_services, get_service_resources, update_service_resources, get_service_credentials, backup_service, add_volume, get_disk_usage
 All actions: action="help"
 
 ## openlander_monitor

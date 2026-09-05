@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { RESOURCE_PROFILE_NAMES } from '../../pipeline/resource-limits-policy.js';
 import { ENVIRONMENT_KEYS } from '../../pipeline/env-scope.js';
 
 const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.string())]);
@@ -231,6 +232,29 @@ export const managedServiceTargetSchema = z
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',
   });
+
+export const updateServiceResourcesSchema = managedServiceTargetSchema
+  .safeExtend({
+    resource_profile: z
+      .enum(RESOURCE_PROFILE_NAMES)
+      .describe('Memory preset, or custom with memory_mb'),
+    memory_mb: z
+      .number()
+      .int()
+      .min(64)
+      .optional()
+      .describe('Custom memory limit in MiB (minimum 64); only with resource_profile="custom"'),
+  })
+  .refine(
+    (value) =>
+      value.resource_profile === 'custom'
+        ? value.memory_mb !== undefined
+        : value.memory_mb === undefined,
+    {
+      message: 'memory_mb is required only when resource_profile="custom"',
+      path: ['memory_mb'],
+    },
+  );
 
 export const mcpActionStatusSchema = z
   .object({

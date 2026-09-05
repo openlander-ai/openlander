@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.19] - 2026-09-05
+
+### Added
+
+- Expose managed database/cache/storage memory reads and updates through MCP, using
+  the same immediate apply, running-decrease guard, and recovery persistence as the web UI.
+- Validate every supplied service selector before scoped MCP resource operations.
+
 ## [0.3.6-rc.18] - 2026-09-05
 
 ### Fixed

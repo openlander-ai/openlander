@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '../../src/app.js';
+import { createOpenLanderManagedServiceCompositeTool } from '../../src/mcp/composite-tools.js';
+import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import type { Database } from '../../src/db/index.js';
 import { Docker } from '../../src/pipeline/docker.js';
 import { updateManagedServiceResources } from '../../src/pipeline/managed-service-resources.js';
@@ -59,10 +62,35 @@ describe.runIf(process.env.OPENLANDER_MEMORY_DOCKER_SMOKE === '1')(
           },
           insertActivityLog: async () => undefined,
         } as unknown as Database;
-        const result = await updateManagedServiceResources(db, docker, 'smoke-db', {
-          profile: 'custom',
-          memoryMb: 512,
-        });
+        const composite = createOpenLanderManagedServiceCompositeTool(serviceToolDefs);
+        const updateViaMcp = async (memoryMb: number) =>
+          composite.execute(
+            {
+              action: 'update_service_resources',
+              params: { service_id: 'smoke-db', resource_profile: 'custom', memory_mb: memoryMb },
+            },
+            {
+              target: 'mcp',
+              identity: {
+                source: 'mcp',
+                mcpScopeKind: 'project',
+                mcpScopeProjectId: 'smoke-project',
+              },
+              appCtx: {
+                db,
+                serviceManager: {
+                  updateResourceLimits: (
+                    serviceId: string,
+                    input: Parameters<typeof updateManagedServiceResources>[3],
+                  ) => updateManagedServiceResources(db, docker, serviceId, input),
+                },
+              } as unknown as AppContext,
+            },
+          ) as Promise<
+            Awaited<ReturnType<typeof updateManagedServiceResources>> & { status: string }
+          >;
+        const result = await updateViaMcp(512);
+        expect(result.status).toBe('updated');
         expect(result.memory?.limitBytes).toBe(512 * 1024 * 1024);
         const after = await docker.inspectContainer(id);
         expect(after.Id).toBe(before.Id);
@@ -76,10 +104,7 @@ describe.runIf(process.env.OPENLANDER_MEMORY_DOCKER_SMOKE === '1')(
         });
         expect((await docker.inspectContainer(id)).HostConfig.Memory).toBe(512 * 1024 * 1024);
         await docker.stopContainer(id);
-        const decreased = await updateManagedServiceResources(db, docker, 'smoke-db', {
-          profile: 'custom',
-          memoryMb: 256,
-        });
+        const decreased = await updateViaMcp(256);
         expect(decreased.running).toBe(false);
         expect(decreased.memory?.limitBytes).toBe(256 * 1024 * 1024);
         run('start', id);
