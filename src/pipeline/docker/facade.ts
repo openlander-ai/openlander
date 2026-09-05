@@ -97,6 +97,10 @@ export class Docker implements RuntimeBackend {
     return this.containerOps.inspectContainer(containerId);
   }
 
+  updateContainerMemory(...args: Parameters<ContainerOps['updateContainerMemory']>) {
+    return this.containerOps.updateContainerMemory(...args);
+  }
+
   restartContainer(...args: Parameters<ContainerOps['restartContainer']>) {
     return this.runContainerStart(() => this.containerOps.restartContainer(...args));
   }

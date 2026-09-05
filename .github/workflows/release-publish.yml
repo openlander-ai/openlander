@@ -108,6 +108,9 @@ jobs:
       - name: Run coverage gate
         run: npm run test:coverage
 
+      - name: Verify managed database memory updates preserve data
+        run: OPENLANDER_MEMORY_DOCKER_SMOKE=1 npx vitest run --config vitest.release.config.ts test/pipeline/managed-service-resources-docker.test.ts
+
       - name: Verify npm package contents
         run: npm pack --dry-run --json --ignore-scripts | tee /tmp/openlander-npm-pack.json
 

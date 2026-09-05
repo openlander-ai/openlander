@@ -90,6 +90,14 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain("t('services.managedDetail.settings.danger')");
   });
 
+  it('includes memory controls for managed services and refreshes after lifecycle changes', () => {
+    const managedOverview = source.slice(source.indexOf('function ManagedOverviewTab('));
+    expect(managedOverview).toContain('<ServiceResourceLimitsPanel');
+    expect(managedOverview).toContain('projectId={service.project_id}');
+    expect(managedOverview).toContain('isManaged');
+    expect(managedOverview).toContain('serviceStatus={service.status}');
+  });
+
   it('does not render missing managed-service ports as undefined', () => {
     expect(source).toContain('getManagedServicePortLabel(service)');
     expect(source).not.toContain('value={String(service.port)}');

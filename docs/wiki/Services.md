@@ -22,6 +22,24 @@ by default. The dashboard can opt into child workloads with
 strategy, traffic-target flag, and optional latest deploy summary; the response includes the
 optional parent `aggregate_status`.
 
+## Memory Limits
+
+Open a Database/Cache/Storage service's **Overview → Resource Limits** to see its
+actual Docker memory limit and choose a profile or enter a custom value. This
+also works for existing PostgreSQL, MySQL, Redis, MongoDB, Neo4j, and MinIO containers.
+
+Increases apply to the existing container without restarting or replacing it.
+Stop the service before decreasing its limit, apply the change, then start it
+again. Docker updates are verified before success is reported. Saved memory
+limits are reused if platform recovery must recreate a missing container.
+CPU settings remain unchanged; database engine memory settings are separate.
+
+The existing `GET` and `PATCH /api/projects/:p/services/:s/resources` endpoints
+return and update applied limits for Database/Cache/Storage resources. Application resource
+settings retain their existing next-deployment behavior. If an update fails,
+reload the current limits before retrying; a persistence failure can leave the
+Docker limit applied while recovery settings still need to be saved.
+
 ## Available Templates
 
 | Template       | Image                 | Default Port | Use Case                     |

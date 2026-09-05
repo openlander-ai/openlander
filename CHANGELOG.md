@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.17] - 2026-09-05
+
+### Fixed
+
+- Add memory controls to Database/Cache/Storage service details, including the
+  actual limit applied to existing containers. Increases apply without restarting
+  or replacing the database container; decreases require stopping the service first.
+- Verify Docker memory updates before reporting success and preserve saved limits
+  when recovering a missing managed-service container. CPU settings remain unchanged.
+
 ## [0.3.6-rc.16] - 2026-08-26
 
 ### Changed

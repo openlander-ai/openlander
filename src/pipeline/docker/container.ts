@@ -625,6 +625,19 @@ export class ContainerOps {
     }
   }
 
+  async updateContainerMemory(containerId: string, memoryLimitBytes: number): Promise<void> {
+    try {
+      await this.ctx.client.getContainer(containerId).update({
+        Memory: memoryLimitBytes,
+        MemorySwap: memoryLimitBytes,
+        MemoryReservation: Math.floor(memoryLimitBytes * 0.5),
+      });
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new ContainerNotFoundError(containerId);
+      throw error;
+    }
+  }
+
   async restartContainer(containerId: string): Promise<void> {
     try {
       const container = this.ctx.client.getContainer(containerId);

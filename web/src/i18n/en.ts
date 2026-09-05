@@ -217,6 +217,14 @@ export const translations = {
     saving: 'Saving...',
     saved: 'Saved',
     appliesOnRedeploy: 'Changes apply on next deployment',
+    apply: 'Apply memory limit',
+    appliedMemory: 'Applied memory limit: {mb} MB',
+    appliesImmediately:
+      'Applies to the existing container without restarting it. CPU settings are unchanged. Database engine memory tuning is separate.',
+    stopBeforeDecrease:
+      'Stop the service before lowering its memory limit. This prevents the database from being terminated during the change.',
+    managedSaveFailed:
+      'Could not complete the memory update. Reload to check the applied limit, then retry. To lower the limit, stop the service first.',
     noLimit: 'No memory limit configured',
     noLimitWarning: 'We recommend setting a memory limit to prevent cascade failures.',
     loadFailed: 'Failed to load resource limits',

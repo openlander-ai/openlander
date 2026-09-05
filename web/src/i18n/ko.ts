@@ -221,6 +221,14 @@ export const translations = {
       '메모리와 CPU 사용량을 제한하여 연쇄 장애를 예방합니다. 변경 사항은 다음 배포 때 적용됩니다.',
     customMemoryHint: '최소 64 MB',
     appliesOnRedeploy: '변경사항은 다음 배포 시 적용됩니다',
+    apply: '메모리 제한 적용',
+    appliedMemory: '현재 적용된 메모리 상한: {mb} MB',
+    appliesImmediately:
+      '기존 컨테이너에 재시작 없이 적용됩니다. CPU 설정은 유지되며, DB 엔진의 메모리 설정은 별도로 조정해야 합니다.',
+    stopBeforeDecrease:
+      '메모리 상한을 낮추려면 먼저 서비스를 중지하세요. 변경 중 메모리 부족으로 DB가 종료되는 것을 방지합니다.',
+    managedSaveFailed:
+      '메모리 변경을 완료하지 못했습니다. 새로고침하여 적용된 상한을 확인한 뒤 다시 시도하세요. 상한을 낮추려면 먼저 서비스를 중지해야 합니다.',
     noLimit: '메모리 제한이 설정되지 않았습니다',
     noLimitWarning: '메모리 제한을 설정하면 연쇄 장애를 예방할 수 있습니다.',
     loadFailed: '리소스 제한을 불러오지 못했습니다',

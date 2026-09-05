@@ -16,7 +16,10 @@ import {
 } from './traefik.js';
 import { allocatePort } from './port.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
+import {
+  loadResourceLimitsForDeployTarget,
+  loadResourceLimitsForService,
+} from './config-snapshot.js';
 import { loadServiceViewRecord } from '../db/views/service-view.js';
 
 const log = createModuleLogger('recover');
@@ -167,6 +170,7 @@ async function recoverService(
       memoryLimitBytes: 536870912,
       cpuShares: 512,
     };
+    const savedLimits = await loadResourceLimitsForService(ctx.db, service.id);
 
     await ctx.docker.safeRemoveContainer(cName);
 
@@ -194,7 +198,7 @@ async function recoverService(
       cmd: template?.cmd,
       volumeBinds: [`${vName}:${dataMountPath}`],
       healthcheck: template?.healthcheck,
-      memoryLimitBytes: memLimits.memoryLimitBytes,
+      memoryLimitBytes: savedLimits?.memoryLimitBytes ?? memLimits.memoryLimitBytes,
       cpuShares: memLimits.cpuShares,
       network,
     });

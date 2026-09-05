@@ -325,6 +325,7 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Dashboard for human oversight + intervention.
 - Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
   MongoDB, Neo4j, and MinIO through agent/MCP workflows.
+- Managed-service memory controls with live increases and persistent recovery settings.
 - Deterministic post-deploy recovery primitives for external agents: structured
   `diagnose_service` findings, safe route re-pointing, same-image runtime env
   apply, verification details, and rollback when a hot path fails.
