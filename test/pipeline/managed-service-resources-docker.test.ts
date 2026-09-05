@@ -25,9 +25,11 @@ describe.runIf(process.env.OPENLANDER_MEMORY_DOCKER_SMOKE === '1')(
         'postgres:16-alpine',
       );
       try {
+        // Initialization uses a temporary socket-only server. Wait for TCP so
+        // it cannot be mistaken for the final PostgreSQL process.
         await vi.waitFor(
           () =>
-            expect(run('exec', id, 'pg_isready', '-U', 'postgres')).toContain(
+            expect(run('exec', id, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres')).toContain(
               'accepting connections',
             ),
           { timeout: 30000, interval: 500 },
