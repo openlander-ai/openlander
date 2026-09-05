@@ -31,6 +31,11 @@ import type { ContainerExecResult } from './service-adapters/types.js';
 import type { RuntimeBackend } from './runtime/index.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
+  getManagedServiceResources,
+  updateManagedServiceResources,
+} from './managed-service-resources.js';
+import type { ResourceProfileUpdate } from './resource-limits-policy.js';
+import {
   isDockerContainerNameConflictError,
   isDockerNotFoundError,
   ManagedPostgresVolumeContractUnsupportedError,
@@ -784,6 +789,14 @@ export class ServiceManager {
       clearPortScanCache();
       releasePortReservation(hostPort);
     }
+  }
+
+  getResourceLimits(id: string) {
+    return getManagedServiceResources(this.db, this.runtime, id);
+  }
+
+  updateResourceLimits(id: string, input: ResourceProfileUpdate) {
+    return updateManagedServiceResources(this.db, this.runtime, id, input);
   }
 
   async start(id: string): Promise<void> {

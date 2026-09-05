@@ -48,6 +48,9 @@ export interface RuntimeBackend {
     containerId: Parameters<ContainerOps['inspectContainer']>[0],
     serverId?: string,
   ): ReturnType<ContainerOps['inspectContainer']>;
+  updateContainerMemory(
+    ...args: Parameters<ContainerOps['updateContainerMemory']>
+  ): ReturnType<ContainerOps['updateContainerMemory']>;
   restartContainer(
     ...args: Parameters<ContainerOps['restartContainer']>
   ): ReturnType<ContainerOps['restartContainer']>;

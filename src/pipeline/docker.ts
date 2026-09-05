@@ -1,4 +1,5 @@
 export { Docker } from './docker/facade.js';
+export { buildResourceLimitConfig } from './docker/types.js';
 export type {
   DockerStatus,
   SecretFileMount,
