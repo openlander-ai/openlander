@@ -119,6 +119,8 @@ async function targetFromServiceName(
   }
   if (projectScopeId)
     return { projectId: projectScopeId, serviceId: null, resolvedFrom: 'project_name' };
+  // Scoped calls must resolve every supplied name, even with a valid service_id.
+  if (isScopedIdentity(identity)) throw new ServiceNotFoundError(serviceName);
   return null;
 }
 

@@ -47,6 +47,7 @@ import {
   removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
+  updateServiceResourcesSchema,
 } from './schemas.js';
 
 const log = createModuleLogger('tools-defs-service');
@@ -986,6 +987,68 @@ export const serviceToolDefs: ToolDef[] = [
         );
       }
       return await readDataSource(appCtx, args['service_id'] as string, args);
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'get_service_resources',
+    riskLevel: 'low',
+    description:
+      'Read actual Docker memory limits for a Database/Cache/Storage resource by service_id or service_name. Returns current limits, saved profile when it matches Docker, and running state. Credentials are omitted.',
+    mcpDescription:
+      'Read the actual managed-service memory limit and running state before changing RAM. Prefer service_id.',
+    inputSchema: managedServiceTargetSchema,
+    execute: async (args, { appCtx }) => {
+      const service = await resolveServiceByIdOrName(appCtx, args);
+      if (!isManagedServiceKind(service.kind)) return serviceKindMismatchResponse(service);
+      const resources = await appCtx.serviceManager.getResourceLimits(service.id);
+      return {
+        status: 'ok',
+        project_id: service.project_id,
+        service_id: service.id,
+        ...resources,
+        _agent_guidance: {
+          message:
+            'These are the limits currently applied to Docker. Use update_service_resources to change memory; running decreases require stopping the service first.',
+          next_steps: [
+            'Use resource_profile="custom" with memory_mb for a custom limit. CPU and database engine settings are unchanged.',
+          ],
+        },
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'update_service_resources',
+    riskLevel: 'medium',
+    description:
+      'Apply a Database/Cache/Storage memory limit through the same pipeline as the web UI. Increases apply in place without restart; running decreases are rejected. Verifies Docker and saves limits for recovery. Does not stop, recreate, or restart the service, modify CPU/engine settings, or write env vars. Errors include SERVICE_CONTAINER_STATE_INVALID, SERVICE_CONFIG_INVALID, DEPLOY_LOCKED, and SERVICE_OPERATION_FAILED.',
+    mcpDescription:
+      'Change managed-service RAM using resource_profile and optional memory_mb. Immediate apply and persistence; stop the service explicitly before decreasing. Inspect get_service_resources first.',
+    inputSchema: updateServiceResourcesSchema,
+    execute: async (args, { appCtx }) => {
+      const input = updateServiceResourcesSchema.parse(args);
+      const service = await resolveServiceByIdOrName(appCtx, input);
+      if (!isManagedServiceKind(service.kind)) return serviceKindMismatchResponse(service);
+      const resources = await appCtx.serviceManager.updateResourceLimits(service.id, {
+        profile: input.resource_profile,
+        ...(input.memory_mb === undefined ? {} : { memoryMb: input.memory_mb }),
+      });
+      return {
+        status: 'updated',
+        project_id: service.project_id,
+        service_id: service.id,
+        ...resources,
+        status_call: {
+          tool: 'openlander_managed_service',
+          arguments: { action: 'get_service_resources', params: { service_id: service.id } },
+        },
+        _agent_guidance: {
+          message:
+            'Memory was applied to Docker and saved for recovery. The service was not restarted; a stopped service remains stopped.',
+          next_steps: ['Use status_call to read the current applied limit.'],
+        },
+      };
     },
     targets: ['mcp'],
   },

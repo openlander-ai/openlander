@@ -101,6 +101,7 @@ export default defineConfig({
       'test/mcp/engagement-scope.test.ts',
       'test/mcp/instance-identity.test.ts',
       'test/mcp/managed-service-rename.test.ts',
+      'test/mcp/managed-service-resources.test.ts',
       'test/mcp/mcp-restricted-actions.test.ts',
       'test/mcp/mode-switching.test.ts',
       'test/mcp/project-create-action.test.ts',

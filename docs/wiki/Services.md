@@ -33,6 +33,9 @@ Stop the service before decreasing its limit, apply the change, then start it
 again. Docker updates are verified before success is reported. Saved memory
 limits are reused if platform recovery must recreate a missing container.
 CPU settings remain unchanged; database engine memory settings are separate.
+MCP agents can use `openlander_managed_service` actions `get_service_resources` and
+`update_service_resources` with the same behavior. Select the DB with `service_id`;
+updates take `resource_profile` and, for `custom`, `memory_mb`.
 
 The existing `GET` and `PATCH /api/projects/:p/services/:s/resources` endpoints
 return and update applied limits for Database/Cache/Storage resources. Application resource
