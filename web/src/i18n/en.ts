@@ -1,4 +1,36 @@
 export const translations = {
+  serviceCleanup: {
+    open: 'Request stop or delete',
+    title: 'Clean up services',
+    description:
+      'Select services, copy the request, and paste it into your agent conversation. Nothing changes here.',
+    action: 'Choose an action',
+    stop: 'Stop',
+    delete: 'Delete',
+    targets: 'Target services',
+    selectAll: 'Select all',
+    selected: '{count} selected',
+    grant: 'Also allow stop and delete for this Project going forward',
+    grantHint:
+      'This applies to the entire Project, beyond the selected services. It also permits archiving and deleting database resources, buckets, and volumes. Service overrides remain effective. You can request approval-required mode again in the conversation.',
+    stopHint: 'Stopping keeps containers and data. You can start the services again later.',
+    deleteHint:
+      'Deletes the selected apps and containers. Data volumes and Database/Cache/Storage resources are kept.',
+    preview: 'Review request',
+    connect: 'Agent connection guide',
+    copy: 'Copy request',
+    copied: 'Copied · paste into your conversation',
+    prompt: {
+      target:
+        'For OpenLander Project "{projectName}" (project_id: {projectId}), perform the following request.',
+      permission:
+        'Persistently allow destructive actions for this Project. Use MCP set_project_permissions to save destructive_actions=allow, then proceed with the actions below. Keep service-specific restrictions.',
+      stop: 'Stop only the following services.',
+      delete: 'Delete only the following app services and preserve data volumes.',
+      boundary:
+        'Do not change services outside this list or other Projects. Include children of selected Compose services and report success or failure for each service.',
+    },
+  },
   aiOps: {
     title: 'AI Ops Briefing',
     beta: 'Beta',
@@ -1564,7 +1596,7 @@ export const translations = {
         'No resources in this Project yet. Add an Application, or ask your agent to add a Database/Cache/Storage resource.',
       help: 'A Project is the workspace. Resources are Applications, Compose stacks, Databases, Caches, and Storage attached to it. MCP follow-up actions should use service_id.',
       banner:
-        'This list includes Applications, Compose stacks, and Database/Cache/Storage resources in the Project. Use the MCP service_id shown below for follow-up actions.',
+        'Open a resource to check its status. To clean up multiple apps, choose Request stop or delete.',
       archivedVisible:
         'Archived Applications are visible. Open one to restore it or delete it from its Application danger zone.',
       showArchived: 'Show archived Applications',

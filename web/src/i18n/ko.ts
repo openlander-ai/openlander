@@ -1,4 +1,35 @@
 export const translations = {
+  serviceCleanup: {
+    open: '정지·삭제 요청',
+    title: '여러 서비스 정리',
+    description:
+      '대상을 선택하고 요청을 복사해 에이전트 대화에 붙여 넣으세요. 여기서는 서비스를 변경하지 않습니다.',
+    action: '작업 선택',
+    stop: '정지',
+    delete: '삭제',
+    targets: '대상 서비스',
+    selectAll: '전체 선택',
+    selected: '{count}개 선택',
+    grant: '이 프로젝트의 정지·삭제 권한도 계속 허용',
+    grantHint:
+      '선택한 서비스뿐 아니라 프로젝트 전체에 적용됩니다. 보관과 DB 리소스·버킷·볼륨 삭제 권한도 포함합니다. 개별 서비스의 제한은 유지되며, 대화에서 다시 승인 필요로 바꿀 수 있습니다.',
+    stopHint: '정지는 컨테이너와 데이터를 남깁니다. 나중에 다시 시작할 수 있습니다.',
+    deleteHint: '선택한 앱과 컨테이너를 삭제합니다. 데이터 볼륨과 DB·캐시·스토리지는 남깁니다.',
+    preview: '요청 내용 보기',
+    connect: '에이전트 연결 안내',
+    copy: '요청 복사',
+    copied: '복사됨 · 대화에 붙여 넣으세요',
+    prompt: {
+      target:
+        'OpenLander 프로젝트 "{projectName}" (project_id: {projectId})에 다음 작업을 요청합니다.',
+      permission:
+        '이 프로젝트의 파괴적 작업 권한을 계속 허용해 주세요. MCP set_project_permissions로 destructive_actions=allow를 저장한 뒤 아래 작업을 진행해 주세요. 개별 서비스 제한은 유지하세요.',
+      stop: '아래 서비스만 정지해 주세요.',
+      delete: '아래 앱 서비스만 삭제하고 데이터 볼륨은 보존해 주세요.',
+      boundary:
+        '목록 밖 서비스와 다른 프로젝트는 변경하지 마세요. Compose 대상에 포함된 하위 서비스는 함께 처리하고, 성공·실패 결과를 서비스별로 알려 주세요.',
+    },
+  },
   aiOps: {
     title: 'AI Ops 브리핑',
     beta: '베타',
@@ -1628,8 +1659,7 @@ export const translations = {
       empty:
         '아직 이 프로젝트에 리소스가 없습니다. 애플리케이션을 추가하거나 에이전트에게 데이터베이스·캐시·스토리지 리소스를 추가해 달라고 요청하세요.',
       help: '프로젝트는 애플리케이션, Compose, 데이터베이스, 캐시, 스토리지 리소스를 묶는 작업 공간입니다. MCP 후속 작업에서는 service_id를 사용하세요.',
-      banner:
-        '아래 목록에서 이 프로젝트의 애플리케이션, Compose, 데이터베이스·캐시·스토리지 리소스를 함께 볼 수 있습니다. 후속 작업에는 표시된 MCP service_id를 사용하세요.',
+      banner: '리소스를 열어 상태를 확인하세요. 여러 앱을 정리하려면 정지·삭제 요청을 선택하세요.',
       archivedVisible:
         '보관된 애플리케이션도 표시하고 있습니다. 애플리케이션을 열어 복원하거나 위험 작업에서 삭제할 수 있습니다.',
       showArchived: '보관된 애플리케이션 표시',

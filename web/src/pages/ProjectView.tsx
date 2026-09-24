@@ -29,6 +29,7 @@ import {
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
+import { ServiceCleanupDialog } from '@/components/project/ServiceCleanupDialog';
 import { SettingsTab, type SettingsSection } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
 import { ProjectAiOpsTab } from '@/components/project/ProjectAiOpsTab';
@@ -611,6 +612,7 @@ export function ProjectView() {
           className="p-0"
         >
           <ServicesPanel
+            projectName={realProject?.name ?? projectId}
             projectId={projectId}
             services={projectServiceRows}
             onOpen={openService}
@@ -700,6 +702,7 @@ export function ProjectView() {
 // ─── Services panel ─────────────────────────────────────────────────────────
 
 function ServicesPanel({
+  projectName,
   projectId,
   services,
   onOpen,
@@ -714,6 +717,7 @@ function ServicesPanel({
   composeAggregateStatus,
   onAccessChanged,
 }: {
+  projectName: string;
   projectId: string;
   services: ServiceNode[];
   onOpen: (service: ServiceNode, tab?: ResourceQuickTab) => void;
@@ -809,6 +813,7 @@ function ServicesPanel({
             </div>
           )}
         </div>
+        <ServiceCleanupDialog projectId={projectId} projectName={projectName} services={services} />
         {canToggleArchived && (
           <button
             type="button"
