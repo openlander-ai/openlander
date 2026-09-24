@@ -1,3 +1,5 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
+import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Drift gate (M2): docs/wiki example MCP composite calls ⇄ ToolDef schema.
  *
@@ -45,11 +47,8 @@ import { z } from 'zod';
 import { COMPOSITE_REGISTRY } from '../../src/mcp/composite-tools.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
-  agentDeliveryToolDefs,
   composeToolDefs,
   debugToolDefs,
-  deliveryToolDefs,
-  engagementToolDefs,
   deployToolDefs,
   deployableServiceToolDefs,
   deployPlanToolDefs,
@@ -57,10 +56,7 @@ import {
   gitToolDefs,
   infraToolDefs,
   monitoringToolDefs,
-  projectManifestToolDefs,
   projectOpsToolDefs,
-  releaseOperationToolDefs,
-  reportingOperationToolDefs,
   serviceToolDefs,
   volumeToolDefs,
 } from '../../src/tools/defs/index.js';
@@ -80,11 +76,8 @@ const SCANNED_DOCS: readonly string[] = [
 ] as const;
 
 const ALL_TOOL_DEFS: readonly ToolDef[] = [
-  ...agentDeliveryToolDefs,
   ...composeToolDefs,
   ...debugToolDefs,
-  ...deliveryToolDefs,
-  ...engagementToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,
@@ -92,10 +85,9 @@ const ALL_TOOL_DEFS: readonly ToolDef[] = [
   ...gitToolDefs,
   ...infraToolDefs,
   ...monitoringToolDefs,
-  ...projectManifestToolDefs,
   ...projectOpsToolDefs,
-  ...releaseOperationToolDefs,
-  ...reportingOperationToolDefs,
+  ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

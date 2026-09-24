@@ -3,7 +3,6 @@ import type { Context } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { assertDestructiveActionAllowed } from '../../security/operation-permissions.js';
-import { DOCKER_LABELS } from '../../config/index.js';
 import type { ProjectRow } from '../../db/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import {
@@ -16,7 +15,6 @@ import {
   OpenLanderError,
   ProjectArchivedError,
   ProjectRecoveringError,
-  ServiceHasConsumersError,
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { LifecycleAction } from '../../pipeline/mutation-policy.js';
@@ -154,130 +152,8 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const providerConnections = await ctx.db.listServiceConsumersForProvider(service.id);
-    const dependencyConsumers = await ctx.db.findProjectDependents(undefined, service.id);
-    if (providerConnections.length > 0 || dependencyConsumers.length > 0) {
-      const connectionConsumers = await Promise.all(
-        providerConnections.map(async (connection) => {
-          const consumer = await ctx.db.getService(connection.service_id_consumer);
-          return {
-            serviceId: connection.service_id_consumer,
-            serviceName: consumer?.name ?? connection.service_id_consumer,
-            projectId: consumer?.project_id ?? '',
-          };
-        }),
-      );
-      const dependencyServiceIds = new Set(
-        dependencyConsumers
-          .map((dependency) => dependency.source_service_id)
-          .filter((serviceId): serviceId is string => Boolean(serviceId)),
-      );
-      const dependencyServiceConsumers = await Promise.all(
-        Array.from(dependencyServiceIds).map(async (serviceId) => {
-          const consumer = await ctx.db.getService(serviceId);
-          return {
-            serviceId,
-            serviceName: consumer?.name ?? serviceId,
-            projectId: consumer?.project_id ?? '',
-          };
-        }),
-      );
-      const consumers = [...connectionConsumers, ...dependencyServiceConsumers];
-      const error = new ServiceHasConsumersError(service.id, service.name, consumers);
-      return c.json(error.toJSON(), 409);
-    }
-
-    const result = await withProjectRuntimeLock(
-      ctx,
-      runtimeProject.id,
-      'delete-service',
-      async () => {
-        ctx.coordinator.suppressProject(runtimeProject.id, 60_000);
-
-        await ctx.cloudflare.deleteConnectedPublishReservation(service.project_id, service.id);
-
-        const removedDomains: string[] = [];
-        for (const mapping of await ctx.db.getDomainMappingsForService(service.id)) {
-          try {
-            await ctx.cloudflare.removeTunnelForService(service.id, mapping.domain);
-          } catch (err) {
-            log.warn(
-              { err, serviceId: service.id, domain: mapping.domain },
-              'Service delete domain disconnect failed; continuing with DB cleanup',
-            );
-            await ctx.db.deleteDomainMapping(mapping.id);
-          }
-          removedDomains.push(mapping.domain);
-        }
-        await ctx.db.deleteDomainMappingsByService(service.id);
-
-        const environments = await ctx.db.getEnvironmentsByServiceId(service.id);
-        const containerRefs = new Set<string>();
-        const primaryContainerRef = service.container_id ?? service.container_name;
-        if (primaryContainerRef) containerRefs.add(primaryContainerRef);
-        for (const environment of environments) {
-          if (environment.container_id) containerRefs.add(environment.container_id);
-        }
-
-        for (const containerRef of containerRefs) {
-          try {
-            await ctx.docker.stopContainer(containerRef);
-          } catch (err) {
-            log.debug({ err, serviceId: service.id, containerRef }, 'Service delete stop skipped');
-          }
-          await ctx.docker.removeContainer(containerRef);
-        }
-        const containerRemoved = containerRefs.size > 0;
-
-        const deleteVolumes = body.deleteVolumes === true;
-        const siblingDeployables = (await ctx.db.getDeployablesByGroup(project.id)).filter(
-          (candidate) => candidate.id !== service.id,
-        );
-        const removedVolumes: string[] = [];
-        let volumeDeleteSkippedReason: string | null = null;
-        if (deleteVolumes) {
-          if (siblingDeployables.length > 0) {
-            volumeDeleteSkippedReason = 'PROJECT_HAS_SIBLING_SERVICES';
-          } else {
-            const volumes = await ctx.docker.listVolumes({
-              label: [`${DOCKER_LABELS.MANAGED}=true`, `${DOCKER_LABELS.PROJECT}=${project.name}`],
-            });
-            for (const volume of volumes) {
-              if (!volume.Name) continue;
-              await ctx.docker.removeVolume(volume.Name);
-              removedVolumes.push(volume.Name);
-            }
-          }
-        }
-
-        await ctx.db.deleteProjectDependenciesByService(service.id);
-        await ctx.db.deleteService(service.id);
-        if (runtimeProject.id !== project.id) {
-          // Current invariant: attached deployables have a preserved 1:1
-          // runtime project row with no remaining deployables under that row.
-          // If a future model lets multiple services share a runtime project,
-          // preserve the row until the last runtime-scoped service is gone.
-          const remainingRuntimeDeployables = await ctx.db.getDeployablesByGroup(runtimeProject.id);
-          if (remainingRuntimeDeployables.length === 0) {
-            await ctx.docker.removeProjectNetwork(runtimeProject.name);
-            await ctx.db.deleteProject(runtimeProject.id);
-          }
-        }
-
-        return {
-          status: 'deleted',
-          project: project.name,
-          service: service.name,
-          serviceId: service.id,
-          containerRemoved,
-          removedDomains,
-          volumes: {
-            deleted: removedVolumes,
-            preserved: !deleteVolumes || volumeDeleteSkippedReason !== null,
-            skippedReason: volumeDeleteSkippedReason,
-          },
-        };
-      },
+    const result = await withProjectRuntimeLock(ctx, runtimeProject.id, 'delete-service', () =>
+      ctx.pipeline.deleteService(service.id, ctx.cloudflare, body.deleteVolumes === true),
     );
     if (result instanceof DeployLockedError) return c.json(result.toJSON(), 409);
     return c.json(result);

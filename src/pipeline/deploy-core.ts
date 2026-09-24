@@ -1,3 +1,9 @@
+import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
+import {
+  deleteDeployableService,
+  assertServiceDeleteDependencies,
+} from './delete-deployable-service.js';
+import { assertAppLifecycleAllowed } from '../security/operation-permissions.js';
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
@@ -64,7 +70,7 @@ import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
-import { assertProjectMutable } from './mutation-policy.js';
+import { assertProjectMutable, assertProjectLifecycleMutable } from './mutation-policy.js';
 import { sleep } from '../lib/sleep.js';
 import { parseDBTimestamp } from '../lib/parse-db-timestamp.js';
 import { resolveComposeFilePath, resolveComposeFilePaths } from './compose-spec.js';
@@ -4116,6 +4122,160 @@ export class DeployPipeline {
       log.info({ containerName }, 'Force mode: removing conflicting container');
       await this.lifecycle.forceCleanConflicts(containerName);
     }
+  }
+
+  async stopService(serviceId: string): Promise<void> {
+    const service = await this.db.getService(serviceId);
+    if (!service) throw new ServiceNotFoundError(serviceId);
+    if ((MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind))
+      throw new ServiceOperationUnsupportedError('stop_app', service.kind);
+    const project = await this.db.getProject(service.project_id);
+    if (!project) throw new ProjectNotFoundError(service.project_id);
+    const runtimeProject =
+      (await this.db.getProject(deployableServiceIdToProjectId(service.id))) ?? project;
+    const lockIds = await this.collectArchiveLockProjectIds([project.id, runtimeProject.id]);
+    await this.assertNoActiveArchiveJobs(lockIds);
+    await this.withArchiveLocks(lockIds, async () => {
+      await assertAppLifecycleAllowed(this.db, { projectId: project.id, serviceId });
+      for (const target of new Map([
+        [project.id, project],
+        [runtimeProject.id, runtimeProject],
+      ]).values()) {
+        assertProjectLifecycleMutable(
+          { ...target, archived_at: service.archived_at ?? target.archived_at },
+          'stop',
+          { db: { service, isCircuitBreakerOpen: () => false } },
+        );
+      }
+      const targets = [service];
+      // Compose stop includes descendants, so respect their service overrides too.
+      if (service.kind === 'compose') {
+        const descendants = await this.db.listServices();
+        const ids = new Set([service.id]);
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          for (const child of descendants)
+            if (child.parent_service_id && ids.has(child.parent_service_id) && !ids.has(child.id)) {
+              ids.add(child.id);
+              expanded = true;
+            }
+        }
+        targets.push(...descendants.filter((row) => row.id !== service.id && ids.has(row.id)));
+        for (const child of targets) {
+          await assertAppLifecycleAllowed(this.db, {
+            projectId: child.project_id,
+            serviceId: child.id,
+          });
+        }
+      }
+      // Target service containers directly; a shared Project can have a different canonical app.
+      for (const target of targets.slice().reverse()) {
+        const targetRuntimeId = deployableServiceIdToProjectId(target.id);
+        this.coordinator?.suppressProject(targetRuntimeId, 60_000);
+        const environments = await this.db.getEnvironmentsByServiceId(target.id);
+        const containerIds = new Set(
+          environments.map((row) => row.container_id).filter((id): id is string => Boolean(id)),
+        );
+        const primaryContainerId = target.container_id ?? target.container_name;
+        if (primaryContainerId) containerIds.add(primaryContainerId);
+        for (const containerId of containerIds) {
+          try {
+            await this.runtime.stopContainer(containerId);
+          } catch (error) {
+            if (!(error instanceof ContainerNotFoundError) && !isDockerNotFoundError(error))
+              throw error;
+          }
+        }
+        await this.db.updateService(target.id, { status: 'stopped' });
+        for (const environment of environments)
+          await this.db.updateEnvironment(environment.id, { status: 'stopped' });
+        await eventBus.emit('container:stop', {
+          projectId: targetRuntimeId,
+          containerId: primaryContainerId ?? '',
+        });
+      }
+    });
+  }
+
+  async deleteService(
+    serviceId: string,
+    cloudflare: CloudflareTunnelManager,
+    deleteVolumes = false,
+  ) {
+    const service = await this.db.getService(serviceId);
+    if (!service) throw new ServiceNotFoundError(serviceId);
+    if ((MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind))
+      throw new ServiceOperationUnsupportedError('delete_app', service.kind);
+    const project = await this.db.getProject(service.project_id);
+    if (!project) throw new ProjectNotFoundError(service.project_id);
+    const targets = [service];
+    if (service.kind === 'compose') {
+      const services = await this.db.listServices();
+      for (const parent of targets) {
+        targets.push(
+          ...services.filter(
+            (row) =>
+              row.parent_service_id === parent.id &&
+              !targets.some((target) => target.id === row.id),
+          ),
+        );
+      }
+    }
+    const deletingIds = new Set(targets.map((row) => row.id));
+    const runtimes = new Map<string, ProjectRow>();
+    for (const target of targets) {
+      const runtime =
+        (await this.db.getProject(deployableServiceIdToProjectId(target.id))) ?? project;
+      runtimes.set(target.id, runtime);
+    }
+    const lockIds = [
+      ...new Set([project.id, ...[...runtimes.values()].map((row) => row.id)]),
+    ].sort();
+    await this.assertNoActiveArchiveJobs(lockIds);
+    return this.withArchiveLocks(lockIds, async () => {
+      // Validate the whole deletion set before removing any container or row.
+      for (const target of targets) {
+        await assertAppLifecycleAllowed(this.db, {
+          projectId: target.project_id,
+          serviceId: target.id,
+        });
+        await assertServiceDeleteDependencies(this.db, target, deletingIds);
+      }
+      for (const target of new Map(
+        [project, ...runtimes.values()].map((row) => [row.id, row]),
+      ).values()) {
+        const record = await loadServiceViewRecord(this.db, target);
+        const circuitOpen = await this.db.isCircuitBreakerOpen(target.id);
+        assertProjectLifecycleMutable(target, 'purge', {
+          db: { service: record.service, isCircuitBreakerOpen: () => circuitOpen },
+        });
+      }
+      const context = {
+        db: this.db,
+        docker: this.runtime,
+        cloudflare,
+        coordinator: this.coordinator,
+      };
+      for (const child of targets.slice(1).reverse()) {
+        await deleteDeployableService(
+          context,
+          project,
+          runtimes.get(child.id) ?? project,
+          child,
+          false,
+          deletingIds,
+        );
+      }
+      return deleteDeployableService(
+        context,
+        project,
+        runtimes.get(service.id) ?? project,
+        service,
+        deleteVolumes,
+        deletingIds,
+      );
+    });
   }
 
   /** Stop a project's container. */

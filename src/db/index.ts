@@ -40,15 +40,8 @@ import { ServiceMetricRepo } from './repos/service-metric.repo.js';
 import { SettingsRepo } from './repos/settings.repo.js';
 import { PatTokenRepo } from './repos/pat-token.repo.js';
 import { GitCredentialRepo } from './repos/git-credential.repo.js';
-import { DeliveryRepo } from './repos/delivery.repo.js';
-import { DeliveryReviewPackageRepo } from './repos/delivery-review-package.repo.js';
-import { EngagementRepo } from './repos/engagement.repo.js';
 import { ApplicationOperationRepo } from './repos/application-operation.repo.js';
-import { DeliveryAgentRunRepo } from './repos/delivery-agent-run.repo.js';
 import { ProjectEnvironmentRepo } from './repos/project-environment.repo.js';
-import { ReleaseRepo } from './repos/release.repo.js';
-import { WeeklyReportRepo } from './repos/weekly-report.repo.js';
-import { ProjectUpdateRepo } from './repos/project-update.repo.js';
 import { PublicAccessRepo } from './repos/public-access.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
@@ -331,15 +324,8 @@ export class Database implements AuthDatabase {
   private readonly settingsRepo: SettingsRepo;
   private readonly patTokenRepo: PatTokenRepo;
   private readonly gitCredentialRepo: GitCredentialRepo;
-  private readonly deliveryRepo: DeliveryRepo;
-  private readonly deliveryReviewPackageRepo: DeliveryReviewPackageRepo;
-  private readonly engagementRepo: EngagementRepo;
   private readonly applicationOperationRepo: ApplicationOperationRepo;
-  private readonly deliveryAgentRunRepo: DeliveryAgentRunRepo;
   private readonly projectEnvironmentRepo: ProjectEnvironmentRepo;
-  private readonly releaseRepo: ReleaseRepo;
-  private readonly weeklyReportRepo: WeeklyReportRepo;
-  private readonly projectUpdateRepo: ProjectUpdateRepo;
   private readonly publicAccessRepo: PublicAccessRepo;
 
   private constructor(client: PostgresClient, db: DrizzleClient) {
@@ -379,15 +365,8 @@ export class Database implements AuthDatabase {
     this.settingsRepo = new SettingsRepo(this.db, this.client);
     this.patTokenRepo = new PatTokenRepo(this.db, this.client);
     this.gitCredentialRepo = new GitCredentialRepo(this.db, this.client);
-    this.deliveryRepo = new DeliveryRepo(this.db, this.client);
-    this.deliveryReviewPackageRepo = new DeliveryReviewPackageRepo(this.db, this.client);
-    this.engagementRepo = new EngagementRepo(this.db, this.client);
     this.applicationOperationRepo = new ApplicationOperationRepo(this.db, this.client);
-    this.deliveryAgentRunRepo = new DeliveryAgentRunRepo(this.db, this.client);
     this.projectEnvironmentRepo = new ProjectEnvironmentRepo(this.db, this.client);
-    this.releaseRepo = new ReleaseRepo(this.db, this.client);
-    this.weeklyReportRepo = new WeeklyReportRepo(this.db, this.client);
-    this.projectUpdateRepo = new ProjectUpdateRepo(this.db, this.client);
     this.publicAccessRepo = new PublicAccessRepo(this.db, this.client);
   }
 
@@ -410,15 +389,6 @@ export class Database implements AuthDatabase {
       await database.applicationOperationRepo.markRunningAsFailedOnStartup();
     if (interruptedOperations > 0) {
       log.warn({ interruptedOperations }, 'Marked interrupted application operations as failed');
-    }
-    const interruptedDelivery =
-      await database.deliveryAgentRunRepo.reconcileInterruptedOnStartup();
-    if (interruptedDelivery.pausedRuns > 0 || interruptedDelivery.cancelledChecks > 0) {
-      log.warn(interruptedDelivery, 'Paused interrupted Agent Runs and cancelled active checks');
-    }
-    const interruptedRelease = await database.releaseRepo.reconcileInterruptedOnStartup();
-    if (interruptedRelease.failedReleases > 0 || interruptedRelease.failedPromotions > 0) {
-      log.warn(interruptedRelease, 'Failed interrupted Release and Promotion work');
     }
     const repairedManagedKinds = await database.serviceRepo.repairManagedServiceKindAliases();
     if (repairedManagedKinds > 0) {
@@ -448,22 +418,6 @@ export class Database implements AuthDatabase {
   retryFailedApplicationOperation(id: string) { return this.applicationOperationRepo.retryFailed(id); }
   succeedApplicationOperation(id: string, response: Record<string, unknown>) { return this.applicationOperationRepo.succeed(id, response); }
   failApplicationOperation(id: string, error: Record<string, unknown>) { return this.applicationOperationRepo.fail(id, error); }
-  startDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['start']>[0]) { return this.deliveryAgentRunRepo.start(input); }
-  getDeliveryAgentRun(id: string) { return this.deliveryAgentRunRepo.get(id); }
-  requireDeliveryAgentRun(id: string) { return this.deliveryAgentRunRepo.require(id); }
-  listDeliveryAgentRuns(deliveryId: string) { return this.deliveryAgentRunRepo.listForDelivery(deliveryId); }
-  listDeliveryAgentRunEventsForRuns(runIds: readonly string[]) { return this.deliveryAgentRunRepo.listEventsForRuns(runIds); }
-  listDeliveryRunChecksForRuns(runIds: readonly string[]) { return this.deliveryAgentRunRepo.listChecksForRuns(runIds); }
-  listDeliveryAgentRunEvents(id: string) { return this.deliveryAgentRunRepo.listEvents(id); }
-  recordDeliveryAgentRunProgress(input: Parameters<DeliveryAgentRunRepo['recordProgress']>[0]) { return this.deliveryAgentRunRepo.recordProgress(input); }
-  resumeDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['resume']>[0]) { return this.deliveryAgentRunRepo.resume(input); }
-  cancelDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['cancel']>[0]) { return this.deliveryAgentRunRepo.cancel(input); }
-  startDeliveryRunCheck(input: Parameters<DeliveryAgentRunRepo['startCheck']>[0]) { return this.deliveryAgentRunRepo.startCheck(input); }
-  finishDeliveryRunCheck(input: Parameters<DeliveryAgentRunRepo['finishCheck']>[0]) { return this.deliveryAgentRunRepo.finishCheck(input); }
-  listDeliveryRunChecks(runId: string) { return this.deliveryAgentRunRepo.listChecks(runId); }
-  setDeliveryAgentRunRunnerDigest(runId: string, digest: string) { return this.deliveryAgentRunRepo.setRunnerImageDigest(runId, digest); }
-  failDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['fail']>[0]) { return this.deliveryAgentRunRepo.fail(input); }
-  completeDeliveryAgentRun(input: Parameters<DeliveryAgentRunRepo['complete']>[0]) { return this.deliveryAgentRunRepo.complete(input); }
   ensureDeployableServiceForProject(projectId: string, input: Parameters<ProjectRepo['ensureDeployableServiceForProject']>[1]) {
     return this.projectRepo.ensureDeployableServiceForProject(projectId, input);
   }
@@ -526,33 +480,6 @@ export class Database implements AuthDatabase {
   getProjectEnvironment(id: string) { return this.projectEnvironmentRepo.get(id); }
   listProjectEnvironments(projectId: string) { return this.projectEnvironmentRepo.list(projectId); }
   getProjectManifestState(projectId: string) { return this.projectEnvironmentRepo.getManifestState(projectId); }
-  createRelease(input: Parameters<ReleaseRepo['create']>[0]) { return this.releaseRepo.create(input); }
-  getRelease(id: string) { return this.releaseRepo.get(id); }
-  requireRelease(id: string) { return this.releaseRepo.require(id); }
-  listReleasesForDelivery(deliveryId: string) { return this.releaseRepo.listForDelivery(deliveryId); }
-  setReleaseStatus(id: string, status: Parameters<ReleaseRepo['setStatus']>[1]) { return this.releaseRepo.setStatus(id, status); }
-  addReleaseArtifact(input: Parameters<ReleaseRepo['addArtifact']>[0]) { return this.releaseRepo.addArtifact(input); }
-  listReleaseArtifacts(releaseId: string) { return this.releaseRepo.listArtifacts(releaseId); }
-  listReleaseArtifactsForReleases(releaseIds: readonly string[]) { return this.releaseRepo.listArtifactsForReleases(releaseIds); }
-  listReleasePromotionsForReleases(releaseIds: readonly string[]) { return this.releaseRepo.listPromotionsForReleases(releaseIds); }
-  createReleasePromotion(input: Parameters<ReleaseRepo['createPromotion']>[0]) { return this.releaseRepo.createPromotion(input); }
-  updateReleasePromotion(id: string, patch: Parameters<ReleaseRepo['updatePromotion']>[1]) { return this.releaseRepo.updatePromotion(id, patch); }
-  finalizeReleasePromotion(input: Parameters<ReleaseRepo['finalizePromotion']>[0]) { return this.releaseRepo.finalizePromotion(input); }
-  getReleasePromotion(id: string) { return this.releaseRepo.getPromotion(id); }
-  listReleasePromotions(releaseId: string) { return this.releaseRepo.listPromotionsForRelease(releaseId); }
-  getLatestSuccessfulPromotion(projectEnvironmentId: string) { return this.releaseRepo.latestSuccessfulPromotion(projectEnvironmentId); }
-  collectWeeklyReportEvidence(engagementId: string, periodStart: string, periodEnd: string) { return this.weeklyReportRepo.collectEvidence(engagementId, periodStart, periodEnd); }
-  createWeeklyReport(input: Parameters<WeeklyReportRepo['create']>[0]) { return this.weeklyReportRepo.create(input); }
-  getWeeklyReport(id: string) { return this.weeklyReportRepo.get(id); }
-  listWeeklyReports(engagementId: string) { return this.weeklyReportRepo.list(engagementId); }
-  publishWeeklyReport(input: Parameters<WeeklyReportRepo['publish']>[0]) { return this.weeklyReportRepo.publish(input); }
-  recordProjectUpdate(input: Parameters<ProjectUpdateRepo['record']>[0]) { return this.projectUpdateRepo.record(input); }
-  getProjectUpdate(id: string) { return this.projectUpdateRepo.get(id); }
-  requireProjectUpdate(id: string) { return this.projectUpdateRepo.require(id); }
-  listProjectUpdateItemsByIds(ids: readonly string[]) { return this.projectUpdateRepo.listItemsByIds(ids); }
-  getProjectUpdateContext(projectId: string, currentItemLimit: number, recentUpdateLimit: number) { return this.projectUpdateRepo.getContext(projectId, currentItemLimit, recentUpdateLimit); }
-  getProjectUpdateDetail(projectId: string, updateId: string) { return this.projectUpdateRepo.getDetail(projectId, updateId); }
-  listDeliveryProjectContext(deliveryId: string) { return this.projectUpdateRepo.listDeliveryContext(deliveryId); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
   getEnvVarsForService(projectId: string, serviceId: string, environmentId?: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId, environmentId); }
   listEnvVarMetadataByProject(projectId: string) { return this.envVarRepo.listMetadataByProject(projectId); }
@@ -743,6 +670,7 @@ export class Database implements AuthDatabase {
   attachAiOpsDedupeBriefing(dedupeKey: string, briefingId: string) { return this.aiOpsPolicyRepo.attachDedupeBriefing(dedupeKey, briefingId); }
   getAiOpsDedupeByKey(dedupeKey: string) { return this.aiOpsPolicyRepo.getDedupeByKey(dedupeKey); }
   createActionRun(data: Parameters<ActionRunRepo['create']>[0]) { return this.actionRunRepo.create(data); }
+  claimMcpActionExecution(id: string, permissionGranted = false) { return this.actionRunRepo.claimMcpExecution(id, permissionGranted); }
   createPendingMcpApproval(data: Parameters<ActionRunRepo['createPendingMcpApproval']>[0]) { return this.actionRunRepo.createPendingMcpApproval(data); }
   recordDeployPlanApproval(data: Parameters<ActionRunRepo['recordDeployPlanApproval']>[0]) { return this.actionRunRepo.recordDeployPlanApproval(data); }
   updateActionRunStatus(id: string, status: 'running' | 'succeeded' | 'failed' | 'pending_approval', errorMessage?: string) { return this.actionRunRepo.updateStatus(id, status, errorMessage); }
@@ -811,67 +739,6 @@ export class Database implements AuthDatabase {
   getSetting(key: string) { return this.settingsRepo.getSetting(key); }
   upsertSetting(key: string, value: string) { return this.settingsRepo.upsertSetting(key, value); }
   deleteSetting(key: string) { return this.settingsRepo.deleteSetting(key); }
-  createDelivery(input: Parameters<DeliveryRepo['createDelivery']>[0]) { return this.deliveryRepo.createDelivery(input); }
-  getDelivery(id: string) { return this.deliveryRepo.getDelivery(id); }
-  requireDelivery(id: string) { return this.deliveryRepo.requireDelivery(id); }
-  listDeliveries(projectId: string) { return this.deliveryRepo.listDeliveries(projectId); }
-  updateDelivery(id: string, patch: Parameters<DeliveryRepo['updateDelivery']>[1]) { return this.deliveryRepo.updateDelivery(id, patch); }
-  setDeliveryStatus(id: string, status: Parameters<DeliveryRepo['setDeliveryStatus']>[1]) { return this.deliveryRepo.setDeliveryStatus(id, status); }
-  upsertArtifactBlob(input: Parameters<DeliveryRepo['upsertArtifactBlob']>[0]) { return this.deliveryRepo.upsertArtifactBlob(input); }
-  getArtifactBlob(id: string) { return this.deliveryRepo.getArtifactBlob(id); }
-  createDeliveryArtifact(input: Parameters<DeliveryRepo['createArtifact']>[0]) { return this.deliveryRepo.createArtifact(input); }
-  getDeliveryArtifact(id: string) { return this.deliveryRepo.getArtifact(id); }
-  listDeliveryArtifacts(deliveryId: string) { return this.deliveryRepo.listArtifacts(deliveryId); }
-  updateDeliveryArtifact(id: string, patch: Parameters<DeliveryRepo['updateArtifact']>[1]) { return this.deliveryRepo.updateArtifact(id, patch); }
-  createDeliveryExternalRef(input: Parameters<DeliveryRepo['createExternalRef']>[0]) { return this.deliveryRepo.createExternalRef(input); }
-  listDeliveryExternalRefs(deliveryId: string) { return this.deliveryRepo.listExternalRefs(deliveryId); }
-  createDeliveryFeedbackSource(input: Parameters<DeliveryRepo['createFeedbackSource']>[0]) { return this.deliveryRepo.createFeedbackSource(input); }
-  listDeliveryFeedbackSources(deliveryId: string) { return this.deliveryRepo.listFeedbackSources(deliveryId); }
-  createDeliveryWorkItems(deliveryId: string, items: Parameters<DeliveryRepo['createWorkItems']>[1]) { return this.deliveryRepo.createWorkItems(deliveryId, items); }
-  listDeliveryWorkItems(deliveryId: string) { return this.deliveryRepo.listWorkItems(deliveryId); }
-  updateDeliveryWorkItem(id: string, status: Parameters<DeliveryRepo['updateWorkItem']>[1], resolution?: string | null) { return this.deliveryRepo.updateWorkItem(id, status, resolution); }
-  createDeliveryApproval(input: Parameters<DeliveryRepo['createApproval']>[0]) { return this.deliveryRepo.createApproval(input); }
-  listDeliveryApprovals(deliveryId: string) { return this.deliveryRepo.listApprovals(deliveryId); }
-  listDeliveryGates(deliveryId: string) { return this.deliveryRepo.listGates(deliveryId); }
-  updateDeliveryGateTemplate(deliveryId: string, gateKey: string, patch: Parameters<DeliveryRepo['updateGateTemplate']>[2]) { return this.deliveryRepo.updateGateTemplate(deliveryId, gateKey, patch); }
-  resetDeliveryGatesForType(deliveryId: string, deliveryType: Parameters<DeliveryRepo['resetGatesForType']>[1]) { return this.deliveryRepo.resetGatesForType(deliveryId, deliveryType); }
-  recordDeliveryGateResult(input: Parameters<DeliveryRepo['recordGateResult']>[0]) { return this.deliveryRepo.recordGateResult(input); }
-  acceptDeliveryReviewCheckpoint(input: Parameters<DeliveryRepo['acceptReviewCheckpoint']>[0]) { return this.deliveryRepo.acceptReviewCheckpoint(input); }
-  createDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['create']>[0]) { return this.deliveryReviewPackageRepo.create(input); }
-  getDeliveryReviewPackage(id: string) { return this.deliveryReviewPackageRepo.get(id); }
-  listDeliveryReviewPackages(deliveryId: string) { return this.deliveryReviewPackageRepo.listForDelivery(deliveryId); }
-  getDeliveryReviewPackageItem(id: string) { return this.deliveryReviewPackageRepo.getItem(id); }
-  recordDeliveryReviewPackageUploadSuccess(input: Parameters<DeliveryReviewPackageRepo['recordUploadSuccess']>[0]) { return this.deliveryReviewPackageRepo.recordUploadSuccess(input); }
-  recordDeliveryReviewPackageUploadFailure(input: Parameters<DeliveryReviewPackageRepo['recordUploadFailure']>[0]) { return this.deliveryReviewPackageRepo.recordUploadFailure(input); }
-  publishDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['publish']>[0]) { return this.deliveryReviewPackageRepo.publish(input); }
-  acceptDeliveryReviewPackage(input: Parameters<DeliveryReviewPackageRepo['accept']>[0]) { return this.deliveryReviewPackageRepo.accept(input); }
-  cleanupDeliveryReviewPackageStaging(input: Parameters<DeliveryReviewPackageRepo['cleanupStagedBlobs']>[0] = {}) { return this.deliveryReviewPackageRepo.cleanupStagedBlobs(input); }
-  linkDeliveryDeploy(input: Parameters<DeliveryRepo['linkDeploy']>[0]) { return this.deliveryRepo.linkDeploy(input); }
-  unlinkDeliveryDeploy(deliveryId: string, deployId: string) { return this.deliveryRepo.unlinkDeploy(deliveryId, deployId); }
-  listDeliveryDeployEvidence(deliveryId: string) { return this.deliveryRepo.listDeployEvidence(deliveryId); }
-  getProjectDeliverySettings(projectId: string) { return this.deliveryRepo.getSettings(projectId); }
-  upsertProjectDeliverySettings(projectId: string, input: Parameters<DeliveryRepo['upsertSettings']>[1]) { return this.deliveryRepo.upsertSettings(projectId, input); }
-  getDeliveryReceipt(deliveryId: string) { return this.deliveryRepo.getReceipt(deliveryId); }
-  recordDeliveryReceiptPreview(deliveryId: string, expectedEvidenceVersion: number) { return this.deliveryRepo.recordReceiptPreview(deliveryId, expectedEvidenceVersion); }
-  finalizeDeliveryReceipt(input: Parameters<DeliveryRepo['finalizeReceipt']>[0]) { return this.deliveryRepo.finalizeReceipt(input); }
-  getDeliveryProjectIdByArtifactId(artifactId: string) { return this.deliveryRepo.getDeliveryProjectIdByArtifactId(artifactId); }
-  getDeliveryProjectIdsByDeployId(deployId: string) { return this.deliveryRepo.getDeliveryProjectIdByDeployId(deployId); }
-  getDeliveryArtifactsByIds(ids: string[]) { return this.deliveryRepo.getArtifactsByIds(ids); }
-  getArtifactProjectRowsByIds(ids: string[]) { return this.deliveryRepo.getArtifactProjectRowsByIds(ids); }
-  listEngagements(includeArchived?: boolean) { return this.engagementRepo.list(includeArchived); }
-  getEngagement(id: string) { return this.engagementRepo.get(id); }
-  requireEngagement(id: string) { return this.engagementRepo.require(id); }
-  createEngagement(input: Parameters<EngagementRepo['create']>[0]) { return this.engagementRepo.create(input); }
-  bootstrapEngagement(input: Parameters<EngagementRepo['bootstrap']>[0]) { return this.engagementRepo.bootstrap(input); }
-  updateEngagement(id: string, input: Parameters<EngagementRepo['update']>[1]) { return this.engagementRepo.update(id, input); }
-  archiveEngagement(id: string, actor?: string) { return this.engagementRepo.archive(id, actor); }
-  unarchiveEngagement(id: string, actor?: string) { return this.engagementRepo.unarchive(id, actor); }
-  linkEngagementProject(engagementId: string, projectId: string, actor?: string) { return this.engagementRepo.linkProject(engagementId, projectId, actor); }
-  unlinkEngagementProject(engagementId: string, projectId: string, actor?: string) { return this.engagementRepo.unlinkProject(engagementId, projectId, actor); }
-  getProjectEngagement(projectId: string) { return this.engagementRepo.getProjectEngagement(projectId); }
-  listUnassignedEngagementProjects() { return this.engagementRepo.listUnassignedProjects(); }
-  getEngagementPortfolioRows(engagementIds: readonly string[]) { return this.engagementRepo.getPortfolioRows(engagementIds); }
-  listEngagementRecentActivity(engagementId: string, projectIds: readonly string[], limit?: number) { return this.engagementRepo.listRecentActivity(engagementId, projectIds, limit); }
   transaction<T>(fn: () => T | Promise<T>) { return this.db.transaction(async () => await fn()); }
   close() { return this.client.end({ timeout: 5 }); }
 }

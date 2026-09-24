@@ -10,12 +10,7 @@ export type AgentGuideKind =
   | 'remove-domain'
   | 'set-env-var'
   | 'delete-env-var'
-  | 'wire-managed-db'
-  | 'bootstrap-engagement'
-  | 'manage-engagement'
-  | 'plan-delivery'
-  | 'record-project-update'
-  | 'manage-delivery';
+  | 'wire-managed-db';
 
 export interface AgentGuidePrompt {
   text: string;
@@ -37,8 +32,6 @@ export interface AgentGuideContext {
   domain?: string;
   /** Optional managed-service name context — used by wire-managed-db prompts. */
   managedServiceName?: string;
-  engagementName?: string;
-  deliveryId?: string;
 }
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -127,7 +120,7 @@ export function getAgentGuideContent(
         lead: t('agentGuide.content.deleteService.lead'),
         prompts: [
           {
-            text: t('agentGuide.content.deleteService.prompt.archive', {
+            text: t('agentGuide.content.deleteService.prompt.delete', {
               serviceName,
               projectName,
             }),
@@ -208,69 +201,6 @@ export function getAgentGuideContent(
               serviceName,
             }),
             hint: t('agentGuide.content.wireManagedDb.hint.service'),
-          },
-        ],
-      };
-    }
-    case 'bootstrap-engagement':
-      return {
-        heading: t('agentGuide.content.bootstrapEngagement.heading'),
-        lead: t('agentGuide.content.bootstrapEngagement.lead'),
-        prompts: [
-          { text: t('agentGuide.content.bootstrapEngagement.prompt.fromBrief') },
-          { text: t('agentGuide.content.bootstrapEngagement.prompt.fromRepository') },
-        ],
-      };
-    case 'manage-engagement': {
-      const engagementName = ctx.engagementName ?? 'this Engagement';
-      return {
-        heading: t('agentGuide.content.manageEngagement.heading'),
-        lead: t('agentGuide.content.manageEngagement.lead'),
-        prompts: [
-          {
-            text: t('agentGuide.content.manageEngagement.prompt.update', { engagementName }),
-          },
-          {
-            text: t('agentGuide.content.manageEngagement.prompt.report', { engagementName }),
-          },
-        ],
-      };
-    }
-    case 'plan-delivery':
-      return {
-        heading: t('agentGuide.content.planDelivery.heading'),
-        lead: t('agentGuide.content.planDelivery.lead'),
-        prompts: [
-          { text: t('agentGuide.content.planDelivery.prompt.plan', { projectName }) },
-          { text: t('agentGuide.content.planDelivery.prompt.continue', { projectName }) },
-        ],
-      };
-    case 'record-project-update':
-      return {
-        heading: t('agentGuide.content.recordProjectUpdate.heading'),
-        lead: t('agentGuide.content.recordProjectUpdate.lead'),
-        prompts: [
-          { text: t('agentGuide.content.recordProjectUpdate.prompt.meeting', { projectName }) },
-          { text: t('agentGuide.content.recordProjectUpdate.prompt.refresh', { projectName }) },
-        ],
-      };
-    case 'manage-delivery': {
-      const deliveryId = ctx.deliveryId ?? 'this Delivery';
-      return {
-        heading: t('agentGuide.content.manageDelivery.heading'),
-        lead: t('agentGuide.content.manageDelivery.lead'),
-        prompts: [
-          {
-            text: t('agentGuide.content.manageDelivery.prompt.continue', {
-              projectName,
-              deliveryId,
-            }),
-          },
-          {
-            text: t('agentGuide.content.manageDelivery.prompt.evidence', {
-              projectName,
-              deliveryId,
-            }),
           },
         ],
       };

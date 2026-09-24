@@ -24,6 +24,7 @@ interface OperationPermissionsPanelProps {
 export function OperationPermissionsPanel({ scope, targetId }: OperationPermissionsPanelProps) {
   const { t } = useLanguage();
   const [response, setResponse] = useState<OperationPermissionResponse | null>(null);
+  const [appLifecycle, setAppLifecycle] = useState<InheritableDestructivePermission>('inherit');
   const [destructive, setDestructive] = useState<InheritableDestructivePermission>('inherit');
   const [databaseAccess, setDatabaseAccess] = useState<InheritableDatabasePermission>('inherit');
   const [loading, setLoading] = useState(true);
@@ -40,6 +41,7 @@ export function OperationPermissionsPanel({ scope, targetId }: OperationPermissi
           : scope === 'project'
             ? next.permissions.project_override
             : next.permissions.service_override;
+      setAppLifecycle(selectedOverride?.app_lifecycle ?? 'inherit');
       setDestructive(selectedOverride?.destructive_actions ?? 'inherit');
       setDatabaseAccess(selectedOverride?.database_access ?? 'inherit');
     },
@@ -79,6 +81,7 @@ export function OperationPermissionsPanel({ scope, targetId }: OperationPermissi
       const next = await updateOperationPermissions(
         scope,
         {
+          app_lifecycle: appLifecycle === 'inherit' ? null : appLifecycle,
           destructive_actions: destructive === 'inherit' ? null : destructive,
           database_access: databaseAccess === 'inherit' ? null : databaseAccess,
         },
@@ -104,6 +107,21 @@ export function OperationPermissionsPanel({ scope, targetId }: OperationPermissi
         <p className="text-xs text-foreground/60">{t('securityPermissions.loading')}</p>
       ) : response ? (
         <>
+          <PermissionRow
+            icon={<ShieldCheck className="h-4 w-4" />}
+            title={t('securityPermissions.appLifecycle.title')}
+            description={t('securityPermissions.appLifecycle.description')}
+            value={appLifecycle}
+            onChange={(value) => {
+              setAppLifecycle(value as InheritableDestructivePermission);
+              setSaved(false);
+            }}
+            effectiveLabel={
+              effective ? t(`securityPermissions.options.${effective.app_lifecycle}`) : undefined
+            }
+            allowInherit={allowInherit}
+            options={['allow', 'approval_required', 'block']}
+          />
           <PermissionRow
             icon={<ShieldCheck className="h-4 w-4" />}
             title={t('securityPermissions.destructive.title')}
@@ -187,6 +205,7 @@ function PermissionRow({
         </div>
       </div>
       <select
+        aria-label={title}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-9 min-w-44 rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 text-xs text-foreground"

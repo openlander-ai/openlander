@@ -71,6 +71,13 @@ function describeApprovalTarget(approval: PendingApproval): string {
 
 export function PendingApprovalsStrip() {
   const { t } = useLanguage();
+  const actionLabel = (approval: PendingApproval) => {
+    if (approval.metadata.toolName !== 'cleanup_apps') return approval.metadata.toolName;
+    const operation = approval.metadata.details?.operation;
+    return operation === 'stop' || operation === 'delete'
+      ? t(`approval.pendingStrip.cleanup${operation === 'stop' ? 'Stop' : 'Delete'}`)
+      : approval.metadata.toolName;
+  };
   const { approvals, loading, error, refetch } = usePendingApprovals();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -166,7 +173,7 @@ export function PendingApprovalsStrip() {
               {firstApproval && (
                 <p className="mt-0.5 truncate text-xs text-[color:var(--ol-fg-muted)]">
                   <span className="font-mono text-[color:var(--ol-fg)]">
-                    {firstApproval.metadata.toolName}
+                    {actionLabel(firstApproval)}
                   </span>
                   <span> · {describeApprovalTarget(firstApproval)}</span>
                   <span> · {formatRelativeTime(firstApproval.createdAt, t)}</span>
@@ -200,7 +207,10 @@ export function PendingApprovalsStrip() {
           <div id={panelId} className="space-y-2 border-t border-[color:var(--ol-border)] p-3">
             {visibleApprovals.slice(0, 5).map((approval) => {
               const actionRunId = approval.metadata.actionRunId;
-              const detail = describeApproval(approval);
+              const detail =
+                approval.metadata.toolName === 'cleanup_apps'
+                  ? formatApprovalDetailValue(approval.metadata.details?.service_ids)
+                  : describeApproval(approval);
               const actor = describeApprovalActor(approval);
               const isAnyBusy = busyId !== null;
               return (
@@ -216,7 +226,7 @@ export function PendingApprovalsStrip() {
                           : t('approval.pendingStrip.recoverySource')}
                       </span>
                       <span className="font-mono text-xs text-[color:var(--ol-fg)]">
-                        {approval.metadata.toolName}
+                        {actionLabel(approval)}
                       </span>
                       <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
                         {formatRelativeTime(approval.createdAt, t)}
@@ -226,7 +236,7 @@ export function PendingApprovalsStrip() {
                       {describeApprovalTarget(approval)}
                     </p>
                     {detail && (
-                      <p className="mt-1 truncate text-xs text-[color:var(--ol-fg-muted)]">
+                      <p className="mt-1 max-h-40 overflow-y-auto break-all text-xs text-[color:var(--ol-fg-muted)]">
                         {t('approval.pendingStrip.details')}{' '}
                         <span className="font-mono">{detail}</span>
                       </p>

@@ -1088,21 +1088,36 @@ export const monitoringToolDefs: ToolDef[] = [
       const projectId = run.project_id || planSummary?.targetProjectId || null;
       const lifecycleEffect = requestedTool ? lifecycleEffectForTool(requestedTool) : undefined;
       const pollCall =
-        status === 'pending' || status === 'approved_executing'
+        status === 'pending' || status === 'approved_executing' || status === 'running'
           ? buildMcpActionStatusCall(run.id)
           : undefined;
+      const canResumeApps = ['stop_app', 'delete_app', 'cleanup_apps'].includes(
+        requestedTool ?? '',
+      );
       const suggestedCall =
-        status === 'succeeded' && lifecycleEffect?.kind === 'archive'
-          ? archivedServicesSuggestedCall(projectId)
-          : status === 'succeeded' && lifecycleEffect?.kind === 'cleanup_docker'
-            ? buildDockerDiskUsageCall()
-            : undefined;
+        status === 'pending' && canResumeApps && projectId
+          ? {
+              tool: 'openlander_project',
+              arguments: {
+                action: 'set_project_permissions',
+                params: { project_id: projectId, app_lifecycle: 'allow', action_run_ids: [run.id] },
+              },
+            }
+          : status === 'succeeded' && lifecycleEffect?.kind === 'archive'
+            ? archivedServicesSuggestedCall(projectId)
+            : status === 'succeeded' && lifecycleEffect?.kind === 'cleanup_docker'
+              ? buildDockerDiskUsageCall()
+              : undefined;
       const guidance =
         status === 'pending'
           ? {
               message:
                 'This MCP action is still waiting for human approval. Do not retry the original destructive action.',
-              next_steps: ['Use poll_call to check this action again after the user responds.'],
+              next_steps: [
+                canResumeApps
+                  ? 'Only if the user explicitly asks to persistently allow app cleanup, use suggested_call to grant permission and resume this exact request. Otherwise poll for web approval.'
+                  : 'Use poll_call to check this action again after the user responds.',
+              ],
             }
           : status === 'approved_executing'
             ? {
@@ -1165,7 +1180,7 @@ export const monitoringToolDefs: ToolDef[] = [
         requestedArgsSummary,
         requested_args_summary: requestedArgsSummary,
         lifecycle_effect: lifecycleEffect,
-        result: planSummary?.cleanupResult,
+        result: planSummary?.appCleanupResult ?? planSummary?.cleanupResult,
         poll_call: pollCall,
         suggested_call: suggestedCall,
         error: run.error_message,

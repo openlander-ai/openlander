@@ -11,6 +11,8 @@ const DESTRUCTIVE_DETAIL_KEYS = [
   'project_name',
   'service_name',
   'service_id',
+  'service_ids',
+  'operation',
 ] as const;
 
 export function createApprovalRoutes(ctx: AppContext): Hono {

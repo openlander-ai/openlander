@@ -40,7 +40,6 @@ const ROUTE_LABEL_KEYS: Record<string, string> = {
   'mcp-server': 'routes.mcp',
   projects: 'routes.projects',
   services: 'routes.services',
-  engagements: 'routes.engagements',
   monitoring: 'routes.monitoring',
   overview: 'routes.overview',
   settings: 'routes.settings',

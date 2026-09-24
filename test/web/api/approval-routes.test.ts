@@ -37,6 +37,35 @@ describe('Approval Routes', () => {
       expect(body).toEqual({ approvals: [] });
     });
 
+    it('shows the operation and all selected services for one batch approval', async () => {
+      const appWithBatch = createTestApp({
+        getProject: vi.fn(async () => ({ id: 'proj-1', name: 'demo' })),
+        getActionRunsByApprovalStatus: vi.fn(async () => [
+          {
+            id: 'run-batch',
+            project_id: 'proj-1',
+            approval_tool: 'destructive_mcp',
+            created_at: '2026-09-24T00:00:00.000Z',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'cleanup_apps',
+              args: {
+                project_id: 'proj-1',
+                operation: 'delete',
+                service_ids: ['app-1', 'app-2'],
+              },
+            }),
+          },
+        ]),
+      });
+      const response = await appWithBatch.request('/api/approvals/pending');
+      const body = await response.json();
+      expect(body.approvals[0].metadata.details).toEqual({
+        operation: 'delete',
+        service_ids: ['app-1', 'app-2'],
+      });
+    });
+
     it('includes destructive MCP target keys in pending approval details', async () => {
       const appWithDestructive = createTestApp({
         getProject: vi.fn(async () => ({ id: 'proj-1', name: 'demo' })),

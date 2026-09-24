@@ -306,7 +306,7 @@ describe('runEphemeralContainer', () => {
           Labels: expect.objectContaining({
             'openlander.instance': 'olinst_quality',
             'openlander.project': 'project-1',
-            'openlander.purpose': 'delivery-quality-check',
+            'openlander.purpose': 'ephemeral-command',
           }),
           HostConfig: expect.objectContaining({
             AutoRemove: false,

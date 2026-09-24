@@ -1,3 +1,5 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
+import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Drift gate: MCP composite-tools.ts ⇄ ToolDef registry ⇄ docs/wiki.
  *
@@ -29,11 +31,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { ToolDef } from '../../src/tools/defs/types.js';
 import {
-  agentDeliveryToolDefs,
   composeToolDefs,
   debugToolDefs,
-  deliveryToolDefs,
-  engagementToolDefs,
   deployToolDefs,
   deployableServiceToolDefs,
   deployPlanToolDefs,
@@ -42,10 +41,7 @@ import {
   infraToolDefs,
   monitoringToolDefs,
   networkOperationToolDefs,
-  projectManifestToolDefs,
   projectOpsToolDefs,
-  releaseOperationToolDefs,
-  reportingOperationToolDefs,
   serviceToolDefs,
   volumeToolDefs,
 } from '../../src/tools/defs/index.js';
@@ -66,11 +62,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'wiki', 'MCP-Tools-Reference.md');
 
 const ALL_TOOL_DEFS = [
-  ...agentDeliveryToolDefs,
   ...composeToolDefs,
   ...debugToolDefs,
-  ...deliveryToolDefs,
-  ...engagementToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,
@@ -79,10 +72,9 @@ const ALL_TOOL_DEFS = [
   ...infraToolDefs,
   ...monitoringToolDefs,
   ...networkOperationToolDefs,
-  ...projectManifestToolDefs,
   ...projectOpsToolDefs,
-  ...releaseOperationToolDefs,
-  ...reportingOperationToolDefs,
+  ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

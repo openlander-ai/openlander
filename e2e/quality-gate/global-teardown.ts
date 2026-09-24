@@ -106,12 +106,7 @@ export default async function globalTeardown() {
 
     const data = (await response.json()) as { projects?: ProjectSummary[] };
     const projects = data.projects ?? [];
-    const isEphemeral = process.env['OPENLANDER_E2E_EPHEMERAL'] === '1';
-    const testProjects = projects.filter(
-      (project) =>
-        TEST_PROJECT_PATTERN.test(project.name) &&
-        !(isEphemeral && project.name.startsWith('qg-delivery-live-')),
-    );
+    const testProjects = projects.filter((project) => TEST_PROJECT_PATTERN.test(project.name));
 
     if (testProjects.length === 0) {
       console.log('  ✓ No test projects to clean up');

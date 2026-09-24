@@ -1683,9 +1683,8 @@ export const deployPlanToolDefs: ToolDef[] = [
             ? {
                 ...frontDoorTarget.params,
                 env_vars: envVars,
-                __adopt_implicit_release: true,
               }
-            : { ...frontDoorTarget.params, __adopt_implicit_release: true };
+            : { ...frontDoorTarget.params };
         const redeployResult = await runDeployableServiceAction(
           redeployParams,
           context,
@@ -2187,41 +2186,6 @@ export const deployPlanToolDefs: ToolDef[] = [
               const trafficFailure = representativeTrafficFailed(representativeTraffic);
               const trafficWarning = representativeTrafficWarning(representativeTraffic);
               const effectiveCompletionStatus = trafficFailure ? 'unhealthy' : completionStatus;
-              let implicitRelease: Record<string, unknown> | undefined;
-              let implicitReleaseWarning: string | undefined;
-              try {
-                const adoptionServiceId =
-                  planBuild?.method === 'compose'
-                    ? undefined
-                    : (attachedServiceId ?? resolvedRouteService?.id ?? serviceRecord?.service?.id);
-                const adoptionDeployLog = adoptionServiceId
-                  ? await appCtx.db.getLastDeployLogForService(adoptionServiceId)
-                  : await appCtx.db.getLastDeployLog(projectId);
-                const adopted = await appCtx.releaseService.adoptSuccessfulDeploy({
-                  projectId: finalProjectId,
-                  ...(adoptionServiceId ? { serviceId: adoptionServiceId } : {}),
-                  ...(adoptionDeployLog ? { deployId: adoptionDeployLog.id } : {}),
-                  actor: context.identity?.initiatedBy ?? 'external-mcp-agent',
-                });
-                implicitRelease = {
-                  status: adopted.release.status,
-                  delivery_id: adopted.delivery.id,
-                  run_id: adopted.run.id,
-                  release_id: adopted.release.id,
-                  image_digests: Object.fromEntries(
-                    adopted.artifacts.map((artifact) => [
-                      artifact.service_id,
-                      artifact.image_digest,
-                    ]),
-                  ),
-                };
-              } catch (err) {
-                implicitReleaseWarning = `deployment evidence warning: implicit Release adoption failed (${err instanceof Error ? err.message : String(err)})`;
-                log.error(
-                  { err, projectId: finalProjectId, planId: plan.plan_id },
-                  'Deployment succeeded, but implicit Release adoption failed',
-                );
-              }
               resolve({
                 plan_id: plan.plan_id,
                 status: effectiveCompletionStatus,
@@ -2288,14 +2252,12 @@ export const deployPlanToolDefs: ToolDef[] = [
                 ...(payload.totalDurationMs
                   ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
                   : {}),
-                ...(implicitRelease ? { implicit_release: implicitRelease } : {}),
                 ...(timedOut || completionStatus === 'timeout' ? { timeout: true } : {}),
                 ...postDeploy,
                 ...([
                   ...readinessWarnings,
                   ...(stabilityWarning ? [stabilityWarning] : []),
                   ...(trafficWarning ? [trafficWarning] : []),
-                  ...(implicitReleaseWarning ? [implicitReleaseWarning] : []),
                   ...(postDeployWarnings ?? []),
                   ...targetAttach.warnings,
                 ].length > 0
@@ -2304,7 +2266,6 @@ export const deployPlanToolDefs: ToolDef[] = [
                         ...readinessWarnings,
                         ...(stabilityWarning ? [stabilityWarning] : []),
                         ...(trafficWarning ? [trafficWarning] : []),
-                        ...(implicitReleaseWarning ? [implicitReleaseWarning] : []),
                         ...(postDeployWarnings ?? []),
                         ...targetAttach.warnings,
                       ],

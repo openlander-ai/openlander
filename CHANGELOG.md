@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.20] - 2026-09-24
+
+### Added
+
+- Let users persist Project-scoped app stop/delete permission through MCP without
+  visiting Settings. Keep database access and data-resource deletion permissions separate.
+- Stop or delete up to 50 app services in one request, resume explicitly selected
+  waiting requests after a permission grant, and report per-service results.
+- Add a multi-service cleanup request dialog with Project permission guidance and
+  readable batch approval targets.
+
+### Fixed
+
+- Keep reported app permissions consistent with execution checks, preserve service
+  overrides, and prevent duplicate execution when web approval and MCP continuation race.
+- Preserve app data volumes during cleanup and retain action status after a service is deleted.
+
+### Removed
+
+- Remove FDE delivery workspaces, artifacts, customer review and acceptance flows,
+  completion reports, and their release/promotion and migration-planning tools.
+  Ordinary app deployment, redeployment, and rollback remain available. Existing
+  delivery records are retained in storage but are no longer exposed in the UI or MCP.
+
 ## [0.3.6-rc.19] - 2026-09-05
 
 ### Added

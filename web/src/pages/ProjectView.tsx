@@ -20,12 +20,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   Box,
-  ClipboardList,
   Database,
   ExternalLink,
-  FileCheck2,
-  MoreHorizontal,
-  PackageOpen,
   Plus,
   Settings as SettingsIcon,
   Sparkles,
@@ -33,10 +29,10 @@ import {
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
+import { ServiceCleanupDialog } from '@/components/project/ServiceCleanupDialog';
 import { SettingsTab, type SettingsSection } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
 import { ProjectAiOpsTab } from '@/components/project/ProjectAiOpsTab';
-import { ProjectContextTab } from '@/components/project/ProjectContextTab';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
@@ -55,19 +51,10 @@ import {
 } from '@/lib/api/services';
 import { listProjectDataSources, type DataSourceAccessStatus } from '@/lib/api/data-access';
 import { cn } from '@/lib/utils';
-import { DeliveriesTab } from '@/components/delivery/DeliveriesTab';
-import { EngagementChip } from '@/components/engagement/EngagementChip';
-import { ProjectMigrationDialog } from '@/components/project/ProjectMigrationDialog';
 import { localizeApiError } from '@/lib/localized-api-error';
 import { ResourceQuickMenu, type ResourceQuickTab } from '@/components/project/ResourceQuickMenu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
-type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings';
+type ProjectTabId = 'services' | 'ai' | 'settings';
 
 function hasRuntimeMetricValue(value: string): boolean {
   const normalized = value.trim();
@@ -185,15 +172,7 @@ export function ProjectView() {
   //   tokens deferred to v0.2).
   const tabParam = searchParams.get('tab');
   const initialTab: ProjectTabId =
-    tabParam === 'settings'
-      ? 'settings'
-      : tabParam === 'context'
-        ? 'context'
-        : tabParam === 'deliveries'
-          ? 'deliveries'
-          : tabParam === 'ai'
-            ? 'ai'
-            : 'services';
+    tabParam === 'settings' ? 'settings' : tabParam === 'ai' ? 'ai' : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('general');
 
@@ -226,7 +205,6 @@ export function ProjectView() {
   const [archivedServicesError, setArchivedServicesError] = useState<string | null>(null);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
-  const [migrationOpen, setMigrationOpen] = useState(false);
   // Database/Cache resources are agent-provisioned, not built here — this
   // secondary action hands the user to the MCP guide instead of a native DB
   // wizard (kind="add-managed-db", never "add-service").
@@ -509,16 +487,6 @@ export function ProjectView() {
       icon: Box,
       count: projectServiceRows.length,
     },
-    {
-      id: 'context',
-      label: t('projectDetail.tabs.context'),
-      icon: ClipboardList,
-    },
-    {
-      id: 'deliveries',
-      label: t('projectDetail.tabs.deliveries'),
-      icon: FileCheck2,
-    },
     { id: 'ai', label: t('projectDetail.tabs.aiOps'), icon: Sparkles },
     { id: 'settings', label: t('projectDetail.tabs.settings'), icon: SettingsIcon },
   ];
@@ -554,7 +522,6 @@ export function ProjectView() {
               {projectInitials}
             </span>
             <span>{projectDisplayName}</span>
-            <EngagementChip projectId={projectId} />
             {isProjectArchived && (
               <span className="rounded-full border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--ol-warning)]">
                 {t('projects.card.archivedBadge')}
@@ -627,23 +594,6 @@ export function ProjectView() {
               <Plus className="h-3.5 w-3.5" />
               {t('projectDetail.addService.title')}
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('projectDetail.migration.more')}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={() => setMigrationOpen(true)}>
-                  <PackageOpen className="mr-2 h-3.5 w-3.5" />
-                  {t('projectDetail.migration.prepare')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         }
         bodyClassName="p-0"
@@ -662,6 +612,7 @@ export function ProjectView() {
           className="p-0"
         >
           <ServicesPanel
+            projectName={realProject?.name ?? projectId}
             projectId={projectId}
             services={projectServiceRows}
             onOpen={openService}
@@ -676,22 +627,6 @@ export function ProjectView() {
             composeAggregateStatus={composeAggregateStatus}
             onAccessChanged={() => void refetchGroupServices()}
           />
-        </TabPanel>
-        <TabPanel
-          active={activeTab === 'context'}
-          panelId="projectpanel-context"
-          labelledBy="project-context"
-          className="p-0"
-        >
-          {projectId && <ProjectContextTab projectId={projectId} />}
-        </TabPanel>
-        <TabPanel
-          active={activeTab === 'deliveries'}
-          panelId="projectpanel-deliveries"
-          labelledBy="project-deliveries"
-          className="p-0"
-        >
-          {projectId && <DeliveriesTab projectId={projectId} />}
         </TabPanel>
         <TabPanel
           active={activeTab === 'ai'}
@@ -760,14 +695,6 @@ export function ProjectView() {
         kind="add-managed-db"
         projectName={realProject?.name}
       />
-      {realProject && (
-        <ProjectMigrationDialog
-          open={migrationOpen}
-          onOpenChange={setMigrationOpen}
-          projectId={projectId}
-          projectName={realProject.name}
-        />
-      )}
     </div>
   );
 }
@@ -775,6 +702,7 @@ export function ProjectView() {
 // ─── Services panel ─────────────────────────────────────────────────────────
 
 function ServicesPanel({
+  projectName,
   projectId,
   services,
   onOpen,
@@ -789,6 +717,7 @@ function ServicesPanel({
   composeAggregateStatus,
   onAccessChanged,
 }: {
+  projectName: string;
   projectId: string;
   services: ServiceNode[];
   onOpen: (service: ServiceNode, tab?: ResourceQuickTab) => void;
@@ -884,6 +813,7 @@ function ServicesPanel({
             </div>
           )}
         </div>
+        <ServiceCleanupDialog projectId={projectId} projectName={projectName} services={services} />
         {canToggleArchived && (
           <button
             type="button"

@@ -1,3 +1,4 @@
+import { deleteDeployableService } from '../../src/pipeline/delete-deployable-service.js';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -86,6 +87,19 @@ function makeEnvironmentRow(overrides: Partial<EnvironmentRow> = {}): Environmen
 }
 
 function createApp(ctx: Partial<AppContext>) {
+  if (!ctx.pipeline) ctx.pipeline = {} as AppContext['pipeline'];
+  ctx.pipeline.deleteService ??= async (id, cloudflare, deleteVolumes = false) => {
+    const service = (await ctx.db!.getService(id))!;
+    const project = (await ctx.db!.getProject(service.project_id))!;
+    const runtime = (await ctx.db!.getProject(id.replace(/__svc$/, ''))) ?? project;
+    return deleteDeployableService(
+      { db: ctx.db!, docker: ctx.docker!, cloudflare, coordinator: ctx.coordinator },
+      project,
+      runtime,
+      service,
+      deleteVolumes,
+    );
+  };
   const app = new Hono();
   app.route('/api', createServiceRuntimeRoutes(ctx as AppContext));
   return app;

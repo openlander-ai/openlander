@@ -6,11 +6,13 @@ export type OperationPermissionSource = 'global' | 'project' | 'service';
 export type OperationPermissionScope = OperationPermissionSource;
 
 export interface OperationPermissionValues {
+  app_lifecycle: DestructiveActionPermission;
   destructive_actions: DestructiveActionPermission;
   database_access: DatabaseAccessPermission;
 }
 
 export interface OperationPermissionOverride {
+  app_lifecycle?: DestructiveActionPermission;
   destructive_actions?: DestructiveActionPermission;
   database_access?: DatabaseAccessPermission;
 }
@@ -21,6 +23,7 @@ export interface OperationPermissionSnapshot {
   service_override: OperationPermissionOverride | null;
   effective: OperationPermissionValues;
   sources: {
+    app_lifecycle: OperationPermissionSource;
     destructive_actions: OperationPermissionSource;
     database_access: OperationPermissionSource;
   };
@@ -34,6 +37,7 @@ export interface OperationPermissionResponse {
 }
 
 export interface OperationPermissionPatch {
+  app_lifecycle?: DestructiveActionPermission | null;
   destructive_actions?: DestructiveActionPermission | null;
   database_access?: DatabaseAccessPermission | null;
 }

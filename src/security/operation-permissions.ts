@@ -8,11 +8,13 @@ export type DatabaseAccessPermission = 'allow' | 'block';
 export type OperationPermissionSource = 'global' | 'project' | 'service';
 
 export interface OperationPermissionValues {
+  app_lifecycle: DestructiveActionPermission;
   destructive_actions: DestructiveActionPermission;
   database_access: DatabaseAccessPermission;
 }
 
 export interface OperationPermissionOverride {
+  app_lifecycle?: DestructiveActionPermission;
   destructive_actions?: DestructiveActionPermission;
   database_access?: DatabaseAccessPermission;
 }
@@ -23,6 +25,7 @@ export interface OperationPermissionSnapshot {
   service_override: OperationPermissionOverride | null;
   effective: OperationPermissionValues;
   sources: {
+    app_lifecycle: OperationPermissionSource;
     destructive_actions: OperationPermissionSource;
     database_access: OperationPermissionSource;
   };
@@ -40,6 +43,7 @@ export interface OperationPermissionTarget {
 }
 
 export const DEFAULT_OPERATION_PERMISSIONS: OperationPermissionValues = {
+  app_lifecycle: 'approval_required',
   destructive_actions: 'allow',
   database_access: 'allow',
 };
@@ -76,6 +80,11 @@ function parseStoredOverride(key: string, value: string): OperationPermissionOve
 
   const record = parsed as Record<string, unknown>;
   const override: OperationPermissionOverride = {};
+  if (record['app_lifecycle'] !== undefined) {
+    if (!isDestructivePermission(record['app_lifecycle']))
+      throw new OperationPermissionConfigurationError(key);
+    override.app_lifecycle = record['app_lifecycle'];
+  }
   if (record['destructive_actions'] !== undefined) {
     if (!isDestructivePermission(record['destructive_actions'])) {
       throw new OperationPermissionConfigurationError(key);
@@ -107,6 +116,11 @@ function applyOverride(
   source: OperationPermissionSource,
 ): void {
   if (!override) return;
+  const appPermission = override.app_lifecycle ?? override.destructive_actions;
+  if (appPermission !== undefined) {
+    current.app_lifecycle = appPermission;
+    sources.app_lifecycle = source;
+  }
   if (override.destructive_actions !== undefined) {
     current.destructive_actions = override.destructive_actions;
     sources.destructive_actions = source;
@@ -130,9 +144,13 @@ export async function getOperationPermissionSnapshot(
   const global: OperationPermissionValues = {
     ...DEFAULT_OPERATION_PERMISSIONS,
     ...globalOverride,
+    app_lifecycle:
+      globalOverride?.app_lifecycle ??
+      (globalOverride?.destructive_actions === 'block' ? 'block' : 'approval_required'),
   };
   const effective = { ...global };
   const sources: OperationPermissionSnapshot['sources'] = {
+    app_lifecycle: 'global',
     destructive_actions: 'global',
     database_access: 'global',
   };
@@ -153,7 +171,10 @@ export async function saveGlobalOperationPermissions(
   patch: OperationPermissionOverride,
 ): Promise<OperationPermissionSnapshot> {
   const current = await getOperationPermissionSnapshot(store);
-  const next: OperationPermissionValues = { ...current.global, ...patch };
+  const stored = await readOverride(store, GLOBAL_SETTING_KEY);
+  const next: OperationPermissionOverride = { ...current.global, ...patch };
+  if (patch.app_lifecycle === undefined && stored?.app_lifecycle === undefined)
+    delete next.app_lifecycle;
   if (!store.upsertSetting) throw new OperationPermissionConfigurationError('settings_store');
   await store.upsertSetting(GLOBAL_SETTING_KEY, JSON.stringify(next));
   return await getOperationPermissionSnapshot(store);
@@ -163,6 +184,7 @@ export async function saveOperationPermissionOverride(
   store: PermissionSettingStore,
   scope: { projectId?: string; serviceId?: string },
   patch: {
+    app_lifecycle?: DestructiveActionPermission | null;
     destructive_actions?: DestructiveActionPermission | null;
     database_access?: DatabaseAccessPermission | null;
   },
@@ -176,6 +198,10 @@ export async function saveOperationPermissionOverride(
 
   const existing = (await readOverride(store, key)) ?? {};
   const next: OperationPermissionOverride = { ...existing };
+  if ('app_lifecycle' in patch) {
+    if (patch.app_lifecycle === null) delete next.app_lifecycle;
+    else if (patch.app_lifecycle !== undefined) next.app_lifecycle = patch.app_lifecycle;
+  }
   if ('destructive_actions' in patch) {
     if (patch.destructive_actions === null) delete next.destructive_actions;
     else if (patch.destructive_actions !== undefined) {
@@ -215,5 +241,15 @@ export async function assertDatabaseAccessAllowed(
   if (snapshot.effective.database_access === 'block') {
     throw new OperationPermissionDeniedError('database_access', target);
   }
+  return snapshot;
+}
+
+export async function assertAppLifecycleAllowed(
+  store: PermissionSettingStore,
+  target: OperationPermissionTarget,
+): Promise<OperationPermissionSnapshot> {
+  const snapshot = await getOperationPermissionSnapshot(store, target);
+  if (snapshot.effective.app_lifecycle === 'block')
+    throw new OperationPermissionDeniedError('app_lifecycle', target);
   return snapshot;
 }

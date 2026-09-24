@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **144 unique default operations** surfaced through those composites
+- **98 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -17,37 +17,21 @@ Model note: **Project = workspace**. **Application**, **Compose**, **Database**,
 
 Agent routing rule of thumb:
 
-| User asks for                                      | Call                                                                                                        |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| "Deploy this new app/repo/image"                   | `openlander_deploy.deploy_app`                                                                              |
-| "Create a new app project before DB/cache"         | `openlander_project.create_project`                                                                         |
-| "Update this existing app to latest code/config"   | `openlander_service.update_app`                                                                             |
-| "Restart/rollback this existing app"               | `openlander_service.restart_service` / `rollback_service`                                                   |
-| "Change app branch/repo/image source"              | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
-| "Set env vars or connect DB/Redis to an app"       | `openlander_service.set_env_vars`, then `update_app`                                                        |
-| "Fix route port mismatch without rebuild"          | `openlander_service.apply_route_config`                                                                     |
-| "Create PostgreSQL/Redis/MySQL/etc."               | `openlander_managed_service.create_service`                                                                 |
-| "Read or change database/cache/storage RAM"        | `openlander_managed_service.get_service_resources` / `update_service_resources`                             |
-| "Inspect this project's database/cache safely"     | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
-| "Why is this failing?"                             | `openlander_monitor.diagnose_service` with `service_id`                                                     |
-| "What did AI Ops notice?"                          | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
-| "Was this killed by host memory/Docker?"           | `openlander_monitor.diagnose_host_resources`                                                                |
-| "Is Docker's network pool exhausted?"              | `openlander_monitor.list_docker_networks`                                                                   |
-| "Capture this customer review delivery"            | `openlander_project.create_delivery` / `record_delivery_feedback`                                           |
-| "Show FDE portfolio blockers across Projects"      | `openlander_project.list_engagements` / `get_engagement`                                                    |
-| "Start a customer engagement and Project"          | `openlander_project.bootstrap_engagement`                                                                   |
-| "Register a repo before deployment is defined"     | `openlander_project.register_project_repository`                                                            |
-| "Plan and hand off an Agent delivery run"          | `openlander_project.plan_delivery` / `record_delivery_run_progress` / `resume_delivery_run`                 |
-| "Apply or inspect the repository Project manifest" | `openlander_project.apply_project_manifest` / `get_project_manifest`                                        |
-| "Prepare this Project for cloud migration"         | `openlander_project.get_migration_snapshot`                                                                 |
-| "Compare AWS and GCP migration targets"            | `openlander_project.compare_migration_targets`                                                              |
-| "Build a PostgreSQL cloud migration runbook"       | `openlander_project.get_migration_runbook`                                                                  |
-| "Inspect PostgreSQL before cloud migration"        | `openlander_project.get_migration_preflight`                                                                |
-| "Build once and promote the same artifact"         | `openlander_deploy.create_release` / `promote_release` / `evaluate_promotion`                               |
-| "Stop or roll back a Release"                      | `openlander_deploy.recall_release` / `rollback_environment`                                                 |
-| "Create this week's internal and customer report"  | `openlander_project.generate_weekly_report` / `publish_weekly_report`                                       |
-| "Classify the feedback into review items"          | `openlander_project.submit_delivery_work_item_drafts`                                                       |
-| "Is the customer Receipt ready?"                   | `openlander_project.get_delivery_readiness`                                                                 |
+| User asks for                                    | Call                                                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"                 | `openlander_deploy.deploy_app`                                                                              |
+| "Create a new app project before DB/cache"       | `openlander_project.create_project`                                                                         |
+| "Update this existing app to latest code/config" | `openlander_service.update_app`                                                                             |
+| "Restart/rollback this existing app"             | `openlander_service.restart_service` / `rollback_service`                                                   |
+| "Change app branch/repo/image source"            | `deploy_app` with an explicit `service_id`/`service_name`, or `update_application_source` then `update_app` |
+| "Set env vars or connect DB/Redis to an app"     | `openlander_service.set_env_vars`, then `update_app`                                                        |
+| "Fix route port mismatch without rebuild"        | `openlander_service.apply_route_config`                                                                     |
+| "Create PostgreSQL/Redis/MySQL/etc."             | `openlander_managed_service.create_service`                                                                 |
+| "Inspect this project's database/cache safely"   | `openlander_managed_service.list_data_sources` / `describe_data_source` / `read_data_source`                |
+| "Why is this failing?"                           | `openlander_monitor.diagnose_service` with `service_id`                                                     |
+| "What did AI Ops notice?"                        | `openlander_monitor.list_ai_ops_briefings` / `get_ai_ops_briefing`                                          |
+| "Was this killed by host memory/Docker?"         | `openlander_monitor.diagnose_host_resources`                                                                |
+| "Is Docker's network pool exhausted?"            | `openlander_monitor.list_docker_networks`                                                                   |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
 contains exactly one Application.
@@ -76,10 +60,7 @@ distinguish a missing target from an out-of-scope target. `list_projects` is the
 exception: it returns only Projects and Application/Compose `service_id` values visible to the token.
 When an action supplies more than one target selector, every supplied selector must be inside the
 token scope; agents should not mix `service_id`, `project_id`, `deploy_id`, or `action_run_id`
-values from different targets in one call. Delivery selectors (`delivery_id`, `artifact_id`,
-`report_artifact_id`, and `predecessor_delivery_id`) follow the same rule. `mcp_action_status` may be polled with a service-scoped
-token for held actions in the scoped service's Project, so handoff flows can follow their own
-approval/status lifecycle without broadening the token.
+values from different targets in one call.
 
 This Bearer token is for MCP, not for raw REST `/api` calls. A correctly registered agent should
 see the five `openlander_*` composite tools and should be able to call
@@ -106,8 +87,8 @@ request includes the requested `level` in its approval summary.
 
 Application cleanup and restore use softer paths. `archive_project`,
 `unarchive_project`, `archive_service`, and `unarchive_service` are exposed
-through the project/service composites but enter the human approval hold queue
-before executing.
+through the project/service composites. An explicit Project permission of `allow`
+executes them immediately; otherwise they enter the approval queue.
 Archive is reversible cleanup, not permanent deletion: archived Applications
 are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
@@ -132,13 +113,10 @@ exact `network_name` and `network_id`, requires zero active endpoints, and never
 removes system/shared, external, or other-instance networks. Label-less legacy
 `ol-*` networks additionally require `allow_legacy_unlabeled=true`.
 
-**Project/app hard delete and purge remain human UI-only.** Composites do not expose
-`delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to those names return
-`{ error: "HUMAN_UI_ONLY", web_ui: { surface: "project_settings_danger" }, safe_alternatives: [...], do_not_substitute: [...] }`
-so agents do not silently substitute `remove_service` or `cleanup_docker` (those target
-Database/Cache/Storage resources, not Applications). For whole Project lifecycle changes, use
-`archive_project` / `unarchive_project` with `project_id` or `project_name`; for one Application,
-use `archive_service` / `unarchive_service` with a `service_id`.
+**Application deletion is available through `openlander_service.delete_app`.**
+It follows Project permissions and retains volumes. Whole-Project hard delete and
+host purge keep their existing human controls. Use `remove_service` only for
+Database/Cache/Storage resources.
 
 User-owned external configuration is also gated. If `diagnose_service` determines that a saved
 external dependency value such as `EXCHANGE_API_URL` requires user input, OpenLander records a
@@ -152,41 +130,34 @@ from trusted human surfaces (for example, saving the value in the web UI) or by 
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                                                 |
-| ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 28           | Deploy plans, immutable Releases, Promotion, rollback, build logs, Git                                  |
-| `openlander_project`         | 64           | Projects, manifests, migration planning, Agent Delivery, weekly reports, Engagement, lifecycle, secrets |
-| `openlander_service`         | 26           | Application lifecycle, config, domain routes, public access, and env vocabulary                         |
-| `openlander_managed_service` | 26           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage                     |
-| `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes                                |
+| Composite                    | Action slots | Purpose                                                                             |
+| ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 22           | Deploy plans, rollback, build logs, Git                                             |
+| `openlander_project`         | 21           | Projects, permissions, lifecycle, secrets                                           |
+| `openlander_service`         | 29           | Application lifecycle, config, routes, public access, env                           |
+| `openlander_managed_service` | 26           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
+| `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
 ## Tool Categories
 
-| Category                                                  | Tools | Description                                                                         |
-| --------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------- |
-| [Deploy Plan](#deploy-plan)                               | 6     | Create, inspect, update, execute deploy plans                                       |
-| [Deployment Controls](#deployment-controls)               | 7     | Status, cancel, rollback, previews                                                  |
-| [Project Operations](#project-operations)                 | 7     | Project lifecycle, listing, and Project-scoped config                               |
-| [Delivery Workspace](#delivery-workspace)                 | 14    | Review evidence, feedback, Gates, deploy links, Receipt preview                     |
-| [Agent Delivery Run](#agent-delivery-run)                 | 8     | Plan, verify, hand off, resume, cancel, or complete                                 |
-| [Project Manifest](#project-manifest)                     | 3     | Register source and apply/inspect Project configuration                             |
-| [Migration Planning](#migration-planning)                 | 4     | Export a neutral graph, compare targets, inspect PostgreSQL, and build a DB runbook |
-| [Release and Promotion](#release-and-promotion)           | 6     | Build once, promote an immutable digest, recall, or roll back                       |
-| [Weekly Reporting](#weekly-reporting)                     | 3     | Freeze evidence and publish internal/customer HTML and PDF                          |
-| [Engagement Portfolio](#engagement-portfolio)             | 3     | Engagement bootstrap and cross-Project portfolio reads                              |
-| [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                                                     |
-| [Resources](#services--infrastructure)                    | 19    | Create databases, manage infrastructure resources                                   |
-| [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                                            |
-| [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL                          |
-| [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes                                  |
-| [Git & Repository](#git--repository)                      | 4     | Scan repos, list GitHub repos                                                       |
-| [Monitoring](#monitoring--logs)                           | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis                       |
-| [Debug](#debug--troubleshooting)                          | 1     | Build logs for external-agent analysis                                              |
-| [Volume Management](#volume-management)                   | 5     | Docker volumes, disk cleanup                                                        |
-| [Infrastructure Analysis](#infrastructure-analysis)       | 2     | Repo analysis, web search                                                           |
-| [Platform Admin](#platform-admin)                         | 13    | Health, events, docker inspect                                                      |
+| Category                                                  | Tools | Description                                                   |
+| --------------------------------------------------------- | ----- | ------------------------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                               | 6     | Create, inspect, update, execute deploy plans                 |
+| [Deployment Controls](#deployment-controls)               | 7     | Status, cancel, rollback, previews                            |
+| [Project Operations](#project-operations)                 | 7     | Project lifecycle, listing, and Project-scoped config         |
+| [Environment Variables](#environment-variables--secrets)  | 11    | Env vars, secrets, secret files                               |
+| [Resources](#services--infrastructure)                    | 17    | Create databases, manage infrastructure resources             |
+| [Data Inspector](#project-aware-data-inspector)           | 3     | Bounded read-only data-source inspection                      |
+| [Managed public sharing](#expose_public--unexpose_public) | 3     | Publish, inspect, or stop an OpenLander-managed public URL    |
+| [Custom domains](#domains)                                | 2     | Register and inspect user-managed Host/path routes            |
+| [Git & Repository](#git--repository)                      | 4     | Scan repos, list GitHub repos                                 |
+| [Monitoring](#monitoring--logs)                           | 14    | Logs, stats, alerts, AI Ops briefings, host/network diagnosis |
+| [Debug](#debug--troubleshooting)                          | 1     | Build logs for external-agent analysis                        |
+| [Volume Management](#volume-management)                   | 5     | Docker volumes, disk cleanup                                  |
+| [Infrastructure Analysis](#infrastructure-analysis)       | 2     | Repo analysis, web search                                     |
+| [Platform Admin](#platform-admin)                         | 13    | Health, events, docker inspect                                |
 
 ---
 
@@ -285,10 +256,6 @@ v0.1 MCP surface.
 One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
 project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
 For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
-After a successful `deploy_app`, OpenLander records the deployed image digest as an implicit
-Delivery/Agent Run/Release compatibility record. This adoption does not rebuild the image, so a
-later Promotion can reuse the exact immutable artifact. Existing-app calls return the Release as
-pending because the delegated `update_app` path is asynchronous.
 When `deploy_app` resolves an existing app and includes source-only changes (`repo_url`, `branch`,
 `source`, `image`, or `port`), OpenLander saves those source settings first and then starts
 `update_app`. Dockerfile/build config changes still require `update_service_config`, then
@@ -479,396 +446,6 @@ contain the scoped service. For service-scoped tokens, `deployable_service`,
 `deployable_services`, and `deployable_service_count` are also reduced to the scoped service so
 agents do not receive sibling service identifiers.
 
-## Migration Planning
-
-### `get_migration_snapshot`
-
-Generate an on-demand, provider-neutral migration graph for one Project.
-
-| Parameter    | Type   | Required | Description |
-| ------------ | ------ | -------- | ----------- |
-| `project_id` | string | Yes      | Project ID  |
-
-The response contains Project identity, Application/Compose and
-Database/Cache/Storage resources, formal Service Connections, persistent mount
-metadata, domain routes, environment-variable keys, secret-file mount metadata,
-runtime-inspection status, and deterministic readiness checks. It does not
-contain Markdown, raw logs, environment-variable values, global secrets,
-secret-file contents, or data payloads.
-
-This is a read-only preparation step. It does not create cloud resources, copy
-database/object/volume data, or change DNS. A project-scoped token may read only
-its exact Project; a service-scoped token cannot request this Project-wide
-snapshot because it would expose sibling resource metadata. The Web Project
-page can download the same snapshot as `migration.json` together with a rendered
-`MIGRATION.md` document. The same REST bundle also includes an AWS/GCP target
-comparison and rendered `TARGETS.md`; both reuse the snapshot's `generated_at`.
-
-### `compare_migration_targets`
-
-Compare the same redacted Project snapshot against two planning targets:
-AWS ECS on Fargate and Google Cloud Run.
-
-| Parameter    | Type   | Required | Description |
-| ------------ | ------ | -------- | ----------- |
-| `project_id` | string | Yes      | Project ID  |
-
-The response contains per-Service target resource recommendations, persistent
-data mappings, supporting configuration/network resources, confidence, manual
-review findings, and official provider reference links. It intentionally omits
-the full source snapshot and Markdown to keep the MCP response focused.
-
-This query does not inspect a cloud account, region, IAM, quota, or pricing. It
-does not provision resources, copy data, or change DNS. MongoDB, MinIO,
-Compose, and bind-mount mappings remain review-required rather than being
-treated as drop-in compatible. Project-scoped tokens may compare only their
-exact Project; service-scoped tokens cannot request a Project-wide comparison.
-
-### `get_migration_runbook`
-
-Generate an operator-reviewed PostgreSQL native dump/restore runbook for one
-Project-owned Database and one explicit destination.
-
-| Parameter    | Type   | Required    | Description                                                        |
-| ------------ | ------ | ----------- | ------------------------------------------------------------------ |
-| `project_id` | string | Yes         | Project ID                                                         |
-| `target`     | enum   | Yes         | `aws_rds_postgresql` or `gcp_cloud_sql_postgresql`                 |
-| `service_id` | string | Conditional | Project-owned PostgreSQL ID; required when the Project has several |
-
-The JSON response contains required operator inputs, preflight and rehearsal
-steps, placeholder-only `pg_dump`/`pg_restore` commands, final write-freeze,
-schema/row/sequence/extension/application verification, cutover, and rollback.
-Markdown is kept out of MCP; the Web endpoint can download the same generated
-runbook as JSON and `RUNBOOK.md`.
-
-This action never executes a command, reads credentials or database contents,
-provisions a cloud service, copies data, changes application config or DNS, or
-creates activity/evidence rows. It accepts only active PostgreSQL resources
-owned by the Project; a connected Database owned by another Project is not a
-valid source. Both `project_id` and `service_id` are scope-checked, and
-service-scoped tokens cannot request the Project-wide runbook.
-
-### `get_migration_preflight`
-
-Inspect one active Project-owned PostgreSQL source before a managed-cloud
-migration rehearsal.
-
-| Parameter    | Type   | Required    | Description                                                        |
-| ------------ | ------ | ----------- | ------------------------------------------------------------------ |
-| `project_id` | string | Yes         | Project ID                                                         |
-| `service_id` | string | Conditional | Project-owned PostgreSQL ID; required when the Project has several |
-
-The response includes the observed PostgreSQL version, database size,
-encoding/collation, extensions, bounded role metadata, schema/table/sequence
-counts, and an estimated row count. It does not query table row contents or
-return source credentials, secret values, raw command output, or Markdown.
-`database_access` permission and every supplied Project/Service selector are
-enforced before inspection.
-
-Actual dump/restore rehearsal is intentionally absent from MCP. It is available
-only in the authenticated Web migration dialog, requires explicit confirmation
-of a disposable empty target, verifies the target is actually empty, requires
-TLS, and never stores or returns the target password. Rehearsal status is
-process-memory only; no cloud provisioning, DNS change, source mutation, or
-automatic target cleanup is performed.
-
-### `archive_project`
-
-Archive a Project by archiving its active Applications
-while preserving configuration and history. This is a soft lifecycle operation:
-it does not delete Database resources, volumes, buckets, or host-wide Docker
-resources. Services that were already archived before the group archive remain
-tracked separately for restore behavior.
-
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_id`   | string | No       | Project id   |
-| `project_name` | string | No       | Project name |
-
-Provide either `project_id` or `project_name`. A successful initial MCP call
-returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
-`poll_call`; poll `mcp_action_status` after the user approves or rejects the
-request. After approval, a real concurrent deployment returns `DEPLOY_LOCKED`
-with sanitized blocker evidence in the polled action status; stale stored
-`building` markers do not cause `ARCHIVE_BUILDING_PROJECT`.
-
-### `unarchive_project`
-
-Restore the archive set from a Project archive. OpenLander restores the
-Applications archived by that Project operation and does **not** redeploy them
-automatically; call `update_app` with each `service_id` that should run again.
-
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_id`   | string | No       | Project id   |
-| `project_name` | string | No       | Project name |
-
-Provide either `project_id` or `project_name`. A successful initial MCP call
-returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
-`poll_call`; poll `mcp_action_status` after the user approves or rejects the
-request. If execution races with a deployment, the terminal poll response uses
-`error_code: "DEPLOY_LOCKED"` and may include `error_details.lock_session`,
-`blocked_service_id`, `status_source`, and `operation_phase`.
-
-## Delivery Workspace
-
-Delivery actions live under `openlander_project` and operate on evidence
-metadata. They do not activate an internal LLM, upload local binary files, or
-finalize a Receipt.
-
-For a local file, call `create_evidence_upload` first. Then send its exact bytes
-with `PUT` to the returned short-lived bearer `upload_url`, without an MCP
-Authorization header. Do not use an MCP token against the general REST API.
-
-For a customer-facing review, use the higher-level package flow instead of
-registering each Artifact role manually:
-
-| Action                               | Required parameters                                                               | Purpose                                                         |
-| ------------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `prepare_delivery_review_package`    | `idempotency_key`, `delivery_id`, `review_note`, `files`, `overview`              | Declare one PDF-led customer review package                     |
-| `get_delivery_review_package_status` | `delivery_id`, optional `package_id`, optional `include_upload_capabilities`      | Read uploaded/missing files and mint fresh URLs only when asked |
-| `publish_delivery_review_package`    | `idempotency_key`, `package_id`, manifest SHA, expected Delivery evidence version | Publish all prepared files and bind the package to Review       |
-
-`prepare_delivery_review_package` requires exactly one PDF `review_document`.
-It may also declare one HTML `interactive_preview` and one PNG/JPEG/WebP
-`representative_image`. Agents provide filenames, expected SHA-256 values,
-sizes, and MIME types; OpenLander derives logical keys, Artifact kinds, Receipt
-order, and HTML companion links. The prepare response contains no bearer URL.
-
-Call `get_delivery_review_package_status` with
-`include_upload_capabilities=true` only when ready to upload. Its 15-minute PUT
-URLs are returned for missing files and are not stored in operation history.
-MCP responses resolve these URLs against the active MCP transport origin, so
-agents should use the returned absolute URL rather than a configured default port.
-Partial uploads remain staged and do not appear as Delivery Artifacts or change
-the active Review Gate. The draft can be resumed for seven days.
-
-`publish_delivery_review_package` verifies the manifest and Delivery evidence
-version, then creates the visible Artifacts in one transaction. The same PDF
-Artifact is both the HTML companion and the Review Gate target. A package-bound
-review must be accepted with its `package_id` and exact manifest SHA-256; legacy
-Artifact-only review remains supported during the compatibility period.
-Instance, organization, and matching Project tokens may use the three package
-actions. Service-scoped tokens receive `SCOPE_VIOLATION` because a review
-package is a Project-level object.
-
-When every declared file is ready, the status response's `suggested_call`
-includes the required stable `idempotency_key` for `publish_delivery_review_package`.
-Image signature failures report both `expectedMimeType` and `actualMimeType` when
-the uploaded bytes are a supported PNG, JPEG, or WebP with the wrong declaration.
-
-| Action                              | Required parameters                       | Purpose                                                        |
-| ----------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| `create_delivery`                   | `project_id`, `title`                     | Create a Delivery and its project-default Gates                |
-| `list_deliveries`                   | `project_id`                              | List one Project's Deliveries                                  |
-| `get_delivery`                      | `delivery_id`                             | Read artifacts, raw feedback, items, approvals, Gates, deploys |
-| `update_delivery_draft`             | `delivery_id`                             | Update title, summary, type, maturity, or limitations          |
-| `attach_delivery_url`               | `delivery_id`, `provider`, `label`, `url` | Add optional external evidence metadata                        |
-| `record_delivery_feedback`          | `delivery_id`, `source_type`, `raw_text`  | Preserve pasted feedback verbatim                              |
-| `submit_delivery_work_item_drafts`  | `delivery_id`, `items`                    | Submit AI/external drafts as `proposed` only                   |
-| `record_delivery_gate_result`       | `delivery_id`, `gate_key`, `status`       | Store an external Gate result and optional report artifact     |
-| `link_delivery_deploy`              | `delivery_id`, `deploy_id`                | Link same-Project successful Production evidence               |
-| `get_delivery_readiness`            | `delivery_id`                             | Return deterministic finalization checks and blockers          |
-| `generate_delivery_receipt_preview` | `delivery_id`                             | Build a preview and return page metadata                       |
-
-`record_delivery_gate_result` accepts `summary`, `waiver_reason`,
-`report_artifact_id`, and `idempotency_key`. A waiver requires a reason. A
-JUnit artifact is normalized by OpenLander, and a report containing failures or
-errors cannot be recorded as `passed`. Gate idempotency records are durable:
-the same key replays its original response, while using that key with different
-request content returns `IDEMPOTENCY_KEY_CONFLICT`.
-
-MCP Agents should call `create_evidence_upload` before referencing an Artifact
-ID, then `PUT` the file to the returned bearer URL. The authenticated multipart
-endpoint `POST /api/projects/:projectId/deliveries/:deliveryId/artifacts`
-remains available to the web UI and supported CI clients. Project PAT uploads
-and Gate-result submissions require an `Idempotency-Key` header. Final Receipt
-confirmation is administrator web-session only; `finalize_delivery*` MCP
-requests return `HUMAN_UI_ONLY`. Finalization also requires the evidence version
-to match the most recently generated Receipt preview.
-
-## Agent Delivery Run
-
-Agent Delivery actions live under `openlander_project`. They pin work to an
-exact commit, manifest hash, and runner image, so another Agent can inspect or
-resume the same execution record without relying on chat history.
-
-| Action                         | Required parameters                                                                                | Purpose                                                |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `plan_delivery`                | `idempotency_key`, `project_id`, `title`, `objective`, `definition_of_done`, `gates`               | Store the Delivery objective, manifest path, and Gates |
-| `request_delivery_review`      | `idempotency_key`, `delivery_id`, `gate_key`, `artifact_id`, `expected_sha256`                     | Bind one exact latest Artifact to a Review Gate        |
-| `get_delivery_review_status`   | `delivery_id`, `gate_key`                                                                          | Read the compact exact-Artifact review checkpoint      |
-| `start_delivery_run`           | `idempotency_key`, `delivery_id`, `commit_sha`, `manifest_path`, `manifest_sha256`, `runner_image` | Start one active Run pinned to exact inputs            |
-| `get_delivery_run`             | `run_id`                                                                                           | Read the Run and its ordered progress/handoff events   |
-| `run_quality_gates`            | `idempotency_key`, `run_id`                                                                        | Run manifest commands in disposable containers         |
-| `record_delivery_run_progress` | `idempotency_key`, `run_id`, `phase`, `summary`                                                    | Record progress or pause with `handoff_summary`        |
-| `resume_delivery_run`          | `idempotency_key`, `run_id`, `summary`                                                             | Resume a paused Run with an explicit takeover summary  |
-| `cancel_delivery_run`          | `idempotency_key`, `run_id`, `reason`                                                              | Cancel an active Run while preserving its evidence     |
-| `complete_delivery`            | `idempotency_key`, `delivery_id`, `run_id`, `release_id`, `promotion_id`, `limitations`            | Finalize Completion Evidence after Production          |
-
-`plan_delivery` defaults `manifest_path` to `.openlander/delivery.yml`. Commit
-that file before `start_delivery_run`, then pass the exact Git commit and
-SHA-256 of the committed manifest. `run_quality_gates` clones the Project's
-single Git-backed Application at that exact commit, verifies the manifest and
-runner-image digest, and executes only argv arrays declared in the manifest.
-Each attempt records exit code, duration, a redacted-log SHA-256, and an
-optional JUnit/Playwright/JSON report artifact. A Delivery can have only one `running` or
-`paused` Run. Supplying `handoff_summary` to
-`record_delivery_run_progress` pauses the Run; the next Agent must call
-`resume_delivery_run` before continuing. Commands require a stable
-`idempotency_key`; exact retries replay the stored result and changed payloads
-return `OPERATION_IDEMPOTENCY_CONFLICT`.
-
-`request_delivery_review` verifies that `artifact_id` belongs to the Delivery,
-is the latest non-superseded revision for its logical key and kind, and has the
-exact `expected_sha256`. It then binds that Artifact to the selected `review`
-Gate as `pending`. `get_delivery_review_status` returns only the bound Artifact
-identity, revision, SHA-256, Gate state, active approval-evidence ID, and
-machine-readable blockers.
-
-`ready_for_next_step=true` means the exact Artifact revision passed or was
-explicitly waived at this review checkpoint. It is permission to continue the
-domain-specific workflow, not evidence that an external import, deployment, or
-other side effect already ran. Delivery-level customer approval and Receipt
-Readiness remain separate checks.
-
-Acceptance itself is intentionally absent from the MCP catalog. A signed-in
-reviewer uses **Accept this version** in the Delivery Gates tab; the underlying
-`accept_delivery_review` Application Operation rejects MCP and raw REST API-token
-actors with `OPERATION_REQUIRES_HUMAN_UI`.
-
-## Project Manifest
-
-`register_project_repository` takes `project_id`, `repo_url`, and `branch`, then creates the Project's
-single stopped Git Application record without cloning, building, or deploying it.
-Use it when requirements and quality work start before an Environment has been
-chosen. It rejects Projects that already contain a different Application source;
-changing an existing source remains `update_application_source`.
-
-`apply_project_manifest` applies `.openlander/project.yml` through
-`openlander_project`. It stores the exact path, SHA-256, optional Service
-composition, Project Environment policy, and optional weekly-report schedule.
-It synchronizes stable Environment keys, display names, tiers, Promotion order,
-health/Smoke/soak policy, and the manifest SHA-256. The manifest must have
-unique keys and orders and exactly one `production` Environment. Removed
-entries are not deleted automatically, so an Agent cannot orphan a running
-Environment merely by changing Git configuration.
-
-`get_project_manifest(project_id)` compares that applied snapshot with current
-Service and Environment rows. It returns `in_sync`, `drifted`, or `not_applied`
-plus machine-readable `missing`, `retained`, and `changed` entries. The Web
-Delivery view renders the same comparison instead of offering an Environment
-authoring form.
-
-Each Environment may also declare `health_timeout_seconds` (1–600), an optional
-absolute `smoke_path`, and `soak_seconds` (0–3600). Promotion waits for container
-health, probes the exposed local port when a Smoke path is present, waits the
-soak window, then repeats health and Smoke checks before recording success.
-
-## Release and Promotion
-
-Release actions live under `openlander_deploy`. A Release builds one immutable
-image digest per Git-backed service and reuses those exact service digests
-across every Environment.
-
-| Action                 | Required parameters                                       | Purpose                                             |
-| ---------------------- | --------------------------------------------------------- | --------------------------------------------------- |
-| `create_release`       | `idempotency_key`, `run_id`, `version`                    | Build one Release after required quality Gates pass |
-| `get_release`          | `release_id`                                              | Read artifacts and Promotion history                |
-| `promote_release`      | `idempotency_key`, `release_id`, `project_environment_id` | Deploy the existing digest to the next Environment  |
-| `evaluate_promotion`   | `promotion_id`                                            | Read health, soak, deploy IDs, and failure details  |
-| `recall_release`       | `idempotency_key`, `release_id`                           | Block additional Promotion of a ready Release       |
-| `rollback_environment` | `idempotency_key`, `project_environment_id`               | Restore the previous successful Release digest      |
-
-All services in one Agent Run must share the same repository and commit;
-unrelated repositories require separate Deliveries. `promote_release` never rebuilds. A missing image fails with
-`ARTIFACT_UNAVAILABLE`; a changed image identifier fails with
-`ARTIFACT_DIGEST_MISMATCH`. Environments must be promoted in manifest order.
-The asynchronous create and promote commands return compact `status_call`
-links for `get_release` and `evaluate_promotion`.
-
-## Weekly Reporting
-
-Weekly reporting lives under `openlander_project` but requires an
-instance/organization-scoped token because one Engagement may contain multiple
-Projects.
-
-| Action                   | Required parameters                                              | Purpose                                                        |
-| ------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `generate_weekly_report` | `idempotency_key`, `engagement_id`, `period_start`, `period_end` | Freeze a one-to-eight-day Engagement evidence snapshot         |
-| `publish_weekly_report`  | `idempotency_key`, `report_id`                                   | Render internal and customer HTML/PDF from that exact snapshot |
-| `get_weekly_report`      | `report_id`                                                      | Read revision, publication state, blob IDs, and SHA-256 values |
-
-`period_start` and `period_end` use `YYYY-MM-DD`. A published report is
-immutable; changed evidence produces another revision. The internal view may
-include Agent Run phases, check log hashes, Activity, and technical failure
-details. The customer view contains outcomes, Project and Delivery status,
-Release/Environment status, and open-issue titles, but excludes check details
-and internal Activity. Both views retain their own PDF SHA-256 and point back
-to one `evidence_sha256`.
-
-## Engagement Portfolio
-
-Engagement Portfolio adds six idempotent mutation commands and two read actions
-to `openlander_project`.
-Engagements are internal FDE classification and observability records, not
-customer accounts. They group existing Projects without changing Project
-runtime, Delivery evidence, or finalized Receipt snapshots.
-
-| Action                           | Required parameters                                    | Purpose                                                      |
-| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
-| `bootstrap_engagement`           | `idempotency_key`, `customer_name`, `title`, `project` | Atomically create an Engagement and its initial Project      |
-| `update_engagement_from_brief`   | `idempotency_key`, `engagement_id`                     | Apply agent-structured brief fields with source artifact IDs |
-| `link_project_to_engagement`     | `idempotency_key`, `engagement_id`, `project_id`       | Add one existing Project to an active Engagement             |
-| `unlink_project_from_engagement` | `idempotency_key`, `engagement_id`, `project_id`       | Remove membership without changing the Project or evidence   |
-| `archive_engagement`             | `idempotency_key`, `engagement_id`                     | Archive the portfolio record while preserving Project links  |
-| `unarchive_engagement`           | `idempotency_key`, `engagement_id`                     | Restore an archived Engagement to active status              |
-| `list_engagements`               | None                                                   | List runtime health, Delivery status counts, and blockers    |
-| `get_engagement`                 | `engagement_id`                                        | Read linked Project health and compact blocker identifiers   |
-
-Portfolio reads and Engagement-wide mutations require an instance/organization-
-scoped MCP token. `link_project_to_engagement` and
-`unlink_project_from_engagement` also accept a project-scoped token when the
-input `project_id` exactly matches that token; sibling Project access and all
-service-scoped access return `SCOPE_VIOLATION`. Mutations are backed by the same
-Application Operations available at `POST /api/v1/operations/:name`; MCP and
-REST do not call one another. Use Delivery actions to retrieve artifacts,
-feedback, Gate evidence, and Receipt metadata.
-
-## Evidence intake and structured project updates
-
-| Action                   | Required parameters                                                            | Purpose                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `create_evidence_upload` | `idempotency_key`, Project/Delivery IDs, filename, logical key, revision, kind | Issue a 15-minute upload capability and reserve an artifact ID                                                      |
-| `record_project_update`  | `idempotency_key`, Project ID, summary, source, entries or transitions         | Record durable decisions, actions, risks, questions, dependencies, progress, and facts without requiring a Delivery |
-| `get_project_context`    | Project ID                                                                     | Read current decisions, open items, changed Delivery context, and the 10 most recent updates                        |
-| `get_project_update`     | Project ID, update ID                                                          | Read one immutable update with full sources, items, transitions, and Delivery links                                 |
-
-`create_evidence_upload` returns an absolute HTTP `upload_url`, `PUT` method,
-expiry, size limit, and the reserved `artifact_id`. The URL is a bearer
-capability: do not log or share it. Send the file bytes to that URL without an
-MCP Authorization header. Uploading validates type, size, hash, Project
-ownership, Delivery mutability, and artifact revision. Replaying the same upload
-is idempotent.
-
-`record_project_update` also accepts meeting labels, HTTP(S) URLs, and
-repository/WBS-relative paths, so agents can record collaboration context before
-a Delivery exists. Update bodies are immutable. Correct earlier information by
-recording a new Update and resolving, dismissing, or superseding the earlier
-item with its expected status. `get_project_context` is the compact handoff read;
-use scoped help for its bounded response schema, then call `get_project_update`
-only when full source details are needed. These durable records, rather than the
-30-day Activity log, feed internal weekly reports. Customer reports expose only
-the count of open confirmation items and do not include repository paths, WBS
-paths, actor identity, or internal detail.
-
-When an implementation slice is ready, pass the relevant current item IDs as
-`plan_delivery.source_project_update_item_ids`. OpenLander snapshots each item's
-status and update timestamp with the Delivery. If that Project context later
-changes, Delivery reads return `context_changed=true` and the Project context
-query lists the affected Delivery IDs. This is a review warning only; it does
-not fail Gates or change Delivery status automatically.
-
 ### `update_app` / `redeploy_app` / `restart_service`
 
 Update or restart an Application. Use `update_app` for the normal "ship the
@@ -944,7 +521,7 @@ version unless the user explicitly accepts downtime.
 Archive an Application while preserving configuration and
 history. This is the MCP-safe cleanup path when an agent created the wrong app
 or the user asks to clean up a deployable. It stops/removes the runtime and
-waits for human approval before executing. It does **not** permanently delete
+executes immediately with an explicit Project allow permission; otherwise it waits for approval. It does **not** permanently delete
 Database resources, volumes, buckets, or host-wide Docker resources.
 
 | Parameter      | Type   | Required | Description                           |
@@ -981,7 +558,7 @@ string the human must enter).
 ### `unarchive_service`
 
 Restore an archived Application while preserving the same
-configuration and history. This reverses `archive_service` after human approval
+configuration and history. This reverses `archive_service` under the effective Project permission
 and does **not** redeploy automatically; call `update_app` if the service
 should run again.
 
@@ -1102,6 +679,48 @@ the port change back; HTTP 4xx is reported as a warning because some apps do not
 serve `/` or the route prefix as a health endpoint.
 
 ---
+
+### Project permissions and service cleanup
+
+Users can grant app stop/delete permission in their agent conversation without
+opening Settings. `get_project_permissions` reports `effective.app_lifecycle`,
+which matches the actual execution gate: `allow`, `approval_required`, or `block`.
+The default is `approval_required`. Optional `service_id` includes that service's
+override and the source of the effective permission. Existing Project/service
+`destructive_actions` overrides remain the fallback when no app-specific value exists.
+
+| Action                    | Composite            | Parameters                                                                                                                                            |
+| ------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_project_permissions` | `openlander_project` | `project_id` or `project_name`; optional `service_id`                                                                                                 |
+| `set_project_permissions` | `openlander_project` | `project_id` or `project_name`; `app_lifecycle` and/or legacy `destructive_actions`: `allow`, `approval_required`, `block`; optional `action_run_ids` |
+| `resume_mcp_actions`      | `openlander_project` | `project_id`, `action_run_ids` (1–50 held app requests)                                                                                               |
+| `cleanup_apps`            | `openlander_service` | `project_id`, unique `service_ids` (1–50), `operation`: `stop` or `delete`                                                                            |
+| `stop_app` / `delete_app` | `openlander_service` | `service_id` or `service_name`; optional `project_name`                                                                                               |
+
+For app cleanup, prefer `app_lifecycle`; it does not grant database, bucket, or
+volume deletion. `destructive_actions` retains its broader compatibility meaning.
+A service-scoped token cannot grant Project permissions. Service-specific restrictions,
+dependency checks, token scope, and deploy locks remain effective.
+
+1. Call `cleanup_apps` for the selected apps. Managed data services are excluded;
+   Compose children are included, and selecting a parent and its child does not
+   execute the child twice. All supplied selectors are scope-checked before mutation.
+2. If `pending_approval` is returned, retain `action_run_id`. Only when the user
+   explicitly asks to allow app cleanup, call the returned `suggested_call` to
+   save `app_lifecycle="allow"` and resume that exact ID via `action_run_ids`.
+   Otherwise the existing Web approval path remains available.
+3. If permission was changed separately, call `resume_mcp_actions` with the exact
+   IDs. This does not change permissions, restart terminal requests, or execute
+   any other queued request. Concurrent Web approval and MCP continuation share
+   one atomic execution claim.
+4. Follow `poll_call` (`mcp_action_status`) for progress and per-service results.
+   Partial failure is reported as `failed` with successful and failed counts and
+   each service's result. Do not retry the original cleanup request to poll.
+
+`delete_app` and `cleanup_apps` preserve volumes. Server restart marks unfinished
+actions failed; they are not replayed automatically. Failed services require a new,
+explicit cleanup request after inspecting their results. Whole-Project hard delete
+and host purge retain their existing human controls.
 
 ## Environment Variables & Secrets
 
@@ -1340,7 +959,7 @@ the container is replaced.
 
 `remove_service` follows the effective destructive-action permission. It executes when allowed,
 enters the human approval queue when approval is required, and returns
-`OPERATION_PERMISSION_DENIED` when blocked. Project/Application hard delete remains a separate
+`OPERATION_PERMISSION_DENIED` when blocked. Whole-Project hard delete remains a separate
 human-UI-only flow.
 
 ### `get_service_credentials`

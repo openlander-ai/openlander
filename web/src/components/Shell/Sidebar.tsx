@@ -28,7 +28,6 @@ import {
   Code2,
   BrainCircuit,
   KeyRound,
-  BriefcaseBusiness,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -90,13 +89,6 @@ const SECTIONS: NavSection[] = [
         to: '/projects',
         matches: startsWith('/projects'),
         // badge filled in per-render from useProjects() — see component body
-      },
-      {
-        id: 'engagements',
-        labelKey: 'sidebar.items.engagements',
-        icon: BriefcaseBusiness,
-        to: '/engagements',
-        matches: startsWith('/engagements'),
       },
       {
         id: 'activity',

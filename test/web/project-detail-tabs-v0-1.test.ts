@@ -16,13 +16,11 @@ describe('Project detail v0.1 tabs', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
-  it('exposes Resources, Context, Deliveries, AI, and Settings tabs', () => {
-    expect(projectViewSource).toContain(
-      "type ProjectTabId = 'services' | 'context' | 'deliveries' | 'ai' | 'settings'",
-    );
+  it('exposes Resources, AI, and Settings tabs', () => {
+    expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'ai' | 'settings'");
     expect(projectViewSource).toContain("id: 'services'");
-    expect(projectViewSource).toContain("id: 'context'");
-    expect(projectViewSource).toContain("id: 'deliveries'");
+    expect(projectViewSource).not.toContain("id: 'context'");
+    expect(projectViewSource).not.toContain("id: 'deliveries'");
     expect(projectViewSource).toContain("id: 'ai'");
     expect(projectViewSource).toContain("id: 'settings'");
     expect(projectViewSource).not.toMatch(/id:\s*'mcp'/);
@@ -31,7 +29,7 @@ describe('Project detail v0.1 tabs', () => {
 
   it('falls through legacy ?tab=mcp to services without rendering an MCP panel', () => {
     expect(projectViewSource).toContain("tabParam === 'settings'");
-    expect(projectViewSource).toContain("tabParam === 'deliveries'");
+    expect(projectViewSource).not.toContain("tabParam === 'deliveries'");
     expect(projectViewSource).toContain("tabParam === 'ai'");
     expect(projectViewSource).toContain(": 'services';");
     expect(projectViewSource).not.toContain('projectpanel-mcp');
@@ -101,12 +99,8 @@ describe('Project detail v0.1 tabs', () => {
     expect(enTabs).not.toMatch(/mcp:/);
     expect(koTabs).not.toMatch(/mcp:/);
     expect(enTabs).toContain("services: 'Resources'");
-    expect(enTabs).toContain("context: 'Context'");
-    expect(enTabs).toContain("deliveries: 'Deliveries'");
     expect(enTabs).toContain("settings: 'Settings'");
     expect(koTabs).toContain("services: '리소스'");
-    expect(koTabs).toContain("context: '현황'");
-    expect(koTabs).toContain("deliveries: '납품 건'");
     expect(koTabs).toContain("settings: '설정'");
   });
 });

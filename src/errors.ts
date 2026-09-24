@@ -42,7 +42,7 @@ export class FeatureDisabledError extends OpenLanderError {
 
 export class OperationPermissionDeniedError extends OpenLanderError {
   constructor(
-    permission: 'destructive_actions' | 'database_access',
+    permission: 'app_lifecycle' | 'destructive_actions' | 'database_access',
     target: { projectId?: string | null; serviceId?: string | null },
   ) {
     super(

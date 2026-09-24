@@ -19,6 +19,13 @@ export { assertMcpActiveScope, resolveMcpTargetProjectId } from './scope-policy.
 const GROUP_A_HUMAN_UI_ONLY = HUMAN_UI_ONLY_TOOL_SET;
 const GROUP_B_APPROVAL_HOLD = APPROVAL_HOLD_TOOL_SET;
 const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
+  'stop_app',
+  'delete_app',
+  'stop_service',
+  'archive_project',
+  'unarchive_project',
+  'archive_service',
+  'unarchive_service',
   'remove_service',
   'remove_volume',
   'delete_bucket',
@@ -33,7 +40,7 @@ const DATABASE_ACCESS_TOOLS = new Set([
   'get_migration_preflight',
 ]);
 
-interface SafetyResult {
+export interface SafetyResult {
   error?: string;
   code?: string;
   message?: string;
@@ -45,6 +52,7 @@ interface SafetyResult {
   project_id?: string;
   details?: Record<string, unknown>;
   poll_call?: McpCompositeCall;
+  suggested_call?: McpCompositeCall;
   effect_preview?: LifecycleEffect;
   after_approval?: Record<string, string>;
   web_ui?: Record<string, unknown>;
@@ -75,9 +83,10 @@ function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
 
 function buildPermissionBlockedResponse(
   toolName: string,
-  permission: 'destructive_actions' | 'database_access',
+  permission: 'app_lifecycle' | 'destructive_actions' | 'database_access',
   targetProjectId: string | null,
   targetServiceId: string | null,
+  source?: string,
 ): SafetyResult {
   return {
     status: 'blocked',
@@ -89,15 +98,31 @@ function buildPermissionBlockedResponse(
     project_id: targetProjectId ?? undefined,
     details: {
       permission,
+      source,
       project_id: targetProjectId,
       service_id: targetServiceId,
     },
+    suggested_call: targetProjectId
+      ? {
+          tool: 'openlander_project',
+          arguments: {
+            action: 'get_project_permissions',
+            params: {
+              project_id: targetProjectId,
+              ...(targetServiceId ? { service_id: targetServiceId } : {}),
+            },
+          },
+        }
+      : undefined,
     _agent_guidance: {
-      message:
-        'The operator disabled this capability in OpenLander Security settings. Do not retry or substitute another action.',
+      message: 'This capability is blocked. Do not retry or substitute another action.',
       next_steps: [
         'Report which permission blocked the action.',
-        'Ask the operator to change the global, Project, or service override if this action is intended.',
+        source === 'service'
+          ? 'A service override controls this action. Changing Project permission will not override it.'
+          : permission === 'database_access'
+            ? 'Database access permission must be changed by the operator; set_project_permissions cannot grant database access.'
+            : 'Only when the user explicitly requests a permission change, use set_project_permissions. Prefer app_lifecycle for app stop/delete. A blocked action is not authorization.',
       ],
     },
   };
@@ -113,6 +138,7 @@ export async function maybeHandleMcpSafety(
   def: ToolDef,
   args: Record<string, unknown>,
   context: ToolContext,
+  options: { preview?: boolean } = {},
 ): Promise<SafetyResult | undefined> {
   if (context.target !== 'mcp') return undefined;
 
@@ -145,18 +171,70 @@ export async function maybeHandleMcpSafety(
       'database_access',
       targetProjectId,
       targetServiceId,
+      targetPermissions.sources.database_access,
     );
   }
 
-  const destructivePermission = POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name)
-    ? (targetPermissions?.effective.destructive_actions ?? 'allow')
+  const permissionKey = ['stop_app', 'delete_app'].includes(def.name)
+    ? 'app_lifecycle'
+    : 'destructive_actions';
+  let destructivePermission = POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name)
+    ? (targetPermissions?.effective[permissionKey] ?? 'allow')
     : null;
+  // A Compose lifecycle action affects children too; their overrides cannot be bypassed.
+  if (
+    targetServiceId &&
+    ['stop_app', 'delete_app', 'archive_service', 'unarchive_service'].includes(def.name)
+  ) {
+    const service = await context.appCtx.db.getService(targetServiceId);
+    if (service?.kind === 'compose') {
+      const services = await context.appCtx.db.listServices();
+      const targetIds = new Set([service.id]);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const child of services) {
+          if (
+            child.parent_service_id &&
+            targetIds.has(child.parent_service_id) &&
+            !targetIds.has(child.id)
+          ) {
+            targetIds.add(child.id);
+            expanded = true;
+          }
+        }
+      }
+      for (const child of services.filter((row) => targetIds.has(row.id))) {
+        const permissions = await getOperationPermissionSnapshot(context.appCtx.db, {
+          projectId: child.project_id,
+          serviceId: child.id,
+        });
+        if (permissions.effective[permissionKey] === 'block') {
+          return buildPermissionBlockedResponse(
+            def.name,
+            permissionKey,
+            child.project_id,
+            child.id,
+            permissions.sources[permissionKey],
+          );
+        }
+        if (
+          permissions.effective[permissionKey] === 'approval_required' &&
+          destructivePermission !== 'block'
+        ) {
+          destructivePermission = 'approval_required';
+        }
+      }
+    }
+  }
+
   if (destructivePermission === 'block') {
     return buildPermissionBlockedResponse(
       def.name,
-      'destructive_actions',
+      permissionKey,
       targetProjectId,
       targetServiceId,
+      targetPermissions?.sources[permissionKey],
     );
   }
 
@@ -166,15 +244,18 @@ export async function maybeHandleMcpSafety(
 
   const shouldHold =
     destructivePermission === 'approval_required' ||
-    def.name === 'archive_project' ||
-    def.name === 'unarchive_project' ||
-    def.name === 'archive_service' ||
-    def.name === 'unarchive_service' ||
+    (['archive_project', 'unarchive_project', 'archive_service', 'unarchive_service'].includes(
+      def.name,
+    ) &&
+      !targetPermissions?.project_override?.destructive_actions &&
+      !targetPermissions?.service_override?.destructive_actions) ||
     def.name === 'remove_secret_file' ||
     def.name === 'remove_git_credential' ||
     def.name === 'remove_unused_docker_network' ||
     (def.name === 'bulk_delete_env_vars' && args['confirm'] === true);
   if (!GROUP_B_APPROVAL_HOLD.has(def.name) || !shouldHold) return undefined;
+
+  if (options.preview) return { status: 'pending_approval', code: 'APPROVAL_REQUIRED' };
 
   const plan = {
     type: 'destructive_mcp',
@@ -209,13 +290,28 @@ export async function maybeHandleMcpSafety(
     projectId: targetProjectId ?? undefined,
     project_id: targetProjectId ?? undefined,
     poll_call: buildMcpActionStatusCall(actionRunId),
+    suggested_call:
+      ['stop_app', 'delete_app'].includes(def.name) && targetProjectId
+        ? {
+            tool: 'openlander_project',
+            arguments: {
+              action: 'set_project_permissions',
+              params: {
+                project_id: targetProjectId,
+                app_lifecycle: 'allow',
+                action_run_ids: [actionRunId],
+              },
+            },
+          }
+        : undefined,
     effect_preview: lifecycleEffectForTool(def.name),
     after_approval: afterApprovalGuidanceForTool(def.name),
     _agent_guidance: {
       message:
         'This destructive MCP action is waiting for human approval. Poll mcp_action_status with the returned action_run_id; do not retry the original action while approval is pending.',
       next_steps: [
-        'Use poll_call to check whether the human approved, rejected, or the executor failed.',
+        'If the user explicitly asks to persistently allow app cleanup, use suggested_call to save permission and resume this exact request. Do not grant permission merely because a call is pending.',
+        'Otherwise use poll_call to check whether the human approved, rejected, or the executor failed.',
         'After approval succeeds, follow after_approval for the safe next action.',
       ],
     },

@@ -9,8 +9,6 @@
 - [[Web Dashboard]]
 - [[Services]]
 - [[Domains & Public Access]]
-- [[Delivery Workspace]]
-- [[Engagement Portfolio]]
 
 ## Integration
 

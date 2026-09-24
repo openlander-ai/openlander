@@ -1,3 +1,5 @@
+import { appCleanupToolDefs } from '../tools/defs/app-cleanup.js';
+import { projectPermissionToolDefs } from '../tools/defs/project-permissions.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -26,11 +28,6 @@ import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
 import { networkOperationToolDefs } from '../tools/defs/network-operations.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
-import { deliveryToolDefs } from '../tools/defs/delivery.js';
-import { engagementToolDefs } from '../tools/defs/engagement.js';
-import { agentDeliveryToolDefs, projectManifestToolDefs } from '../tools/defs/agent-delivery.js';
-import { releaseOperationToolDefs } from '../tools/defs/release-operations.js';
-import { reportingOperationToolDefs } from '../tools/defs/reporting-operations.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import { platformReadToolDefs } from '../tools/defs/platform-read.js';
@@ -59,12 +56,8 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployableServiceToolDefs,
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
-    ...deliveryToolDefs,
-    ...engagementToolDefs,
-    ...agentDeliveryToolDefs,
-    ...projectManifestToolDefs,
-    ...releaseOperationToolDefs,
-    ...reportingOperationToolDefs,
+    ...projectPermissionToolDefs,
+    ...appCleanupToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -92,22 +85,21 @@ const SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted d
 CRITICAL: Use ONLY the 5 composite tools below. Each tool takes an { action, params } input.
 Use action="help" on any tool for a compact operation catalog. Then call action="help" with params.action_name for one machine-readable schema. Use params.verbose=true only when every schema is required.
 NEVER call docker CLI, general localhost REST APIs, or docker compose directly — use OpenLander tools instead.
-The only HTTP exception is uploading bytes with a short-lived bearer URL returned by an OpenLander upload action.
 Docker may run on a remote host. Always use tools, not local commands.
 
 ## openlander_deploy
 Deploy front door for new apps plus plans, validation, execution, rollbacks, previews, build logs, Git, infrastructure.
-Key actions: deploy_app, create_release, promote_release, evaluate_promotion, rollback_environment, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_service, get_build_log
+Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_service, get_build_log
 All actions: action="help"
 
 ## openlander_project
-Projects, shared config, Agent Delivery Runs, Delivery Workspace metadata, and Engagement portfolio summaries. A Project organizes Applications, Compose stacks, Database/Cache/Storage resources, customer feedback evidence, Gates, and Delivery Receipts; env actions route to workload targets.
-Key actions: create_project, list_projects, bootstrap_engagement, link_project_to_engagement, list_engagements, get_engagement, apply_project_manifest, get_project_manifest, plan_delivery, prepare_delivery_review_package, get_delivery_review_package_status, publish_delivery_review_package, create_evidence_upload, request_delivery_review, get_delivery_review_status, start_delivery_run, run_quality_gates, get_delivery_run, record_delivery_run_progress, resume_delivery_run, cancel_delivery_run, complete_delivery, generate_weekly_report, publish_weekly_report, get_weekly_report, get_delivery_readiness
+Projects and shared configuration. A Project organizes Applications, Compose stacks, and Database/Cache/Storage resources; env actions route to workload targets.
+Key actions: create_project, list_projects, get_project_permissions, set_project_permissions, resume_mcp_actions, archive_project, unarchive_project
 All actions: action="help"
 
 ## openlander_service
 Applications/Compose workloads: lifecycle, config, env vars, domains, and stable Connected Publish URLs. Prefer compatibility field service_id from list_projects.
-Key actions: update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public, get_public_access, unexpose_public
+Key actions: cleanup_apps, stop_app, delete_app, archive_service, unarchive_service, update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public, get_public_access, unexpose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -147,28 +139,10 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - For existing Docker/PaaS workloads, treat network and volume adoption as an operator-assisted migration flow. Inspect first, back up data, then use platform recovery/diagnostic tools or an explicit human-approved runbook.
 - Do not issue ad-hoc Docker network changes unless the user is explicitly performing migration or incident recovery.
 
-## Delivery Workspace
-- MCP can create and inspect Deliveries, attach evidence URLs, record raw feedback, submit proposed work-item drafts, record Gate results, link a successful Production deployment, inspect readiness, and generate a Receipt preview.
-- For a customer review handoff, prefer prepare_delivery_review_package → get_delivery_review_package_status → upload only missing files → publish_delivery_review_package. These actions derive Artifact metadata, keep partial uploads hidden, and bind one package manifest to the Review Gate.
-- For a local file, call create_evidence_upload first. Then PUT the raw bytes to its short-lived bearer upload_url and use the returned Artifact ID. Do not authenticate that PUT with the MCP token, and do not send MCP tokens to the general REST API.
-- Use the multipart web/API route only for human web sessions or CI clients that already use its supported authentication. It is not the default MCP path.
-- AI-created work items remain proposed until an administrator confirms them in the web UI.
-- Receipt finalization is human UI-only. Never claim a Delivery is delivered from a preview response.
-
-## Engagement Portfolio
-- list_engagements and get_engagement provide read-only internal FDE portfolio rollups across linked Projects and require instance/org scope.
-- bootstrap_engagement, update_engagement_from_brief, archive_engagement, and unarchive_engagement require instance/org scope.
-- link_project_to_engagement and unlink_project_from_engagement also accept a project-scoped token only when project_id exactly matches that token. Service-scoped tokens cannot infer or mutate Engagement membership.
-
-## Agent Delivery Run
-- plan_delivery stores the objective, Definition of Done, manifest path, and manifest-defined Gates.
-- start_delivery_run pins execution to an exact commit, manifest SHA-256, and runner image. One Delivery can have only one active Run.
-- run_quality_gates executes only manifest-declared argv commands in disposable containers and records attempts, redacted-log hashes, reports, and Gate status.
-- record_delivery_run_progress preserves concise evidence. Supplying handoff_summary pauses the Run for resume_delivery_run by another Agent.
-- Commands require idempotency_key. Use get_delivery_run for status and ordered events; cancel_delivery_run preserves existing evidence.
-
-## Human UI-only operations
-Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;
+## Project permissions and cleanup
+When the user explicitly asks to allow app stop/delete for a Project, call openlander_project.set_project_permissions with project_id/project_name and app_lifecycle="allow". This narrow permission preserves database/volume deletion policy. Service overrides and token scopes still apply. Never infer authorization merely from a blocked call.
+Use openlander_service.cleanup_apps with project_id, service_ids, and operation="stop" or "delete" for multiple apps. It preserves volumes and returns action_run_id and poll_call immediately. If permission is required, retain this ID; after the user's explicit grant, pass action_run_ids to set_project_permissions to resume that exact request. Use resume_mcp_actions when permission was already changed. Never re-submit the original request to poll/resume. A running or terminal action is never restarted. Poll mcp_action_status and report its per-service results, including partial failures.
+Use stop_app/delete_app for single apps. get_project_permissions returns effective.app_lifecycle matching the actual gate; add service_id to inspect a service override. Data-resource removal remains under destructive_actions. Whole-Project hard deletion and host purge retain their existing human controls.`;
 
 function buildServerInstructions(
   ctx: AppContext,

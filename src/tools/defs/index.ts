@@ -11,10 +11,9 @@ export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
 export { networkOperationToolDefs } from './network-operations.js';
 export { projectOpsToolDefs } from './project-ops.js';
-export { deliveryToolDefs } from './delivery.js';
-export { engagementToolDefs } from './engagement.js';
-export { agentDeliveryToolDefs, projectManifestToolDefs } from './agent-delivery.js';
-export { releaseOperationToolDefs } from './release-operations.js';
-export { reportingOperationToolDefs } from './reporting-operations.js';
 export { serviceToolDefs } from './service.js';
 export { volumeToolDefs } from './volume.js';
+
+export { projectPermissionToolDefs } from './project-permissions.js';
+
+export { appCleanupToolDefs } from './app-cleanup.js';

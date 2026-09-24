@@ -118,6 +118,31 @@ export class ActionRunRepo {
     return id;
   }
 
+  /** Atomic execution ownership shared by web approval and MCP continuation. */
+  async claimMcpExecution(id: string, permissionGranted = false): Promise<boolean> {
+    const now = new Date().toISOString();
+    const rows = await this.db
+      .update(actionRuns)
+      .set({
+        status: 'running',
+        approval_status: 'approved',
+        approval_resolved_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(actionRuns.id, id),
+          eq(actionRuns.approval_tool, 'destructive_mcp'),
+          eq(actionRuns.status, 'pending_approval'),
+          permissionGranted
+            ? inArray(actionRuns.approval_status, ['pending', 'approved'])
+            : eq(actionRuns.approval_status, 'approved'),
+        ),
+      )
+      .returning({ id: actionRuns.id });
+    return rows.length === 1;
+  }
+
   async updateStatus(
     id: string,
     status: 'running' | 'succeeded' | 'failed' | 'pending_approval',
@@ -178,7 +203,18 @@ export class ActionRunRepo {
       setValues.approval_resolved_at = now;
     }
 
-    await this.db.update(actionRuns).set(setValues).where(eq(actionRuns.id, id));
+    await this.db
+      .update(actionRuns)
+      .set(setValues)
+      .where(
+        approvalTool === 'destructive_mcp'
+          ? and(
+              eq(actionRuns.id, id),
+              eq(actionRuns.status, 'pending_approval'),
+              eq(actionRuns.approval_status, 'pending'),
+            )
+          : eq(actionRuns.id, id),
+      );
   }
 
   async updateRecoveryStrategy(

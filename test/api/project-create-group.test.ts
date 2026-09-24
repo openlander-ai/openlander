@@ -1,3 +1,4 @@
+import { deleteDeployableService } from '../../src/pipeline/delete-deployable-service.js';
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { readFileSync } from 'node:fs';
@@ -7,9 +8,32 @@ import type { AppContext } from '../../src/app.js';
 import { createDeployableServiceRoutes } from '../../src/web/api/deployable-service-routes.js';
 import { createProjectGroupRoutes } from '../../src/web/api/project-group-routes.js';
 import { createProjectRoutes } from '../../src/web/api/project-routes.js';
-import { createServiceRuntimeRoutes } from '../../src/web/api/service-runtime-routes.js';
+import { createServiceRuntimeRoutes as realServiceRuntimeRoutes } from '../../src/web/api/service-runtime-routes.js';
 import type { ProjectRow, ServiceRow } from '../../src/db/types.js';
-import { ProjectAlreadyExistsError } from '../../src/errors.js';
+import { ProjectAlreadyExistsError, OpenLanderError } from '../../src/errors.js';
+
+function createServiceRuntimeRoutes(ctx: AppContext) {
+  if (!ctx.pipeline) ctx.pipeline = {} as AppContext['pipeline'];
+  ctx.pipeline.deleteService ??= async (id, cloudflare, deleteVolumes = false) => {
+    const service = (await ctx.db.getService(id))!;
+    const project = (await ctx.db.getProject(service.project_id))!;
+    const runtime = (await ctx.db.getProject(id.replace(/__svc$/, ''))) ?? project;
+    return deleteDeployableService(
+      { db: ctx.db, docker: ctx.docker, cloudflare, coordinator: ctx.coordinator },
+      project,
+      runtime,
+      service,
+      deleteVolumes,
+    );
+  };
+  const routes = realServiceRuntimeRoutes(ctx);
+  routes.onError((error, c) =>
+    error instanceof OpenLanderError
+      ? c.json(error.toJSON(), error.statusCode as 409)
+      : c.json({ error: error.message }, 500),
+  );
+  return routes;
+}
 
 function makeProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
   return {
@@ -94,6 +118,19 @@ function readRepoFile(relativePath: string): string {
 }
 
 function createDeployableSplitApp(ctx: Partial<AppContext>) {
+  if (!ctx.pipeline) ctx.pipeline = {} as AppContext['pipeline'];
+  ctx.pipeline.deleteService ??= async (id, cloudflare, deleteVolumes = false) => {
+    const service = (await ctx.db!.getService(id))!;
+    const project = (await ctx.db!.getProject(service.project_id))!;
+    const runtime = (await ctx.db!.getProject(id.replace(/__svc$/, ''))) ?? project;
+    return deleteDeployableService(
+      { db: ctx.db!, docker: ctx.docker!, cloudflare, coordinator: ctx.coordinator },
+      project,
+      runtime,
+      service,
+      deleteVolumes,
+    );
+  };
   const app = new Hono();
   app.route('/api', createDeployableServiceRoutes(ctx as AppContext));
   app.route('/api', createServiceRuntimeRoutes(ctx as AppContext));

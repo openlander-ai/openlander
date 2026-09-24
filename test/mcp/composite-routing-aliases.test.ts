@@ -1,3 +1,5 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
+import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Guardrails for the Project=group / Service=deployable MCP split.
  *
@@ -7,8 +9,6 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
-import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
-import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -33,6 +33,8 @@ const allToolDefs: ToolDef[] = [
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
+  ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
@@ -40,8 +42,6 @@ const allToolDefs: ToolDef[] = [
   ...gitToolDefs,
   ...monitoringToolDefs,
   ...debugToolDefs,
-  ...deliveryToolDefs,
-  ...engagementToolDefs,
 ];
 
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
@@ -140,7 +140,7 @@ describe('openlander_project runtime aliases removed', () => {
 
   it('does not attach lifecycle-tool guidance to hard-delete aliases', async () => {
     const result = (await tool.execute(
-      { action: 'delete_app', params: {} },
+      { action: 'delete_project', params: {} },
       mockContext,
     )) as Record<string, unknown>;
     const guidance = result['_agent_guidance'] as Record<string, unknown>;
@@ -270,16 +270,21 @@ describe('openlander_service direct deployable runtime actions', () => {
     }
   });
 
+  it.each(['delete_service', 'remove_app', 'purge_app', 'destroy_app'])(
+    'directs %s to permission-controlled Application deletion',
+    async (action) => {
+      const result = await tool.execute({ action, params: {} }, mockContext);
+      expect(result).toMatchObject({
+        suggested_call: {
+          tool: 'openlander_service',
+          arguments: { action: 'help', params: { action_name: 'delete_app' } },
+        },
+      });
+    },
+  );
+
   it('returns HUMAN_UI_ONLY for delete/remove/purge aliases agents commonly reach for', async () => {
-    for (const action of [
-      'delete_project',
-      'delete_app',
-      'delete_service',
-      'remove_app',
-      'remove_project',
-      'purge_project',
-      'destroy_app',
-    ] as const) {
+    for (const action of ['delete_project', 'remove_project', 'purge_project'] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown
@@ -287,24 +292,6 @@ describe('openlander_service direct deployable runtime actions', () => {
       expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
       expect(result).toHaveProperty('action', action);
     }
-  });
-
-  it('routes Receipt finalization aliases to the human Delivery UI', async () => {
-    const result = (await tool.execute(
-      { action: 'finalize_delivery_receipt', params: { delivery_id: 'delivery-1' } },
-      mockContext,
-    )) as Record<string, unknown>;
-
-    expect(result).toMatchObject({
-      error: 'HUMAN_UI_ONLY',
-      web_ui: { surface: 'delivery_receipt', requires_human: true },
-      safe_alternatives: [
-        {
-          tool: 'openlander_project',
-          action: 'generate_delivery_receipt_preview',
-        },
-      ],
-    });
   });
 });
 
