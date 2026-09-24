@@ -309,6 +309,8 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 
 - Git-to-URL deploy pipeline.
 - MCP server with deploy / inspect / operate tools.
+- Persistent Project app permissions and batched stop/delete requests through MCP,
+  with targeted continuation and per-service results.
 - Dashboard for human oversight + intervention.
 - Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
   MongoDB, Neo4j, and MinIO through agent/MCP workflows.
