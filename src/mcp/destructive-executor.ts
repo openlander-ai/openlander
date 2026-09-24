@@ -14,6 +14,13 @@ import type { RequestIdentity } from '../types/identity.js';
 import { assertDestructiveActionAllowed } from '../security/operation-permissions.js';
 
 const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
+  'stop_app',
+  'delete_app',
+  'stop_service',
+  'archive_project',
+  'unarchive_project',
+  'archive_service',
+  'unarchive_service',
   'remove_service',
   'remove_volume',
   'delete_bucket',

@@ -1,13 +1,6 @@
+import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
-import {
-  agentDeliveryToolDefs,
-  projectManifestToolDefs,
-} from '../../src/tools/defs/agent-delivery.js';
-import { releaseOperationToolDefs } from '../../src/tools/defs/release-operations.js';
-import { reportingOperationToolDefs } from '../../src/tools/defs/reporting-operations.js';
-import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
-import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -31,14 +24,11 @@ import {
 import type { AppContext } from '../../src/app.js';
 
 const allToolDefs: ToolDef[] = [
-  ...agentDeliveryToolDefs,
-  ...projectManifestToolDefs,
-  ...releaseOperationToolDefs,
-  ...reportingOperationToolDefs,
   ...deployToolDefs,
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
+  ...projectPermissionToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
@@ -47,8 +37,6 @@ const allToolDefs: ToolDef[] = [
   ...monitoringToolDefs,
   ...networkOperationToolDefs,
   ...debugToolDefs,
-  ...deliveryToolDefs,
-  ...engagementToolDefs,
 ];
 
 const composites = createCompositeTools(allToolDefs);
@@ -301,27 +289,6 @@ describe('Composite Action Routing', () => {
       const actions = result['actions'] as Array<{ name: string }>;
       expect(actions.length).toBeGreaterThan(0);
       expect(actions.map((action) => action.name)).toContain('create_project');
-    });
-
-    it('reports defaulted Project context limits as optional input parameters', async () => {
-      const result = (await tool.execute(
-        { action: 'help', params: { action_name: 'get_project_context' } },
-        mockContext,
-      )) as Record<string, unknown>;
-
-      const action = result['action'] as Record<string, unknown>;
-      expect(action).toMatchObject({
-        name: 'get_project_context',
-        required_params: ['project_id'],
-        optional_params: expect.arrayContaining(['current_item_limit', 'recent_update_limit']),
-      });
-
-      const inputSchema = action['input_schema'] as Record<string, unknown>;
-      expect(inputSchema['required']).toEqual(['project_id']);
-      expect(inputSchema['properties']).toMatchObject({
-        current_item_limit: { default: 50 },
-        recent_update_limit: { default: 10 },
-      });
     });
 
     it('returns UNKNOWN_ACTION for unknown action', async () => {

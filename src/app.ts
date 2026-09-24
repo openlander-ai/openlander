@@ -60,18 +60,6 @@ import type { AgentPool } from './_ai-ops/agent-pool.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
 import type { OpsAgent } from './_ai-ops/ops-agent.js';
 import { GitCredentialManager, setActiveGitCredentialManager } from './git-credentials/manager.js';
-import { ArtifactStore } from './delivery/artifact-store.js';
-import { DeliveryService } from './delivery/delivery-service.js';
-import { DeliveryAgentRunService } from './delivery/agent-run-service.js';
-import { DeliveryQualityGateService } from './delivery/quality-gate-service.js';
-import { DeliveryCompletionService } from './delivery/completion-service.js';
-import { EvidenceUploadService } from './delivery/evidence-upload-service.js';
-import { DeliveryReviewPackageService } from './delivery/review-package-service.js';
-import { EngagementService } from './engagement/engagement-service.js';
-import { ProjectManifestService } from './project/project-manifest-service.js';
-import { ReleaseService } from './release/release-service.js';
-import { ReleasePromotionService } from './release/promotion-service.js';
-import { WeeklyReportService } from './reporting/weekly-report-service.js';
 import { ensureMcpInstanceId } from './mcp/instance-identity.js';
 import {
   createApplicationOperationRegistry,
@@ -79,7 +67,6 @@ import {
 } from './operations/index.js';
 import { PlatformUpdater } from './update/platform-updater.js';
 import { VERSION } from './version.js';
-import { ProjectMigrationService } from './migration/project-migration-service.js';
 
 const log = createModuleLogger('app');
 
@@ -87,12 +74,10 @@ let activeIncidentReporter: IncidentReporter | null = null;
 let activeActivityLogger: ActivityLogger | null = null;
 let activeAiUsageListener: AiUsageListener | null = null;
 let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
-let activeReviewPackageCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
 const ACTIVITY_LOG_TTL_DAYS = 30;
-const ACTIVITY_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const REVIEW_PACKAGE_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const ACTIVITY_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const POSTMORTEM_CANCEL_EVENTS = [
   'recovery:failed',
   'recovery:exhausted',
@@ -231,19 +216,6 @@ export interface AppContext {
   // v1.0 modules
   mcpClientManager: McpClientManager;
   planEngine: PlanEngine;
-  artifactStore: ArtifactStore;
-  deliveryService: DeliveryService;
-  deliveryAgentRunService: DeliveryAgentRunService;
-  deliveryQualityGateService: DeliveryQualityGateService;
-  deliveryCompletionService: DeliveryCompletionService;
-  evidenceUploadService: EvidenceUploadService;
-  deliveryReviewPackageService: DeliveryReviewPackageService;
-  projectManifestService: ProjectManifestService;
-  projectMigrationService: ProjectMigrationService;
-  releaseService: ReleaseService;
-  releasePromotionService: ReleasePromotionService;
-  weeklyReportService: WeeklyReportService;
-  engagementService: EngagementService;
   operations: ApplicationOperationRegistry;
   // v1.0: Recovery coordinator
   coordinator: RecoveryCoordinator;
@@ -344,11 +316,6 @@ export async function createAppContext(
   databaseUrl: string,
 ): Promise<AppContext> {
   const db = await Database.connect(databaseUrl);
-  const artifactStore = new ArtifactStore();
-  const deliveryService = new DeliveryService(db, artifactStore);
-  const deliveryAgentRunService = new DeliveryAgentRunService(db, deliveryService);
-  const engagementService = new EngagementService(db);
-  const projectManifestService = new ProjectManifestService(db, deliveryService);
   const operations = createApplicationOperationRegistry();
   const gitCredentials = new GitCredentialManager(db);
   setActiveGitCredentialManager(gitCredentials);
@@ -360,33 +327,7 @@ export async function createAppContext(
     instanceId,
     config.docker.projectNetworkPoolCidr,
   );
-  const deliveryQualityGateService = new DeliveryQualityGateService(
-    db,
-    deliveryService,
-    deliveryAgentRunService,
-    docker,
-  );
-  const releaseService = new ReleaseService(db, docker);
-  const releasePromotionService = new ReleasePromotionService(db, docker, config);
-  const deliveryCompletionService = new DeliveryCompletionService(
-    db,
-    deliveryService,
-    deliveryAgentRunService,
-  );
-  const evidenceUploadService = new EvidenceUploadService(db, deliveryService);
-  const deliveryReviewPackageService = new DeliveryReviewPackageService(
-    db,
-    deliveryService,
-    artifactStore,
-  );
-  const weeklyReportService = new WeeklyReportService(
-    db,
-    engagementService,
-    artifactStore,
-    () => config.language,
-  );
   const runtime: RuntimeBackend = docker;
-  const projectMigrationService = new ProjectMigrationService(db, runtime);
   const serverContext = createLocalServerContext(docker);
 
   const jobManager = new JobManager();
@@ -638,19 +579,6 @@ export async function createAppContext(
     approvalGate,
     mcpClientManager,
     planEngine,
-    artifactStore,
-    deliveryService,
-    deliveryAgentRunService,
-    deliveryQualityGateService,
-    deliveryCompletionService,
-    evidenceUploadService,
-    deliveryReviewPackageService,
-    projectManifestService,
-    projectMigrationService,
-    releaseService,
-    releasePromotionService,
-    weeklyReportService,
-    engagementService,
     operations,
     coordinator,
     rollbackWatcher,
@@ -721,25 +649,6 @@ export async function createAppContext(
     ACTIVITY_LOG_CLEANUP_INTERVAL_MS,
   );
 
-  const runReviewPackageCleanup = (): void => {
-    void db
-      .cleanupDeliveryReviewPackageStaging()
-      .then((result) => {
-        if (result.expiredPackages + result.releasedItems + result.deletedBlobRows > 0) {
-          log.info(result, 'Delivery review package staging cleanup completed');
-        }
-      })
-      .catch((err: unknown) => {
-        log.error({ err }, 'Delivery review package staging cleanup failed');
-      });
-  };
-  runReviewPackageCleanup();
-  if (activeReviewPackageCleanupInterval) clearInterval(activeReviewPackageCleanupInterval);
-  activeReviewPackageCleanupInterval = setInterval(
-    runReviewPackageCleanup,
-    REVIEW_PACKAGE_CLEANUP_INTERVAL_MS,
-  );
-
   // Activity event persistence subscriber
   activeActivityLogger?.stop();
   const activityLogger = new ActivityLogger(eventBus, db);
@@ -765,10 +674,6 @@ export async function shutdownAppContext(ctx: AppContext): Promise<void> {
   if (activeActivityLogCleanupInterval) {
     clearInterval(activeActivityLogCleanupInterval);
     activeActivityLogCleanupInterval = null;
-  }
-  if (activeReviewPackageCleanupInterval) {
-    clearInterval(activeReviewPackageCleanupInterval);
-    activeReviewPackageCleanupInterval = null;
   }
   activeIncidentReporter = null;
   activeActivityLogger = null;

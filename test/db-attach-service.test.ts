@@ -12,7 +12,7 @@ const projectRepoSource = readFileSync(
   'utf8',
 );
 const serviceRuntimeRoutesSource = readFileSync(
-  resolve(process.cwd(), 'src/web/api/service-runtime-routes.ts'),
+  resolve(process.cwd(), 'src/pipeline/delete-deployable-service.ts'),
   'utf8',
 );
 

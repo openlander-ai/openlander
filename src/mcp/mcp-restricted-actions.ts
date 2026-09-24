@@ -27,7 +27,6 @@ export const HUMAN_UI_ONLY_TOOLS = [
 
 export const HUMAN_UI_ONLY_ALIASES = [
   'archive_app',
-  'delete_app',
   'delete_project',
   'delete_service',
   'destroy_app',
@@ -37,13 +36,14 @@ export const HUMAN_UI_ONLY_ALIASES = [
   'remove_app',
   'remove_project',
   'unarchive_app',
-  'finalize_delivery',
-  'finalize_delivery_receipt',
 ] as const;
 
 export const PROJECT_LIFECYCLE_ALIASES = ['archive_app', 'unarchive_app'] as const;
 
 export const APPROVAL_HOLD_TOOLS = [
+  'stop_app',
+  'delete_app',
+  'stop_service',
   'remove_service',
   'remove_volume',
   'delete_bucket',

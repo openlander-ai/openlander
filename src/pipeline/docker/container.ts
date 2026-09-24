@@ -299,7 +299,7 @@ export class ContainerOps {
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.PROJECT]: options.projectId,
         ...(this.ctx.instanceId ? { [DOCKER_LABELS.INSTANCE]: this.ctx.instanceId } : {}),
-        'openlander.purpose': 'delivery-quality-check',
+        'openlander.purpose': 'ephemeral-command',
       },
       HostConfig: {
         AutoRemove: false,

@@ -59,12 +59,6 @@ export const DEPLOY_ACTIONS = [
   'remove_git_credential',
   'scan_dockerfiles',
   'analyze_infrastructure',
-  'create_release',
-  'get_release',
-  'promote_release',
-  'evaluate_promotion',
-  'recall_release',
-  'rollback_environment',
 ] as const;
 
 /**
@@ -73,45 +67,10 @@ export const DEPLOY_ACTIONS = [
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
  * - Compatibility-only public-sharing routes (hidden from general help)
- * Includes Delivery Workspace metadata, feedback, Gate, deployment-link,
- * readiness, and Receipt-preview actions, plus read-only internal Engagement
- * portfolio summaries. Binary evidence uses short-lived upload capabilities;
- * human exception decisions and hard deletion stay on the Web surface.
  */
 export const PROJECT_ACTIONS = [
-  'bootstrap_engagement',
-  'update_engagement_from_brief',
-  'link_project_to_engagement',
-  'unlink_project_from_engagement',
-  'archive_engagement',
-  'unarchive_engagement',
-  'plan_delivery',
-  'create_evidence_upload',
-  'prepare_delivery_review_package',
-  'get_delivery_review_package_status',
-  'publish_delivery_review_package',
-  'request_delivery_review',
-  'get_delivery_review_status',
-  'start_delivery_run',
-  'get_delivery_run',
-  'run_quality_gates',
-  'record_delivery_run_progress',
-  'resume_delivery_run',
-  'cancel_delivery_run',
-  'complete_delivery',
-  'generate_weekly_report',
-  'publish_weekly_report',
-  'get_weekly_report',
-  'register_project_repository',
-  'apply_project_manifest',
-  'get_project_manifest',
-  'get_migration_snapshot',
-  'compare_migration_targets',
-  'get_migration_runbook',
-  'get_migration_preflight',
-  'record_project_update',
-  'get_project_context',
-  'get_project_update',
+  'get_project_permissions',
+  'set_project_permissions',
   'create_project',
   'list_projects',
   'archive_project',
@@ -130,19 +89,6 @@ export const PROJECT_ACTIONS = [
   'expose_public',
   'get_public_access',
   'unexpose_public',
-  'create_delivery',
-  'list_deliveries',
-  'get_delivery',
-  'update_delivery_draft',
-  'attach_delivery_url',
-  'record_delivery_feedback',
-  'submit_delivery_work_item_drafts',
-  'record_delivery_gate_result',
-  'link_delivery_deploy',
-  'get_delivery_readiness',
-  'generate_delivery_receipt_preview',
-  'list_engagements',
-  'get_engagement',
 ] as const;
 
 /**
@@ -190,9 +136,11 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Applications/Compose workloads.
- * Total: 25 tools
+ * Total: 28 tools
  */
 export const SERVICE_ACTIONS = [
+  'stop_app',
+  'delete_app',
   'list_archived_services',
   'archive_service',
   'unarchive_service',
@@ -277,10 +225,10 @@ export const PLATFORM_ACTIONS = [
 
 /**
  * Verification: Total tool counts
- * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 64 action slots
+ * - DEPLOY_ACTIONS: 22 tools
+ * - PROJECT_ACTIONS: 20 action slots
  * - MANAGED_SERVICE_ACTIONS: 24 tools
- * - SERVICE_ACTIONS: 25 tools
+ * - SERVICE_ACTIONS: 28 tools
  * - MONITOR_ACTIONS: 15 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
@@ -424,26 +372,18 @@ function invalidParamsResponse(
 }
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
-  if (action === 'finalize_delivery' || action === 'finalize_delivery_receipt') {
+  if (['delete_service', 'destroy_app', 'purge_app', 'remove_app'].includes(action)) {
     return {
-      error: 'HUMAN_UI_ONLY',
+      error: 'UNKNOWN_ACTION',
       action,
-      blocked_action: action,
       composite: toolName,
-      web_ui: {
-        surface: 'delivery_receipt',
-        requires_human: true,
+      suggested_call: {
+        tool: 'openlander_service',
+        arguments: { action: 'help', params: { action_name: 'delete_app' } },
       },
-      safe_alternatives: [
-        {
-          tool: 'openlander_project',
-          action: 'generate_delivery_receipt_preview',
-          effect: 'readiness_validation_and_preview',
-        },
-      ],
       _agent_guidance: {
         message:
-          'Receipt finalization is intentionally not exposed to MCP. Generate a preview, then ask an administrator to review and finalize it in the Delivery Receipt page.',
+          'Use openlander_service.delete_app for Application deletion. It follows the Project operation permission and retains volumes. Read the action schema, then select the requested service_id.',
       },
     };
   }

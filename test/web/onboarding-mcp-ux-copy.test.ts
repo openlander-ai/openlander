@@ -40,7 +40,7 @@ describe('onboarding MCP UX copy', () => {
 
   it('does not tell users that agents can perform human-only or external domain work', () => {
     expect(en.agentGuide.content.deleteService.lead).toContain(
-      'Permanent Project/Application deletion is human UI-only',
+      'You can allow stop and delete actions for this Project in the conversation',
     );
     expect(en.agentGuide.content.addDomain.lead).toContain(
       'DNS and TLS stay outside OpenLander in v0.1',

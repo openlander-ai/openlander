@@ -1,3 +1,4 @@
+import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,8 +10,6 @@ import {
 import { isHumanUiOnlyAction } from '../../src/mcp/composite-tools.js';
 import { isGroupBMcpHoldTool } from '../../src/mcp/destructive-safety.js';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
-import { deliveryToolDefs } from '../../src/tools/defs/delivery.js';
-import { engagementToolDefs } from '../../src/tools/defs/engagement.js';
 import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -33,6 +32,7 @@ const ALL_DEFS = [
   ...deployableServiceToolDefs,
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
+  ...projectPermissionToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
@@ -41,8 +41,6 @@ const ALL_DEFS = [
   ...monitoringToolDefs,
   ...networkOperationToolDefs,
   ...debugToolDefs,
-  ...deliveryToolDefs,
-  ...engagementToolDefs,
   ...platformReadToolDefs,
   ...platformDebugToolDefs,
   ...platformActionToolDefs,
@@ -76,7 +74,8 @@ describe('MCP restricted-action policy (single source)', () => {
   it('pins tier sentinels (regression guard, incl. the delete_service dedupe)', () => {
     expect(HUMAN_UI_ONLY_TOOLS).not.toContain('remove_service');
     expect(HUMAN_UI_ONLY_TOOLS).not.toContain('cleanup_docker');
-    expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_app');
+    expect(HUMAN_UI_ONLY_ALIASES).not.toContain('delete_app');
+    expect(APPROVAL_HOLD_TOOLS).toContain('delete_app');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_project');
     expect(APPROVAL_HOLD_TOOLS).toContain('archive_project');
     expect(APPROVAL_HOLD_TOOLS).toContain('unarchive_project');

@@ -12,22 +12,7 @@ import {
   OpenLanderError,
 } from '../errors.js';
 import { applicationOperationActorScopeKey } from './actor.js';
-import { engagementOperations } from './definitions/engagement.js';
-import { agentDeliveryOperations, webDeliveryOperations } from './definitions/delivery.js';
-import { deliveryReviewPackageOperations } from './definitions/delivery-review-package.js';
 import { networkMaintenanceOperations } from './definitions/network-maintenance.js';
-import { getMigrationSnapshotOperation } from './definitions/migration.js';
-import { compareMigrationTargetsOperation } from './definitions/migration-targets.js';
-import { getMigrationRunbookOperation } from './definitions/migration-runbook.js';
-import { getMigrationPreflightOperation } from './definitions/migration-preflight.js';
-import {
-  applyProjectManifestOperation,
-  getProjectManifestOperation,
-  registerProjectRepositoryOperation,
-} from './definitions/project-manifest.js';
-import { projectUpdateOperations } from './definitions/project-update.js';
-import { releaseOperations } from './definitions/release.js';
-import { reportingOperations } from './definitions/reporting.js';
 import type {
   ApplicationOperationActor,
   ApplicationOperationDefinition,
@@ -276,21 +261,5 @@ export class ApplicationOperationRegistry {
 }
 
 export function createApplicationOperationRegistry(): ApplicationOperationRegistry {
-  return new ApplicationOperationRegistry([
-    ...engagementOperations,
-    registerProjectRepositoryOperation,
-    applyProjectManifestOperation,
-    getProjectManifestOperation,
-    getMigrationSnapshotOperation,
-    compareMigrationTargetsOperation,
-    getMigrationRunbookOperation,
-    getMigrationPreflightOperation,
-    ...projectUpdateOperations,
-    ...agentDeliveryOperations,
-    ...deliveryReviewPackageOperations,
-    ...webDeliveryOperations,
-    ...releaseOperations,
-    ...reportingOperations,
-    ...networkMaintenanceOperations,
-  ]);
+  return new ApplicationOperationRegistry([...networkMaintenanceOperations]);
 }

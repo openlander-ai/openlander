@@ -8,8 +8,6 @@ const EXEMPT_PREFIXES = [
   '/assets/',
   '/mcp',
   '/api/traefik/',
-  '/api/evidence-uploads/',
-  '/api/review-package-uploads/',
   '/__openlander/share/',
 ];
 
@@ -74,24 +72,6 @@ export function createAuthMiddleware(authService: AuthService) {
         if (await authService.validateApiToken(token)) {
           authed = true;
           authKind = 'api_token';
-        } else if (token.startsWith('olp_')) {
-          const deliveryCiMatch =
-            method === 'POST'
-              ? /^\/api\/projects\/([^/]+)\/deliveries\/[^/]+\/(?:artifacts|gates\/[^/]+\/result)$/.exec(
-                  path,
-                )
-              : null;
-          if (deliveryCiMatch?.[1]) {
-            const identity = await authService.validateMcpBearerToken(token);
-            if (
-              identity?.scopeKind === 'project' &&
-              identity.scopeProjectId === decodeURIComponent(deliveryCiMatch[1])
-            ) {
-              authed = true;
-              authKind = 'project_pat';
-              c.set('deliveryPatIdentity', identity);
-            }
-          }
         }
       }
     }

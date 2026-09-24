@@ -94,21 +94,11 @@ newly generated access code, rotates the code, and stops sharing.
 
 **Tabs** (access via URL tab state such as `?tab=ai`):
 
-| Tab             | Features                                                                                     |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| **Overview**    | Latest deployment summary, quick actions, resource health, live timeline excerpt             |
-| **Deployments** | History list with filters (all / success / failed / building), commit SHA, duration, trigger |
-| **Recovery**    | Historical incident/status information when available                                        |
-| **Runtime**     | Service logs + web terminal (xterm.js), ANSI colors, runtime state                           |
-| **AI Ops**      | Project-level briefing feed with status filters and agent handoff actions                    |
-| **Deliveries**  | Review artifacts, feedback, decisions, Gates, deployment evidence, and Receipt finalization  |
-| **Settings**    | Project metadata, Receipt theme/default Gates, and danger actions                            |
-
-The **Deliveries** tab creates a project-scoped delivery record. Its detail
-page separates Overview, Artifacts, Review, Gates, Deployments, and Receipt.
-External agents may submit proposed review items, but only an administrator can
-confirm decisions, record customer approval evidence, acknowledge warnings,
-and finalize an immutable Receipt.
+| Tab           | Features                                                                        |
+| ------------- | ------------------------------------------------------------------------------- |
+| **Resources** | Applications, Compose workloads, and connected Database/Cache/Storage resources |
+| **AI Ops**    | Project briefing feed and agent handoff actions                                 |
+| **Settings**  | Project metadata, permissions, data access, and lifecycle actions               |
 
 Project Settings includes **AI Ops Briefing** controls. The Project **AI Ops** tab is the read
 surface for recent briefings. Briefings are read-only: OpenLander can summarize deterministic
@@ -205,7 +195,7 @@ The legacy multi-tab `/settings` host (System / Security / Proxy / GitHub / MCP)
 ### Sidebar
 
 - **Search** (⌘K): open command palette to jump to projects / pages, plus quick-links for Web Server + Git Providers.
-- **Workspace**: Home, Your Agent, Projects, Engagements, Activity, Monitoring, Web Server.
+- **Workspace**: Home, Your Agent, Projects, Activity, Monitoring, Web Server.
 - **Settings**: Git Providers.
 - **Account footer**: admin avatar with Change Password / Sign Out popover.
 

@@ -19,6 +19,13 @@ export { assertMcpActiveScope, resolveMcpTargetProjectId } from './scope-policy.
 const GROUP_A_HUMAN_UI_ONLY = HUMAN_UI_ONLY_TOOL_SET;
 const GROUP_B_APPROVAL_HOLD = APPROVAL_HOLD_TOOL_SET;
 const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
+  'stop_app',
+  'delete_app',
+  'stop_service',
+  'archive_project',
+  'unarchive_project',
+  'archive_service',
+  'unarchive_service',
   'remove_service',
   'remove_volume',
   'delete_bucket',
@@ -93,11 +100,10 @@ function buildPermissionBlockedResponse(
       service_id: targetServiceId,
     },
     _agent_guidance: {
-      message:
-        'The operator disabled this capability in OpenLander Security settings. Do not retry or substitute another action.',
+      message: 'This capability is blocked. Do not retry or substitute another action.',
       next_steps: [
         'Report which permission blocked the action.',
-        'Ask the operator to change the global, Project, or service override if this action is intended.',
+        'If the user explicitly requests a Project permission change, use openlander_project set_project_permissions, then retry the requested action. Never change permissions merely because a call was blocked.',
       ],
     },
   };
@@ -148,9 +154,55 @@ export async function maybeHandleMcpSafety(
     );
   }
 
-  const destructivePermission = POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name)
+  let destructivePermission = POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(def.name)
     ? (targetPermissions?.effective.destructive_actions ?? 'allow')
     : null;
+  // A Compose lifecycle action affects children too; their overrides cannot be bypassed.
+  if (
+    targetServiceId &&
+    ['stop_app', 'delete_app', 'archive_service', 'unarchive_service'].includes(def.name)
+  ) {
+    const service = await context.appCtx.db.getService(targetServiceId);
+    if (service?.kind === 'compose') {
+      const services = await context.appCtx.db.listServices();
+      const targetIds = new Set([service.id]);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const child of services) {
+          if (
+            child.parent_service_id &&
+            targetIds.has(child.parent_service_id) &&
+            !targetIds.has(child.id)
+          ) {
+            targetIds.add(child.id);
+            expanded = true;
+          }
+        }
+      }
+      for (const child of services.filter((row) => targetIds.has(row.id))) {
+        const permissions = await getOperationPermissionSnapshot(context.appCtx.db, {
+          projectId: child.project_id,
+          serviceId: child.id,
+        });
+        if (permissions.effective.destructive_actions === 'block') {
+          return buildPermissionBlockedResponse(
+            def.name,
+            'destructive_actions',
+            child.project_id,
+            child.id,
+          );
+        }
+        if (
+          permissions.effective.destructive_actions === 'approval_required' &&
+          destructivePermission !== 'block'
+        ) {
+          destructivePermission = 'approval_required';
+        }
+      }
+    }
+  }
+
   if (destructivePermission === 'block') {
     return buildPermissionBlockedResponse(
       def.name,
@@ -166,10 +218,16 @@ export async function maybeHandleMcpSafety(
 
   const shouldHold =
     destructivePermission === 'approval_required' ||
-    def.name === 'archive_project' ||
-    def.name === 'unarchive_project' ||
-    def.name === 'archive_service' ||
-    def.name === 'unarchive_service' ||
+    ([
+      'stop_app',
+      'delete_app',
+      'archive_project',
+      'unarchive_project',
+      'archive_service',
+      'unarchive_service',
+    ].includes(def.name) &&
+      !targetPermissions?.project_override?.destructive_actions &&
+      !targetPermissions?.service_override?.destructive_actions) ||
     def.name === 'remove_secret_file' ||
     def.name === 'remove_git_credential' ||
     def.name === 'remove_unused_docker_network' ||

@@ -940,7 +940,6 @@ export async function runDeployableServiceAction(
     action,
   );
   const noCache = (args.no_cache as boolean | undefined) === true;
-  const adoptAsImplicitRelease = args['__adopt_implicit_release'] === true;
   const requestedStrategy = args.strategy as 'blue-green' | 'force' | undefined;
   let strategy = requestedStrategy;
   const healthCheckPath = args.health_check_path as string | undefined;
@@ -1260,22 +1259,6 @@ export async function runDeployableServiceAction(
       lockSessionId: sessionId,
       trigger: deployTriggerForToolContext(context),
     });
-    if (adoptAsImplicitRelease) {
-      try {
-        const deployLog = await context.appCtx.db.getLastDeployLogForService(deploymentService.id);
-        await context.appCtx.releaseService.adoptSuccessfulDeploy({
-          projectId: project.id,
-          serviceId: service.id,
-          ...(deployLog ? { deployId: deployLog.id } : {}),
-          actor: context.identity?.initiatedBy ?? 'external-mcp-agent',
-        });
-      } catch (err) {
-        log.error(
-          { err, projectId: project.id, serviceId: service.id },
-          'Deployment succeeded, but implicit Release adoption failed',
-        );
-      }
-    }
   };
 
   void execute()
@@ -1323,9 +1306,6 @@ export async function runDeployableServiceAction(
 
   return {
     status: 'deploying',
-    ...(adoptAsImplicitRelease
-      ? { implicit_release: { status: 'pending', source: 'deploy_app_compatibility' } }
-      : {}),
     strategy,
     ...(autoSelectedBlueGreen ? { zero_downtime: true } : {}),
     ...(strategy === 'force'
@@ -1365,6 +1345,32 @@ export async function runDeployableServiceAction(
 }
 
 export const deployableServiceToolDefs: ToolDef[] = [
+  ...(['stop_app', 'delete_app'] as const).map((name): ToolDef => ({
+    name,
+    targets: ['mcp'],
+    riskLevel: 'high',
+    description:
+      name === 'stop_app'
+        ? 'Stop the selected Application/Compose workload using its Project permission. Use service_id for each requested workload.'
+        : 'Delete the selected Application/Compose workload using its Project permission. Preserves persistent volumes and sibling services. Use service_id for each requested workload.',
+    inputSchema: serviceTargetSchema,
+    execute: async (args, context) => {
+      const { service, project } = await resolveDeployableService(args, context, name);
+      if (name === 'stop_app') await context.appCtx.pipeline.stopService(service.id);
+      else await context.appCtx.pipeline.deleteService(service.id, context.appCtx.cloudflare);
+      return {
+        status: name === 'stop_app' ? 'stopped' : 'deleted',
+        project_id: project.id,
+        service_id: service.id,
+        _agent_guidance: {
+          message:
+            name === 'stop_app'
+              ? 'The workload is stopped.'
+              : 'The workload is deleted. Persistent volumes were retained.',
+        },
+      };
+    },
+  })),
   {
     name: 'list_archived_services',
     riskLevel: 'low',
@@ -1398,7 +1404,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
                 ]
               : [
                   'Use list_projects for active Projects and Application service_id values.',
-                  'If a service was meant to be cleaned up, archive_service enters the human approval queue.',
+                  'If a service was meant to be cleaned up, archive_service follows the Project operation permission.',
                 ],
         },
       };
@@ -1527,7 +1533,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     description:
       'Archive an Application/worker. Provide service_id or service_name. Stops runtime and preserves configuration/history.',
     mcpDescription:
-      'Request human approval to archive an Application/worker while preserving configuration/history. Execution returns DEPLOY_LOCKED only when an active deployment owns the runtime lock.',
+      'Archive an Application/worker using its Project operation permission while preserving configuration/history. Execution returns DEPLOY_LOCKED only when an active deployment owns the runtime lock.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(

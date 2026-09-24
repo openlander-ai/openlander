@@ -53,40 +53,13 @@ Generic product nouns and actions must be localized:
 | Deployment  | 배포         |
 | Log         | 로그         |
 
-## FDE delivery vocabulary
-
-The following labels are the canonical Korean display terms. Internal entity
-names and API fields remain unchanged.
-
-| Internal name        | Korean display term | Meaning                                                                |
-| -------------------- | ------------------- | ---------------------------------------------------------------------- |
-| Engagement           | 고객 과제           | A customer outcome or initiative grouping related Projects             |
-| Engagement Portfolio | 고객 과제 현황      | Cross-project view for FDE work                                        |
-| Delivery             | 납품 건             | One reviewable and finalizable delivery unit                           |
-| Delivery Workspace   | 납품 관리           | Area for preparing and confirming deliveries                           |
-| Receipt              | 납품 확인서         | Final evidence PDF for a Delivery                                      |
-| Recovery Receipt     | 복구 검증 결과      | Deterministic verification after incident recovery                     |
-| Artifact             | 산출물              | File or report included in a Delivery                                  |
-| Gate                 | 통과 기준           | Required or optional quality/review condition                          |
-| Blocker              | 진행을 막는 항목    | Condition preventing a Delivery from progressing                       |
-| Work Item            | 검토 항목           | Decision, question, or requested change                                |
-| Maturity             | 납품 단계           | Readiness stage shown to users                                         |
-| Runtime health       | 실행 상태           | Current runtime condition                                              |
-| Revision             | 버전                | Version of an artifact                                                 |
-| Evidence             | 근거 자료           | Information supporting a decision or result                            |
-| Recipe               | 자동 복구 규칙      | Internal known-error recovery rule; do not expose as a primary UI noun |
-
-Do not force one Korean word onto unrelated concepts. In particular,
-`Delivery Receipt` is `납품 확인서`, while `Recovery Receipt` is
-`복구 검증 결과`.
-
 ## Korean writing guide
 
 - Write for the action the user is taking now.
 - Prefer familiar words over internal architecture terms.
 - Keep established developer terms when translating them would reduce precision. Terms such as
   `런타임`, `엔드포인트`, `브랜치`, `커밋`, `릴리스`, and `Dockerfile` are acceptable in the
-  FDE interface.
+  deployment interface.
 - Use `저장소`, `보관`, `재배포`, and `미리보기` consistently. Do not alternate them with
   `레포지토리`, `아카이브`, `리디플로이`, or `프리뷰` in the same product surface.
 - Use one idea per sentence.
@@ -96,11 +69,11 @@ Do not force one Korean word onto unrelated concepts. In particular,
 - Translate stable wire values through their display keys. Do not render raw status values,
   server-generated English event titles, or API error prose as Korean UI copy.
 - Replace abstract claims with consequences:
-  - Avoid: `불변 Receipt가 확정되었습니다.`
-  - Prefer: `납품 확인서가 확정되어 더 이상 변경할 수 없습니다.`
+  - Avoid: `영구적 삭제 작업이 수행되었습니다.`
+  - Prefer: `서비스를 삭제했습니다. 데이터 볼륨은 남아 있습니다.`
 - Explain unavoidable identifiers:
   - Avoid: `논리 키`
-  - Prefer: `산출물 식별자`
+  - Prefer: `서비스 식별자`
 - Avoid mixed-language phrases when a natural Korean expression exists:
   - Avoid: `Project runtime 오류`
   - Prefer: `프로젝트 실행 오류`

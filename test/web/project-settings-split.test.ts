@@ -17,11 +17,11 @@ describe('Project Settings split contract', () => {
 
   it('keeps Project Settings group-owned only', () => {
     expect(projectSettingsSource).toContain(
-      "type SettingsSection = 'general' | 'permissions' | 'delivery' | 'ai' | 'data' | 'danger'",
+      "type SettingsSection = 'general' | 'permissions' | 'ai' | 'data' | 'danger'",
     );
     expect(projectSettingsSource).toContain("id: 'general'");
     expect(projectSettingsSource).toContain("id: 'permissions'");
-    expect(projectSettingsSource).toContain("id: 'delivery'");
+    expect(projectSettingsSource).not.toContain("id: 'delivery'");
     expect(projectSettingsSource).toContain("id: 'ai'");
     expect(projectSettingsSource).toContain("id: 'data'");
     expect(projectSettingsSource).toContain("id: 'danger'");

@@ -13,14 +13,9 @@ import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createDeployableServiceRoutes } from './deployable-service-routes.js';
 import { createGitProvidersRoutes } from './git-providers-routes.js';
 import { createGitCredentialRoutes } from './git-credential-routes.js';
-import { createDeliveryRoutes } from './delivery-routes.js';
-import { createEngagementRoutes } from './engagement-routes.js';
 import { createOperationRoutes } from './operation-routes.js';
-import { createEvidenceUploadRoutes } from './evidence-upload-routes.js';
-import { createReviewPackageUploadRoutes } from './review-package-upload-routes.js';
 import { createSecurityPermissionRoutes } from './security-permission-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
-import { createMigrationRoutes } from './migration-routes.js';
 import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectGroupRoutes } from './project-group-routes.js';
 import { createProjectCompatRoutes } from './project-compat-routes.js';
@@ -624,7 +619,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createAiOpsRoutes(ctx));
   api.route('/', createDataAccessRoutes(ctx));
   api.route('/', createMcpStatusRoutes(ctx));
-  api.route('/', createMigrationRoutes(ctx));
   api.route('/', createMonitoringRoutes(ctx));
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectGroupRoutes(ctx));
@@ -646,11 +640,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createWebServerRoutes(ctx));
   api.route('/', createGitProvidersRoutes(ctx));
   api.route('/', createGitCredentialRoutes(ctx));
-  api.route('/', createDeliveryRoutes(ctx));
-  api.route('/', createEngagementRoutes(ctx));
   api.route('/', createOperationRoutes(ctx));
-  api.route('/', createEvidenceUploadRoutes(ctx));
-  api.route('/', createReviewPackageUploadRoutes(ctx));
   api.route('/', createSecurityPermissionRoutes(ctx));
 
   return api;

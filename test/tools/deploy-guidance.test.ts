@@ -195,10 +195,6 @@ describe('deploy MCP guidance', () => {
       mode: 'redeploy_existing_project',
       strategy: 'blue-green',
       zero_downtime: true,
-      implicit_release: {
-        status: 'pending',
-        source: 'deploy_app_compatibility',
-      },
     });
     await vi.waitFor(() =>
       expect(ctx.pipeline.redeployService).toHaveBeenCalledWith(
@@ -206,15 +202,7 @@ describe('deploy MCP guidance', () => {
         expect.objectContaining({ strategy: 'blue-green' }),
       ),
     );
-    await vi.waitFor(() =>
-      expect(ctx.releaseService.adoptSuccessfulDeploy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectId: 'app',
-          serviceId: 'app__svc',
-          deployId: 'deploy-app-1',
-        }),
-      ),
-    );
+    expect(result).not.toHaveProperty('implicit_release');
   });
 
   it('deploy_app delegation respects an explicit strategy:force (no eligibility check)', async () => {

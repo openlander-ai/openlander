@@ -2,13 +2,8 @@ import type { AppContext } from '../app.js';
 import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
 import type { ProjectRow, ServiceRow } from '../db/types.js';
 import {
-  ArtifactNotFoundError,
-  DeliveryNotFoundError,
-  DeliveryAgentRunNotFoundError,
-  DeliveryReviewPackageNotReadyError,
   ProjectNotFoundError,
   ProjectEnvironmentNotFoundError,
-  ReleaseStateError,
   ScopeViolationError,
   ServiceNotFoundError,
 } from '../errors.js';
@@ -131,40 +126,6 @@ async function targetFromDeployId(
   return targetFromService(appCtx, deploy.service_id, 'deploy_id');
 }
 
-async function targetFromDeliveryId(
-  appCtx: AppContext,
-  deliveryId: string,
-  resolvedFrom = 'delivery_id',
-): Promise<ScopeTarget> {
-  const delivery = await appCtx.db.getDelivery(deliveryId);
-  if (!delivery) throw new DeliveryNotFoundError(deliveryId);
-  return { projectId: delivery.project_id, serviceId: null, resolvedFrom };
-}
-
-async function targetFromDeliveryRunId(appCtx: AppContext, runId: string): Promise<ScopeTarget> {
-  const run = await appCtx.db.getDeliveryAgentRun(runId);
-  if (!run) throw new DeliveryAgentRunNotFoundError(runId);
-  return await targetFromDeliveryId(appCtx, run.delivery_id, 'run_id');
-}
-
-async function targetFromDeliveryReviewPackageId(
-  appCtx: AppContext,
-  packageId: string,
-): Promise<ScopeTarget> {
-  const detail = await appCtx.db.getDeliveryReviewPackage(packageId);
-  if (!detail) throw new DeliveryReviewPackageNotReadyError(packageId, 'package_not_found');
-  return {
-    projectId: detail.delivery.project_id,
-    serviceId: null,
-    resolvedFrom: 'package_id',
-  };
-}
-
-async function targetFromReleaseId(appCtx: AppContext, releaseId: string): Promise<ScopeTarget> {
-  const release = await appCtx.db.requireRelease(releaseId);
-  return targetFromDeliveryId(appCtx, release.delivery_id, 'release_id');
-}
-
 async function targetFromProjectEnvironmentId(
   appCtx: AppContext,
   projectEnvironmentId: string,
@@ -176,25 +137,6 @@ async function targetFromProjectEnvironmentId(
     serviceId: null,
     resolvedFrom: 'project_environment_id',
   };
-}
-
-async function targetFromPromotionId(
-  appCtx: AppContext,
-  promotionId: string,
-): Promise<ScopeTarget> {
-  const promotion = await appCtx.db.getReleasePromotion(promotionId);
-  if (!promotion) throw new ReleaseStateError(promotionId, 'Promotion was not found.');
-  return targetFromReleaseId(appCtx, promotion.release_id);
-}
-
-async function targetFromArtifactId(
-  appCtx: AppContext,
-  artifactId: string,
-  resolvedFrom = 'artifact_id',
-): Promise<ScopeTarget> {
-  const projectId = await appCtx.db.getDeliveryProjectIdByArtifactId(artifactId);
-  if (!projectId) throw new ArtifactNotFoundError(artifactId);
-  return { projectId, serviceId: null, resolvedFrom };
 }
 
 async function targetFromBriefingId(
@@ -327,33 +269,10 @@ async function resolveMcpScopeTargets(
   const deployId = readString(args, 'deploy_id', 'job_id');
   if (deployId) push(await targetFromDeployId(appCtx, deployId));
 
-  const deliveryId = readString(args, 'delivery_id');
-  if (deliveryId) push(await targetFromDeliveryId(appCtx, deliveryId));
-
-  const packageId = readString(args, 'package_id');
-  if (packageId) push(await targetFromDeliveryReviewPackageId(appCtx, packageId));
-
-  const runId = readString(args, 'run_id');
-  if (runId) push(await targetFromDeliveryRunId(appCtx, runId));
-
-  const releaseId = readString(args, 'release_id');
-  if (releaseId) push(await targetFromReleaseId(appCtx, releaseId));
-
-  const promotionId = readString(args, 'promotion_id');
-  if (promotionId) push(await targetFromPromotionId(appCtx, promotionId));
-
   const projectEnvironmentId = readString(args, 'project_environment_id');
   if (projectEnvironmentId) {
     push(await targetFromProjectEnvironmentId(appCtx, projectEnvironmentId));
   }
-
-  const predecessorDeliveryId = readString(args, 'predecessor_delivery_id');
-  if (predecessorDeliveryId) {
-    push(await targetFromDeliveryId(appCtx, predecessorDeliveryId, 'predecessor_delivery_id'));
-  }
-
-  const artifactId = readString(args, 'artifact_id', 'report_artifact_id');
-  if (artifactId) push(await targetFromArtifactId(appCtx, artifactId));
 
   const briefingId = readString(args, 'briefing_id');
   if (briefingId) push(await targetFromBriefingId(appCtx, briefingId, identity));
@@ -431,14 +350,7 @@ export async function maybeRejectMcpScope(
   try {
     targets = await resolveMcpScopeTargets(context.appCtx, args, identity);
   } catch (err) {
-    if (
-      err instanceof ProjectNotFoundError ||
-      err instanceof ServiceNotFoundError ||
-      err instanceof DeliveryNotFoundError ||
-      err instanceof DeliveryAgentRunNotFoundError ||
-      err instanceof DeliveryReviewPackageNotReadyError ||
-      err instanceof ArtifactNotFoundError
-    ) {
+    if (err instanceof ProjectNotFoundError || err instanceof ServiceNotFoundError) {
       return buildScopeViolationResponse(identity, null, 'target_not_found_or_out_of_scope');
     }
     throw err;

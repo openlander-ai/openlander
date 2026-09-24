@@ -64,43 +64,6 @@ describe('Korean localization quality gate', () => {
     }
   });
 
-  it('uses the approved Korean FDE product vocabulary', () => {
-    expect(ko.delivery.title).toBe('납품 관리');
-    expect(ko.delivery.tabs.artifacts).toBe('자료·증빙');
-    expect(ko.delivery.tabs.gates).toBe('검토·품질');
-    expect(ko.delivery.tabs.receipt).toBe('완료 증빙');
-    expect(ko.delivery.gates.title).toBe('납품 통과 기준');
-    expect(ko.engagements.title).toBe('고객 과제 현황');
-    expect(ko.engagements.sections.blockers.title).toBe('진행을 막는 항목');
-    expect(ko.engagements.metrics.blockers).toBe('진행을 막는 항목');
-    expect(ko.engagements.blockerCount).toBe('진행을 막는 항목 {count}개');
-    expect(ko.engagements.activityEvent.webhookSkipped).toBe('웹훅 배포 건너뜀');
-    expect(ko.vocab.project).toBe('프로젝트');
-    expect(ko.vocab.application).toBe('애플리케이션');
-    expect(ko.delivery.type.software_release).toBe('소프트웨어 릴리스');
-    expect(ko.delivery.gates.defaultLabel.review).toBe('검토');
-    expect(ko.delivery.gates.defaultLabel.data).toBe('데이터');
-    expect(ko.delivery.reviewCheckpoint.acceptExactVersion).toBe('이 버전 승인');
-    expect(ko.delivery.reviewCheckpoint.requestChanges).toBe('수정 요청');
-    expect(ko.delivery.reviewCheckpoint.exactVersionHint).toBe(
-      '새 버전이 올라오면 이 승인은 새 버전에 적용되지 않습니다. 새 버전은 다시 검토하세요.',
-    );
-    expect(ko.delivery.humanAction.review_version.eyebrow).toBe('확인 필요');
-    expect(ko.delivery.humanAction.review_version.action).toBe('검토 열기');
-    expect(ko.delivery.humanAction.review_version.title).toBe(
-      '고객 검토본 {count}개가 검토를 기다리고 있습니다',
-    );
-    expect(ko.delivery.workflow.detailsTitle).toBe('상세 진행 기록');
-    expect(ko.services.managedDetail.field.type).toBe('유형');
-    expect(ko.notifications.type['container-crash']).toBe('컨테이너 비정상 종료');
-    expect(ko.notifications.type['resource-saturation']).toBe('리소스 사용량 과다');
-    expect(ko.settings.data.factCredentialValue).toBe('에이전트에게 공개하지 않음');
-    expect(ko.approval.pendingStrip.approved).toBe('승인했습니다');
-    expect(ko.serviceDialogs.grantAccessOptional).toBe(
-      '접근 권한을 부여할 데이터베이스 (선택 사항)',
-    );
-  });
-
   it('rejects inconsistent loanwords and internal English from Korean copy', () => {
     const rejectedFragments = [
       'Your Agent',
@@ -282,9 +245,6 @@ describe('Korean localization quality gate', () => {
       'set-env-var',
       'delete-env-var',
       'wire-managed-db',
-      'plan-delivery',
-      'record-project-update',
-      'manage-delivery',
     ];
 
     for (const kind of kinds) {
@@ -295,7 +255,6 @@ describe('Korean localization quality gate', () => {
           serviceName: 'sample-service',
           envVarKey: 'DATABASE_URL',
           managedServiceName: 'sample-db',
-          deliveryId: 'del_sample',
         },
         translateKo,
       );
@@ -313,20 +272,6 @@ describe('Korean localization quality gate', () => {
       translateKo,
     );
     expect(envGuide.prompts[0]?.text).toContain('DATABASE_URL');
-    const deliveryGuide = getAgentGuideContent(
-      'manage-delivery',
-      { projectName: 'sample-project', deliveryId: 'del_sample' },
-      translateKo,
-    );
-    expect(deliveryGuide.prompts[0]?.text).toContain('결과 중심');
-    expect(deliveryGuide.prompts[0]?.text).toContain('최소 구성');
-    const deliveryPlanGuide = getAgentGuideContent(
-      'plan-delivery',
-      { projectName: 'sample-project' },
-      translateKo,
-    );
-    expect(deliveryPlanGuide.prompts[0]?.text).toContain('내부 절차 표현은 넣지 마세요');
-    expect(deliveryPlanGuide.prompts[0]?.text).toContain('QA와 이력은 내부 증빙');
     expect(ko.agentGuide.mcpSetupCheck).toContain('openlander_project({ action: "help" })');
     expect(ko.agentGuide.mcpSetupCheck).toContain('/api');
   });

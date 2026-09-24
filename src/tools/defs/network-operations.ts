@@ -1,5 +1,5 @@
 import { networkMaintenanceOperations } from '../../operations/definitions/network-maintenance.js';
-import { operationToolDef } from './agent-delivery.js';
+import { operationToolDef } from './operation.js';
 import type { ToolDef } from './types.js';
 
 export const networkOperationToolDefs: ToolDef[] = networkMaintenanceOperations.map((definition) =>

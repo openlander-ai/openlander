@@ -266,22 +266,9 @@ common single-Application case.
   scope checks. Per-project audit trail.
 - Env vars and secrets are masked by default in MCP responses, so agents can
   inspect configuration shape without automatically receiving raw secret values.
-- Conservative built-in safety policy. Project and app archive/delete flows
-  are human UI-only. Destructive MCP actions that remain exposed are either
-  blocked at the MCP boundary or held in a human approval queue before
-  execution.
-
-**Delivery Workspace Beta**
-
-- Create a Delivery inside a Project, preserve HTML/PDF review artifacts and
-  pasted Slack/email/meeting feedback, and let an external MCP agent propose
-  structured decisions, change requests, questions, and notes.
-- Keep approval and finalization human-controlled in the dashboard. OpenLander
-  records external Review/QA/Data Gate results and successful Production deploy
-  evidence; it does not run QA or a built-in LLM.
-- Generate an immutable Receipt PDF containing OpenLander evidence pages,
-  hashes, approvals, Gate/deploy snapshots, and every approved companion PDF.
-  Customers do not need an OpenLander account.
+- Project permissions can be changed through MCP when the user explicitly asks.
+  Once allowed, stop, archive, and delete actions proceed without per-action web
+  approval. Token scope and service overrides still apply.
 
 **Self-hosted**
 
@@ -328,9 +315,6 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Deterministic post-deploy recovery primitives for external agents: structured
   `diagnose_service` findings, safe route re-pointing, same-image runtime env
   apply, verification details, and rollback when a hot path fails.
-- Delivery Workspace Beta for FDE review, approval, Gate, deployment evidence,
-  and immutable customer-facing Receipt PDFs, plus an Engagement Portfolio for
-  cross-Project runtime health and delivery blocker rollups.
 
 **Next**
 
