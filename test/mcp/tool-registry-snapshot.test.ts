@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
@@ -25,6 +26,7 @@ const EXPECTED_TOOLS = [
   'backup_service',
   'bulk_delete_env_vars',
   'cancel_deploy',
+  'cleanup_apps',
   'cleanup_docker',
   'cleanup_preview',
   'create_bucket',
@@ -91,6 +93,7 @@ const EXPECTED_TOOLS = [
   'remove_volume',
   'restart_service',
   'restore_service',
+  'resume_mcp_actions',
   'rollback_service',
   'scan_dockerfiles',
   'search_github_repos',
@@ -128,6 +131,7 @@ function getMcpToolDefs(): ToolDef[] {
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
     ...projectPermissionToolDefs,
+    ...appCleanupToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -156,8 +160,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 94 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(94);
+  it('maintains exactly 96 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(96);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

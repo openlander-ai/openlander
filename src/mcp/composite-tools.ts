@@ -71,6 +71,7 @@ export const DEPLOY_ACTIONS = [
 export const PROJECT_ACTIONS = [
   'get_project_permissions',
   'set_project_permissions',
+  'resume_mcp_actions',
   'create_project',
   'list_projects',
   'archive_project',
@@ -139,6 +140,7 @@ export const MANAGED_SERVICE_ACTIONS = [
  * Total: 28 tools
  */
 export const SERVICE_ACTIONS = [
+  'cleanup_apps',
   'stop_app',
   'delete_app',
   'list_archived_services',

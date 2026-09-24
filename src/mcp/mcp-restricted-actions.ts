@@ -14,8 +14,8 @@
  *   purge and legacy app lifecycle aliases). The composite intercepts them
  *   with a HUMAN_UI_ONLY pointer to the safe MCP action or web UI so a "delete it"
  *   prompt doesn't spiral into adjacent destructive tools.
- * - APPROVAL_HOLD_TOOLS: tools the approval executor can run. Lifecycle tools
- *   always enter the queue; resource deletion tools enter it only when the
+ * - APPROVAL_HOLD_TOOLS: tools the approval executor can run. App lifecycle tools use app_lifecycle; other lifecycle tools retain their
+ *   explicit-override default gate; resource deletion tools enter it only when the
  *   effective Security permission is `approval_required`.
  */
 
@@ -41,6 +41,7 @@ export const HUMAN_UI_ONLY_ALIASES = [
 export const PROJECT_LIFECYCLE_ALIASES = ['archive_app', 'unarchive_app'] as const;
 
 export const APPROVAL_HOLD_TOOLS = [
+  'cleanup_apps',
   'stop_app',
   'delete_app',
   'stop_service',

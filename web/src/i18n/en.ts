@@ -12,7 +12,7 @@ export const translations = {
     selected: '{count} selected',
     grant: 'Also allow stop and delete for this Project going forward',
     grantHint:
-      'This applies to the entire Project, beyond the selected services. It also permits archiving and deleting database resources, buckets, and volumes. Service overrides remain effective. You can request approval-required mode again in the conversation.',
+      'This applies to app stop/delete across this Project. Database, bucket, and volume deletion permissions and service overrides stay unchanged. You can request approval-required mode again in the conversation.',
     stopHint: 'Stopping keeps containers and data. You can start the services again later.',
     deleteHint:
       'Deletes the selected apps and containers. Data volumes and Database/Cache/Storage resources are kept.',
@@ -24,9 +24,11 @@ export const translations = {
       target:
         'For OpenLander Project "{projectName}" (project_id: {projectId}), perform the following request.',
       permission:
-        'Persistently allow destructive actions for this Project. Use MCP set_project_permissions to save destructive_actions=allow, then proceed with the actions below. Keep service-specific restrictions.',
+        'Persistently allow app stop/delete for this Project. Use MCP set_project_permissions to save app_lifecycle=allow, then proceed with the actions below. Keep service-specific restrictions.',
       stop: 'Stop only the following services.',
       delete: 'Delete only the following app services and preserve data volumes.',
+      execution:
+        'Use MCP cleanup_apps to submit the selected services together, in batches of up to 50. Poll each returned action ID until complete. If this exact request is already waiting for approval, resume that action ID instead of creating a duplicate.',
       boundary:
         'Do not change services outside this list or other Projects. Include children of selected Compose services and report success or failure for each service.',
     },
@@ -2416,6 +2418,8 @@ export const translations = {
       timedOut: 'Approval timed out',
     },
     pendingStrip: {
+      cleanupStop: 'Stop selected apps',
+      cleanupDelete: 'Delete selected apps',
       title: 'Agent action waiting for approval',
       summaryOne: '1 agent action needs approval',
       summaryMany: '{count} agent actions need approval',
@@ -2938,9 +2942,14 @@ export const translations = {
     },
   },
   securityPermissions: {
+    appLifecycle: {
+      title: 'App stop/delete',
+      description: 'Stop or delete apps and Compose services while preserving data volumes.',
+    },
+
     title: 'Security',
     description:
-      'Set the default for destructive operations and database access. Everything is allowed until you restrict it.',
+      'Set app cleanup, other destructive actions, and database access permissions. App stop/delete requires approval by default.',
     projectTitle: 'Project permissions',
     projectDescription:
       'Set permissions for this Project. You can also ask your agent to allow stop and delete actions here.',
@@ -2948,8 +2957,7 @@ export const translations = {
     serviceDescription: 'Inherit the Project setting or restrict this service only.',
     destructive: {
       title: 'Destructive actions',
-      description:
-        'Service stop, archive, and deletion, including database resources, buckets, and volumes.',
+      description: 'Service archiving and deletion of database resources, buckets, and volumes.',
     },
     database: {
       title: 'Database access',

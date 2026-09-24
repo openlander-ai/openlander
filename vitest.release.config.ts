@@ -92,6 +92,8 @@ export default defineConfig({
       'test/mcp/mode-switching.test.ts',
       'test/mcp/project-create-action.test.ts',
       'test/mcp/project-permissions.test.ts',
+      'test/mcp/permission-continuation.test.ts',
+      'test/db/mcp-action-claim-postgres.test.ts',
       'test/pipeline/service-cleanup.test.ts',
       'test/mcp/response-contract.test.ts',
       'test/mcp/session-heartbeat.test.ts',

@@ -16,7 +16,7 @@ interface ScopeTarget {
   resolvedFrom: string;
 }
 
-interface ScopeRejection {
+export interface ScopeRejection {
   error: 'SCOPE_VIOLATION';
   code: 'SCOPE_VIOLATION';
   message: string;
@@ -208,7 +208,20 @@ async function targetFromActionRunId(
   const plan = parseJsonRecord(run.plan);
   if (plan) {
     const targetServiceId = readRecordString(plan, 'targetServiceId');
-    if (targetServiceId) return targetFromService(appCtx, targetServiceId, 'action_run_id');
+    if (targetServiceId) {
+      const service = await appCtx.db.getService(targetServiceId);
+      const target = service
+        ? await targetFromService(appCtx, targetServiceId, 'action_run_id')
+        : null;
+      if (target) return target;
+      if (run.project_id && readRecordString(plan, 'targetProjectId') === run.project_id)
+        return {
+          projectId: run.project_id,
+          serviceId: targetServiceId,
+          resolvedFrom: 'action_run_id',
+        };
+      return null;
+    }
 
     const args = asRecord(plan['args']);
     const serviceId = args ? readString(args, 'service_id', 'serviceId') : '';
@@ -279,6 +292,20 @@ async function resolveMcpScopeTargets(
 
   const actionRunId = readString(args, 'action_run_id', 'action_id', 'actionRunId');
   if (actionRunId) push(await targetFromActionRunId(appCtx, actionRunId, identity));
+
+  for (const selector of ['action_run_ids', 'service_ids'] as const) {
+    const ids = args[selector];
+    if (Array.isArray(ids))
+      for (const id of ids) {
+        const target =
+          typeof id === 'string'
+            ? selector === 'action_run_ids'
+              ? await targetFromActionRunId(appCtx, id, identity)
+              : await targetFromService(appCtx, id)
+            : null;
+        push(target ?? { projectId: null, serviceId: null, resolvedFrom: selector });
+      }
+  }
 
   const serviceId = readString(args, 'service_id', 'serviceId');
   if (serviceId) push(await targetFromService(appCtx, serviceId));
@@ -361,7 +388,13 @@ export async function maybeRejectMcpScope(
 
   for (const target of targets) {
     if (!target.projectId) {
-      return buildScopeViolationResponse(identity, target, 'target_required');
+      return buildScopeViolationResponse(
+        identity,
+        target,
+        ['service_ids', 'action_run_ids'].includes(target.resolvedFrom)
+          ? 'target_not_found_or_out_of_scope'
+          : 'target_required',
+      );
     }
 
     if (identity.mcpScopeKind === 'project') {

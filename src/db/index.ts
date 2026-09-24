@@ -670,6 +670,7 @@ export class Database implements AuthDatabase {
   attachAiOpsDedupeBriefing(dedupeKey: string, briefingId: string) { return this.aiOpsPolicyRepo.attachDedupeBriefing(dedupeKey, briefingId); }
   getAiOpsDedupeByKey(dedupeKey: string) { return this.aiOpsPolicyRepo.getDedupeByKey(dedupeKey); }
   createActionRun(data: Parameters<ActionRunRepo['create']>[0]) { return this.actionRunRepo.create(data); }
+  claimMcpActionExecution(id: string, permissionGranted = false) { return this.actionRunRepo.claimMcpExecution(id, permissionGranted); }
   createPendingMcpApproval(data: Parameters<ActionRunRepo['createPendingMcpApproval']>[0]) { return this.actionRunRepo.createPendingMcpApproval(data); }
   recordDeployPlanApproval(data: Parameters<ActionRunRepo['recordDeployPlanApproval']>[0]) { return this.actionRunRepo.recordDeployPlanApproval(data); }
   updateActionRunStatus(id: string, status: 'running' | 'succeeded' | 'failed' | 'pending_approval', errorMessage?: string) { return this.actionRunRepo.updateStatus(id, status, errorMessage); }

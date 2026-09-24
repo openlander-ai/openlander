@@ -39,6 +39,7 @@ export function ServiceCleanupDialog({ projectId, projectName, services }: Props
     t(`serviceCleanup.prompt.${action}`),
     ...targets.map((service) => `- ${service.name} (service_id: ${service.id})`),
     t('serviceCleanup.prompt.boundary'),
+    t('serviceCleanup.prompt.execution'),
   ].join('\n');
 
   const change = () => setCopied(false);

@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Drift gate (M2): docs/wiki example MCP composite calls ⇄ ToolDef schema.
@@ -86,6 +87,7 @@ const ALL_TOOL_DEFS: readonly ToolDef[] = [
   ...monitoringToolDefs,
   ...projectOpsToolDefs,
   ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

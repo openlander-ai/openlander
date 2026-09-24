@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Drift gate: MCP composite-tools.ts ⇄ ToolDef registry ⇄ docs/wiki.
@@ -73,6 +74,7 @@ const ALL_TOOL_DEFS = [
   ...networkOperationToolDefs,
   ...projectOpsToolDefs,
   ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,
   ...platformActionToolDefs,

@@ -15,3 +15,5 @@ export { serviceToolDefs } from './service.js';
 export { volumeToolDefs } from './volume.js';
 
 export { projectPermissionToolDefs } from './project-permissions.js';
+
+export { appCleanupToolDefs } from './app-cleanup.js';

@@ -13,6 +13,7 @@ import {
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 interface PermissionPatch {
+  app_lifecycle?: DestructiveActionPermission | null;
   destructive_actions?: DestructiveActionPermission | null;
   database_access?: DatabaseAccessPermission | null;
 }
@@ -22,8 +23,9 @@ function parsePatch(
   allowInherit: boolean,
 ): { ok: true; patch: PermissionPatch } | { ok: false; message: string } {
   const patch: PermissionPatch = {};
-  if ('destructive_actions' in body) {
-    const value = body['destructive_actions'];
+  for (const key of ['app_lifecycle', 'destructive_actions'] as const) {
+    if (!(key in body)) continue;
+    const value = body[key];
     if (
       value !== 'allow' &&
       value !== 'approval_required' &&
@@ -32,11 +34,10 @@ function parsePatch(
     ) {
       return {
         ok: false,
-        message:
-          'destructive_actions must be "allow", "approval_required", "block", or null for inheritance.',
+        message: `${key} must be "allow", "approval_required", "block", or null for inheritance.`,
       };
     }
-    patch.destructive_actions = value;
+    patch[key] = value;
   }
   if ('database_access' in body) {
     const value = body['database_access'];
@@ -75,6 +76,7 @@ export function createSecurityPermissionRoutes(ctx: AppContext): Hono {
     const parsed = parsePatch(body, false);
     if (!parsed.ok) return c.json(invalidPatchResponse(parsed.message), 400);
     const permissions = await saveGlobalOperationPermissions(ctx.db, {
+      ...(parsed.patch.app_lifecycle ? { app_lifecycle: parsed.patch.app_lifecycle } : {}),
       ...(parsed.patch.destructive_actions
         ? { destructive_actions: parsed.patch.destructive_actions }
         : {}),

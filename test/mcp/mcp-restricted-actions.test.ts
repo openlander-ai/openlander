@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 
@@ -33,6 +34,7 @@ const ALL_DEFS = [
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
   ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,

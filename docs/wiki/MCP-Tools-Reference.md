@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **94 unique default operations** surfaced through those composites
+- **96 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -133,8 +133,8 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                             |
 | ---------------------------- | ------------ | ----------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 22           | Deploy plans, rollback, build logs, Git                                             |
-| `openlander_project`         | 20           | Projects, permissions, lifecycle, secrets                                           |
-| `openlander_service`         | 28           | Application lifecycle, config, routes, public access, env                           |
+| `openlander_project`         | 21           | Projects, permissions, lifecycle, secrets                                           |
+| `openlander_service`         | 29           | Application lifecycle, config, routes, public access, env                           |
 | `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
 
@@ -682,25 +682,45 @@ serve `/` or the route prefix as a health endpoint.
 
 ### Project permissions and service cleanup
 
-Users can ask their MCP agent to allow stop and delete operations for a named
-Project. The agent calls `set_project_permissions` only on that explicit user
-request, then continues the requested operations. Permission persists for that
-Project. A service token cannot change Project permissions; token boundaries,
-service overrides, dependency checks, and deploy locks still apply.
+Users can grant app stop/delete permission in their agent conversation without
+opening Settings. `get_project_permissions` reports `effective.app_lifecycle`,
+which matches the actual execution gate: `allow`, `approval_required`, or `block`.
+The default is `approval_required`. Optional `service_id` includes that service's
+override and the source of the effective permission. Existing Project/service
+`destructive_actions` overrides remain the fallback when no app-specific value exists.
 
-| Action                    | Composite            | Parameters                                                                                      |
-| ------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
-| `get_project_permissions` | `openlander_project` | `project_id` or `project_name`                                                                  |
-| `set_project_permissions` | `openlander_project` | `project_id` or `project_name`, `destructive_actions`: `allow`, `approval_required`, or `block` |
-| `stop_app`                | `openlander_service` | `service_id` or `service_name`; optional `project_name`                                         |
-| `delete_app`              | `openlander_service` | `service_id` or `service_name`; optional `project_name`                                         |
+| Action                    | Composite            | Parameters                                                                                                                                            |
+| ------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_project_permissions` | `openlander_project` | `project_id` or `project_name`; optional `service_id`                                                                                                 |
+| `set_project_permissions` | `openlander_project` | `project_id` or `project_name`; `app_lifecycle` and/or legacy `destructive_actions`: `allow`, `approval_required`, `block`; optional `action_run_ids` |
+| `resume_mcp_actions`      | `openlander_project` | `project_id`, `action_run_ids` (1–50 held app requests)                                                                                               |
+| `cleanup_apps`            | `openlander_service` | `project_id`, unique `service_ids` (1–50), `operation`: `stop` or `delete`                                                                            |
+| `stop_app` / `delete_app` | `openlander_service` | `service_id` or `service_name`; optional `project_name`                                                                                               |
 
-With an explicit Project permission of `allow`, stop, archive, unarchive and
-delete execute without a separate Web approval for each service. Iterate the
-requested service IDs for multi-service cleanup. `delete_app` retains volumes.
-`remove_service` continues to own Database/Cache/Storage removal. Without an
-explicit lifecycle permission, those lifecycle actions enter the approval queue.
-A blocked operation is never itself authorization to change permissions.
+For app cleanup, prefer `app_lifecycle`; it does not grant database, bucket, or
+volume deletion. `destructive_actions` retains its broader compatibility meaning.
+A service-scoped token cannot grant Project permissions. Service-specific restrictions,
+dependency checks, token scope, and deploy locks remain effective.
+
+1. Call `cleanup_apps` for the selected apps. Managed data services are excluded;
+   Compose children are included, and selecting a parent and its child does not
+   execute the child twice. All supplied selectors are scope-checked before mutation.
+2. If `pending_approval` is returned, retain `action_run_id`. Only when the user
+   explicitly asks to allow app cleanup, call the returned `suggested_call` to
+   save `app_lifecycle="allow"` and resume that exact ID via `action_run_ids`.
+   Otherwise the existing Web approval path remains available.
+3. If permission was changed separately, call `resume_mcp_actions` with the exact
+   IDs. This does not change permissions, restart terminal requests, or execute
+   any other queued request. Concurrent Web approval and MCP continuation share
+   one atomic execution claim.
+4. Follow `poll_call` (`mcp_action_status`) for progress and per-service results.
+   Partial failure is reported as `failed` with successful and failed counts and
+   each service's result. Do not retry the original cleanup request to poll.
+
+`delete_app` and `cleanup_apps` preserve volumes. Server restart marks unfinished
+actions failed; they are not replayed automatically. Failed services require a new,
+explicit cleanup request after inspecting their results. Whole-Project hard delete
+and host purge retain their existing human controls.
 
 ## Environment Variables & Secrets
 

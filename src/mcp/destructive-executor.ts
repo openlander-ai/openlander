@@ -1,3 +1,4 @@
+import { executeAppCleanup, type AppCleanupArgs } from './app-cleanup.js';
 import type { AppContext } from '../app.js';
 import { DeployLockedError, OpenLanderError } from '../errors.js';
 import { deployableServiceToolDefs } from '../tools/defs/deployable-service.js';
@@ -8,10 +9,17 @@ import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import type { ToolDef } from '../tools/defs/types.js';
 import type { EventPayload } from '../events/index.js';
-import { assertMcpActiveScope, isGroupBMcpHoldTool } from './destructive-safety.js';
+import {
+  assertMcpActiveScope,
+  isGroupBMcpHoldTool,
+  maybeHandleMcpSafety,
+} from './destructive-safety.js';
 import { parseStatefulComposeApprovalPlan } from './stateful-compose-approval.js';
 import type { RequestIdentity } from '../types/identity.js';
-import { assertDestructiveActionAllowed } from '../security/operation-permissions.js';
+import {
+  assertAppLifecycleAllowed,
+  assertDestructiveActionAllowed,
+} from '../security/operation-permissions.js';
 
 const POLICY_CONTROLLED_DESTRUCTIVE_TOOLS = new Set([
   'stop_app',
@@ -94,9 +102,21 @@ export async function handleDestructiveMcpApproval(
   if (!actionRun || actionRun.approval_tool !== 'destructive_mcp') return;
 
   if (!payload.approved) {
-    await ctx.db.updateActionRunStatus(actionRun.id, 'failed', 'rejected');
+    if (actionRun.status === 'pending_approval' && actionRun.approval_status === 'rejected')
+      await ctx.db.updateActionRunStatus(actionRun.id, 'failed', 'rejected');
     return;
   }
+  if (!(await ctx.db.claimMcpActionExecution(actionRun.id))) return;
+  await executeClaimedMcpAction(ctx, actionRun.id);
+}
+
+export async function executeClaimedMcpAction(
+  ctx: AppContext,
+  actionRunId: string,
+  requirePermission = false,
+): Promise<void> {
+  const actionRun = await ctx.db.getActionRun(actionRunId);
+  if (!actionRun || actionRun.status !== 'running') return;
 
   try {
     const statefulPlan = parseStatefulComposeApprovalPlan(actionRun.plan);
@@ -131,7 +151,7 @@ export async function handleDestructiveMcpApproval(
 
     const plan = parsePlan(actionRun.plan);
     const def = findExecutableTool(plan.tool);
-    if (!def) {
+    if (!def && plan.tool !== 'cleanup_apps') {
       await ctx.db.updateActionRunStatus(
         actionRun.id,
         'failed',
@@ -148,22 +168,49 @@ export async function handleDestructiveMcpApproval(
       plan.targetServiceId,
     );
     if (POLICY_CONTROLLED_DESTRUCTIVE_TOOLS.has(plan.tool)) {
-      await assertDestructiveActionAllowed(ctx.db, {
+      const check = ['stop_app', 'delete_app'].includes(plan.tool)
+        ? assertAppLifecycleAllowed
+        : assertDestructiveActionAllowed;
+      await check(ctx.db, {
         projectId: plan.targetProjectId,
         serviceId: plan.targetServiceId,
       });
     }
     await ctx.db.updateActionRunStatus(actionRun.id, 'running');
-    const result = await def.execute(plan.args, {
-      target: 'mcp',
-      appCtx: ctx,
-      identity: plan.identity,
-    });
+    const context = { target: 'mcp' as const, appCtx: ctx, identity: plan.identity };
+    if (requirePermission && def) {
+      const rejection = await maybeHandleMcpSafety(def, plan.args, context, { preview: true });
+      if (rejection)
+        throw new OpenLanderError(
+          'Permission changed before execution.',
+          'OPERATION_PERMISSION_DENIED',
+          403,
+        );
+    }
+    const result =
+      plan.tool === 'cleanup_apps'
+        ? await executeAppCleanup(
+            plan.args as unknown as AppCleanupArgs,
+            context,
+            actionRun.id,
+            { ...plan },
+            requirePermission,
+          )
+        : def
+          ? await def.execute(plan.args, context)
+          : undefined;
     await ctx.db.updateActionRunPlan(
       actionRun.id,
       JSON.stringify({ ...plan, result, executedAt: new Date().toISOString() }),
     );
-    await ctx.db.updateActionRunStatus(actionRun.id, 'succeeded');
+    const failed = plan.tool === 'cleanup_apps' && (result as { failed: number }).failed > 0;
+    if (failed)
+      await ctx.db.updateActionRunStatus(
+        actionRun.id,
+        'failed',
+        'Some services could not be cleaned up; inspect per-service results.',
+      );
+    else await ctx.db.updateActionRunStatus(actionRun.id, 'succeeded');
   } catch (error) {
     const message =
       error instanceof OpenLanderError

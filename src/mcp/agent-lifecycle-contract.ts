@@ -2,7 +2,7 @@ export interface McpCompositeCall {
   tool: string;
   arguments: {
     action: string;
-    params: Record<string, string>;
+    params: Record<string, unknown>;
   };
 }
 
@@ -18,6 +18,13 @@ export interface DestructiveMcpPlanSummary {
   tool: string;
   args: Record<string, unknown>;
   targetProjectId: string | null;
+  appCleanupResult?: {
+    operation: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    results: Array<{ service_id: string; status: string; error_code?: string }>;
+  };
   cleanupResult?: {
     level: string;
     total_reclaimed_mb: number;
@@ -44,6 +51,7 @@ const safeArgKeys = new Set([
   'network_name',
   'network_id',
   'level',
+  'operation',
 ]);
 
 export function buildMcpActionStatusCall(actionRunId: string): McpCompositeCall {
@@ -180,12 +188,17 @@ export function afterApprovalGuidanceForTool(toolName: string): Record<string, s
 
 export function summarizeDestructiveArgs(
   args: Record<string, unknown>,
-): Record<string, string | number> {
-  const summary: Record<string, string | number> = {};
+): Record<string, string | number | string[]> {
+  const summary: Record<string, string | number | string[]> = {};
   for (const [key, value] of Object.entries(args)) {
     if (safeArgKeys.has(key) && typeof value === 'string' && value.trim()) {
       summary[key] = value.trim();
     }
+  }
+
+  const serviceIds = args['service_ids'];
+  if (Array.isArray(serviceIds)) {
+    summary.service_ids = serviceIds.filter((id): id is string => typeof id === 'string');
   }
 
   const keys = args['keys'];
@@ -279,10 +292,35 @@ export function parseDestructiveMcpPlan(plan: string | null): DestructiveMcpPlan
           }
         : undefined;
 
+    const appCleanupResult =
+      parsed['tool'] === 'cleanup_apps' && result && Array.isArray(result['results'])
+        ? {
+            operation: String(result['operation']),
+            total: Number(result['total']),
+            succeeded: Number(result['succeeded']),
+            failed: Number(result['failed']),
+            results: result['results'].flatMap((item: unknown) => {
+              const row = asRecord(item);
+              return typeof row?.['service_id'] === 'string' && typeof row['status'] === 'string'
+                ? [
+                    {
+                      service_id: row['service_id'],
+                      status: row['status'],
+                      ...(typeof row['error_code'] === 'string'
+                        ? { error_code: row['error_code'] }
+                        : {}),
+                    },
+                  ]
+                : [];
+            }),
+          }
+        : undefined;
+
     return {
       tool: parsed['tool'],
       args,
       targetProjectId,
+      ...(appCleanupResult ? { appCleanupResult } : {}),
       ...(cleanupResult ? { cleanupResult } : {}),
       ...(failure ? { failure } : {}),
     };

@@ -14,9 +14,11 @@ import { handleDestructiveMcpApproval } from '../../src/mcp/destructive-executor
 
 function createApprovalContext() {
   const db = {
+    claimMcpActionExecution: vi.fn().mockResolvedValue(true),
     getActionRun: vi.fn().mockResolvedValue({
       id: 'action-run-1',
       approval_tool: 'destructive_mcp',
+      status: 'running',
       plan: JSON.stringify({
         type: 'destructive_mcp',
         tool: 'bulk_delete_env_vars',
@@ -65,9 +67,11 @@ describe('destructive MCP approval executor', () => {
       ],
     };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-stateful',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'update_app',
@@ -110,9 +114,11 @@ describe('destructive MCP approval executor', () => {
       changes: [],
     };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-stateful-failed',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'update_app',
@@ -179,9 +185,11 @@ describe('destructive MCP approval executor', () => {
     };
     const project = { id: 'project-1', name: 'demo' };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-archive',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'archive_service',
@@ -223,9 +231,11 @@ describe('destructive MCP approval executor', () => {
     };
     const project = { id: 'project-1', name: 'demo' };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-archive-locked',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'archive_service',
@@ -271,9 +281,11 @@ describe('destructive MCP approval executor', () => {
     };
     const project = { id: 'project-1', name: 'demo' };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-unarchive',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'unarchive_service',
@@ -312,9 +324,11 @@ describe('destructive MCP approval executor', () => {
   it('executes approved project archive_project approvals', async () => {
     const project = { id: 'project-1', name: 'demo' };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-project-archive',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'archive_project',
@@ -356,9 +370,11 @@ describe('destructive MCP approval executor', () => {
   it('executes approved project unarchive_project approvals without redeploying', async () => {
     const project = { id: 'project-1', name: 'demo' };
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-project-unarchive',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'unarchive_project',
@@ -403,9 +419,11 @@ describe('destructive MCP approval executor', () => {
 
   it('executes approved exact unused-network cleanup through the operation registry', async () => {
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-network-cleanup',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'remove_unused_docker_network',
@@ -480,9 +498,11 @@ describe('destructive MCP approval executor', () => {
     });
 
     const db = {
+      claimMcpActionExecution: vi.fn().mockResolvedValue(true),
       getActionRun: vi.fn().mockResolvedValue({
         id: 'action-run-docker-cleanup',
         approval_tool: 'destructive_mcp',
+        status: 'running',
         plan: JSON.stringify({
           type: 'destructive_mcp',
           tool: 'cleanup_docker',

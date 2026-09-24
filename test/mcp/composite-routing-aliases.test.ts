@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 /**
  * Guardrails for the Project=group / Service=deployable MCP split.
@@ -33,6 +34,7 @@ const allToolDefs: ToolDef[] = [
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
   ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,

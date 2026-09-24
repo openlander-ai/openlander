@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
@@ -26,6 +27,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
     ...projectPermissionToolDefs,
+    ...appCleanupToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -45,10 +47,10 @@ function isMcpTargeted(def: ToolDef): boolean {
 }
 
 describe('MCP Composite Tools', () => {
-  it('returns 5 composite tools from 94 underlying default tool defs', () => {
+  it('returns 5 composite tools from 96 underlying default tool defs', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
-    expect(mcpDefs).toHaveLength(94);
+    expect(mcpDefs).toHaveLength(96);
 
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(5);

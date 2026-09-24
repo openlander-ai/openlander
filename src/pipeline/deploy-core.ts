@@ -3,7 +3,7 @@ import {
   deleteDeployableService,
   assertServiceDeleteDependencies,
 } from './delete-deployable-service.js';
-import { assertDestructiveActionAllowed } from '../security/operation-permissions.js';
+import { assertAppLifecycleAllowed } from '../security/operation-permissions.js';
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
@@ -4136,7 +4136,7 @@ export class DeployPipeline {
     const lockIds = await this.collectArchiveLockProjectIds([project.id, runtimeProject.id]);
     await this.assertNoActiveArchiveJobs(lockIds);
     await this.withArchiveLocks(lockIds, async () => {
-      await assertDestructiveActionAllowed(this.db, { projectId: project.id, serviceId });
+      await assertAppLifecycleAllowed(this.db, { projectId: project.id, serviceId });
       for (const target of new Map([
         [project.id, project],
         [runtimeProject.id, runtimeProject],
@@ -4163,7 +4163,7 @@ export class DeployPipeline {
         }
         targets.push(...descendants.filter((row) => row.id !== service.id && ids.has(row.id)));
         for (const child of targets) {
-          await assertDestructiveActionAllowed(this.db, {
+          await assertAppLifecycleAllowed(this.db, {
             projectId: child.project_id,
             serviceId: child.id,
           });
@@ -4236,7 +4236,7 @@ export class DeployPipeline {
     return this.withArchiveLocks(lockIds, async () => {
       // Validate the whole deletion set before removing any container or row.
       for (const target of targets) {
-        await assertDestructiveActionAllowed(this.db, {
+        await assertAppLifecycleAllowed(this.db, {
           projectId: target.project_id,
           serviceId: target.id,
         });

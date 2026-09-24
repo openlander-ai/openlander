@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../tools/defs/project-permissions.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -56,6 +57,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...deployPlanToolDefs,
     ...projectOpsToolDefs,
     ...projectPermissionToolDefs,
+    ...appCleanupToolDefs,
     ...envToolDefs,
     ...serviceToolDefs,
     ...volumeToolDefs,
@@ -92,12 +94,12 @@ All actions: action="help"
 
 ## openlander_project
 Projects and shared configuration. A Project organizes Applications, Compose stacks, and Database/Cache/Storage resources; env actions route to workload targets.
-Key actions: create_project, list_projects, get_project_permissions, set_project_permissions, archive_project, unarchive_project
+Key actions: create_project, list_projects, get_project_permissions, set_project_permissions, resume_mcp_actions, archive_project, unarchive_project
 All actions: action="help"
 
 ## openlander_service
 Applications/Compose workloads: lifecycle, config, env vars, domains, and stable Connected Publish URLs. Prefer compatibility field service_id from list_projects.
-Key actions: stop_app, delete_app, archive_service, unarchive_service, update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public, get_public_access, unexpose_public
+Key actions: cleanup_apps, stop_app, delete_app, archive_service, unarchive_service, update_app, redeploy_app, restart_service, apply_route_config, list_archived_services, set_env_vars, list_env_vars, update_application_source, update_service_config, expose_public, get_public_access, unexpose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -138,8 +140,9 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Do not issue ad-hoc Docker network changes unless the user is explicitly performing migration or incident recovery.
 
 ## Project permissions and cleanup
-When the user explicitly asks to allow stop/delete for a Project, call openlander_project.set_project_permissions with project_id/project_name and destructive_actions="allow". This persists only for that Project; continue the requested actions without sending the user to Settings. Never infer authorization from a blocked call. Service-scoped tokens cannot change Project permissions and service overrides remain effective.
-Use openlander_service.stop_app or delete_app for each requested Application/Compose service_id. delete_app retains volumes. Use openlander_managed_service.stop_service/remove_service for Database/Cache/Storage resources. Report each target's result and any dependency/lock failures. Archive/unarchive honor the same Project permission. Without an explicit lifecycle permission, follow the returned poll_call for human approval; do not repeat pending actions. Whole-Project hard delete and host purge still use their existing human surfaces.`;
+When the user explicitly asks to allow app stop/delete for a Project, call openlander_project.set_project_permissions with project_id/project_name and app_lifecycle="allow". This narrow permission preserves database/volume deletion policy. Service overrides and token scopes still apply. Never infer authorization merely from a blocked call.
+Use openlander_service.cleanup_apps with project_id, service_ids, and operation="stop" or "delete" for multiple apps. It preserves volumes and returns action_run_id and poll_call immediately. If permission is required, retain this ID; after the user's explicit grant, pass action_run_ids to set_project_permissions to resume that exact request. Use resume_mcp_actions when permission was already changed. Never re-submit the original request to poll/resume. A running or terminal action is never restarted. Poll mcp_action_status and report its per-service results, including partial failures.
+Use stop_app/delete_app for single apps. get_project_permissions returns effective.app_lifecycle matching the actual gate; add service_id to inspect a service override. Data-resource removal remains under destructive_actions. Whole-Project hard deletion and host purge retain their existing human controls.`;
 
 function buildServerInstructions(
   ctx: AppContext,

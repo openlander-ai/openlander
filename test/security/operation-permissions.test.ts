@@ -26,14 +26,16 @@ class MemorySettingsStore {
 }
 
 describe('operation permissions', () => {
-  it('defaults both capabilities to allowed', async () => {
+  it('defaults app lifecycle to approval while retaining existing data permissions', async () => {
     const snapshot = await getOperationPermissionSnapshot(new MemorySettingsStore());
 
     expect(snapshot.effective).toEqual({
+      app_lifecycle: 'approval_required',
       destructive_actions: 'allow',
       database_access: 'allow',
     });
     expect(snapshot.sources).toEqual({
+      app_lifecycle: 'global',
       destructive_actions: 'global',
       database_access: 'global',
     });
@@ -57,10 +59,12 @@ describe('operation permissions', () => {
     );
 
     expect(snapshot.effective).toEqual({
+      app_lifecycle: 'allow',
       destructive_actions: 'allow',
       database_access: 'allow',
     });
     expect(snapshot.sources).toEqual({
+      app_lifecycle: 'service',
       destructive_actions: 'service',
       database_access: 'project',
     });

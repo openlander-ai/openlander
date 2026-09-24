@@ -1,3 +1,4 @@
+import { appCleanupToolDefs } from '../../src/tools/defs/app-cleanup.js';
 import { projectPermissionToolDefs } from '../../src/tools/defs/project-permissions.js';
 import { describe, expect, it } from 'vitest';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
@@ -29,6 +30,7 @@ const allToolDefs: ToolDef[] = [
   ...deployPlanToolDefs,
   ...projectOpsToolDefs,
   ...projectPermissionToolDefs,
+  ...appCleanupToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
   ...volumeToolDefs,

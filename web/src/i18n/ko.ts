@@ -12,7 +12,7 @@ export const translations = {
     selected: '{count}개 선택',
     grant: '이 프로젝트의 정지·삭제 권한도 계속 허용',
     grantHint:
-      '선택한 서비스뿐 아니라 프로젝트 전체에 적용됩니다. 보관과 DB 리소스·버킷·볼륨 삭제 권한도 포함합니다. 개별 서비스의 제한은 유지되며, 대화에서 다시 승인 필요로 바꿀 수 있습니다.',
+      '이 프로젝트의 앱 정지·삭제에 계속 적용됩니다. DB·버킷·볼륨 삭제 권한과 개별 서비스의 제한은 바꾸지 않습니다. 대화에서 다시 승인 필요로 바꿀 수 있습니다.',
     stopHint: '정지는 컨테이너와 데이터를 남깁니다. 나중에 다시 시작할 수 있습니다.',
     deleteHint: '선택한 앱과 컨테이너를 삭제합니다. 데이터 볼륨과 DB·캐시·스토리지는 남깁니다.',
     preview: '요청 내용 보기',
@@ -23,9 +23,11 @@ export const translations = {
       target:
         'OpenLander 프로젝트 "{projectName}" (project_id: {projectId})에 다음 작업을 요청합니다.',
       permission:
-        '이 프로젝트의 파괴적 작업 권한을 계속 허용해 주세요. MCP set_project_permissions로 destructive_actions=allow를 저장한 뒤 아래 작업을 진행해 주세요. 개별 서비스 제한은 유지하세요.',
+        '이 프로젝트의 앱 정지·삭제 권한을 계속 허용해 주세요. MCP set_project_permissions로 app_lifecycle=allow를 저장한 뒤 아래 작업을 진행해 주세요. 개별 서비스 제한은 유지하세요.',
       stop: '아래 서비스만 정지해 주세요.',
       delete: '아래 앱 서비스만 삭제하고 데이터 볼륨은 보존해 주세요.',
+      execution:
+        'MCP cleanup_apps로 한 번에 요청하세요. 50개를 넘으면 나눠 요청하고, 반환된 작업 ID로 완료 결과를 확인하세요. 이미 승인 대기 중인 같은 요청이 있다면 새로 만들지 말고 해당 작업 ID를 재개하세요.',
       boundary:
         '목록 밖 서비스와 다른 프로젝트는 변경하지 마세요. Compose 대상에 포함된 하위 서비스는 함께 처리하고, 성공·실패 결과를 서비스별로 알려 주세요.',
     },
@@ -2566,6 +2568,8 @@ export const translations = {
       timedOut: '승인 시간 초과',
     },
     pendingStrip: {
+      cleanupStop: '여러 앱 정지',
+      cleanupDelete: '여러 앱 삭제',
       // Chrome — source labels + buttons.
       mcpSource: 'MCP',
       recoverySource: '복구',
@@ -3140,9 +3144,14 @@ export const translations = {
     },
   },
   securityPermissions: {
+    appLifecycle: {
+      title: '앱 정지·삭제',
+      description: '앱과 Compose를 정지하거나 삭제합니다. 데이터 볼륨은 보존합니다.',
+    },
+
     title: '보안',
     description:
-      '파괴적 작업과 데이터베이스 접근의 기본값을 정합니다. 별도로 제한하기 전에는 모두 허용됩니다.',
+      '앱 정지·삭제, 데이터 삭제, 데이터베이스 접근 권한을 정합니다. 앱 정지·삭제는 기본적으로 승인이 필요합니다.',
     projectTitle: '프로젝트 권한',
     projectDescription:
       '이 프로젝트의 권한을 정합니다. 에이전트에게 이 프로젝트의 정지·삭제를 허용해 달라고 요청할 수도 있습니다.',
@@ -3150,7 +3159,7 @@ export const translations = {
     serviceDescription: '프로젝트 설정을 상속하거나 이 서비스만 제한합니다.',
     destructive: {
       title: '파괴적 작업',
-      description: '서비스 정지·보관·삭제와 DB 리소스, 버킷, 볼륨 삭제에 적용됩니다.',
+      description: '서비스 보관과 DB 리소스·버킷·볼륨 삭제에 적용됩니다.',
     },
     database: {
       title: '데이터베이스 접근',
