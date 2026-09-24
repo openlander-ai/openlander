@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6-rc.19] - 2026-09-05
+
+### Added
+
+- Expose managed database/cache/storage memory reads and updates through MCP, using
+  the same immediate apply, running-decrease guard, and recovery persistence as the web UI.
+- Validate every supplied service selector before scoped MCP resource operations.
+
+## [0.3.6-rc.18] - 2026-09-05
+
+### Fixed
+
+- Add memory controls to Database/Cache/Storage service details, including the
+  actual limit applied to existing containers. Increases apply without restarting
+  or replacing the database container; decreases require stopping the service first.
+- Verify Docker memory updates before reporting success and preserve saved limits
+  when recovering a missing managed-service container. CPU settings remain unchanged.
+
+## [0.3.6-rc.16] - 2026-08-26
+
+### Changed
+
+- Keep managed-service MCP guidance focused on OpenLander-owned connection,
+  secret, lifecycle, and migration constraints across all supported services.
+- Remove framework, ORM, SDK, and source-architecture prescriptions from MCP
+  deployment prompts while retaining PostgreSQL and object-storage compatibility
+  facts.
+- Clarify plaintext credential handling and the non-persistent nature of ad hoc
+  commands executed inside managed-service containers.
+
+### Fixed
+
+- Correct the documented `create_service_user` parameters to match the public
+  MCP schema.
+
+## [0.3.6-rc.15] - 2026-08-26
+
+### Added
+
+- Add provider-neutral `OBJECT_STORAGE_*` bindings for new MinIO connections
+  with guidance for portable object keys and storage adapters.
+- Add extension-aware PostgreSQL implementation guidance for pgvector, Apache
+  AGE, PostGIS, and TimescaleDB while retaining `DATABASE_URL` as the connection
+  contract.
+
+### Changed
+
+- Preserve existing MinIO `S3_ENDPOINT` and `AWS_*` bindings instead of
+  rewriting application configuration during an upgrade.
+- Require PostgreSQL extension images to contain their binaries and direct
+  applications to activate extensions through versioned migrations rather than
+  modifying running database containers.
+
+## [0.3.6-rc.14] - 2026-08-26
+
+### Added
+
+- Add provider-neutral Project migration snapshots and target comparisons for
+  AWS ECS/Fargate and Google Cloud Run through the web UI and MCP.
+- Add PostgreSQL migration runbooks, read-only preflight checks, and a
+  human-session-only rehearsal that restores into a verified empty target.
+
+### Security
+
+- Fail closed before PostgreSQL dump or restore when the target cluster identity
+  cannot be verified, and redact credentials from persisted migration artifacts.
+
 ## [0.3.6-rc.13] - 2026-08-23
 
 ### Added

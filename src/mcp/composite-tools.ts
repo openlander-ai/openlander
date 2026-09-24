@@ -106,7 +106,7 @@ export const PROJECT_ACTIONS = [
  * - Container execution
  * - Persistent volumes
  * - Disk usage monitoring
- * Total: 24 tools
+ * Total: 26 tools
  */
 export const MANAGED_SERVICE_ACTIONS = [
   'create_service',
@@ -115,6 +115,8 @@ export const MANAGED_SERVICE_ACTIONS = [
   'describe_data_source',
   'read_data_source',
   'get_service_status',
+  'get_service_resources',
+  'update_service_resources',
   'get_service_credentials',
   'get_service_logs',
   'start_service',
@@ -228,9 +230,9 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 22 tools
- * - PROJECT_ACTIONS: 20 action slots
- * - MANAGED_SERVICE_ACTIONS: 24 tools
- * - SERVICE_ACTIONS: 28 tools
+ * - PROJECT_ACTIONS: 21 action slots
+ * - MANAGED_SERVICE_ACTIONS: 26 tools
+ * - SERVICE_ACTIONS: 29 tools
  * - MONITOR_ACTIONS: 15 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
@@ -636,7 +638,7 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderManagedServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_managed_service',
-    'Database/Cache/Storage resources (Postgres, MySQL, Redis, Mongo, MinIO): provisioning, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
+    'Database/Cache/Storage resources (Postgres, MySQL, Redis, Mongo, MinIO): provisioning, memory limits, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
     toolDefs,
   );
 }

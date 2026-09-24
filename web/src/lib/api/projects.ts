@@ -957,6 +957,7 @@ export async function scanProjectEnvVars(
 }
 
 export interface ResourceLimitsResponse {
+  running?: boolean;
   profile: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
   memory: {
     limitBytes: number;

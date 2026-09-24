@@ -24,6 +24,10 @@ import {
 } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
+  createManagedServiceGuidanceMessage,
+  revealedCredentialGuidanceMessage,
+} from '../managed-service-guidance.js';
+import {
   backupServiceSchema,
   createBucketSchema,
   createDatabaseSchema,
@@ -43,6 +47,7 @@ import {
   removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
+  updateServiceResourcesSchema,
 } from './schemas.js';
 
 const log = createModuleLogger('tools-defs-service');
@@ -389,9 +394,19 @@ async function projectHasDeployableService(
 function createServiceGuidance(params: {
   hasDeployableService: boolean;
   autoInjectedEnvKeys: string[];
+  suggestedEnvKeys: string[];
+  serviceKind: string;
+  image: string;
 }) {
+  const message = createManagedServiceGuidanceMessage({
+    kind: params.serviceKind,
+    image: params.image,
+    suggestedEnvKeys: params.suggestedEnvKeys,
+  });
+
   if (!params.hasDeployableService) {
     return {
+      message,
       next_steps: [
         'Connection env was saved on the empty Project.',
         'Deploy the first Application with deploy_app using target_project_id so OpenLander attaches it to this Project after readiness succeeds.',
@@ -401,6 +416,7 @@ function createServiceGuidance(params: {
   }
 
   return {
+    message,
     next_steps:
       params.autoInjectedEnvKeys.length > 0
         ? [
@@ -433,9 +449,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/neo4j/rabbitmq/minio, or a custom container) inside a Project. Neo4j Community exposes Bolt only and returns NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g. template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then call update_app for the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/neo4j/rabbitmq/minio, or a custom container) inside a Project. Neo4j Community exposes Bolt only and returns NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD. New MinIO connections return provider-neutral OBJECT_STORAGE_* env while preserving existing S3_ENDPOINT/AWS_* values. PostgreSQL extension images keep DATABASE_URL as the only connection secret and require extension binaries in the selected image. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g. template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env, auto_injected_env_keys, _agent_guidance }. Call update_app after saved env changes to apply them to a running Application/Compose workload. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a Database/Cache/Storage resource inside a Project. Pass project_id or project_name. Use this manual path for existing groups/shared resources; for new apps with safe DB/cache proposals, prefer deploy-plan approval. Existing Application: redeploy to apply saved env.',
+      'Create a Database/Cache/Storage resource inside a Project. Pass project_id or project_name. Returns the connection env contract, which keys were saved, and resource-specific compatibility limits. Use this manual path for existing groups/shared resources; for new apps with safe DB/cache proposals, prefer deploy-plan approval. Existing Application: redeploy to apply saved env.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveCreateServiceScope(appCtx, args);
@@ -585,6 +601,9 @@ export const serviceToolDefs: ToolDef[] = [
         _agent_guidance: createServiceGuidance({
           hasDeployableService,
           autoInjectedEnvKeys,
+          suggestedEnvKeys: suggestedEnv.map((entry) => entry.key),
+          serviceKind: result.kind,
+          image: result.image_url ?? result.image ?? '',
         }),
       };
     },
@@ -820,8 +839,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_bucket',
     riskLevel: 'medium',
     description:
-      'Create an S3 bucket in a MinIO service. Use when setting up storage for a project. Bucket names must be 3-63 chars, lowercase, following S3 naming rules. Returns { status, service, bucket }. Errors: SERVICE_NOT_FOUND, bucket already exists, not a MinIO service.',
-    mcpDescription: 'Create an S3 bucket in a MinIO object storage service.',
+      'Create an S3-compatible bucket in a MinIO service. Bucket names must be 3-63 chars, lowercase, following S3 naming rules. This does not update application env, copy objects, or rewrite stored object locations. Returns { status, service, bucket, _agent_guidance }. Errors: SERVICE_NOT_FOUND, bucket already exists, not a MinIO service.',
+    mcpDescription:
+      'Create an S3-compatible bucket in MinIO and return the application binding and migration limits.',
     inputSchema: createBucketSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -832,6 +852,14 @@ export const serviceToolDefs: ToolDef[] = [
         status: 'created',
         service: service.name,
         bucket: bucketName,
+        _agent_guidance: {
+          message:
+            'The bucket was created only in this MinIO resource. OpenLander did not update application env, provision a cloud bucket, copy objects, or rewrite persisted object locations.',
+          next_steps: [
+            `Save OBJECT_STORAGE_BUCKET=${bucketName} and an optional OBJECT_STORAGE_PREFIX on the target workload, then call update_app to apply them.`,
+            'For migration portability, persist an opaque object key rather than a full s3://, gs://, or provider HTTP URL.',
+          ],
+        },
       };
     },
     targets: ['mcp'],
@@ -959,6 +987,68 @@ export const serviceToolDefs: ToolDef[] = [
         );
       }
       return await readDataSource(appCtx, args['service_id'] as string, args);
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'get_service_resources',
+    riskLevel: 'low',
+    description:
+      'Read actual Docker memory limits for a Database/Cache/Storage resource by service_id or service_name. Returns current limits, saved profile when it matches Docker, and running state. Credentials are omitted.',
+    mcpDescription:
+      'Read the actual managed-service memory limit and running state before changing RAM. Prefer service_id.',
+    inputSchema: managedServiceTargetSchema,
+    execute: async (args, { appCtx }) => {
+      const service = await resolveServiceByIdOrName(appCtx, args);
+      if (!isManagedServiceKind(service.kind)) return serviceKindMismatchResponse(service);
+      const resources = await appCtx.serviceManager.getResourceLimits(service.id);
+      return {
+        status: 'ok',
+        project_id: service.project_id,
+        service_id: service.id,
+        ...resources,
+        _agent_guidance: {
+          message:
+            'These are the limits currently applied to Docker. Use update_service_resources to change memory; running decreases require stopping the service first.',
+          next_steps: [
+            'Use resource_profile="custom" with memory_mb for a custom limit. CPU and database engine settings are unchanged.',
+          ],
+        },
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'update_service_resources',
+    riskLevel: 'medium',
+    description:
+      'Apply a Database/Cache/Storage memory limit through the same pipeline as the web UI. Increases apply in place without restart; running decreases are rejected. Verifies Docker and saves limits for recovery. Does not stop, recreate, or restart the service, modify CPU/engine settings, or write env vars. Errors include SERVICE_CONTAINER_STATE_INVALID, SERVICE_CONFIG_INVALID, DEPLOY_LOCKED, and SERVICE_OPERATION_FAILED.',
+    mcpDescription:
+      'Change managed-service RAM using resource_profile and optional memory_mb. Immediate apply and persistence; stop the service explicitly before decreasing. Inspect get_service_resources first.',
+    inputSchema: updateServiceResourcesSchema,
+    execute: async (args, { appCtx }) => {
+      const input = updateServiceResourcesSchema.parse(args);
+      const service = await resolveServiceByIdOrName(appCtx, input);
+      if (!isManagedServiceKind(service.kind)) return serviceKindMismatchResponse(service);
+      const resources = await appCtx.serviceManager.updateResourceLimits(service.id, {
+        profile: input.resource_profile,
+        ...(input.memory_mb === undefined ? {} : { memoryMb: input.memory_mb }),
+      });
+      return {
+        status: 'updated',
+        project_id: service.project_id,
+        service_id: service.id,
+        ...resources,
+        status_call: {
+          tool: 'openlander_managed_service',
+          arguments: { action: 'get_service_resources', params: { service_id: service.id } },
+        },
+        _agent_guidance: {
+          message:
+            'Memory was applied to Docker and saved for recovery. The service was not restarted; a stopped service remains stopped.',
+          next_steps: ['Use status_call to read the current applied limit.'],
+        },
+      };
     },
     targets: ['mcp'],
   },
@@ -1196,9 +1286,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'exec_service_container',
     riskLevel: 'high',
     description:
-      'Execute a command inside a running service container (like docker exec). command must be an argv array, not a shell string (for example ["psql", "-U", "openlander", "-c", "SELECT 1"]). Use for installing extensions (e.g., pgvector), running SQL, debugging, or any ad-hoc command. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
+      'Execute a command inside a running service container (like docker exec). command must be an argv array, not a shell string (for example ["psql", "-U", "openlander", "-c", "SELECT 1"]). Use for bounded SQL checks, debugging, or other ad-hoc commands. Do not package-install PostgreSQL extensions into a running container; select an image that already contains them and activate them through versioned database migrations. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
     mcpDescription:
-      'Run an argv-array command inside a service container. command must be string[]. Returns stdout, stderr, and exit code.',
+      'Run an argv-array command inside a service container. Do not use it to package-install PostgreSQL extensions. Returns stdout, stderr, and exit code.',
     inputSchema: execServiceContainerSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -1221,10 +1311,17 @@ export const serviceToolDefs: ToolDef[] = [
             }
           : {}),
         _agent_guidance: {
-          notes: [
-            'Exit code 0 means success. Non-zero means the command failed — check stderr for details.',
-            'Exit code -1 means the command timed out. Use timeout_seconds to extend the limit.',
-            'For database extensions: after installing, verify with a query (e.g., SELECT * FROM pg_extension).',
+          message:
+            'This command ran inside the current container; it is not declarative OpenLander configuration, and filesystem changes may be lost when the container is replaced.',
+          next_steps: [
+            result.exitCode === 0
+              ? 'The command completed successfully; verify the intended service state before continuing.'
+              : 'Inspect stderr and exitCode before retrying or changing the service.',
+            ...(service.kind === 'postgres'
+              ? [
+                  'For PostgreSQL extensions, verify pg_available_extensions / pg_extension and change the image or versioned migration instead of package-installing into this container.',
+                ]
+              : []),
           ],
         },
       };
@@ -1235,9 +1332,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_credentials',
     riskLevel: 'low',
     description:
-      'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { service, type, credentials, connectionString, host, port, user, password, database, externalAccess, externalConnectionStrings }. Errors: SERVICE_NOT_FOUND.',
+      'Get plaintext connection credentials for a service. Returns internal Project-network connection values, optional operator-access endpoints, and secret-handling guidance. A credential-reveal activity is recorded. Errors: SERVICE_NOT_FOUND.',
     mcpDescription:
-      'Get service connection credentials. Host is Docker internal DNS (e.g., ol-svc-pg), not localhost. Use for DATABASE_URL, REDIS_URL, etc. in projects.',
+      'Reveal service credentials with internal-vs-external endpoint and secret-handling guidance. Host is Project-internal Docker DNS, not localhost.',
     inputSchema: managedServiceTargetSchema,
     execute: async (args, { appCtx }) => {
       const service = await resolveServiceByIdOrName(appCtx, args);
@@ -1277,6 +1374,9 @@ export const serviceToolDefs: ToolDef[] = [
         database: (credentials?.['database'] as string | undefined) || null,
         externalAccess: getServiceExternalAccess(svcPort ?? null),
         externalConnectionStrings: getExternalConnectionStrings(connectionString, internalHost),
+        _agent_guidance: {
+          message: revealedCredentialGuidanceMessage(),
+        },
       };
     },
     targets: ['mcp'],
@@ -1286,8 +1386,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service_user',
     riskLevel: 'medium',
     description:
-      'Create a new user in a PostgreSQL or MySQL service with optional database grants. Neo4j Community user creation is not exposed. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, SERVICE_OPERATION_UNSUPPORTED, CONTAINER_NOT_RUNNING.',
-    mcpDescription: 'Create a database user with optional per-database grants.',
+      'Create a new user in a PostgreSQL or MySQL service with optional database grants. Neo4j Community user creation is not exposed. Returns a plaintext password/connectionString that OpenLander does not automatically bind to an application. Errors: SERVICE_NOT_FOUND, SERVICE_OPERATION_UNSUPPORTED, CONTAINER_NOT_RUNNING.',
+    mcpDescription:
+      'Create a database user with optional per-database grants and return explicit secret-binding guidance.',
     inputSchema: createServiceUserSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -1305,6 +1406,14 @@ export const serviceToolDefs: ToolDef[] = [
         password: result.password,
         database: result.database,
         connectionString: result.connectionString,
+        _agent_guidance: {
+          message:
+            'This response contains a newly created plaintext password and connectionString. OpenLander did not save them to an application workload automatically.',
+          next_steps: [
+            'Save only the required connection value in the intended workload secret env; keep it out of source control, build output, and logs.',
+            'Call update_app after saving the env value to apply it to a running workload.',
+          ],
+        },
       };
     },
     targets: ['mcp'],

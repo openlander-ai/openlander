@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **96 unique default operations** surfaced through those composites
+- **98 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -135,7 +135,7 @@ Composite catalog:
 | `openlander_deploy`          | 22           | Deploy plans, rollback, build logs, Git                                             |
 | `openlander_project`         | 21           | Projects, permissions, lifecycle, secrets                                           |
 | `openlander_service`         | 29           | Application lifecycle, config, routes, public access, env                           |
-| `openlander_managed_service` | 24           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
+| `openlander_managed_service` | 26           | Database/Cache/Storage resources, credentials, backups, data inspection, disk usage |
 | `openlander_monitor`         | 15           | Logs, alerts, AI Ops briefings, topology, host/network diagnosis, probes            |
 
 `openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
@@ -842,11 +842,33 @@ The standalone action saves compatible connection env vars on the target workloa
 when one exists and returns the same values in `suggested_env`. It does not
 redeploy the app; call `update_app` to apply them to a running workload.
 
+For PostgreSQL extension images, `create_service` keeps `DATABASE_URL` as the sole connection
+secret and returns the OpenLander integration contract based on the selected image family:
+
+| Image family                 | Optional application selector          | OpenLander behavior |
+| ---------------------------- | -------------------------------------- | ------------------- |
+| `pgvector/pgvector`          | `VECTOR_STORE_BACKEND=pgvector`        | Not auto-injected   |
+| `apache/age`                 | `GRAPH_STORE_BACKEND=age`              | Not auto-injected   |
+| `postgis/postgis`            | `SPATIAL_STORE_BACKEND=postgis`        | Not auto-injected   |
+| `timescale/timescaledb[-ha]` | `TIMESERIES_STORE_BACKEND=timescaledb` | Not auto-injected   |
+
+OpenLander does not auto-inject these selectors or duplicate `DATABASE_URL` under capability-specific
+names. The selected Docker image must contain extension binaries; versioned application migrations
+own `CREATE EXTENSION IF NOT EXISTS` and extension schema changes. OpenLander does not modify a
+running database container to install extension packages.
+
 The `neo4j` template provisions Neo4j Community with Bolt port `7687` and a
 persistent `/data` volume. Its `suggested_env` contains `NEO4J_URI`,
 `NEO4J_USERNAME`, and `NEO4J_PASSWORD`. OpenLander disables the HTTP Browser
 server and does not expose Enterprise multi-database features. Generic volume backup/restore
 and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Neo4j.
+
+For a new MinIO connection, the `minio` template returns `OBJECT_STORAGE_PROVIDER`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. The
+returned `_agent_guidance` states that bucket/prefix are configured separately and that OpenLander
+does not copy objects or rewrite persisted object locations. Existing Projects keep any stored
+`S3_ENDPOINT` / `AWS_*` values; OpenLander does not auto-rename or remove them. Automatic legacy
+aliases are not added to a new connection.
 
 ### `list_services`
 
@@ -858,6 +880,51 @@ and database/user creation actions return `SERVICE_OPERATION_UNSUPPORTED` for Ne
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 Project-scoped rows include `kind`, `attached_project_id`, and `attached_project_name` so agents can tell which app project can reach the database/cache over its Docker network.
+
+### `get_service_resources` / `update_service_resources`
+
+Read or change the actual Docker memory limit for managed PostgreSQL, MySQL, Redis,
+MongoDB, Neo4j, or MinIO through `openlander_managed_service`.
+
+| Parameter          | Type    | Required           | Description                                                                                |
+| ------------------ | ------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `service_id`       | string  | One target         | Preferred exact Database/Cache/Storage service ID                                          |
+| `service_name`     | string  | One target         | Resource name; `service_id` takes precedence when both are supplied                        |
+| `resource_profile` | string  | Update only        | `micro` (256 MiB), `small` (512 MiB), `medium` (1024 MiB), `large` (2048 MiB), or `custom` |
+| `memory_mb`        | integer | Custom update only | Limit in MiB, at least 64; only accepted with `resource_profile="custom"`                  |
+
+Use `list_services` to select the DB ID, then read before updating:
+
+```json
+{ "action": "get_service_resources", "params": { "service_id": "db-id" } }
+```
+
+```json
+{
+  "action": "update_service_resources",
+  "params": { "service_id": "db-id", "resource_profile": "custom", "memory_mb": 1024 }
+}
+```
+
+Responses include `status`, `project_id`, `service_id`, `profile`, `memory`
+(`limitBytes`, `reservationBytes`, `swapBytes`), `cpu.shares`, and `running`.
+The read reports actual Docker limits, including existing containers without saved
+profiles; `memory: null` means unlimited. Updates use the same pipeline as the web UI:
+increases apply in place, are verified, and are saved for container recovery. CPU,
+engine settings, data volumes, and env vars are unchanged. Limits cannot exceed 80%
+of host memory.
+
+A running decrease returns `SERVICE_CONTAINER_STATE_INVALID`. Stop the DB explicitly
+before decreasing; the update does not stop or restart it automatically. A stopped DB
+remains stopped. Runtime/persistence failures return `SERVICE_OPERATION_FAILED` when
+raised by the managed resource pipeline. After a failure, read the applied limit again:
+Docker may have applied it even if saving failed. Archived/recovering Projects, open
+circuit breakers, and concurrent deploy locks retain their existing mutation guards.
+
+Project- and service-scoped tokens check every supplied service selector before
+execution; mixing an allowed ID with an out-of-scope name returns `SCOPE_VIOLATION`.
+Application/Compose targets return `SERVICE_KIND_MISMATCH`; use
+`openlander_service.update_service_config` and then `update_app` for those workloads.
 
 ### `get_service_status`
 
@@ -884,6 +951,11 @@ Provide either `service_id` or `service_name`. Applications are intentionally re
 
 `command` must be an argv array such as `["psql", "-U", "openlander", "-c", "SELECT 1"]`.
 Shell strings like `"psql -U openlander"` are intentionally rejected.
+Do not use this action to package-install PostgreSQL extensions into a running container. Select a
+reviewed Docker image containing the extension, activate it through a versioned database migration,
+and use this action only for bounded verification when necessary. The response also warns that
+container filesystem changes are not declarative OpenLander configuration and can disappear when
+the container is replaced.
 
 `remove_service` follows the effective destructive-action permission. It executes when allowed,
 enters the human approval queue when approval is required, and returns
@@ -896,6 +968,11 @@ human-UI-only flow.
 | -------------- | ------ | -------- | ------------------------------------ |
 | `service_id`   | string | No       | Database/Cache/Storage resource id   |
 | `service_name` | string | No       | Database/Cache/Storage resource name |
+
+The response contains plaintext credentials and records a credential-reveal activity. Internal
+host and connection strings are for workloads on the same Project network; external connection
+strings are operator-access endpoints and are not automatic application bindings. Keep returned
+values out of source control, build output, and logs.
 
 Provide either `service_id` or `service_name`.
 
@@ -980,12 +1057,16 @@ DB indexes return `DATA_REDIS_DB_INVALID` before any container command runs.
 
 `create_service_user`
 
-| Parameter       | Type   | Required   | Description               |
-| --------------- | ------ | ---------- | ------------------------- |
-| `service_name`  | string | Yes        | Service name              |
-| `database_name` | string | Yes        | Database name             |
-| `username`      | string | Yes (user) | Username                  |
-| `password`      | string | No         | Auto-generated if omitted |
+| Parameter      | Type   | Required | Description               |
+| -------------- | ------ | -------- | ------------------------- |
+| `service_name` | string | Yes      | Service name              |
+| `username`     | string | Yes      | Username                  |
+| `password`     | string | No       | Auto-generated if omitted |
+| `database`     | string | No       | Optional database grant   |
+
+The response contains the new plaintext password and connection string. OpenLander does not bind
+them to an Application automatically; save only the required value as workload secret env and call
+`update_app` to apply it.
 
 The Database resource itself is provisioned by `create_service` (template `postgresql` /
 `mysql` / `mongodb`). `create_database` and `list_databases` are not exposed on the MCP
@@ -1002,6 +1083,11 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 
 `create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` follows the effective
 destructive-action permission: allow, approval hold, or block.
+
+`create_bucket` returns the exact OpenLander boundary with the created bucket. It does not update
+application env, provision an AWS/GCP bucket, copy objects, or rewrite persisted object locations.
+Agents should save `OBJECT_STORAGE_BUCKET` and optional `OBJECT_STORAGE_PREFIX` on the target
+workload, call `update_app`, and avoid persisting provider URLs as business data.
 
 ### Backup Operations
 
@@ -1614,7 +1700,9 @@ changes without `dry_run=false` plus `confirm=true`. `platform_cleanup_orphans` 
 - All tools return structured JSON responses.
 - Status responses stay intentionally small: current status, IDs, revision
   fields such as `deploy_id`/`commit_sha`, and short guidance.
-- Tool responses may include `_agent_guidance` with suggested next steps.
+- Tool responses may include `_agent_guidance` with suggested next steps and short OpenLander-owned
+  integration constraints. Guidance describes env, networking, secret, lifecycle, and migration
+  boundaries; it does not select an application framework, ORM, SDK, or source-code architecture.
 - Tool responses may include these call links:
   - `status_call` for polling progress.
   - `diagnostic_call` for service or host diagnosis.

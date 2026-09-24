@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { RESOURCE_PROFILE_NAMES } from '../../pipeline/resource-limits-policy.js';
 import { ENVIRONMENT_KEYS } from '../../pipeline/env-scope.js';
 
 const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.string())]);
@@ -231,6 +232,29 @@ export const managedServiceTargetSchema = z
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',
   });
+
+export const updateServiceResourcesSchema = managedServiceTargetSchema
+  .safeExtend({
+    resource_profile: z
+      .enum(RESOURCE_PROFILE_NAMES)
+      .describe('Memory preset, or custom with memory_mb'),
+    memory_mb: z
+      .number()
+      .int()
+      .min(64)
+      .optional()
+      .describe('Custom memory limit in MiB (minimum 64); only with resource_profile="custom"'),
+  })
+  .refine(
+    (value) =>
+      value.resource_profile === 'custom'
+        ? value.memory_mb !== undefined
+        : value.memory_mb === undefined,
+    {
+      message: 'memory_mb is required only when resource_profile="custom"',
+      path: ['memory_mb'],
+    },
+  );
 
 export const mcpActionStatusSchema = z
   .object({
@@ -541,7 +565,7 @@ export const createServiceSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Docker image (e.g., pgvector/pgvector:pg17). When used with template, overrides the template default image. When used alone, port is required.',
+      'Docker image (for example pgvector/pgvector:pg17 or apache/age:release_PG17_1.6.0). When used with the postgresql template, the image supplies extension binaries while OpenLander keeps the standard DATABASE_URL connection contract. When used alone, port is required.',
     ),
   port: z
     .number()
@@ -613,7 +637,7 @@ export const execServiceContainerSchema = z.object({
     .array(z.string())
     .min(1)
     .describe(
-      'Command to execute as an array (e.g., ["psql", "-U", "openlander", "-c", "CREATE EXTENSION vector"])',
+      'Command to execute as an array (e.g., ["psql", "-U", "openlander", "-c", "SELECT 1"])',
     ),
   timeout_seconds: z
     .number()

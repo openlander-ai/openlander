@@ -22,6 +22,27 @@ by default. The dashboard can opt into child workloads with
 strategy, traffic-target flag, and optional latest deploy summary; the response includes the
 optional parent `aggregate_status`.
 
+## Memory Limits
+
+Open a Database/Cache/Storage service's **Overview → Resource Limits** to see its
+actual Docker memory limit and choose a profile or enter a custom value. This
+also works for existing PostgreSQL, MySQL, Redis, MongoDB, Neo4j, and MinIO containers.
+
+Increases apply to the existing container without restarting or replacing it.
+Stop the service before decreasing its limit, apply the change, then start it
+again. Docker updates are verified before success is reported. Saved memory
+limits are reused if platform recovery must recreate a missing container.
+CPU settings remain unchanged; database engine memory settings are separate.
+MCP agents can use `openlander_managed_service` actions `get_service_resources` and
+`update_service_resources` with the same behavior. Select the DB with `service_id`;
+updates take `resource_profile` and, for `custom`, `memory_mb`.
+
+The existing `GET` and `PATCH /api/projects/:p/services/:s/resources` endpoints
+return and update applied limits for Database/Cache/Storage resources. Application resource
+settings retain their existing next-deployment behavior. If an update fails,
+reload the current limits before retrying; a persistence failure can leave the
+Docker limit applied while recovery settings still need to be saved.
+
 ## Available Templates
 
 | Template       | Image                 | Default Port | Use Case                     |
@@ -34,6 +55,33 @@ optional parent `aggregate_status`.
 | **RabbitMQ**   | rabbitmq:3-management | 5672         | Message queue                |
 | **MinIO**      | minio/minio           | 9000         | S3-compatible object storage |
 | **Custom**     | Any Docker image      | User-defined | Anything else                |
+
+### PostgreSQL Extension-Ready Applications
+
+PostgreSQL extensions do not need separate connection secrets. Keep `DATABASE_URL` as the only
+PostgreSQL connection URL, select an image that already contains the required extension binaries,
+and activate extensions through versioned application migrations. Do not install extension
+packages into a running database container.
+
+When an application genuinely supports multiple implementations, it may use an optional non-secret
+selector. OpenLander reports but does not inject these values:
+
+| PostgreSQL capability | Optional selector                      | OpenLander behavior |
+| --------------------- | -------------------------------------- | ------------------- |
+| pgvector              | `VECTOR_STORE_BACKEND=pgvector`        | Not auto-injected   |
+| Apache AGE            | `GRAPH_STORE_BACKEND=age`              | Not auto-injected   |
+| PostGIS               | `SPATIAL_STORE_BACKEND=postgis`        | Not auto-injected   |
+| TimescaleDB           | `TIMESERIES_STORE_BACKEND=timescaledb` | Not auto-injected   |
+
+These selectors are ordinary application configuration, not credentials, and OpenLander does not
+inject them automatically. Do not create duplicate secrets such as `AGE_DATABASE_URL` or
+`VECTOR_DATABASE_URL` while the capability uses the same PostgreSQL instance. Application
+migrations should use an allowlisted `CREATE EXTENSION IF NOT EXISTS ...` statement and verify the
+extension through `pg_available_extensions` / `pg_extension`.
+
+For AGE, prefer a provider-neutral `GRAPH_NAMESPACE` over an AGE-specific graph-name variable.
+OpenLander does not inject it automatically. Retain relational records as the migration source of
+truth and treat the AGE graph as reconstructable data.
 
 ---
 
@@ -140,6 +188,31 @@ list_buckets(service_name: "my-minio")
 ```
 delete_bucket(service_name: "my-minio", bucket_name: "uploads")
 ```
+
+### Keep Application Storage Portable
+
+For a new MinIO connection, OpenLander injects `OBJECT_STORAGE_PROVIDER`,
+`OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, and `OBJECT_STORAGE_SECRET_KEY`. These are
+application infrastructure inputs; map them to the selected provider SDK inside an adapter rather
+than exposing provider credential names to domain code. New application code should:
+
+- expose provider-neutral configuration such as `OBJECT_STORAGE_BUCKET`, optional
+  `OBJECT_STORAGE_PREFIX`, and an infrastructure-selected backend;
+- keep MinIO/S3, Amazon S3, and Google Cloud Storage SDK calls behind one application-owned
+  object-storage interface;
+- persist a logical store plus an opaque object key, not a full `s3://`, `gs://`, MinIO endpoint,
+  or provider HTTP URL;
+- keep bucket, prefix, endpoint, path-style addressing, and credentials in deployment config; and
+- contract-test the portable operations the application actually uses, including signed URLs and
+  metadata when applicable.
+
+Google Cloud Storage HMAC/XML interoperability can be a useful migration bridge for an existing
+S3 client, but it is not a guarantee that provider-specific ACL, metadata, multipart upload,
+versioning, lifecycle, or event behavior is identical. Prefer a native provider adapter when those
+features matter. Existing OpenLander Projects keep their `S3_ENDPOINT` / `AWS_*` compatibility
+keys; OpenLander does not rename or remove them automatically. When an existing application needs
+a newly connected MinIO resource, migrate its adapter explicitly or map the new `OBJECT_STORAGE_*`
+inputs to its legacy SDK configuration rather than creating automatic aliases.
 
 ---
 

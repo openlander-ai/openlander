@@ -31,6 +31,11 @@ import type { ContainerExecResult } from './service-adapters/types.js';
 import type { RuntimeBackend } from './runtime/index.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
+  getManagedServiceResources,
+  updateManagedServiceResources,
+} from './managed-service-resources.js';
+import type { ResourceProfileUpdate } from './resource-limits-policy.js';
+import {
   isDockerContainerNameConflictError,
   isDockerNotFoundError,
   ManagedPostgresVolumeContractUnsupportedError,
@@ -287,7 +292,7 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   mongodb: 'MONGODB_URI',
   mongo: 'MONGODB_URI', // canonical alias
   neo4j: 'NEO4J_URI',
-  minio: 'S3_ENDPOINT',
+  minio: 'OBJECT_STORAGE_ENDPOINT',
   rabbitmq: 'AMQP_URL',
 };
 
@@ -344,12 +349,19 @@ export class ServiceManager {
     if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
       const password = (credentials?.['password'] as string | undefined) ?? '';
-      const minioKeys = ['S3_ENDPOINT', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+      const minioKeys = [
+        'OBJECT_STORAGE_PROVIDER',
+        'OBJECT_STORAGE_ENDPOINT',
+        'OBJECT_STORAGE_ACCESS_KEY',
+        'OBJECT_STORAGE_SECRET_KEY',
+      ];
       const shouldPrefix = await this.shouldPrefixSuggestedEnvKeys(service, minioKeys, opts);
+      const keyPrefix = shouldPrefix ? prefix : '';
       return [
-        { key: `${shouldPrefix ? prefix : ''}S3_ENDPOINT`, value: connectionString },
-        { key: `${shouldPrefix ? prefix : ''}AWS_ACCESS_KEY_ID`, value: user },
-        { key: `${shouldPrefix ? prefix : ''}AWS_SECRET_ACCESS_KEY`, value: password },
+        { key: `${keyPrefix}OBJECT_STORAGE_ENDPOINT`, value: connectionString },
+        { key: `${keyPrefix}OBJECT_STORAGE_ACCESS_KEY`, value: user },
+        { key: `${keyPrefix}OBJECT_STORAGE_SECRET_KEY`, value: password },
+        { key: `${keyPrefix}OBJECT_STORAGE_PROVIDER`, value: 'minio' },
       ];
     }
 
@@ -777,6 +789,14 @@ export class ServiceManager {
       clearPortScanCache();
       releasePortReservation(hostPort);
     }
+  }
+
+  getResourceLimits(id: string) {
+    return getManagedServiceResources(this.db, this.runtime, id);
+  }
+
+  updateResourceLimits(id: string, input: ResourceProfileUpdate) {
+    return updateManagedServiceResources(this.db, this.runtime, id, input);
   }
 
   async start(id: string): Promise<void> {

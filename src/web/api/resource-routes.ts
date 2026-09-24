@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import type { AppContext } from '../../app.js';
 import type { ProjectRow, ServiceRow } from '../../db/index.js';
+import { isManagedServiceKind } from '../../db/repos/service.repo.js';
 import {
   CONFIG_VERSION,
   deserializeConfig,
@@ -46,6 +47,7 @@ export const ResourceLimitsResponseSchema = z.object({
     .nullable(),
   cpu: z.object({ shares: z.number() }).nullable(),
   warnings: z.array(z.string()).optional(),
+  running: z.boolean().optional(),
 });
 
 export type ResourceLimitsResponse = z.infer<typeof ResourceLimitsResponseSchema>;
@@ -153,6 +155,10 @@ export function createResourceRoutes(ctx: AppContext): Hono {
     const resolved = await resolveService(c);
     if (resolved instanceof Response) return resolved;
 
+    if (isManagedServiceKind(resolved.service.kind)) {
+      return c.json(await ctx.serviceManager.getResourceLimits(resolved.service.id));
+    }
+
     const snapshot = await loadSnapshotForService(resolved.service.id);
     return c.json(appendHostMemoryWarnings(buildResourceResponse(snapshot)));
   });
@@ -177,6 +183,12 @@ export function createResourceRoutes(ctx: AppContext): Hono {
     const validationError = validateMemoryProfile(parsed.data.profile, parsed.data.memoryMb);
     if (validationError) {
       return c.json({ error: 'VALIDATION_ERROR', message: validationError }, 400);
+    }
+
+    if (isManagedServiceKind(resolved.service.kind)) {
+      return c.json(
+        await ctx.serviceManager.updateResourceLimits(resolved.service.id, parsed.data),
+      );
     }
 
     const snapshot = applyResourceUpdate(

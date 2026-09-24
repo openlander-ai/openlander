@@ -102,6 +102,9 @@ jobs:
           echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
           echo "prerelease_channel=$prerelease_channel" >> "$GITHUB_OUTPUT"
 
+      - name: Verify managed database memory updates preserve data
+        run: OPENLANDER_MEMORY_DOCKER_SMOKE=1 npx vitest run --config vitest.release.config.ts test/pipeline/managed-service-resources-docker.test.ts
+
       - name: Run release QA gate
         run: npm run qa:release
 

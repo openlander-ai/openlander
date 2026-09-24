@@ -2859,6 +2859,16 @@ function ManagedOverviewTab({
       </div>
       <ServiceOperationPermissions serviceId={service.id} />
       <ManagedCredentialCard serviceId={service.id} />
+      {service.project_id && (
+        <SubCard title={t('resources.title')}>
+          <ServiceResourceLimitsPanel
+            projectId={service.project_id}
+            serviceId={service.id}
+            isManaged
+            serviceStatus={service.status}
+          />
+        </SubCard>
+      )}
       <ManagedOperationsSection
         service={service}
         connections={connections}

@@ -62,6 +62,7 @@ const EXPECTED_TOOLS = [
   'get_public_access',
   'get_service_credentials',
   'get_service_logs',
+  'get_service_resources',
   'get_service_status',
   'get_system_stats',
   'get_topology',
@@ -110,6 +111,7 @@ const EXPECTED_TOOLS = [
   'update_application_source',
   'update_deploy_plan',
   'update_service_config',
+  'update_service_resources',
   'upload_secret_file',
   'validate_deploy_plan',
   'verify_git_credential',
@@ -160,8 +162,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 96 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(96);
+  it('maintains exactly 98 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(98);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

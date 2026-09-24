@@ -5,7 +5,10 @@ import type { AppContext } from '../src/app.js';
 import { deserializeConfig, serializeConfig } from '../src/pipeline/config-snapshot.js';
 import { createResourceRoutes } from '../src/web/api/resource-routes.js';
 
-function createApp(overrides: Record<string, unknown> = {}) {
+function createApp(
+  overrides: Record<string, unknown> = {},
+  serviceManager: Record<string, unknown> = {},
+) {
   const db = {
     getProject: vi.fn(async (id: string) =>
       id === 'proj-1' ? { id: 'proj-1', name: 'group' } : null,
@@ -26,11 +29,64 @@ function createApp(overrides: Record<string, unknown> = {}) {
   };
 
   const app = new Hono();
-  app.route('/api', createResourceRoutes({ db } as unknown as AppContext));
+  app.route('/api', createResourceRoutes({ db, serviceManager } as unknown as AppContext));
   return { app, db };
 }
 
 describe('resource routes', () => {
+  it('reads actual managed limits and applies changes through the service manager', async () => {
+    const manager = {
+      getResourceLimits: vi.fn(async () => ({
+        profile: 'custom',
+        memory: { limitBytes: 128 * 1024 * 1024 },
+      })),
+      updateResourceLimits: vi.fn(async () => ({
+        profile: 'custom',
+        memory: { limitBytes: 768 * 1024 * 1024 },
+      })),
+    };
+    const { app, db } = createApp(
+      { getService: vi.fn(async () => ({ id: 'db-1', kind: 'redis', project_id: 'proj-1' })) },
+      manager,
+    );
+    const get = await app.request('/api/projects/proj-1/services/db-1/resources');
+    expect(get.status).toBe(200);
+    expect(manager.getResourceLimits).toHaveBeenCalledWith('db-1');
+    const update = await app.request('/api/projects/proj-1/services/db-1/resources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: 'custom', memoryMb: 768 }),
+    });
+    expect(update.status).toBe(200);
+    expect(manager.updateResourceLimits).toHaveBeenCalledWith('db-1', {
+      profile: 'custom',
+      memoryMb: 768,
+    });
+    expect(db.saveDeployConfigForService).not.toHaveBeenCalled();
+  });
+
+  it('rejects a managed service belonging to another project before reading or updating it', async () => {
+    const manager = { getResourceLimits: vi.fn(), updateResourceLimits: vi.fn() };
+    const { app } = createApp(
+      {
+        getService: vi.fn(async () => ({
+          id: 'db-1',
+          kind: 'postgres',
+          project_id: 'other-project',
+        })),
+      },
+      manager,
+    );
+    for (const method of ['GET', 'PATCH']) {
+      const response = await app.request('/api/projects/proj-1/services/db-1/resources', {
+        method,
+      });
+      expect(response.status).toBe(404);
+    }
+    expect(manager.getResourceLimits).not.toHaveBeenCalled();
+    expect(manager.updateResourceLimits).not.toHaveBeenCalled();
+  });
+
   it('loads resource limits from the selected service', async () => {
     const { app, db } = createApp();
 
